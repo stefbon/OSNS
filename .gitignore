@@ -1,0 +1,4 @@
+*.o
+*.Po
+src/autom4te.cache/
+
