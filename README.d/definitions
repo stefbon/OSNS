@@ -1,0 +1,34 @@
+06-12-2020
+
+
+Overview of most used terms and definitions
+-------------------------------------------
+
+This application offers a browseable map to discover and access networkservices like SFTP over a secure SSH connection.
+To do this I had to introduce some terms and definitions. To demonstrate an example is good:
+
+
+
+    /Open Secure Network Services/example.org/Adminserver/home
+    |						|	   \
+  workspace					|	    \
+    mount context			     ssh context  sftp context
+    interface				      interface    interface
+      fuse				      ssh client    sftp client
+
+
+Workspace
+---------
+
+A workspace is a synonym for the mountpoint: everything general for the whole browseable map belings here, like:
+- mountpoint
+- inode lookup hashtable
+- root inode and entry
+- list of context services used on the browseable map
+
+
+Services context and context interface
+--------------------------------------
+
+A context is the bridge between the fuse filesystem and the backend, like a SSH connection.
+

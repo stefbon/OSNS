@@ -1,0 +1,5 @@
+20181203
+- different processes per server per (remote host/user) connected via unix socket, running with privileges connecting user
+- do data transfer via udp (libudt)
+
+

@@ -1,0 +1,91 @@
+01-12-2020
+
+
+Overview of io over the network filesystem
+------------------------------------------
+
+FUSE filesystems are actually the forwarding of request of a VFS call like lookup, open, getattr and opendir to a userspace program, which will
+take care of the reply.
+
+The userspace service OSNS receives a VFS request from the kernel via a socket, will forward the request to a sftp library,
+which will make use of a secure ssh connection. The reply from the sftp server (of sftp subsystem) is translated into a fuse reply,
+and send to the VFS.
+
+Default the way this fuse request takes the following route:
+
+
+	    localhost										remote host A
+
+               |
+               |
+               |
+    kernel  < === > userspace service OSNS
+               |           |- <=> SFTP client
+               |                    |- <=> SSH client    - - - - - network - - - - -     SSH server <=> sftp-subsystem
+               |
+               |
+               |
+
+
+    a. A request is made on a fuse mounted filesystem. For example a file manager does after an opendir call, a readdir call to get the direntries in a directory
+	representing a directory on the remote sftp server.
+    b. This request is translated into a FUSE type request and send to the userspace service, in this case OSNS.
+    c. OSNS receives this request, finds out that it represents a sftp directory on remote host A, translates this request into a SFTP request using a sftp client.
+	This client uses the SFTP api which applies for the sftp protocol version used/negotiated, and sends it over the secure SSH connection to
+	the sftp susbsystem on remote host A.
+    d. The sftp subsystem processes this request, and sends the reply back over the secure SSH connection.
+    e. When receiving the sftp reply, the OSNS sftp client translates the reply to the FUSE api, and sending the reply to the VFS over the socket.
+
+
+    Example
+    -------
+
+    This may be abstract so an example might be handy.
+    Suppose the OSNS represents the SFTP network like:
+
+    ../Open Secure Network/example.org/Administration/home
+
+    and a program wants to do lookup the directory Documents in this home directory on the Administration server in the example.org domain.
+    So it does a lookup of the name "Documents" in the home directory. The kernel will forward the request to the userspace service OSNS
+    using the inodenumber of the parentinode (home) and the name Documents (FUSE_LOOKUP).
+
+    OSNS discovers that this applies to a remote folder (the users homedirectory on the remote server) and translates this using the internal SFTP client
+    to a sftp SSH_FXP_LSTAT request using the path to the root of the remote map, which is in this case the remote home directory (see: [1]). SFTP uses
+    absolute paths to identify files/directories to communicate over the network. There is one exception, and that's contents of the remote home directory.
+    When the path is not starting with a slash, it's relative to the connected remote users home directory. So in this case this will look like:
+
+    Documents
+    together with flags specifying the attributes the OSNS wants to know.
+
+    If the directory exists, a SSH_FXP_ATTRS reply is send back, with the requested attributes.
+    If the directory does not exist, a SSH_FXP_STATUS reply is send back, with error/status code SSH_FX_NO_SUCH_FILE.
+
+    In the first case, the OSNS sftg client translates the received attributes to Linux stat equivalents, caches those, and sends a reply to the VFS using the
+    FUSE api.
+
+    OSNS uses a thread model to do the io. When receiving a FUSE request from the VFS (using an eventloop), OSNS starts a thread (say thread B) to process
+    this request. This thread finds out the context (what is the directory representing? in this case a remote home directory managed by a SFTP subsystem over an
+    SSH connection. It lets the internal sftp client translate it into a sftp request, sends it to the remote SFTP subsystem over the SSH connection, and starts waiting
+    for a certain period (say 4 seconds) for a reply to arrive.
+    After receiving this sftp request over the network from the SSH server, the SFTP subsystem processes it, and send a reply, as described above.
+    OSNS receives the request over the SSH connection using an eventloop to watch the connection, starts another thread (say thread C)
+    finds out it's a reply to a waiting sftp request, and provides this request with the response,
+    and signalling is a response is available. Thread C task is done. The thread B will wake up, processing the response by translating the SFTP attributes
+    to the Linux stat values.
+
+    One thing I have paid a lot of attention to is the ability for thread B to listen not only to the desired arrival of a response, but also to other events which
+    can have an influence and can happen in a FUSE network filesystem like:
+
+    - no response has arrived in time, so a timeout occurs
+    - response the received packet is invalid, protocol error
+    - ssh connection is closed
+    - ssh channel is closed
+    - network connection is closed / has errors
+    - original FUSE request is interrupted
+
+    To handle all these events well one set of pthread mutex and cond is used for ALL io events to signal waiting threads. This set of mutex and cond
+    (I call FUSE network signal) is used by the FUSE client (to signal for an interrupt), by the SSH client (to signal connection/channel is closed) and
+    by the sftp client a response has arrived (or is invalid) and of course by the waiting thread (using the pthread_cond_timedwait call to wait for a certain period).
+
+
+

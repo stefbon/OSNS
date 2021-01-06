@@ -1,0 +1,73 @@
+# main.server.socket = path
+
+# NETWORK
+
+# network.discover_methods = avahi,static-file
+# network.discover_static_file = path
+# network.icon.domain.path
+# network.icon.domain.flags= "hide"/"show"/"override"
+# network.icon.server.path
+# network.icon.server.flags= "hide"/"show"/"override"
+# network.icon.share.path
+# network.icon.share.flags= "hide"/"show"/"override"
+
+user.network_mount_template=/run/network/$USER/fs
+user.network_mount_group=users
+user.network_mount_group_policy=partof
+
+# fuse.fuse_attr_timeout = double
+# fuse.fuse_entry_timeout = double
+# fuse.fuse_negative_timeout = double
+
+# SSH
+
+# ssh.crypto_cipher_algos = 
+# ssh.crypto_mac_algos = 
+# ssh.pubkey_algos = 
+# ssh.compression_algos = 
+# ssh.keyx_algos = 
+# ssh.init.timeout =
+# ssh.session.timeout =
+# ssh.exec.timeout =
+
+# backend to get keys, local db of trusted keys from
+# possible:
+# - _OPTIONS_SSH_BACKEND_OPENSSH
+# - todo: _OPTIONS_SSH_BACKEND_GPGME
+#
+
+# SFTP
+
+# sftp usermapping type:
+# - file: remote ids/names are mapped to local ones via a file
+# - map: simple mapping of remote names to local ones for root, the connecting user/group and the user nobody
+# - none: no mapping, remote names are assumed the same as local ones
+# sftp.usermapping.type = file/map/none
+
+# sftp maximum packet size
+# maximum size in bytes of a sftp packet
+
+# sftp local user "unknown"
+# userids/names which cannot mapped to another user are mapped to this user
+
+# sftp.usermapping.user.unknown
+# sftp.usermapping.user.nobody
+
+# sftp network name as it appears in the fuse network map
+sftp.network.name = Open Secure Network
+
+# show in the fuse network map the domainname or not
+
+sftp.network.show_domainname = 1
+
+# use for the homedirectory of the connecting user on the remote server the username
+# the default is to use the name "home"
+
+sftp.network.home_use_remotename = 1
+
+sftp.fs.mkdir.call_getattr_after_success = 1
+sftp.fs.create.call_getattr_after_success = 1
+sftp.fs.setattr.call_getattr_after_success = 1
+
+sftp.network.hide_dot_files = 1
+
