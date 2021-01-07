@@ -57,6 +57,85 @@
 extern struct fs_options_s fs_options;
 static struct list_header_s list_keyex_ops=INIT_LIST_HEADER;
 
+static unsigned int populate_keyex_dhnone(struct ssh_connection_s *c, struct keyex_ops_s *ops, struct algo_list_s *alist, unsigned int start)
+{
+
+    if (alist) {
+
+	alist[start].type=SSH_ALGO_TYPE_KEX;
+	alist[start].order=SSH_ALGO_ORDER_MEDIUM;
+	alist[start].sshname="none";
+	alist[start].libname="none";
+	alist[start].ptr=(void *) ops;
+
+    }
+
+    start++;
+    return start;
+
+}
+
+static int dhnone_create_local_key(struct ssh_keyex_s *k)
+{
+    return 0;
+}
+
+static void dhnone_msg_write_local_key(struct msg_buffer_s *mb, struct ssh_keyex_s *k)
+{
+    struct ssh_mpint_s tmp=SSH_MPINT_INIT;
+
+    if (create_ssh_mpint(&tmp)==0) {
+
+	msg_write_ssh_mpint(mb, &tmp);
+	free_ssh_mpint(&tmp);
+
+    }
+
+}
+
+static void dhnone_msg_read_remote_key(struct msg_buffer_s *mb, struct ssh_keyex_s *k)
+{
+    struct ssh_mpint_s tmp=SSH_MPINT_INIT;
+    msg_read_ssh_mpint(mb, &tmp, NULL);
+}
+
+static void dhnone_msg_write_remote_key(struct msg_buffer_s *mb, struct ssh_keyex_s *k)
+{
+    dhnone_msg_write_local_key(mb, k); /* just does nothing */
+}
+
+static int dhnone_calc_sharedkey(struct ssh_keyex_s *k)
+{
+    return 0; /* no key to be calculated */
+}
+
+static void dhnone_msg_write_sharedkey(struct msg_buffer_s *mb, struct ssh_keyex_s *k)
+{
+}
+
+static void dhnone_free_keyex(struct ssh_keyex_s *k)
+{
+}
+
+static int dhnone_init_keyex(struct ssh_keyex_s *k, char *name)
+{
+    logoutput("dhnone_init_keyex");
+    return 0;
+}
+
+static struct keyex_ops_s dhnone_ops = {
+    .name				=	"none",
+    .populate				=	populate_keyex_dhnone,
+    .init				=	dhnone_init_keyex,
+    .create_local_key			=	dhnone_create_local_key,
+    .msg_write_local_key		=	dhnone_msg_write_local_key,
+    .msg_read_remote_key		=	dhnone_msg_read_remote_key,
+    .msg_write_remote_key		=	dhnone_msg_write_remote_key,
+    .calc_sharedkey			=	dhnone_calc_sharedkey,
+    .msg_write_sharedkey		=	dhnone_msg_write_sharedkey,
+    .free				=	dhnone_free_keyex,
+};
+
 void add_keyex_ops(struct keyex_ops_s *ops)
 {
     add_list_element_last(&list_keyex_ops, &ops->list);
@@ -438,5 +517,5 @@ void init_keyex_once()
 {
     //init_keyex_ecdh();
     init_keyex_dh();
-
+    add_keyex_ops(&dhnone_ops);
 }

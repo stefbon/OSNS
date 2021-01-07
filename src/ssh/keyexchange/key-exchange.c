@@ -80,6 +80,7 @@ static unsigned int write_kexdh_reply_message(struct msg_buffer_s *mb, struct ss
 {
     msg_write_byte(mb, SSH_MSG_KEXDH_REPLY);
     (* pkey->msg_write_key)(mb, pkey, PK_DATA_FORMAT_SSH);
+    (* k->ops->msg_write_remote_key)(mb, k);
     msg_write_pksignature(mb, pkey->algo, signature);
     return mb->pos;
 }
@@ -450,39 +451,50 @@ int start_diffiehellman_client(struct ssh_connection_s *connection, struct ssh_k
 
     }
 
-    /* calculate the shared K from the client keyx key (e/Q_C/..) and the server keyx key (f/Q_S/..)*/
 
-    if ((* k->ops->calc_sharedkey)(k)==-1) {
+    if (strcmp(k->ops->name, "none") != 0) {
 
-	logoutput("start_diffiehellman_client: calculation shared key K failed");
-	goto out;
+	/* calculate the shared K from the client keyx key (e/Q_C/..) and the server keyx key (f/Q_S/..)*/
 
-    }
+	if ((* k->ops->calc_sharedkey)(k)==-1) {
 
-    /* check the signature is correct by creating the H self
-	and verify using the public key of the server */
+	    logoutput("start_diffiehellman_client: calculation shared key K failed");
+	    goto out;
 
-    if (create_H(connection, k, pkey, H)==-1) {
+	}
 
-	logoutput("start_diffiehellman_client: error creating H (len %i size %i)", H->len, H->size);
-	goto out;
+	/* check the signature is correct by creating the H self
+	    and verify using the public key of the server */
+
+	if (create_H(connection, k, pkey, H)==-1) {
+
+	    logoutput("start_diffiehellman_client: error creating H (len %i size %i)", H->len, H->size);
+	    goto out;
+
+	} else {
+
+	    logoutput("start_diffiehellman_client: created H (%i size %i)", H->len, H->size);
+
+	}
+
+	/* compare the signature with the one created here */
+
+	if ((* pkey->verify)(pkey, H->digest, H->len, &signature.data, k->algo->hash)==-1) {
+
+	    logoutput("start_diffiehellman_client: verify signature H failed (hash: %s algo %s)", k->algo->hash, pkey->algo->sshname);
+	    goto out;
+
+	} else {
+
+	    logoutput("start_diffiehellman_client: signature H verified (hash %s algo %s)", k->algo->hash, pkey->algo->sshname);
+	    result=0;
+
+	}
 
     } else {
 
-	logoutput("start_diffiehellman_client: created H (%i size %i)", H->len, H->size);
+	/* calculation of a shared key is not required, and also not the creation of H and verify of the signature */
 
-    }
-
-    /* compare the signature with the one created here */
-
-    if ((* pkey->verify)(pkey, H->digest, H->len, &signature.data, k->algo->hash)==-1) {
-
-	logoutput("start_diffiehellman_client: verify signature H failed (hash: %s algo %s)", k->algo->hash, pkey->algo->sshname);
-	goto out;
-
-    } else {
-
-	logoutput("start_diffiehellman_client: signature H verified (hash %s algo %s)", k->algo->hash, pkey->algo->sshname);
 	result=0;
 
     }
@@ -548,40 +560,44 @@ int start_diffiehellman_server(struct ssh_connection_s *connection, struct ssh_k
 
     }
 
-    /* calculate the shared K from the client keyx key (e/Q_C/..) and the server keyx key (f/Q_S/..)*/
+    if (strcmp(k->ops->name, "none") != 0) {
 
-    if ((* k->ops->calc_sharedkey)(k)==-1) {
+	/* calculate the shared K from the client keyx key (e/Q_C/..) and the server keyx key (f/Q_S/..)*/
 
-	logoutput("start_diffiehellman_server: calculation shared key K failed");
-	goto out;
+	if ((* k->ops->calc_sharedkey)(k)==-1) {
 
-    }
+	    logoutput("start_diffiehellman_server: calculation shared key K failed");
+	    goto out;
 
-    /* create the H */
+	}
 
-    if (create_H(connection, k, pkey, H)==-1) {
+	/* create the H */
 
-	logoutput("start_diffiehellman_server: error creating H (len %i size %i)", H->len, H->size);
-	goto out;
+	if (create_H(connection, k, pkey, H)==-1) {
 
-    } else {
+	    logoutput("start_diffiehellman_server: error creating H (len %i size %i)", H->len, H->size);
+	    goto out;
 
-	logoutput("start_diffiehellman_server: created H (%i size %i)", H->len, H->size);
+	} else {
 
-    }
+	    logoutput("start_diffiehellman_server: created H (%i size %i)", H->len, H->size);
 
-    /* this creates a signature on H, which method?
-	where to get the signmethod from (=hostkey algo?) and which sign method (the default one?) 
-	get the skey to do this */
+	}
 
-    if (create_signature_H(pkey, H, k->algo->hash, &signature)==-1) {
+	/* this creates a signature on H, which method?
+	    where to get the signmethod from (=hostkey algo?) and which sign method (the default one?) 
+	    get the skey to do this */
 
-	logoutput("start_diffiehellman_server: create signature H failed (hash: %s algo %s)", k->algo->hash, pkey->algo->sshname);
-	goto out;
+	if (create_signature_H(pkey, H, k->algo->hash, &signature)==-1) {
 
-    } else {
+	    logoutput("start_diffiehellman_server: create signature H failed (hash: %s algo %s)", k->algo->hash, pkey->algo->sshname);
+	    goto out;
 
-	logoutput("start_diffiehellman_server: signature on H created (hash: %s algo %s)", k->algo->hash, pkey->algo->sshname);
+	} else {
+
+	    logoutput("start_diffiehellman_server: signature on H created (hash: %s algo %s)", k->algo->hash, pkey->algo->sshname);
+
+	}
 
     }
 
@@ -593,6 +609,7 @@ int start_diffiehellman_server(struct ssh_connection_s *connection, struct ssh_k
     }
 
     change_ssh_connection_setup(connection, "transport", SSH_TRANSPORT_TYPE_KEX, SSH_KEX_FLAG_KEXDH_S2C, 0, NULL, NULL);
+    result=0;
 
     out:
 
@@ -628,6 +645,10 @@ int start_diffiehellman(struct ssh_connection_s *connection, struct ssh_keyex_s 
     if (result==-1) {
 
 	logoutput("start_diffiehellman: failed to do diffie-hellman");
+	goto out;
+
+    } else if (strcmp(k->ops->name, "none") == 0) {
+
 	goto out;
 
     }
@@ -666,4 +687,3 @@ int start_diffiehellman(struct ssh_connection_s *connection, struct ssh_keyex_s 
     return result;
 
 }
-

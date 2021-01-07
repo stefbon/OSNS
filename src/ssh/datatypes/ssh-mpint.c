@@ -45,6 +45,10 @@
 
 #include <gcrypt.h>
 
+struct ssh_mpint_s zeroinit = {
+    .lib.mpi=NULL,
+};
+
 int create_ssh_mpint(struct ssh_mpint_s *mp)
 {
     if (mp->lib.mpi==NULL) mp->lib.mpi=gcry_mpi_new(0);

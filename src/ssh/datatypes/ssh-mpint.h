@@ -45,6 +45,9 @@ struct ssh_mpoint_s {
     } lib;
 };
 
+extern struct ssh_mpint_s zeroinit;
+#define SSH_MPINT_INIT			zeroinit
+
 /* prototypes */
 
 int create_ssh_mpint(struct ssh_mpint_s *mp);
