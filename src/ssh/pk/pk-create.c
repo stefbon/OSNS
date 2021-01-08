@@ -32,7 +32,7 @@
 #include <sys/types.h>
 #include <errno.h>
 
-#include <utils.h>
+#include "misc.h"
 #include "logging.h"
 #include "ssh-datatypes.h"
 #include "pk-types.h"

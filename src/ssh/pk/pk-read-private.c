@@ -33,7 +33,7 @@
 #include <sys/types.h>
 
 #include <logging.h>
-#include <utils.h>
+#include "misc.h"
 
 #include "asn1.h"
 

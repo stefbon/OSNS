@@ -36,7 +36,7 @@
 #include <fcntl.h>
 
 #include <logging.h>
-#include <utils.h>
+#include "misc.h"
 
 /* test the host is matched by hostpattern
     hostpattern can contain a '?' and a '*' */

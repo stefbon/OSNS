@@ -36,7 +36,7 @@
 #include <glib.h>
 #endif
 
-#include <utils.h>
+#include "misc.h"
 #include "ssh-datatypes.h"
 #include "pk-types.h"
 
