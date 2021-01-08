@@ -137,7 +137,6 @@ int randomize_ssh_mpint(struct ssh_mpint_s *mp, unsigned int bits)
 {
     gcry_mpi_randomize(mp->lib.mpi, bits, GCRY_WEAK_RANDOM);
     return 0;
-
 }
 
 void add_ssh_mpint(struct ssh_mpint_s *w, struct ssh_mpint_s *u, const char *what, unsigned long n)
@@ -203,6 +202,10 @@ int read_ssh_mpint(struct ssh_mpint_s *mp, char *buffer, unsigned int size, unsi
 
 	*error=EIO;
 	return -1;
+
+    } else {
+
+	logoutput("read_ssh_mpint: %i bytes scanned", nscanned);
 
     }
 

@@ -239,7 +239,7 @@ static unsigned int populate_keyex_dh(struct ssh_connection_s *c, struct keyex_o
     if (alist) {
 
 	alist[start].type=SSH_ALGO_TYPE_KEX;
-	alist[start].order=SSH_ALGO_ORDER_MEDIUM;
+	alist[start].order=SSH_ALGO_ORDER_HIGH;
 	alist[start].sshname="diffie-hellman-group1-sha1";
 	alist[start].libname="diffie-hellman-group1-sha1";
 	alist[start].ptr=(void *) ops;
@@ -310,7 +310,6 @@ static int dh_create_local_key(struct ssh_keyex_s *k)
     init_ssh_mpint(&tmp);
     init_ssh_mpint(&q);
 
-
     /* size of subgroup is (q = (p - 1)/2) which results in a number of (bits(p) - 1) bits
 	TODO: is this always the case ??? also with another generator ??? */
 
@@ -338,8 +337,6 @@ static int dh_create_local_key(struct ssh_keyex_s *k)
 	goto getrandom;
 
     }
-
-    /* TODO: here a check 1 < x < q */
 
     if (k->flags & SSH_KEYEX_FLAG_SERVER) {
 
@@ -502,8 +499,8 @@ static int dh_init_keyex(struct ssh_keyex_s *k, char *name)
     init_ssh_mpint(&dh->f);
     init_ssh_mpint(&dh->sharedkey);
 
-    if (create_ssh_mpint(&dh->p)==-1) goto error;
-    if (create_ssh_mpint(&dh->g)==-1) goto error;
+    // if (create_ssh_mpint(&dh->p)==-1) goto error;
+    // if (create_ssh_mpint(&dh->g)==-1) goto error;
     if (create_ssh_mpint(&dh->x)==-1) goto error;
     if (create_ssh_mpint(&dh->e)==-1) goto error;
     if (create_ssh_mpint(&dh->f)==-1) goto error;
@@ -517,6 +514,7 @@ static int dh_init_keyex(struct ssh_keyex_s *k, char *name)
     return 0;
 
     error:
+    logoutput("dh_init_keyex: error");
     dh_free_keyex(k);
     return -1;
 

@@ -42,7 +42,7 @@
 #include "logging.h"
 #include "main.h"
 
-#include "utils.h"
+#include "misc.h"
 #include "logging.h"
 
 #include "sftp/common-protocol.h"

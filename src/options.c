@@ -815,7 +815,7 @@ int parse_arguments(int argc, char *argv[], unsigned int *error)
 
     /* SSH */
 
-    fs_options.ssh.flags		= _OPTIONS_SSH_FLAG_SUPPORT_EXT_INFO | _OPTIONS_SSH_FLAG_SUPPORT_CERTIFICATES;
+    fs_options.ssh.flags		= 0; // _OPTIONS_SSH_FLAG_SUPPORT_EXT_INFO | _OPTIONS_SSH_FLAG_SUPPORT_CERTIFICATES;
 
     /* default support all extensions mentioned in RFC 8308
 	are there more ? */
