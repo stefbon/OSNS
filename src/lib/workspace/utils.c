@@ -41,8 +41,8 @@
 #define ENOATTR ENODATA        /* No such attribute */
 #endif
 
-#include "utils.h"
 #include "misc.h"
+#include "utils.h"
 
 #undef LOGGING
 #include "log.h"

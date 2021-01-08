@@ -41,7 +41,7 @@
 
 #define LOGGING
 #include "logging.h"
-#include "utils.h"
+#include "misc.h"
 
 #include "ssh/ssh-utils.h"
 #include "discover.h"

@@ -27,7 +27,7 @@
 // #include "fuse.h"
 #include "workspace-interface.h"
 #include "list.h"
-#include "utils.h"
+#include "misc.h"
 #include "lib/fuse/fs.h"
 
 #define WORKSPACE_TYPE_DEVICES			1

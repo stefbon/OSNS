@@ -40,7 +40,7 @@
 #include "logging.h"
 #include "main.h"
 
-#include "utils.h"
+#include "misc.h"
 #include "options.h"
 
 #include "ssh-utils.h"

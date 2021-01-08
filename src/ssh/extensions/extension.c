@@ -37,7 +37,7 @@
 #include <sys/stat.h>
 
 #include "main.h"
-#include "utils.h"
+#include "misc.h"
 #include "logging.h"
 
 #include "ssh-common.h"

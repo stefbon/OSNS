@@ -43,7 +43,7 @@
 #endif
 
 #include "misc.h"
-#include "utils.h"
+#include "misc.h"
 #include "eventloop.h"
 #include "threads.h"
 #include "workspace-interface.h"

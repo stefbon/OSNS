@@ -38,7 +38,7 @@
 
 #include "logging.h"
 #include "main.h"
-#include "utils.h"
+#include "misc.h"
 
 #include "ssh-datatypes.h"
 #include "pk-types.h"

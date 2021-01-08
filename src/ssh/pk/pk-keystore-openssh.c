@@ -42,7 +42,7 @@
 #include <sys/fsuid.h>
 
 #include "logging.h"
-#include "utils.h"
+#include "misc.h"
 #include "list.h"
 
 #include "pk-keys.h"

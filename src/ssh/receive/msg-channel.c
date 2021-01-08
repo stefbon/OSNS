@@ -39,7 +39,7 @@
 
 #include "logging.h"
 #include "main.h"
-#include "utils.h"
+#include "misc.h"
 
 #include "ssh-common-protocol.h"
 #include "ssh-common.h"

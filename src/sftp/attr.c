@@ -41,7 +41,7 @@
 
 #include "main.h"
 #include "logging.h"
-#include "utils.h"
+#include "misc.h"
 
 #include "common-protocol.h"
 #include "common.h"

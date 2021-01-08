@@ -42,7 +42,7 @@
 #include "log.h"
 
 #include "misc.h"
-#include "utils.h"
+#include "misc.h"
 #include "workspace-interface.h"
 #include "workspaces.h"
 #include "fuse.h"

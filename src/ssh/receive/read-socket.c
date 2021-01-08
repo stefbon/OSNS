@@ -42,7 +42,7 @@
 #include "main.h"
 #include "threads.h"
 
-#include "utils.h"
+#include "misc.h"
 
 #include "ssh-common.h"
 #include "ssh-common-protocol.h"

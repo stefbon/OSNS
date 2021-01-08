@@ -49,7 +49,7 @@
 #include "fuse-dentry.h"
 
 #include "options.h"
-#include "utils.h"
+#include "misc.h"
 #include "simple-list.h"
 #include "readdir-utils.h"
 
