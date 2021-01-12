@@ -38,7 +38,7 @@
 #include <sys/stat.h>
 
 #include "main.h"
-#include "logging.h"
+#include "log.h"
 
 #include "common-utils/utils.h"
 #include "common-utils/workerthreads.h"

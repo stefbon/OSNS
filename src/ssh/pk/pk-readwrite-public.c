@@ -35,7 +35,7 @@
 #include <logging.h>
 #include "misc.h"
 
-#include "ssh-datatypes.h"
+#include "datatypes.h"
 #include "pk-types.h"
 #include "pk-keys.h"
 #include "pk-readwrite-public.h"

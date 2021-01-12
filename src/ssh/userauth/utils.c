@@ -43,7 +43,7 @@
 #include <crypt.h>
 
 #include "main.h"
-#include "logging.h"
+#include "log.h"
 #include "misc.h"
 
 #include "ssh-common.h"

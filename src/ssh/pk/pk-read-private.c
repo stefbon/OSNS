@@ -37,7 +37,7 @@
 
 #include "asn1.h"
 
-#include "ssh-datatypes.h"
+#include "datatypes.h"
 #include "pk-types.h"
 #include "pk-keys.h"
 #include "pk-read-private.h"
@@ -45,14 +45,18 @@
 
 #define OPENSSH_KEY_V1					"openssh-key-v1"
 
+#ifdef HAVE_LIBGCRYPT
+
+#include <gcrypt.h>
+
 static int asn1_read_mpint_from_tlv(struct asn1_tlv_s *tlv, struct ssh_mpint_s *mp)
 {
     size_t count=0;
+    gcry_mpi_t tmp=(gcry_mpi_t) mp->ptr;
 
-#if HAVE_LIBGCRYPT
+    if (gcry_mpi_scan(&tmp, GCRYMPI_FMT_STD, (const unsigned char *) tlv->pos, (size_t) tlv->len, &count)==GPG_ERR_NO_ERROR) {
 
-    if (gcry_mpi_scan(&mp->lib.mpi, GCRYMPI_FMT_STD, (const unsigned char *) tlv->pos, (size_t) tlv->len, &count)==GPG_ERR_NO_ERROR) {
-
+	mp->ptr=(void *) tmp;
 	return (int) count;
 
     } else {
@@ -61,11 +65,19 @@ static int asn1_read_mpint_from_tlv(struct asn1_tlv_s *tlv, struct ssh_mpint_s *
 
     }
 
-#endif
 
     return -1;
-
 }
+
+#else
+
+static int asn1_read_mpint_from_tlv(struct asn1_tlv_s *tlv, struct ssh_mpint_s *mp)
+{
+    return -1;
+}
+
+#endif
+
 
 static int asn1_read_parameter(char *pos, unsigned int left, struct asn1_tlv_s *tlv, struct ssh_mpint_s *mp, const char *name)
 {

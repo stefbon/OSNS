@@ -36,7 +36,7 @@
 #include <logging.h>
 #include "misc.h"
 
-#include "ssh-datatypes.h"
+#include "datatypes.h"
 #include "pk-types.h"
 #include "pk-keys.h"
 
@@ -106,7 +106,7 @@ int verify_sig_rsa(struct ssh_key_s *key, unsigned char *buffer, unsigned int si
 
     }
 
-    err=gcry_sexp_build(&s_pkey, NULL, "(public-key (rsa(e %m)(n %m)))", key->param.rsa.e.lib.mpi, key->param.rsa.n.lib.mpi);
+    err=gcry_sexp_build(&s_pkey, NULL, "(public-key (rsa(e %m)(n %m)))", (gcry_mpi_t) key->param.rsa.e.ptr, (gcry_mpi_t) key->param.rsa.n.ptr);
 
     if (err) {
 
@@ -191,7 +191,7 @@ int verify_sig_dss(struct ssh_key_s *key, unsigned char *buffer, unsigned int si
 
     }
 
-    err=gcry_sexp_build(&s_pkey, NULL, "(public-key(dsa(p%m)(q%m)(g%m)(y%m)))", key->param.dss.p.lib.mpi, key->param.dss.q.lib.mpi, key->param.dss.g.lib.mpi, key->param.dss.y.lib.mpi);
+    err=gcry_sexp_build(&s_pkey, NULL, "(public-key(dsa(p%m)(q%m)(g%m)(y%m)))", (gcry_mpi_t) key->param.dss.p.ptr, (gcry_mpi_t) key->param.dss.q.ptr, (gcry_mpi_t) key->param.dss.g.ptr, (gcry_mpi_t) key->param.dss.y.ptr);
 
     if (err) {
 
@@ -292,7 +292,7 @@ int verify_sig_ecc(struct ssh_key_s *key, unsigned char *buffer, unsigned int si
 
     }
 
-    ptr=gcry_mpi_get_opaque(key->param.ecc.q.lib.mpi, &nbits);
+    ptr=gcry_mpi_get_opaque((gcry_mpi_t) key->param.ecc.q.ptr, &nbits);
 
     if (ptr==NULL || nbits==0) {
 

@@ -38,7 +38,7 @@
 #include <sys/param.h>
 #include <sys/types.h>
 
-#include "logging.h"
+#include "log.h"
 #include "datatypes/ssh-string.h"
 
 #include <systemd/sd-login.h>

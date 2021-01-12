@@ -20,7 +20,7 @@
 #ifndef FS_WORKSPACE_SSH_PK_KEYS_H
 #define FS_WORKSPACE_SSH_PK_KEYS_H
 
-#include "ssh-datatypes.h"
+#include "datatypes.h"
 #include "pk-types.h"
 
 /* layout of the data containing keymaterial (headers, footer, encoding, ...)

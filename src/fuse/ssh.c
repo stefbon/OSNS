@@ -45,7 +45,7 @@
 #endif
 
 #define LOGGING
-#include "logging.h"
+#include "log.h"
 
 #include "main.h"
 #include "misc.h"

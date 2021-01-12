@@ -34,6 +34,7 @@
 #include <syslog.h>
 
 struct logging_s {
+    unsigned int		level;
     void 			(* debug)(const char *fmt, ...);
     void 			(* info)(const char *fmt, ...);
     void 			(* notice)(const char *fmt, ...);

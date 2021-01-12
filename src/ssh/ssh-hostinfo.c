@@ -42,7 +42,7 @@
 #include "pwd.h"
 #include "grp.h"
 
-#include "logging.h"
+#include "log.h"
 #include "main.h"
 
 #include "misc.h"

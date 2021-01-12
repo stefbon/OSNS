@@ -40,7 +40,7 @@
 #include <sys/types.h>
 
 #define LOGGING
-#include "logging.h"
+#include "log.h"
 #include "misc.h"
 
 #include "ssh/ssh-utils.h"

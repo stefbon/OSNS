@@ -61,7 +61,7 @@
 #include "fschangenotify-fssync.h"
 #include "fschangenotify-event.h"
 
-#include "logging.h"
+#include "log.h"
 
 #define _FSSYNC_STATUS_OK			0
 #define _FSSYNC_STATUS_SCHEDULED		1

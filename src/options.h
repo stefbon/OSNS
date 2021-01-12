@@ -16,14 +16,13 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
-#ifndef FS_WORKSPACE_OPTIONS_H
-#define FS_WORKSPACE_OPTIONS_H
+#ifndef _OSNS_OPTIONS_H
+#define _OSNS_OPTIONS_H
 
 #include "misc.h"
 
-
-#define _OPTIONS_MAIN_CONFIGFILE 					"/etc/fs-workspace/options"
-#define _OPTIONS_MAIN_SOCKET 						"/run/fs-workspace/sock"
+#define _OPTIONS_MAIN_CONFIGFILE 					"/etc/osns/options"
+#define _OPTIONS_MAIN_SOCKET 						"/run/osns/sock"
 
 /* FUSE */
 
@@ -39,11 +38,16 @@
 
 #define _OPTIONS_NETWORK_DISCOVER_METHOD_AVAHI				1
 #define _OPTIONS_NETWORK_DISCOVER_METHOD_FILE				2
-#define _OPTIONS_NETWORK_DISCOVER_STATIC_FILE_DEFAULT			"/etc/fs-workspace/network.services"
+#define _OPTIONS_NETWORK_DISCOVER_STATIC_FILE_DEFAULT			"/etc/osns/network.services"
 
 #define _OPTIONS_NETWORK_ICON_HIDE					0
 #define _OPTIONS_NETWORK_ICON_SHOW					1
 #define _OPTIONS_NETWORK_ICON_OVERRULE					2
+
+#define _OPTIONS_NETWORK_ENABLE_SSH					1
+#define _OPTIONS_NETWORK_ENABLE_SMB					2
+#define _OPTIONS_NETWORK_ENABLE_NFS					4
+#define _OPTIONS_NETWORK_ENABLE_WEBDAV					8
 
 /* SSH */
 

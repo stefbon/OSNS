@@ -41,7 +41,7 @@
 #include <sys/syscall.h>
 #include <sys/fsuid.h>
 
-#include "logging.h"
+#include "log.h"
 #include "misc.h"
 #include "list.h"
 

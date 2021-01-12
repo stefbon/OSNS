@@ -37,7 +37,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-#include "logging.h"
+#include "log.h"
 #include "main.h"
 #include "misc.h"
 #include "workspace-interface.h"
@@ -47,9 +47,7 @@
 #include <glib.h>
 
 #if HAVE_LIBGCRYPT
-
 #include <gcrypt.h>
-
 #endif
 
 static struct ssh_utils_s utils;
@@ -62,11 +60,28 @@ unsigned int fill_random(char *buffer, unsigned int size)
     return size;
 }
 
+void test_pow()
+{
+  int b_int = 17;
+  int e_int = 3;
+  int m_int = 19;
+  gcry_mpi_t base = gcry_mpi_set_ui (NULL, b_int);
+  gcry_mpi_t exp = gcry_mpi_set_ui (NULL, e_int);
+  gcry_mpi_t mod = gcry_mpi_set_ui (NULL, m_int);
+  gcry_mpi_t res = gcry_mpi_new (0);
+
+  gcry_mpi_powm (res, base, exp, mod);
+}
+
 #else
 
 unsigned int fill_random(char *buffer, unsigned int size)
 {
     return 0;
+}
+
+void test_pow()
+{
 }
 
 #endif
@@ -79,31 +94,37 @@ int init_ssh_backend_library()
 
     logoutput("init_ssh_backend_library: test libgcrypt %s", GCRYPT_VERSION);
 
-    version=gcry_check_version(GCRYPT_VERSION);
-
-    if (version==NULL) {
-
-	logoutput_warning("init_ssh_backend_library");
-	return -1;
-
-    }
-
-    logoutput("init_ssh_backend_library: found libgcrypt %s", version);
-
     GCRY_THREAD_OPTION_PTHREAD_IMPL;
     err=gcry_control(GCRYCTL_SET_THREAD_CBS, &gcry_threads_pthread);
     if (err) goto error;
 
     /* disable secure memory (for now) */
 
-    err=gcry_control(GCRYCTL_DISABLE_SECMEM, 0);
+    err=gcry_control(GCRYCTL_DISABLE_SECMEM);
     if (err) goto error;
+
+    //err=gcry_control(GCRYCTL_ENABLE_M_GUARD);
+    //if (err) goto error;
 
     // gcry_control(GCRYCTL_INIT_SECMEM, 16384, 0);
-    err=gcry_control(GCRYCTL_SET_VERBOSITY, 3);
-    if (err) goto error;
+    // err=gcry_control(GCRYCTL_SET_VERBOSITY, 3);
+    // if (err) goto error;
+
+    version=gcry_check_version(GCRYPT_VERSION);
+
+    if (version==NULL) {
+
+	logoutput_warning("init_ssh_backend_library: no version");
+
+    } else {
+
+	logoutput("init_ssh_backend_library: found libgcrypt %s", version);
+
+    }
 
     gcry_control(GCRYCTL_INITIALIZATION_FINISHED, 0);
+    test_pow();
+
     return 0;
 
     error:

@@ -36,12 +36,11 @@
 #include <logging.h>
 #include "misc.h"
 
-#include "ssh-datatypes.h"
+#include "datatypes.h"
 #include "pk-types.h"
 #include "pk-keys.h"
 
 #ifdef HAVE_LIBGCRYPT
-
 #include <gcrypt.h>
 
 /* generic function to convert a s-expression for a signature to a buffer
@@ -156,12 +155,12 @@ int create_sig_rsa(struct ssh_key_s *key, unsigned char *buffer, unsigned int si
     }
 
     err=gcry_sexp_build(&s_private, NULL, "(private-key (rsa (n %m)(e %m)(d %m)(p %m)(q %m)(u %m)))",
-					    key->param.rsa.n.lib.mpi,
-					    key->param.rsa.e.lib.mpi,
-					    key->param.rsa.d.lib.mpi,
-					    key->param.rsa.p.lib.mpi,
-					    key->param.rsa.q.lib.mpi,
-					    key->param.rsa.u.lib.mpi);
+					    (gcry_mpi_t) key->param.rsa.n.ptr,
+					    (gcry_mpi_t) key->param.rsa.e.ptr,
+					    (gcry_mpi_t) key->param.rsa.d.ptr,
+					    (gcry_mpi_t) key->param.rsa.p.ptr,
+					    (gcry_mpi_t) key->param.rsa.q.ptr,
+					    (gcry_mpi_t) key->param.rsa.u.ptr);
 
     if (err) {
 
@@ -233,11 +232,11 @@ int create_sig_dss(struct ssh_key_s *key, unsigned char *buffer, unsigned int si
     }
 
     err=gcry_sexp_build(&s_private, NULL, "(private-key (dsa (p %m)(q %m)(g %m)(y %m)(x %m)))",
-					    key->param.dss.p.lib.mpi,
-					    key->param.dss.q.lib.mpi,
-					    key->param.dss.g.lib.mpi,
-					    key->param.dss.y.lib.mpi,
-					    key->param.dss.x.lib.mpi);
+					    (gcry_mpi_t) key->param.dss.p.ptr,
+					    (gcry_mpi_t) key->param.dss.q.ptr,
+					    (gcry_mpi_t) key->param.dss.g.ptr,
+					    (gcry_mpi_t) key->param.dss.y.ptr,
+					    (gcry_mpi_t) key->param.dss.x.ptr);
 
     if (err) {
 
@@ -311,13 +310,13 @@ int create_sig_ecc(struct ssh_key_s *key, unsigned char *buffer, unsigned int si
 
     /* q is opaque mpint, libgcrypt will handle these */
 
-    if (key->param.ecc.q.lib.mpi) {
+    if (key->param.ecc.q.ptr) {
 
-	err=gcry_sexp_build(&s_private, NULL, "(private-key(ecc (curve %s)(flags eddsa)(q %m)(d %m)))", curve, key->param.ecc.q.lib.mpi, key->param.ecc.d.lib.mpi);
+	err=gcry_sexp_build(&s_private, NULL, "(private-key(ecc (curve %s)(flags eddsa)(q %m)(d %m)))", curve, (gcry_mpi_t) key->param.ecc.q.ptr, (gcry_mpi_t) key->param.ecc.d.ptr);
 
     } else {
 
-	err=gcry_sexp_build(&s_private, NULL, "(private-key(ecc (curve %s)(flags eddsa)(d %m)))", curve, key->param.ecc.d.lib.mpi);
+	err=gcry_sexp_build(&s_private, NULL, "(private-key(ecc (curve %s)(flags eddsa)(d %m)))", curve, (gcry_mpi_t) key->param.ecc.d.ptr);
 
     }
 

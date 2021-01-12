@@ -37,7 +37,7 @@
 #include <sys/stat.h>
 #include "list.h"
 #include "sftp/common-protocol.h"
-#include "logging.h"
+#include "log.h"
 
 static void nowrite_uchar(struct attr_buffer_s *ab, unsigned char b)
 {

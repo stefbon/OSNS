@@ -37,7 +37,7 @@
 #include <sys/types.h>
 
 #include "main.h"
-#include "logging.h"
+#include "log.h"
 #include "options.h"
 
 #include "misc.h"

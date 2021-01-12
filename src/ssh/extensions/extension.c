@@ -38,7 +38,7 @@
 
 #include "main.h"
 #include "misc.h"
-#include "logging.h"
+#include "log.h"
 
 #include "ssh-common.h"
 #include "ssh-utils.h"

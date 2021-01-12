@@ -17,8 +17,8 @@
 
 */
 
-#ifndef FS_WORKSPACE_SSH_PK_READ_PRIVATE_H
-#define FS_WORKSPACE_SSH_PK_READ_PRIVATE_H
+#ifndef _SSH_PK_READ_PRIVATE_H
+#define _SSH_PK_READ_PRIVATE_H
 
 int read_skey_rsa(struct ssh_key_s *skey, char *buffer, unsigned int size, unsigned int format, unsigned int *error);
 int read_skey_dss(struct ssh_key_s *skey, char *buffer, unsigned int size, unsigned int format, unsigned int *error);

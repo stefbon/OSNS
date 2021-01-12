@@ -41,7 +41,7 @@
 #include <sys/syscall.h>
 
 #define LOGGING
-#include "logging.h"
+#include "log.h"
 
 #include "main.h"
 #include "options.h"

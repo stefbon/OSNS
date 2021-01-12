@@ -40,7 +40,7 @@
 #include <sys/stat.h>
 
 #include "main.h"
-#include "logging.h"
+#include "log.h"
 #include "misc.h"
 
 #include "ssh-common.h"
@@ -138,6 +138,7 @@ static struct keyex_ops_s dhnone_ops = {
 
 void add_keyex_ops(struct keyex_ops_s *ops)
 {
+    init_list_element(&ops->list, NULL);
     add_list_element_last(&list_keyex_ops, &ops->list);
 }
 

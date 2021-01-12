@@ -38,7 +38,7 @@
 #include <sys/stat.h>
 #include <sys/epoll.h>
 
-#include "logging.h"
+#include "log.h"
 #include "main.h"
 #include "threads.h"
 

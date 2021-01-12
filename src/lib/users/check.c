@@ -39,7 +39,7 @@
 #include <sys/types.h>
 
 #include "datatypes/ssh-string.h"
-#include "logging.h"
+#include "log.h"
 
 /* check for existance of username
     if not, return -1

@@ -41,11 +41,11 @@
 #include <sys/syscall.h>
 #include <sys/fsuid.h>
 
-#include "logging.h"
+#include "log.h"
 #include "misc.h"
 #include "list.h"
 
-#include "ssh-datatypes.h"
+#include "datatypes.h"
 #include "pk-types.h"
 #include "pk-keys.h"
 #include "pk-keystore.h"

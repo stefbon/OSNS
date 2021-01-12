@@ -29,7 +29,7 @@
 #include "list.h"
 #include "network.h"
 
-#include "ssh-datatypes.h"
+#include "datatypes.h"
 #include "ssh-pk.h"
 #include "ssh-common-protocol.h"
 
@@ -249,9 +249,9 @@ struct algo_list_s {
 #define SSH_ALGO_HASH_SHA2_512				3
 
 struct ssh_dh_s {
-    unsigned char					status;
+    struct ssh_string_s					modp;
+    struct ssh_string_s					modg;
     void						(* free)(struct ssh_dh_s *dh);
-    unsigned int					(* get_size_modgroup)(struct ssh_dh_s *dh);
     struct ssh_mpint_s					p;
     struct ssh_mpint_s					g;
     struct ssh_mpint_s					x;

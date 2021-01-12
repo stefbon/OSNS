@@ -38,31 +38,23 @@ unsigned int gettid()
 
 #endif
 
+static struct logging_s logging_std;
+static struct logging_s logging_syslog;
+
 /* no logging */
 
-void logoutput_debug_nolog(const char *fmt, ...)
-{
-}
-void logoutput_info_nolog(const char *fmt, ...)
-{
-}
-void logoutput_notice_nolog(const char *fmt, ...)
-{
-}
-void logoutput_warning_nolog(const char *fmt, ...)
-{
-}
-void logoutput_error_nolog(const char *fmt, ...)
+void logoutput_nolog(const char *fmt, ...)
 {
 }
 
 static struct logging_s logging_nolog = {
 
-    .debug=logoutput_debug_nolog,
-    .info=logoutput_info_nolog,
-    .notice=logoutput_notice_nolog,
-    .warning=logoutput_warning_nolog,
-    .error=logoutput_error_nolog,
+    .level		= LOG_INFO,
+    .debug		= logoutput_nolog,
+    .info		= logoutput_nolog,
+    .notice		= logoutput_nolog,
+    .warning		= logoutput_nolog,
+    .error		= logoutput_nolog,
 
 };
 
@@ -76,72 +68,83 @@ struct logging_s *logging=&logging_nolog;
 
 void logoutput_debug_std(const char *fmt, ...)
 {
-    va_list args;
-    unsigned int len=strlen(fmt);
-    char fmtextra[len+1];
+    if (logging_std.level >= LOG_DEBUG) {
+	va_list args;
+	unsigned int len=strlen(fmt);
+	char fmtextra[len+1];
 
-    memcpy(fmtextra, fmt, len);
-    fmtextra[len]='\n';
+	memcpy(fmtextra, fmt, len);
+	fmtextra[len]='\n';
 
-    va_start(args, fmt);
-    vfprintf(stdout, fmtextra, args);
-    va_end(args);
+	va_start(args, fmt);
+	vfprintf(stdout, fmtextra, args);
+	va_end(args);
+    }
 }
 void logoutput_info_std(const char *fmt, ...)
 {
-    va_list args;
-    unsigned int len=strlen(fmt);
-    char fmtextra[len+1];
+    if (logging_std.level >= LOG_INFO) {
+	va_list args;
+	unsigned int len=strlen(fmt);
+	char fmtextra[len+1];
 
-    memcpy(fmtextra, fmt, len);
-    fmtextra[len]='\n';
+	memcpy(fmtextra, fmt, len);
+	fmtextra[len]='\n';
 
-    va_start(args, fmt);
-    vfprintf(stdout, fmtextra, args);
-    va_end(args);
+	va_start(args, fmt);
+	vfprintf(stdout, fmtextra, args);
+	va_end(args);
+    }
 }
 void logoutput_notice_std(const char *fmt, ...)
 {
-    va_list args;
-    unsigned int len=strlen(fmt);
-    char fmtextra[len+1];
+    if (logging_std.level >= LOG_NOTICE) {
+	va_list args;
+	unsigned int len=strlen(fmt);
+	char fmtextra[len+1];
 
-    memcpy(fmtextra, fmt, len);
-    fmtextra[len]='\n';
+	memcpy(fmtextra, fmt, len);
+	fmtextra[len]='\n';
 
-    va_start(args, fmt);
-    vfprintf(stdout, fmtextra, args);
-    va_end(args);
+	va_start(args, fmt);
+	vfprintf(stdout, fmtextra, args);
+	va_end(args);
+    }
 }
 void logoutput_warning_std(const char *fmt, ...)
 {
-    va_list args;
-    unsigned int len=strlen(fmt);
-    char fmtextra[len+1];
+    if (logging_std.level >= LOG_WARNING) {
+	va_list args;
+	unsigned int len=strlen(fmt);
+	char fmtextra[len+1];
 
-    memcpy(fmtextra, fmt, len);
-    fmtextra[len]='\n';
+	memcpy(fmtextra, fmt, len);
+	fmtextra[len]='\n';
 
-    va_start(args, fmt);
-    vfprintf(stderr, fmtextra, args);
-    va_end(args);
+	va_start(args, fmt);
+	vfprintf(stderr, fmtextra, args);
+	va_end(args);
+    }
 }
 void logoutput_error_std(const char *fmt, ...)
 {
-    va_list args;
-    unsigned int len=strlen(fmt);
-    char fmtextra[len+1];
+    if (logging_std.level >= LOG_ERR) {
+	va_list args;
+	unsigned int len=strlen(fmt);
+	char fmtextra[len+1];
 
-    memcpy(fmtextra, fmt, len);
-    fmtextra[len]='\n';
+	memcpy(fmtextra, fmt, len);
+	fmtextra[len]='\n';
 
-    va_start(args, fmt);
-    vfprintf(stderr, fmtextra, args);
-    va_end(args);
+	va_start(args, fmt);
+	vfprintf(stderr, fmtextra, args);
+	va_end(args);
+    }
 }
 
 static struct logging_s logging_std = {
 
+    .level=LOG_INFO,
     .debug=logoutput_debug_std,
     .info=logoutput_info_std,
     .notice=logoutput_notice_std,
@@ -150,52 +153,62 @@ static struct logging_s logging_std = {
 
 };
 
-
 /* log to syslog */
 
 void logoutput_debug_syslog(const char *fmt, ...)
 {
-    va_list args;
+    if (logging_syslog.level >= LOG_DEBUG) {
+	va_list args;
 
-    va_start(args, fmt);
-    vsyslog(LOG_DEBUG, fmt, args);
-    va_end(args);
+	va_start(args, fmt);
+	vsyslog(LOG_DEBUG, fmt, args);
+	va_end(args);
+    }
 }
 void logoutput_info_syslog(const char *fmt, ...)
 {
-    va_list args;
+    if (logging_syslog.level >= LOG_INFO) {
+	va_list args;
 
-    va_start(args, fmt);
-    vsyslog(LOG_INFO, fmt, args);
-    va_end(args);
+	va_start(args, fmt);
+	vsyslog(LOG_INFO, fmt, args);
+	va_end(args);
+    }
 }
 void logoutput_notice_syslog(const char *fmt, ...)
 {
-    va_list args;
+    if (logging_syslog.level >= LOG_NOTICE) {
+	va_list args;
 
-    va_start(args, fmt);
-    vsyslog(LOG_NOTICE, fmt, args);
-    va_end(args);
+	va_start(args, fmt);
+	vsyslog(LOG_NOTICE, fmt, args);
+	va_end(args);
+    }
 }
 void logoutput_warning_syslog(const char *fmt, ...)
 {
-    va_list args;
+    if (logging_syslog.level >= LOG_WARNING) {
+	va_list args;
 
-    va_start(args, fmt);
-    vsyslog(LOG_WARNING, fmt, args);
-    va_end(args);
+	va_start(args, fmt);
+	vsyslog(LOG_WARNING, fmt, args);
+	va_end(args);
+    }
 }
 void logoutput_error_syslog(const char *fmt, ...)
 {
-    va_list args;
+    if (logging_syslog.level >= LOG_ERR) {
+	va_list args;
 
-    va_start(args, fmt);
-    vsyslog(LOG_CRIT, fmt, args);
-    va_end(args);
+	va_start(args, fmt);
+	vsyslog(LOG_CRIT, fmt, args);
+	va_end(args);
+    }
 }
 
 static struct logging_s logging_syslog = {
 
+    .level			= LOG_INFO,
     .debug			= logoutput_debug_syslog,
     .info			= logoutput_info_syslog,
     .notice			= logoutput_notice_syslog,

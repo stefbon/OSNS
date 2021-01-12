@@ -37,7 +37,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-#include "logging.h"
+#include "log.h"
 #include "main.h"
 
 #include "misc.h"
@@ -393,6 +393,8 @@ int start_diffiehellman_client(struct ssh_connection_s *connection, struct ssh_k
 	goto out;
 
     }
+
+    logoutput("start_diffiehellman_client: kex local key created");
 
     /* client: send SSH_MSG_KEXDH_INIT message */
 

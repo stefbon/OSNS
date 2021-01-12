@@ -41,7 +41,7 @@
 #include <sys/socket.h>
 #include <netdb.h>
 
-#include "logging.h"
+#include "log.h"
 #include "main.h"
 #include "misc.h"
 #include "network.h"

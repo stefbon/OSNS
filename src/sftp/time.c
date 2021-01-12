@@ -42,7 +42,7 @@
 #include <linux/fs.h>
 
 #include "main.h"
-#include "logging.h"
+#include "log.h"
 #include "misc.h"
 
 #include "workspace-interface.h"

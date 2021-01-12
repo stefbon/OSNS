@@ -38,7 +38,7 @@
 #include <sys/param.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include "logging.h"
+#include "log.h"
 #include "main.h"
 #include "misc.h"
 

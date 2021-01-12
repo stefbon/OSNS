@@ -1,7 +1,7 @@
 sbin_PROGRAMS = sonssc
 
-sonssc_CFLAGS = $(GLIB_CFLAGS) $(LIBGCRYPT_CFLAGS) $(SYSTEMD_CFLAGS) $(AVAHI_CORE_CFLAGS) $(AVAHI_CLIENT_CFLAGS) -g -D_FILE_OFFSET_BITS=64 -lz -lpthread -fPIC -lm -I . -I ssh -I lib -O2 -Wall -Wno-unused-but-set-variable -Wno-uninitialized -Wno-unused-variable -Wno-unused-label -Wno-unused-function
-sonssc_CPPFLAGS = $(GLIB_CFLAGS) $(LIBGCRYPT_CFLAGS) $(SYSTEMD_CFLAGS)  $(AVAHI_CORE_CFLAGS) $(AVAHI_CLIENT_CFLAGS) -g -D_FILE_OFFSET_BITS=64 -lz -lpthread -fPIC -lm -I . -I ssh -I lib -O2 -Wall -Wno-unused-but-set-variable -Wno-uninitialized -Wno-unused-variable -Wno-unused-label -Wno-unused-function
+sonssc_CFLAGS = $(CFLAGS) $(GLIB_CFLAGS) $(LIBGCRYPT_CFLAGS) $(SYSTEMD_CFLAGS) $(AVAHI_CORE_CFLAGS) $(AVAHI_CLIENT_CFLAGS) -g -fasynchronous-unwind-tables -fexceptions -fstack-clash-protection -D_FILE_OFFSET_BITS=64 -lz -lpthread -fPIC -lm -I . -I ./ssh -I ./lib -O2 -Wall -Wno-unused-but-set-variable -Wno-uninitialized -Wno-unused-variable -Wno-unused-label -Wno-unused-function
+sonssc_CPPFLAGS = $(CXXFLAGS) $(GLIB_CFLAGS) $(LIBGCRYPT_CFLAGS) $(SYSTEMD_CFLAGS)  $(AVAHI_CORE_CFLAGS) $(AVAHI_CLIENT_CFLAGS) -g -fasynchronous-unwind-tables -fexceptions -fstack-clash-protection -D_FILE_OFFSET_BITS=64 -lz -lpthread -fPIC -lm -I . -I ./ssh -I ./lib -O2 -Wall -Wno-unused-but-set-variable -Wno-uninitialized -Wno-unused-variable -Wno-unused-label -Wno-unused-function
 sonssc_LDADD = $(GLIB_LIBS) $(LIBGCRYPT_LIBS) $(SYSTEMD_LIBS) $(AVAHI_CORE_LIBS) $(AVAHI_CLIENT_LIBS) $(LDFLAGS)
 
 sonssc_SOURCES =  	lib/fuse/directory.c lib/fuse/dentry.c lib/fuse/utils.c \
@@ -27,7 +27,8 @@ sonssc_SOURCES =  	lib/fuse/directory.c lib/fuse/dentry.c lib/fuse/utils.c \
 			lib/mime/handlemime.c  lib/misc/replaceandskip.c \
 			options.c \
 			main.c \
-			datatypes/ssh-string.c datatypes/ssh-uint.c \
+			lib/datatypes/ssh-string.c lib/datatypes/ssh-uint.c \
+			lib/datatypes/ssh-namelist.c lib/datatypes/ssh-payload.c lib/datatypes/ssh-mpint.c lib/datatypes/ssh-msg-buffer.c \
 			lib/users/check.c lib/users/local.c lib/users/monitor.c \
 			fuse/sftp.c fuse/sftp-fs.c fuse/network.c fuse/ssh.c \
 			fuse/sftp/inode-stat.c \
@@ -45,11 +46,9 @@ sonssc_SOURCES =  	lib/fuse/directory.c lib/fuse/dentry.c lib/fuse/utils.c \
 			sftp/user/mapping.c \
 			sftp/attr.c sftp/context.c sftp/common.c sftp/extensions.c sftp/init.c   \
 			sftp/request-hash.c sftp/recv.c sftp/time.c sftp/usermapping.c \
-			ssh/alloc/init.c \
 			ssh/channel/init.c ssh/channel/payload.c ssh/channel/shell.c ssh/channel/startclose.c \
 			ssh/channel/table.c ssh/channel/uri.c ssh/channel/utils.c \
 			ssh/connections/connect.c  ssh/connections/init.c ssh/connections/setup.c ssh/connections/utils.c \
-			ssh/datatypes/ssh-namelist.c ssh/datatypes/ssh-payload.c ssh/datatypes/ssh-mpint.c ssh/datatypes/ssh-msg-buffer.c \
 			ssh/extensions/extension.c \
 			ssh/hash/hash.c \
 			ssh/keyexchange/algo-exchange.c ssh/keyexchange/compare.c ssh/keyexchange/createkeys.c ssh/keyexchange/dh.c ssh/keyexchange/ecdh.c ssh/keyexchange/key-exchange.c ssh/keyexchange/keyx.c \
@@ -68,7 +67,7 @@ sonssc_SOURCES =  	lib/fuse/directory.c lib/fuse/dentry.c lib/fuse/utils.c \
 			ssh/ssh-hostinfo.c \
 			ssh/ssh-language.c \
 			ssh/ssh-pubkey.c \
-			ssh/ssh-utils.c 
+			ssh/ssh-utils.c
 
 
 

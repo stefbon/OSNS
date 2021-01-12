@@ -35,11 +35,11 @@
 #include <sys/param.h>
 #include <sys/types.h>
 
-#include "logging.h"
+#include "log.h"
 #include "main.h"
 #include "misc.h"
 
-#include "ssh-datatypes.h"
+#include "datatypes.h"
 #include "pk-types.h"
 #include "pk-keys.h"
 #include "pk-utils.h"
@@ -82,10 +82,10 @@ int compare_ssh_keys(struct ssh_key_s *a, struct ssh_key_s *b)
 	/* q is the public key but is optional for the private key
 	    if defined in both test it */
 
-	if (a->secret==0 && a->param.ecc.q.lib.mpi==NULL) return -1;
-	if (b->secret==0 && b->param.ecc.q.lib.mpi==NULL) return -1;
+	if (a->secret==0 && a->param.ecc.q.ptr==NULL) return -1;
+	if (b->secret==0 && b->param.ecc.q.ptr==NULL) return -1;
 
-	if (a->param.ecc.q.lib.mpi && b->param.ecc.q.lib.mpi) {
+	if (a->param.ecc.q.ptr && b->param.ecc.q.ptr) {
 
 	    if (compare_ssh_mpoint(&a->param.ecc.q, &b->param.ecc.q)!=0) return -1;
 

@@ -39,7 +39,11 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-#include "logging.h"
+#if HAVE_LIBGCRYPT
+#include <gcrypt.h>
+#endif
+
+#include "log.h"
 #include "main.h"
 
 #include "misc.h"
@@ -303,68 +307,77 @@ static unsigned int populate_keyex_dh(struct ssh_connection_s *c, struct keyex_o
 static int dh_create_local_key(struct ssh_keyex_s *k)
 {
     struct ssh_dh_s *dh=&k->method.dh;
-    unsigned int bits = get_nbits_ssh_mpint(&dh->p);
-    struct ssh_mpint_s tmp;
-    struct ssh_mpint_s q;
+    unsigned int bits = 0;
+    unsigned int error = 0;
+    int result=-1;
+    struct ssh_mpint_s q=SSH_MPINT_INIT;
+    struct ssh_mpint_s tmp=SSH_MPINT_INIT;
+    struct ssh_mpint_s *ef=(struct ssh_mpint_s *)(k->flags & SSH_KEYEX_FLAG_SERVER) ? &dh->f : &dh->e;
 
-    init_ssh_mpint(&tmp);
-    init_ssh_mpint(&q);
+
+    if (create_ssh_mpint(&dh->p)==-1) goto out;
+    if (create_ssh_mpint(&dh->g)==-1) goto out;
+
+    if (create_ssh_mpint(&dh->x)==-1) goto out;
+    if (create_ssh_mpint(&dh->e)==-1) goto out;
+    if (create_ssh_mpint(&dh->f)==-1) goto out;
+    if (create_ssh_mpint(&dh->sharedkey)==-1) goto out;
+
+    if (read_ssh_mpint(&dh->p, (char *)dh->modp.ptr, dh->modp.len, SSH_MPINT_FORMAT_USC, &error)==-1) goto out;
+    if (read_ssh_mpint(&dh->g, (char *)dh->modg.ptr, dh->modg.len, SSH_MPINT_FORMAT_USC, &error)==-1) goto out;
 
     /* size of subgroup is (q = (p - 1)/2) which results in a number of (bits(p) - 1) bits
 	TODO: is this always the case ??? also with another generator ??? */
 
     if (create_ssh_mpint(&tmp)==-1) goto out;
-    add_ssh_mpint(&tmp, &dh->p, "sub", 1);
-    bits = get_nbits_ssh_mpint(&tmp);
-    bits--;
-
     if (create_ssh_mpint(&q)==-1) goto out;
+
+    add_ssh_mpint(&tmp, &dh->p, "sub", 1);
     mul_ssh_mpint(&q, &tmp, "div", 2);
+
+    bits = get_nbits_ssh_mpint(&dh->p);
+    bits--;
 
     getrandom:
 
     if (randomize_ssh_mpint(&dh->x, bits)==-1) goto out;
-    if (compare_ssh_mpint_ui(&dh->x, 1) <= 0) {
-
-	logoutput("dh_create_local_key: random is equal/less then 1..retry");
-	goto getrandom;
-
-    }
-
+    if (compare_ssh_mpint_ui(&dh->x, 1) <= 0) goto getrandom;
     if (compare_ssh_mpint(&dh->x, &q) >= 0) {
 
-	logoutput("dh_create_local_key: random x is equal or bigger than q..retry");
+	logoutput("dh_create_local_key: random too big (x>=q), try again");
 	goto getrandom;
 
     }
 
-    if (k->flags & SSH_KEYEX_FLAG_SERVER) {
+#if HAVE_LIBGCRYPT
 
-	power_modulo_ssh_mpint(&dh->f, &dh->g, &dh->x, &dh->p);
+    gcry_mpi_powm((gcry_mpi_t) ef->ptr, (gcry_mpi_t) dh->g.ptr, (gcry_mpi_t) dh->x.ptr, (gcry_mpi_t) dh->p.ptr);
 
-    } else {
+#else
 
-	power_modulo_ssh_mpint(&dh->e, &dh->g, &dh->x, &dh->p);
+    power_modulo_ssh_mpint(ef, &dh->g, &dh->x, &dh->p);
 
-    }
+#endif
+
+    result=0;
 
     out:
-
     free_ssh_mpint(&tmp);
     free_ssh_mpint(&q);
-    return 0;
+    return result;
 }
 
 static void dh_msg_write_local_key(struct msg_buffer_s *mb, struct ssh_keyex_s *k)
 {
+    struct ssh_dh_s *dh=&k->method.dh;
 
     if (k->flags & SSH_KEYEX_FLAG_SERVER) {
 
-	msg_write_ssh_mpint(mb, &k->method.dh.f);
+	msg_write_ssh_mpint(mb, &dh->f);
 
     } else {
 
-	msg_write_ssh_mpint(mb, &k->method.dh.f);
+	msg_write_ssh_mpint(mb, &dh->e);
 
     }
 
@@ -372,14 +385,15 @@ static void dh_msg_write_local_key(struct msg_buffer_s *mb, struct ssh_keyex_s *
 
 static void dh_msg_read_remote_key(struct msg_buffer_s *mb, struct ssh_keyex_s *k)
 {
+    struct ssh_dh_s *dh=&k->method.dh;
 
     if (k->flags & SSH_KEYEX_FLAG_SERVER) {
 
-	msg_read_ssh_mpint(mb, &k->method.dh.e, NULL);
+	msg_read_ssh_mpint(mb, &dh->e, NULL);
 
     } else {
 
-	msg_read_ssh_mpint(mb, &k->method.dh.f, NULL);
+	msg_read_ssh_mpint(mb, &dh->f, NULL);
 
     }
 
@@ -387,14 +401,15 @@ static void dh_msg_read_remote_key(struct msg_buffer_s *mb, struct ssh_keyex_s *
 
 static void dh_msg_write_remote_key(struct msg_buffer_s *mb, struct ssh_keyex_s *k)
 {
+    struct ssh_dh_s *dh=&k->method.dh;
 
     if (k->flags & SSH_KEYEX_FLAG_SERVER) {
 
-	msg_write_ssh_mpint(mb, &k->method.dh.e);
+	msg_write_ssh_mpint(mb, &dh->e);
 
     } else {
 
-	msg_write_ssh_mpint(mb, &k->method.dh.f);
+	msg_write_ssh_mpint(mb, &dh->f);
 
     }
 
@@ -427,6 +442,7 @@ static void dh_msg_write_sharedkey(struct msg_buffer_s *mb, struct ssh_keyex_s *
 static void dh_free_keyex(struct ssh_keyex_s *k)
 {
     struct ssh_dh_s *dh=&k->method.dh;
+
     free_ssh_mpint(&dh->p);
     free_ssh_mpint(&dh->g);
     free_ssh_mpint(&dh->x);
@@ -444,12 +460,23 @@ static int dh_init_keyex(struct ssh_keyex_s *k, char *name)
     unsigned int leng=0;
     unsigned int error=0;
 
+    init_ssh_mpint(&dh->p);
+    init_ssh_mpint(&dh->g);
+    init_ssh_mpint(&dh->x);
+    init_ssh_mpint(&dh->e);
+    init_ssh_mpint(&dh->f);
+    init_ssh_mpint(&dh->sharedkey);
+
+    init_ssh_string(&dh->modp);
+    init_ssh_string(&dh->modg);
+
     if (strcmp(name, "diffie-hellman-group1-sha1")==0) {
 
 	p=modp_group1_p;
 	lenp=(sizeof(modp_group1_p)/sizeof(modp_group1_p[0]));
 	g=modp_group1_g;
 	leng=(sizeof(modp_group1_g)/sizeof(modp_group1_g[0]));
+
 	strcpy(k->digestname, "sha1");
 
     } else if (strcmp(name, "diffie-hellman-group14-sha1")==0) {
@@ -458,6 +485,7 @@ static int dh_init_keyex(struct ssh_keyex_s *k, char *name)
 	lenp=(sizeof(modp_group14_p)/sizeof(modp_group14_p[0]));
 	g=modp_group1_g;
 	leng=(sizeof(modp_group14_g)/sizeof(modp_group14_g[0]));
+
 	strcpy(k->digestname, "sha1");
 
     } else if (strcmp(name, "diffie-hellman-group14-sha256")==0) {
@@ -466,6 +494,7 @@ static int dh_init_keyex(struct ssh_keyex_s *k, char *name)
 	lenp=(sizeof(modp_group14_p)/sizeof(modp_group14_p[0]));
 	g=modp_group14_g;
 	leng=(sizeof(modp_group14_g)/sizeof(modp_group14_g[0]));
+
 	strcpy(k->digestname, "sha256");
 
     } else if (strcmp(name, "diffie-hellman-group16-sha512")==0) {
@@ -474,6 +503,7 @@ static int dh_init_keyex(struct ssh_keyex_s *k, char *name)
 	lenp=(sizeof(modp_group16_p)/sizeof(modp_group16_p[0]));
 	g=modp_group16_g;
 	leng=(sizeof(modp_group16_g)/sizeof(modp_group16_g[0]));
+
 	strcpy(k->digestname, "sha512");
 
     } else if (strcmp(name, "diffie-hellman-group18-sha512")==0) {
@@ -482,6 +512,7 @@ static int dh_init_keyex(struct ssh_keyex_s *k, char *name)
 	lenp=(sizeof(modp_group18_p)/sizeof(modp_group18_p[0]));
 	g=modp_group18_g;
 	leng=(sizeof(modp_group18_g)/sizeof(modp_group18_g[0]));
+
 	strcpy(k->digestname, "sha512");
 
     } else {
@@ -492,25 +523,14 @@ static int dh_init_keyex(struct ssh_keyex_s *k, char *name)
     }
 
     k->ops=&dh_ops;
-    init_ssh_mpint(&dh->p);
-    init_ssh_mpint(&dh->g);
-    init_ssh_mpint(&dh->x);
-    init_ssh_mpint(&dh->e);
-    init_ssh_mpint(&dh->f);
-    init_ssh_mpint(&dh->sharedkey);
 
-    // if (create_ssh_mpint(&dh->p)==-1) goto error;
-    // if (create_ssh_mpint(&dh->g)==-1) goto error;
-    if (create_ssh_mpint(&dh->x)==-1) goto error;
-    if (create_ssh_mpint(&dh->e)==-1) goto error;
-    if (create_ssh_mpint(&dh->f)==-1) goto error;
-    if (create_ssh_mpint(&dh->sharedkey)==-1) goto error;
+    dh->modp.ptr=p;
+    dh->modp.len=lenp;
+
+    dh->modg.ptr=g;
+    dh->modg.len=leng;
 
     logoutput("dh_init_keyex: %s: len p %i len g %i", name, lenp, leng);
-
-    if (read_ssh_mpint(&dh->p, (char *)p, lenp, SSH_MPINT_FORMAT_USC, &error)==-1) goto error;
-    if (read_ssh_mpint(&dh->g, (char *)g, leng, SSH_MPINT_FORMAT_USC, &error)==-1) goto error;
-
     return 0;
 
     error:

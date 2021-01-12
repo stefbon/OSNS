@@ -39,7 +39,7 @@
 #include <sys/vfs.h>
 
 #include "main.h"
-#include "logging.h"
+#include "log.h"
 #include "misc.h"
 
 #include "sftp/common-protocol.h"

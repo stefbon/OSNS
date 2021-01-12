@@ -33,11 +33,15 @@
 #include <errno.h>
 
 #include "misc.h"
-#include "logging.h"
-#include "ssh-datatypes.h"
+#include "log.h"
+#include "datatypes.h"
 #include "pk-types.h"
 #include "pk-keys.h"
 #include "alloc/init.h"
+
+#ifdef HAVE_LIBGCRYPT
+
+#include <gcrypt.h>
 
 static int compare_sexp_type(gcry_sexp_t s_key, const char *name)
 {
@@ -119,26 +123,26 @@ static int read_key_sexp_param_rsa(gcry_sexp_t s_keydata, struct ssh_key_s *key)
 	    /* d is a regular mpi */
 
 	    s_tmp=gcry_sexp_find_token(s_param, "n", 0);
-	    if (s_tmp) key->param.rsa.n.lib.mpi=gcry_sexp_nth_mpi(s_tmp, 1, GCRYMPI_FMT_USG);
+	    if (s_tmp) key->param.rsa.n.ptr=(void *) gcry_sexp_nth_mpi(s_tmp, 1, GCRYMPI_FMT_USG);
 	    s_tmp=gcry_sexp_find_token(s_param, "e", 0);
-	    if (s_tmp) key->param.rsa.e.lib.mpi=gcry_sexp_nth_mpi(s_tmp, 1, GCRYMPI_FMT_USG);
+	    if (s_tmp) key->param.rsa.e.ptr=(void *) gcry_sexp_nth_mpi(s_tmp, 1, GCRYMPI_FMT_USG);
 
 	    if (key->secret==1) {
 
 		s_tmp=gcry_sexp_find_token(s_param, "d", 0);
-		if (s_tmp) key->param.rsa.d.lib.mpi=gcry_sexp_nth_mpi(s_tmp, 1, GCRYMPI_FMT_USG);
+		if (s_tmp) key->param.rsa.d.ptr=(void *) gcry_sexp_nth_mpi(s_tmp, 1, GCRYMPI_FMT_USG);
 		s_tmp=gcry_sexp_find_token(s_param, "p", 0);
-		if (s_tmp) key->param.rsa.p.lib.mpi=gcry_sexp_nth_mpi(s_tmp, 1, GCRYMPI_FMT_USG);
+		if (s_tmp) key->param.rsa.p.ptr=(void *) gcry_sexp_nth_mpi(s_tmp, 1, GCRYMPI_FMT_USG);
 		s_tmp=gcry_sexp_find_token(s_param, "q", 0);
-		if (s_tmp) key->param.rsa.q.lib.mpi=gcry_sexp_nth_mpi(s_tmp, 1, GCRYMPI_FMT_USG);
+		if (s_tmp) key->param.rsa.q.ptr=(void *) gcry_sexp_nth_mpi(s_tmp, 1, GCRYMPI_FMT_USG);
 		s_tmp=gcry_sexp_find_token(s_param, "u", 0);
-		if (s_tmp) key->param.rsa.u.lib.mpi=gcry_sexp_nth_mpi(s_tmp, 1, GCRYMPI_FMT_USG);
+		if (s_tmp) key->param.rsa.u.ptr=(void *) gcry_sexp_nth_mpi(s_tmp, 1, GCRYMPI_FMT_USG);
 
 	    }
 
 
-	    if (key->param.rsa.n.lib.mpi==NULL || key->param.rsa.e.lib.mpi==NULL ||
-		(key->secret==1 && (key->param.rsa.d.lib.mpi==NULL || key->param.rsa.p.lib.mpi==NULL || key->param.rsa.q.lib.mpi==NULL || key->param.rsa.u.lib.mpi==NULL))) {
+	    if (key->param.rsa.n.ptr==NULL || key->param.rsa.e.ptr==NULL ||
+		(key->secret==1 && (key->param.rsa.d.ptr==NULL || key->param.rsa.p.ptr==NULL || key->param.rsa.q.ptr==NULL || key->param.rsa.u.ptr==NULL))) {
 
 		(* key->free_param)(key);
 
@@ -294,24 +298,23 @@ static int read_key_sexp_param_dss(gcry_sexp_t s_keydata, struct ssh_key_s *key)
 	    /* d is a regular mpi */
 
 	    s_tmp=gcry_sexp_find_token(s_param, "p", 0);
-	    if (s_tmp) key->param.dss.p.lib.mpi=gcry_sexp_nth_mpi(s_tmp, 1, GCRYMPI_FMT_USG);
+	    if (s_tmp) key->param.dss.p.ptr=(void *) gcry_sexp_nth_mpi(s_tmp, 1, GCRYMPI_FMT_USG);
 	    s_tmp=gcry_sexp_find_token(s_param, "q", 0);
-	    if (s_tmp) key->param.dss.q.lib.mpi=gcry_sexp_nth_mpi(s_tmp, 1, GCRYMPI_FMT_USG);
+	    if (s_tmp) key->param.dss.q.ptr=(void *) gcry_sexp_nth_mpi(s_tmp, 1, GCRYMPI_FMT_USG);
 	    s_tmp=gcry_sexp_find_token(s_param, "g", 0);
-	    if (s_tmp) key->param.dss.g.lib.mpi=gcry_sexp_nth_mpi(s_tmp, 1, GCRYMPI_FMT_USG);
+	    if (s_tmp) key->param.dss.g.ptr=(void *) gcry_sexp_nth_mpi(s_tmp, 1, GCRYMPI_FMT_USG);
 	    s_tmp=gcry_sexp_find_token(s_param, "y", 0);
-	    if (s_tmp) key->param.dss.y.lib.mpi=gcry_sexp_nth_mpi(s_tmp, 1, GCRYMPI_FMT_USG);
+	    if (s_tmp) key->param.dss.y.ptr=(void *) gcry_sexp_nth_mpi(s_tmp, 1, GCRYMPI_FMT_USG);
 
 	    if (key->secret==1) {
 
 		s_tmp=gcry_sexp_find_token(s_param, "x", 0);
-		if (s_tmp) key->param.dss.x.lib.mpi=gcry_sexp_nth_mpi(s_tmp, 1, GCRYMPI_FMT_USG);
+		if (s_tmp) key->param.dss.x.ptr=(void *) gcry_sexp_nth_mpi(s_tmp, 1, GCRYMPI_FMT_USG);
 
 	    }
 
-
-	    if (key->param.dss.p.lib.mpi==NULL || key->param.dss.q.lib.mpi==NULL || key->param.dss.g.lib.mpi==NULL || key->param.dss.y.lib.mpi==NULL ||
-		(key->secret==1 && key->param.dss.x.lib.mpi==NULL)) {
+	    if (key->param.dss.p.ptr==NULL || key->param.dss.q.ptr==NULL || key->param.dss.g.ptr==NULL || key->param.dss.y.ptr==NULL ||
+		(key->secret==1 && key->param.dss.x.ptr==NULL)) {
 
 		(* key->free_param)(key);
 
@@ -497,18 +500,18 @@ static int read_key_sexp_param_ecc(gcry_sexp_t s_keydata, struct ssh_key_s *key)
 
 		    /* q is stored as opaque mpi */
 
-		    key->param.ecc.q.lib.mpi=gcry_mpi_set_opaque(NULL, (void *) data, (8 * len));
+		    key->param.ecc.q.ptr=(void *) gcry_mpi_set_opaque(NULL, (void *) data, (8 * len));
 
 		}
 
-		if (key->param.ecc.q.lib.mpi) {
+		if (key->param.ecc.q.ptr) {
 
 		    if (key->secret==0) result=0;
 
 		} else {
 
 		    logoutput("read_key_sexp_param_ecc: failed to store q");
-		    free_custom(data);
+		    free(data);
 		    if (key->secret==1) goto privatekey;
 		    goto out;
 
@@ -538,9 +541,9 @@ static int read_key_sexp_param_ecc(gcry_sexp_t s_keydata, struct ssh_key_s *key)
 
 		    /* is this right?? in documentation this value is not an mpi */
 
-		    key->param.ecc.d.lib.mpi=gcry_sexp_nth_mpi(s_d, 1, GCRYMPI_FMT_USG);
+		    key->param.ecc.d.ptr=(void *) gcry_sexp_nth_mpi(s_d, 1, GCRYMPI_FMT_USG);
 
-		    if (key->param.ecc.d.lib.mpi) {
+		    if (key->param.ecc.d.ptr) {
 
 			result=0;
 
@@ -720,3 +723,12 @@ int create_ssh_key(struct ssh_pkalgo_s *algo, struct ssh_key_s *pkey, struct ssh
     return -1;
 
 }
+
+#else
+
+int create_ssh_key(struct ssh_pkalgo_s *algo, struct ssh_key_s *pkey, struct ssh_key_s *skey)
+{
+    return -1;
+}
+
+#endif

@@ -38,7 +38,7 @@
 #include <sys/stat.h>
 
 #include "main.h"
-#include "logging.h"
+#include "log.h"
 #include "options.h"
 
 #include "misc.h"
@@ -155,7 +155,7 @@ int init_ssh_backend()
 	init_ssh_receive_once();
 	init_ssh_utils();
 	init_keyex_once();
-	result=init_ssh_backend_library();
+	//result=init_ssh_backend_library();
 	// init_custom_memory_handlers();
 	if (result==0) init_done=1;
 

@@ -38,12 +38,12 @@
 #include <sys/stat.h>
 #include <sys/fsuid.h>
 
-#include "logging.h"
+#include "log.h"
 #include "main.h"
 #include "misc.h"
 #include "network.h"
 
-#include "ssh-datatypes.h"
+#include "datatypes.h"
 #include "ssh-utils.h"
 
 #include "pk-types.h"

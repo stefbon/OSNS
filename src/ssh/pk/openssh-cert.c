@@ -35,11 +35,11 @@
 #include <sys/param.h>
 #include <sys/types.h>
 
-#include "logging.h"
+#include "log.h"
 #include "main.h"
 #include "misc.h"
 
-#include "ssh-datatypes.h"
+#include "datatypes.h"
 #include "ssh-utils.h"
 #include "pk-types.h"
 #include "pk-keys.h"

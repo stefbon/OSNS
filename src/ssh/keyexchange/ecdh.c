@@ -37,7 +37,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-#include "logging.h"
+#include "log.h"
 #include "main.h"
 
 #include "misc.h"
@@ -115,7 +115,7 @@ static void convert_hex2char(unsigned char **p_hex, unsigned char *uchar)
     *p_hex+=2;
 }
 
-static int gcry_ecc_mul_point(int algo, unsigned char *buffer, struct ssh_string_s *skey, struct ssh_string_s *pkey)
+static int tmp_gcry_ecc_mul_point(int algo, unsigned char *buffer, struct ssh_string_s *skey, struct ssh_string_s *pkey)
 {
     gpg_error_t err=0;
     gcry_sexp_t s_pkey=NULL;

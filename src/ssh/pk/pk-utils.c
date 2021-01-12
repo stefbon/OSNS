@@ -37,7 +37,7 @@
 #endif
 
 #include "misc.h"
-#include "ssh-datatypes.h"
+#include "datatypes.h"
 #include "pk-types.h"
 
 #ifdef HAVE_GLIB2
