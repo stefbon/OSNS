@@ -180,19 +180,19 @@
 #define LSTAT_FOLLOWS_SLASHED_SYMLINK 1
 
 /* Name of package */
-#define PACKAGE "fs-workspace"
+#define PACKAGE "osns"
 
 /* Define to the address where bug reports for this package should be sent. */
 #define PACKAGE_BUGREPORT "none"
 
 /* Define to the full name of this package. */
-#define PACKAGE_NAME "fs-workspace"
+#define PACKAGE_NAME "osns"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "fs-workspace 1.0a1"
+#define PACKAGE_STRING "osns 1.0a1"
 
 /* Define to the one symbol short name of this package. */
-#define PACKAGE_TARNAME "fs-workspace"
+#define PACKAGE_TARNAME "osns"
 
 /* Define to the home page for this package. */
 #define PACKAGE_URL ""

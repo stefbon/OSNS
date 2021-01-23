@@ -44,7 +44,7 @@ struct logging_s {
 
 // #ifdef LOGGING
 
-struct logging_s *logging;
+extern struct logging_s *logging;
 
 /* without extension defaults to debug */
 #define logoutput(...) (* logging->info)(__VA_ARGS__)

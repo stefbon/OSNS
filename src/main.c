@@ -447,12 +447,26 @@ struct service_context_s *create_mount_context(struct fuse_user_s *user, char **
 
 	}
 
-	logoutput("create_mount_context: start");
+	logoutput("create_mount_context: starting FUSE mountpoint using fd %i", fd);
 
 	if ((* context->interface.start)(&context->interface, fd, NULL)==0) {
+	    struct simple_lock_s wlock;
+	    struct inode_s *inode=&workspace->inodes.rootinode;
+	    struct directory_s *d=get_directory(inode);
 
 	    (* user->add_workspace)(user, workspace);
-	    logoutput("create_mount_context: %s mounted", workspace->mountpoint.path);
+	    logoutput("create_mount_context: FUSE mountpoint %s mounted", workspace->mountpoint.path);
+
+	    if (wlock_directory(d, &wlock)==0) {
+		struct inode_link_s link;
+
+		link.type=INODE_LINK_TYPE_CONTEXT;
+		link.link.ptr=(void *) context;
+		set_inode_link_directory(inode, &link);
+		unlock_directory(d, &wlock);
+
+	    }
+
 	    return context;
 
 	}

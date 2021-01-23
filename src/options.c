@@ -104,6 +104,30 @@ static void parse_network_discover_option_cb(char *name, void *ptr)
 
 }
 
+static void parse_network_services_option_cb(char *name, void *ptr)
+{
+    struct network_options_s *network=(struct network_options_s *) ptr;
+
+    if (strcmp(name, "ssh")==0) {
+
+	network->services |= _OPTIONS_NETWORK_ENABLE_SSH;
+
+    } else if (strcmp(name, "smb")==0) {
+
+	network->flags |= _OPTIONS_NETWORK_ENABLE_SMB;
+
+    } else if (strcmp(name, "nfs")==0) {
+
+	network->flags |= _OPTIONS_NETWORK_ENABLE_NFS;
+
+    } else if (strcmp(name, "webdav")==0) {
+
+	network->flags |= _OPTIONS_NETWORK_ENABLE_WEBDAV;
+
+    }
+
+}
+
 static void parse_ssh_userauth_methods_cb(char *name, void *ptr)
 {
     struct ssh_options_s *ssh=(struct ssh_options_s *) ptr;
@@ -252,6 +276,10 @@ static void parse_ssh_keyx_cb(char *name, void *ptr)
 
 	ssh->keyx|=(1 << (_OPTIONS_SSH_KEYX_ECDH - 1));
 
+    } else if (strcmp(name, "none")==0) {
+
+	ssh->keyx|=(1 << (_OPTIONS_SSH_KEYX_NONE - 1));
+
     }
 
 }
@@ -336,17 +364,17 @@ static int read_config(char *path)
 
 	    /* FUSE */
 
-	    } else if (strcmp(option, "fuse.fuse_attr_timeout")==0) {
+	    } else if (strcmp(option, "fuse.timeout_attr")==0) {
 
-		if (len>0) parse_fuse_timeout_option(&fs_options.fuse.attr_timeout, value);
+		if (len>0) parse_fuse_timeout_option(&fs_options.fuse.timeout_attr, value);
 
-	    } else if (strcmp(option, "fuse.fuse_entry_timeout")==0) {
+	    } else if (strcmp(option, "fuse.timeout_entry")==0) {
 
-		if (len>0) parse_fuse_timeout_option(&fs_options.fuse.entry_timeout, value);
+		if (len>0) parse_fuse_timeout_option(&fs_options.fuse.timeout_entry, value);
 
-	    } else if (strcmp(option, "fuse.fuse_negative_timeout")==0) {
+	    } else if (strcmp(option, "fuse.timeout_negative")==0) {
 
-		if (len>0) parse_fuse_timeout_option(&fs_options.fuse.negative_timeout, value);
+		if (len>0) parse_fuse_timeout_option(&fs_options.fuse.timeout_negative, value);
 
 	    /* NETWORK */
 
@@ -355,6 +383,20 @@ static int read_config(char *path)
 		if ( len>0 ) {
 
 		    parse_options_commalist(value, len, parse_network_discover_option_cb, (void *) &fs_options.network);
+
+		} else {
+
+		    fprintf(stderr, "read_config: option %s requires an argument. Cannot continue.\n", option);
+		    result=-1;
+		    goto out;
+
+		}
+
+	    } else if (strcmp(option, "network.services")==0) {
+
+		if ( len>0 ) {
+
+		    parse_options_commalist(value, len, parse_network_services_option_cb, (void *) &fs_options.network);
 
 		} else {
 
@@ -511,11 +553,11 @@ static int read_config(char *path)
 
 		}
 
-	    } else if ( strcmp(option, "ssh.init.timeout")==0 ) {
+	    } else if ( strcmp(option, "ssh.timeout_init")==0 ) {
 
 		if ( len>0 ) {
 
-		    fs_options.ssh.init_timeout=atoi(value);
+		    fs_options.ssh.timeout_init=atoi(value);
 
 		} else {
 
@@ -525,11 +567,11 @@ static int read_config(char *path)
 
 		}
 
-	    } else if ( strcmp(option, "ssh.session.timeout")==0 ) {
+	    } else if ( strcmp(option, "ssh.timeout_session")==0 ) {
 
 		if ( len>0 ) {
 
-		    fs_options.ssh.session_timeout=atoi(value);
+		    fs_options.ssh.timeout_session=atoi(value);
 
 		} else {
 
@@ -539,11 +581,11 @@ static int read_config(char *path)
 
 		}
 
-	    } else if ( strcmp(option, "ssh.exec.timeout")==0 ) {
+	    } else if ( strcmp(option, "ssh.timeout_exec")==0 ) {
 
 		if ( len>0 ) {
 
-		    fs_options.ssh.exec_timeout=atoi(value);
+		    fs_options.ssh.timeout_exec=atoi(value);
 
 		} else {
 
@@ -553,11 +595,11 @@ static int read_config(char *path)
 
 		}
 
-	    } else if ( strcmp(option, "ssh.userauth.timeout")==0 ) {
+	    } else if ( strcmp(option, "ssh.timeout_userauth")==0 ) {
 
 		if ( len>0 ) {
 
-		    fs_options.ssh.userauth_timeout=atoi(value);
+		    fs_options.ssh.timeout_userauth=atoi(value);
 
 		} else {
 
@@ -599,7 +641,7 @@ static int read_config(char *path)
 
 		}
 
-	    } else if (strcmp(option, "sftp.usermapping.user.unknown")==0 || strcmp(option, "sftp.usermapping.user.nobody")==0) {
+	    } else if (strcmp(option, "sftp.usermapping.user_unknown")==0 || strcmp(option, "sftp.usermapping.user_nobody")==0) {
 
 		if ( len>0 ) {
 		    char *tmp=strdup(value);
@@ -612,11 +654,11 @@ static int read_config(char *path)
 
 		    }
 
-		    if (strcmp(option, "sftp.usermapping.user.unknown")==0) {
+		    if (strcmp(option, "sftp.usermapping.user_unknown")==0) {
 
 			fs_options.sftp.usermapping_user_unknown=tmp;
 
-		    } else if (strcmp(option, "sftp.usermapping.user.nobody")==0) {
+		    } else if (strcmp(option, "sftp.usermapping.user_nobody")==0) {
 
 			fs_options.sftp.usermapping_user_nobody=tmp;
 
@@ -720,7 +762,7 @@ static int read_config(char *path)
 
 		}
 
-	    } else if (strcmp(option, "user.network_mount_template")==0) {
+	    } else if (strcmp(option, "user.network.mount_template")==0) {
 
 		if (len>0) {
 		    struct pathinfo_s *pathinfo=&fs_options.user.network_mount_template;
@@ -741,13 +783,13 @@ static int read_config(char *path)
 
 		}
 
-	    } else if (strcmp(option, "user.network_mount_group")==0) {
+	    } else if (strcmp(option, "user.network.mount_group")==0) {
 		struct group *grp;
 
 		grp=getgrnam(value);
 		if (grp) fs_options.user.network_mount_group=grp->gr_gid;
 
-	    } else if (strcmp(option, "user.network_mount_group_policy")==0) {
+	    } else if (strcmp(option, "user.network.mount_group_policy")==0) {
 
 		if (strcmp(value, "partof")==0) {
 
@@ -780,7 +822,8 @@ int parse_arguments(int argc, char *argv[], unsigned int *error)
     static struct option long_options[] = {
 	{"help", 		optional_argument, 		0, 0},
 	{"version", 		optional_argument, 		0, 0},
-	{"configfile", 		optional_argument,		0, 0},
+	{"server", 		no_argument, 			0, 0},
+	{"configfile", 		required_argument,		0, 0},
 	{0,0,0,0}
 	};
     int res, long_options_index=0, result=0;
@@ -792,55 +835,58 @@ int parse_arguments(int argc, char *argv[], unsigned int *error)
 
     init_pathinfo(&fs_options.configfile);
     init_pathinfo(&fs_options.socket);
+    fs_options.flags=0;
 
     /* FUSE */
 
-    convert_double_to_timespec(&fs_options.fuse.attr_timeout, _OPTIONS_FUSE_ATTR_TIMEOUT);
-    convert_double_to_timespec(&fs_options.fuse.entry_timeout, _OPTIONS_FUSE_ENTRY_TIMEOUT);
-    convert_double_to_timespec(&fs_options.fuse.negative_timeout, _OPTIONS_FUSE_NEGATIVE_TIMEOUT);
+    convert_double_to_timespec(&fs_options.fuse.timeout_attr, _OPTIONS_FUSE_ATTR_TIMEOUT);
+    convert_double_to_timespec(&fs_options.fuse.timeout_entry, _OPTIONS_FUSE_ENTRY_TIMEOUT);
+    convert_double_to_timespec(&fs_options.fuse.timeout_negative, _OPTIONS_FUSE_NEGATIVE_TIMEOUT);
     fs_options.fuse.flags=0;
 
     /* NETWORK */
 
-    fs_options.network.flags=0;
+    fs_options.network.flags		=	0;
+    fs_options.network.services		=	0;
+    fs_options.network.discover		=	0;
     init_pathinfo(&fs_options.network.discover_static_file);
-    fs_options.network.path_icon_network=NULL;
-    fs_options.network.path_icon_domain=NULL;
-    fs_options.network.path_icon_server=NULL;
-    fs_options.network.path_icon_share=NULL;
-    fs_options.network.network_icon=_OPTIONS_NETWORK_ICON_OVERRULE;
-    fs_options.network.domain_icon=_OPTIONS_NETWORK_ICON_OVERRULE;
-    fs_options.network.server_icon=_OPTIONS_NETWORK_ICON_OVERRULE;
-    fs_options.network.share_icon=_OPTIONS_NETWORK_ICON_OVERRULE;
+    fs_options.network.path_icon_network=	NULL;
+    fs_options.network.path_icon_domain	=	NULL;
+    fs_options.network.path_icon_server	=	NULL;
+    fs_options.network.path_icon_share	=	NULL;
+    fs_options.network.network_icon	=	_OPTIONS_NETWORK_ICON_OVERRULE;
+    fs_options.network.domain_icon	=	_OPTIONS_NETWORK_ICON_OVERRULE;
+    fs_options.network.server_icon	=	_OPTIONS_NETWORK_ICON_OVERRULE;
+    fs_options.network.share_icon	=	_OPTIONS_NETWORK_ICON_OVERRULE;
 
     /* SSH */
 
-    fs_options.ssh.flags		= 0; // _OPTIONS_SSH_FLAG_SUPPORT_EXT_INFO | _OPTIONS_SSH_FLAG_SUPPORT_CERTIFICATES;
+    fs_options.ssh.flags		= 	0; // _OPTIONS_SSH_FLAG_SUPPORT_EXT_INFO | _OPTIONS_SSH_FLAG_SUPPORT_CERTIFICATES;
 
     /* default support all extensions mentioned in RFC 8308
 	are there more ? */
 
-    fs_options.ssh.extensions		=   (1 << (_OPTIONS_SSH_EXTENSION_SERVER_SIG_ALGS - 1)) | (1 << (_OPTIONS_SSH_EXTENSION_DELAY_COMPRESSION - 1)) |
-					    (1 << (_OPTIONS_SSH_EXTENSION_NO_FLOW_CONTROL - 1)) | (1 << (_OPTIONS_SSH_EXTENSION_ELEVATION - 1));
+    fs_options.ssh.extensions		=   	(1 << (_OPTIONS_SSH_EXTENSION_SERVER_SIG_ALGS - 1)) | (1 << (_OPTIONS_SSH_EXTENSION_DELAY_COMPRESSION - 1)) |
+						(1 << (_OPTIONS_SSH_EXTENSION_NO_FLOW_CONTROL - 1)) | (1 << (_OPTIONS_SSH_EXTENSION_ELEVATION - 1));
 
-    fs_options.ssh.cipher 		= _OPTIONS_SSH_CIPHER_AES256_CTR | _OPTIONS_SSH_CIPHER_CHACHA20_POLY1305_OPENSSH_COM;
-    fs_options.ssh.compression		= _OPTIONS_SSH_COMPRESS_NONE;
-    fs_options.ssh.pubkey		= _OPTIONS_SSH_PUBKEY_RSA | _OPTIONS_SSH_PUBKEY_ED25519;
-    fs_options.ssh.certificate		= _OPTIONS_SSH_CERTIFICATE_RSA_CERT_V01_OPENSSH_COM | _OPTIONS_SSH_CERTIFICATE_ED25519_CERT_V01_OPENSSH_COM;
-    fs_options.ssh.keyx			= _OPTIONS_SSH_KEYX_DH;
-    fs_options.ssh.hmac			= _OPTIONS_SSH_HMAC_SHA256 | _OPTIONS_SSH_HMAC_SHA1;
+    fs_options.ssh.cipher 		= 	_OPTIONS_SSH_CIPHER_AES256_CTR | _OPTIONS_SSH_CIPHER_CHACHA20_POLY1305_OPENSSH_COM;
+    fs_options.ssh.compression		= 	_OPTIONS_SSH_COMPRESS_NONE;
+    fs_options.ssh.pubkey		= 	_OPTIONS_SSH_PUBKEY_RSA | _OPTIONS_SSH_PUBKEY_ED25519;
+    fs_options.ssh.certificate		= 	_OPTIONS_SSH_CERTIFICATE_RSA_CERT_V01_OPENSSH_COM | _OPTIONS_SSH_CERTIFICATE_ED25519_CERT_V01_OPENSSH_COM;
+    fs_options.ssh.keyx			= 	_OPTIONS_SSH_KEYX_DH;
+    fs_options.ssh.hmac			= 	_OPTIONS_SSH_HMAC_SHA256 | _OPTIONS_SSH_HMAC_SHA1;
 
-    fs_options.ssh.init_timeout		= _OPTIONS_SSH_INIT_TIMEOUT_DEFAULT;
-    fs_options.ssh.session_timeout	= _OPTIONS_SSH_SESSION_TIMEOUT_DEFAULT;
-    fs_options.ssh.exec_timeout		= _OPTIONS_SSH_EXEC_TIMEOUT_DEFAULT;
-    fs_options.ssh.userauth_timeout	= _OPTIONS_SSH_USERAUTH_TIMEOUT_DEFAULT;
+    fs_options.ssh.timeout_init		= 	_OPTIONS_SSH_TIMEOUT_INIT_DEFAULT;
+    fs_options.ssh.timeout_session	= 	_OPTIONS_SSH_TIMEOUT_SESSION_DEFAULT;
+    fs_options.ssh.timeout_exec		= 	_OPTIONS_SSH_TIMEOUT_EXEC_DEFAULT;
+    fs_options.ssh.timeout_userauth	= 	_OPTIONS_SSH_TIMEOUT_USERAUTH_DEFAULT;
 
     /* more backends... SSSD GPGME .... */
 
-    fs_options.ssh.backend		= _OPTIONS_SSH_BACKEND_OPENSSH;
-    fs_options.ssh.trustdb		= _OPTIONS_SSH_TRUSTDB_OPENSSH;
+    fs_options.ssh.backend		= 	_OPTIONS_SSH_BACKEND_OPENSSH;
+    fs_options.ssh.trustdb		= 	_OPTIONS_SSH_TRUSTDB_OPENSSH;
 
-    fs_options.ssh.required_authmethods = _OPTIONS_SSH_SERVER_USERAUTH_REQUIRED_PUBLICKEY;
+    fs_options.ssh.required_authmethods = 	_OPTIONS_SSH_SERVER_USERAUTH_REQUIRED_PUBLICKEY;
  
     /* SFTP */
 
@@ -869,7 +915,6 @@ int parse_arguments(int argc, char *argv[], unsigned int *error)
     while(1) {
 
 	res = getopt_long(argc, argv, "", long_options, &long_options_index);
-
 	if (res==-1) break;
 
 	switch (res) {
@@ -878,25 +923,27 @@ int parse_arguments(int argc, char *argv[], unsigned int *error)
 
 		/* a long option */
 
-		if ( strcmp(long_options[long_options_index].name, "help")==0 ) {
+		if (strcmp(long_options[long_options_index].name, "help")==0) {
 
 		    print_help(argv[0]);
 		    result=1;
 		    *error=0;
 		    goto finish;
 
-
-		} else if ( strcmp(long_options[long_options_index].name, "version")==0 ) {
+		} else if (strcmp(long_options[long_options_index].name, "version")==0) {
 
 		    print_version(argv[0]);
 		    result=1;
 		    *error=0;
 		    goto finish;
 
+		} else if (strcmp(long_options[long_options_index].name, "server")==0) {
 
-		} else if ( strcmp(long_options[long_options_index].name, "configfile")==0 ) {
+		    fs_options.flags |= _OPTIONS_MAIN_FLAG_SERVER;
 
-		    if ( optarg ) {
+		} else if (strcmp(long_options[long_options_index].name, "configfile")==0) {
+
+		    if (optarg) {
 
 			fs_options.configfile.path=realpath(optarg, NULL);
 
@@ -961,7 +1008,15 @@ int parse_arguments(int argc, char *argv[], unsigned int *error)
 
     }
 
-    if (fs_options.network.flags & _OPTIONS_NETWORK_DISCOVER_METHOD_FILE) {
+    if (fs_options.network.services==0) {
+
+	/* defaults */
+
+	fs_options.network.services |= (_OPTIONS_NETWORK_ENABLE_SSH | _OPTIONS_NETWORK_ENABLE_SMB);
+
+    }
+
+    if (fs_options.network.discover & _OPTIONS_NETWORK_DISCOVER_METHOD_FILE) {
 
 	if (fs_options.network.discover_static_file.path==NULL) {
 

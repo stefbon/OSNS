@@ -41,6 +41,7 @@
 
 #include "dentry.h"
 #include "log.h"
+#include "datatypes.h"
 
 #define NAMEINDEX_ROOT1						92			/* number of valid chars*/
 #define NAMEINDEX_ROOT2						8464			/* 92 ^ 2 */
@@ -48,28 +49,23 @@
 #define NAMEINDEX_ROOT4						71639296		/* 92 ^ 4 */
 #define NAMEINDEX_ROOT5						6590815232		/* 92 ^ 5 */
 
+static struct list_header_s cacheheader=INIT_LIST_HEADER;
+static pthread_mutex_t cachemutex=PTHREAD_MUTEX_INITIALIZER;
+
 void calculate_nameindex(struct name_s *name)
 {
     char buffer[6];
+    unsigned char count=(name->len > 5) ? 6 : name->len;
 
     memset(buffer, 32, 6);
+    memcpy(buffer, name->name, count);
 
-    if (name->len>5) {
-
-	memcpy(buffer, name->name, 6);
-
-    } else {
-
-	memcpy(buffer, name->name, name->len);
-
-    }
-
-    unsigned char firstletter=*buffer-32;
-    unsigned char secondletter=*(buffer+1)-32;
-    unsigned char thirdletter=*(buffer+2)-32;
-    unsigned char fourthletter=*(buffer+3)-32;
-    unsigned char fifthletter=*(buffer+4)-32;
-    unsigned char sixthletter=*(buffer+5)-32;
+    unsigned char firstletter		= buffer[0] - 32;
+    unsigned char secondletter		= buffer[1] - 32;
+    unsigned char thirdletter		= buffer[2] - 32;
+    unsigned char fourthletter		= buffer[3] - 32;
+    unsigned char fifthletter		= buffer[4] - 32;
+    unsigned char sixthletter		= buffer[5] - 32;
 
     name->index=(firstletter * NAMEINDEX_ROOT5) + (secondletter * NAMEINDEX_ROOT4) + (thirdletter * NAMEINDEX_ROOT3) + (fourthletter * NAMEINDEX_ROOT2) + (fifthletter * NAMEINDEX_ROOT1) + sixthletter;
 
@@ -86,7 +82,6 @@ void init_entry(struct entry_s *entry)
 }
 
 /*
-
     allocate an entry and name
 
     TODO: for the name is now a seperate pointer used entry->name.name, but it would
@@ -102,7 +97,7 @@ struct entry_s *create_entry(struct name_s *xname)
 
     if (entry) {
 
-	memset(entry, 0, size);
+	memset(entry, 0, size); /* ensures also a terminating null byte to the name buffer */
 	init_entry(entry);
 	memcpy(&entry->buffer[0], xname->name, xname->len);
 	entry->name.name=&entry->buffer[0];
@@ -120,11 +115,197 @@ void destroy_entry(struct entry_s *entry)
     free(entry);
 }
 
+int check_create_inodecache(struct inode_s *inode, unsigned int size, char *buffer, unsigned int flag)
+{
+    struct inodecache_s *cache=NULL;
+    int result=0;
+
+    logoutput_debug("check_create_inodecache: size %i flag %i", size, flag);
+
+    pthread_mutex_lock(&cachemutex);
+
+    cache=inode->cache;
+
+    if (cache) {
+	struct ssh_string_s *tmp=NULL;
+	struct ssh_string_s *copy=NULL;
+
+	logoutput_debug("check_create_inodecache: exist");
+
+	switch (flag) {
+
+	    case INODECACHE_FLAG_STAT:
+
+		tmp=&cache->stat;
+		copy=&cache->readdir;
+		break;
+
+	    case INODECACHE_FLAG_READDIR:
+
+		tmp=&cache->readdir;
+		copy=&cache->stat;
+		break;
+
+	    case INODECACHE_FLAG_XATTR:
+
+		tmp=&cache->xattr;
+		break;
+
+	    default:
+
+		return 0;
+
+	}
+
+	if (tmp==NULL || (tmp->len==0 && size==0)) return -1;
+
+
+	logoutput_debug("check_create_inodecache: size buffer %i size cache %i", size, tmp->len);
+
+	if (tmp->len == size) {
+
+	    if (memcmp(tmp->ptr, buffer, size) != 0) {
+
+		/* differ */
+
+		logoutput_debug("check_create_inodecache: memcmp");
+		memcpy(tmp->ptr, buffer, size);
+		result=1;
+
+	    }
+
+	} else {
+
+	    if (copy && copy->len>0 && tmp->len==0 && (cache->flags & INODECACHE_FLAG_STAT_EQUAL_READDIR)==0) {
+
+		if (memcmp(copy->ptr, buffer, 4)==0) {
+
+		    cache->flags |= INODECACHE_FLAG_STAT_EQUAL_READDIR;
+		    tmp->ptr=copy->ptr;
+		    tmp->len=copy->len;
+
+		    if (copy->len==size) {
+
+			if (memcmp(copy->ptr, buffer, size) != 0) {
+
+			    memcpy(copy->ptr, buffer, size);
+			    result=1;
+
+			}
+
+		    } else {
+
+			copy->ptr = realloc(copy->ptr, size);
+
+			if (copy->ptr) {
+
+			    memcpy(copy->ptr, buffer, size);
+			    copy->len=size;
+			    result=1;
+
+			}
+
+		    }
+
+		    goto unlock;
+
+		}
+
+	    }
+
+	    char *ptr=tmp->ptr;
+	    unsigned char equal=(unsigned char) ((copy) ? (copy->ptr==tmp->ptr) : 0);
+
+	    ptr=realloc(ptr, size);
+
+	    if (ptr==NULL) {
+
+		/* not fatal */
+
+		tmp->len=0;
+		tmp->ptr=NULL;
+
+	    } else {
+
+		memcpy(ptr, buffer, size);
+		tmp->len=size;
+		tmp->ptr=ptr;
+
+		if (equal) {
+
+		    copy->ptr=tmp->ptr;
+		    copy->len=tmp->len;
+
+		}
+
+	    }
+
+	}
+
+    } else {
+	char *ptr=NULL;
+
+	logoutput_debug("check_create_inodecache: create");
+
+	/* create */
+
+	cache=malloc(sizeof(struct inodecache_s));
+	ptr=malloc(size);
+
+	if (cache && ptr) {
+	    struct ssh_string_s *tmp=NULL;
+
+	    switch (flag) {
+
+		case INODECACHE_FLAG_STAT:
+
+		    tmp=&cache->stat;
+		    break;
+
+		case INODECACHE_FLAG_READDIR:
+
+		    tmp=&cache->readdir;
+		    break;
+
+		case INODECACHE_FLAG_XATTR:
+
+		    tmp=&cache->xattr;
+		    break;
+
+	    }
+
+	    memset(cache, 0, sizeof(struct inodecache_s));
+
+	    cache->ino=inode->st.st_ino;
+	    init_list_element(&cache->list, NULL);
+	    add_list_element_first(&cacheheader, &cache->list);
+	    inode->cache=cache;
+
+	    memcpy(ptr, buffer, size);
+	    tmp->ptr=ptr;
+	    tmp->len=size;
+
+	    result=1;
+
+	} else {
+
+	    if (cache) free(cache);
+	    if (ptr) free(ptr);
+
+	}
+
+    }
+
+    unlock:
+
+    pthread_mutex_unlock(&cachemutex);
+    return result;
+
+}
+
 void init_inode(struct inode_s *inode)
 {
     struct stat *st=&inode->st;
-
-    memset(inode, 0, sizeof(struct inode_s) + inode->cache_size);
 
     inode->flags=0;
     init_list_element(&inode->list, NULL);
@@ -160,6 +341,8 @@ void init_inode(struct inode_s *inode)
     inode->link.type=0;
     inode->link.link.ptr=NULL;
 
+    inode->cache=NULL;
+
 }
 
 void get_inode_stat(struct inode_s *inode, struct stat *st)
@@ -188,15 +371,13 @@ void fill_inode_stat(struct inode_s *inode, struct stat *st)
 
 }
 
-struct inode_s *create_inode(unsigned int cache_size)
+struct inode_s *create_inode()
 {
-    struct inode_s *inode=NULL;
-
-    inode = malloc(sizeof(struct inode_s) + cache_size);
+    struct inode_s *inode = malloc(sizeof(struct inode_s));
 
     if (inode) {
 
-	inode->cache_size=cache_size;
+	memset(inode, 0, sizeof(struct inode_s));
 	init_inode(inode);
 
     }
@@ -208,59 +389,6 @@ struct inode_s *create_inode(unsigned int cache_size)
 void free_inode(struct inode_s *inode)
 {
     free(inode);
-}
-
-struct inode_s *realloc_inode(struct inode_s *inode, unsigned int new)
-{
-    struct inode_s *keep=inode;
-
-    inode=realloc(inode, sizeof(struct inode_s) + new); /* assume always good */
-
-    if (inode != keep) {
-	struct list_element_s *next=NULL;
-	struct list_element_s *prev=NULL;
-
-	if (inode==NULL) return NULL;
-	next=get_next_element(&inode->list);
-	prev=get_prev_element(&inode->list);
-
-	/* repair */
-
-	if (next) {
-
-	    next->p=&inode->list;
-
-	} else {
-	    struct list_header_s *header=inode->list.h;
-
-	    /* no next so thus at tail */
-	    header->tail=&inode->list;
-
-	}
-
-	if (prev) {
-
-	    prev->n=&inode->list;
-
-	} else {
-	    struct list_header_s *header=inode->list.h;
-
-	    /* no prev so thus at head */
-	    header->head=&inode->list;
-
-	}
-
-	if (inode->alias) {
-
-	    struct entry_s *entry=inode->alias;
-	    entry->inode=inode;
-
-	}
-
-    }
-
-    inode->cache_size=new;
-    return inode;
 }
 
 void log_inode_information(struct inode_s *inode, uint64_t what)

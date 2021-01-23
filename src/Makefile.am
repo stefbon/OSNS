@@ -1,10 +1,12 @@
-sbin_PROGRAMS = sonssc
+sbin_PROGRAMS = osns
 
-sonssc_CFLAGS = $(CFLAGS) $(GLIB_CFLAGS) $(LIBGCRYPT_CFLAGS) $(SYSTEMD_CFLAGS) $(AVAHI_CORE_CFLAGS) $(AVAHI_CLIENT_CFLAGS) -g -fasynchronous-unwind-tables -fexceptions -fstack-clash-protection -D_FILE_OFFSET_BITS=64 -lz -lpthread -fPIC -lm -I . -I ./ssh -I ./lib -O2 -Wall -Wno-unused-but-set-variable -Wno-uninitialized -Wno-unused-variable -Wno-unused-label -Wno-unused-function
-sonssc_CPPFLAGS = $(CXXFLAGS) $(GLIB_CFLAGS) $(LIBGCRYPT_CFLAGS) $(SYSTEMD_CFLAGS)  $(AVAHI_CORE_CFLAGS) $(AVAHI_CLIENT_CFLAGS) -g -fasynchronous-unwind-tables -fexceptions -fstack-clash-protection -D_FILE_OFFSET_BITS=64 -lz -lpthread -fPIC -lm -I . -I ./ssh -I ./lib -O2 -Wall -Wno-unused-but-set-variable -Wno-uninitialized -Wno-unused-variable -Wno-unused-label -Wno-unused-function
-sonssc_LDADD = $(GLIB_LIBS) $(LIBGCRYPT_LIBS) $(SYSTEMD_LIBS) $(AVAHI_CORE_LIBS) $(AVAHI_CLIENT_LIBS) $(LDFLAGS)
+extra_CFLAGS = -fasynchronous-unwind-tables -fexceptions -fstack-clash-protection
 
-sonssc_SOURCES =  	lib/fuse/directory.c lib/fuse/dentry.c lib/fuse/utils.c \
+osns_CFLAGS = $(CFLAGS) $(GLIB_CFLAGS) $(LIBGCRYPT_CFLAGS) $(SYSTEMD_CFLAGS) $(AVAHI_CORE_CFLAGS) $(AVAHI_CLIENT_CFLAGS) -ggdb -Og  -D_FILE_OFFSET_BITS=64 -lz -lpthread -fPIC -lm -I . -I ./ssh -I ./lib -Wall -Wno-unused-but-set-variable -Wno-uninitialized -Wno-unused-variable -Wno-unused-label -Wno-unused-function
+osns_CPPFLAGS = $(CXXFLAGS) $(GLIB_CFLAGS) $(LIBGCRYPT_CFLAGS) $(SYSTEMD_CFLAGS)  $(AVAHI_CORE_CFLAGS) $(AVAHI_CLIENT_CFLAGS) -ggdb -Og -D_FILE_OFFSET_BITS=64 -lz -lpthread -fPIC -lm -I . -I ./ssh -I ./lib -Wall -Wno-unused-but-set-variable -Wno-uninitialized -Wno-unused-variable -Wno-unused-label -Wno-unused-function
+osns_LDADD = $(GLIB_LIBS) $(LIBGCRYPT_LIBS) $(SYSTEMD_LIBS) $(AVAHI_CORE_LIBS) $(AVAHI_CLIENT_LIBS) $(LDFLAGS)
+
+osns_SOURCES =  	lib/fuse/directory.c lib/fuse/dentry.c lib/fuse/utils.c \
 			lib/fuse/fuse-interface.c lib/fuse/fs.c \
 			lib/fuse/fs-common.c lib/fuse/fs-virtual.c lib/fuse/fs-special.c \
 			lib/fuse/context-fs-common.c lib/fuse/context-fs-root.c lib/fuse/context-fs.c \
@@ -72,35 +74,35 @@ sonssc_SOURCES =  	lib/fuse/directory.c lib/fuse/dentry.c lib/fuse/utils.c \
 
 
 if LIBRSYNC_AVAIL
-sonssc_CFLAGS += -lrsync
-sonssc_CPPFLAGS += -lrsync
-sonssc_LDADD += -L/usr/lib64 -lrsync
+osns_CFLAGS += -lrsync
+osns_CPPFLAGS += -lrsync
+osns_LDADD += -L/usr/lib64 -lrsync
 endif
 
 if GLIB2_AVAIL
-sonssc_CFLAGS += $(GLIB_CFLAGS)
-sonssc_CPPFLAGS += $(GLIB_CFLAGS)
-sonssc_LDADD += $(GLIB_LIBS)
+osns_CFLAGS += $(GLIB_CFLAGS)
+osns_CPPFLAGS += $(GLIB_CFLAGS)
+osns_LDADD += $(GLIB_LIBS)
 endif
 
 if GOBJECT2_AVAIL
-sonssc_CFLAGS += $(GOBJECT2_CFLAGS)
-sonssc_CPPFLAGS += $(GOBJECT2_CFLAGS)
-sonssc_LDADD += $(GOBJECT2_LIBS)
+osns_CFLAGS += $(GOBJECT2_CFLAGS)
+osns_CPPFLAGS += $(GOBJECT2_CFLAGS)
+osns_LDADD += $(GOBJECT2_LIBS)
 endif
 
 if GIO2_AVAIL
-sonssc_CFLAGS += $(GIO_CFLAGS)
-sonssc_CPPFLAGS += $(GIO_CFLAGS)
-sonssc_LDADD += $(GIO_LIBS)
+osns_CFLAGS += $(GIO_CFLAGS)
+osns_CPPFLAGS += $(GIO_CFLAGS)
+osns_LDADD += $(GIO_LIBS)
 endif
 
 if LIBPAM_AVAIL
-sonssc_CFLAGS += -lpam
-sonssc_CPPFLAGS += -lpam
+osns_CFLAGS += -lpam
+osns_CPPFLAGS += -lpam
 else
-sonssc_CFLAGS += -lcrypt
-sonssc_CPPFLAGS += -lcrypt
+osns_CFLAGS += -lcrypt
+osns_CPPFLAGS += -lcrypt
 endif
 
 

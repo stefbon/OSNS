@@ -63,7 +63,7 @@ void move_sl_dirnode_left(struct sl_skiplist_s *sl, struct sl_move_dirnode_s *mo
 {
     struct sl_dirnode_s *dirnode=move->dirnode;
 
-    logoutput("move_sl_dirnode_left: differ %i", move->left - move->right);
+    // logoutput("move_sl_dirnode_left: differ %i", move->left - move->right);
 
     while (move->left - move->right > 1) {
 	struct list_element_s *list=dirnode->list;
@@ -82,7 +82,7 @@ void move_sl_dirnode_right(struct sl_skiplist_s *sl, struct sl_move_dirnode_s *m
 {
     struct sl_dirnode_s *dirnode=move->dirnode;
 
-    logoutput("move_sl_dirnode_right: differ %i", move->right - move->left);
+    // logoutput("move_sl_dirnode_right: differ %i", move->right - move->left);
 
     while (move->right - move->left > 1) {
 	struct list_element_s *list=dirnode->list;
@@ -97,16 +97,17 @@ void move_sl_dirnode_right(struct sl_skiplist_s *sl, struct sl_move_dirnode_s *m
 
 }
 
-void _init_sl_dirnode(struct sl_skiplist_s *sl, struct sl_dirnode_s *dirnode, unsigned short level, unsigned char flag)
+void _init_sl_dirnode(struct sl_skiplist_s *sl, struct sl_dirnode_s *dirnode, unsigned int size, unsigned char flag)
 {
+    unsigned short count=(size / sizeof(struct sl_junction_s));
 
     dirnode->list=NULL;
     dirnode->lock=0;
     dirnode->lockers=0;
     dirnode->flags|=flag;
-    dirnode->level=level;
+    dirnode->level=count-1;
 
-    for (unsigned int i=0; i<=level; i++) {
+    for (unsigned int i=0; i<count; i++) {
 
 	dirnode->junction[i].p=&sl->dirnode;
 	dirnode->junction[i].n=&sl->dirnode;
@@ -125,7 +126,7 @@ struct sl_dirnode_s *create_sl_dirnode(struct sl_skiplist_s *sl, unsigned short 
     if (dirnode) {
 
 	memset(dirnode, 0, size);
-	_init_sl_dirnode(sl, dirnode, level, _DIRNODE_FLAG_ALLOC);
+	_init_sl_dirnode(sl, dirnode, size - sizeof(struct sl_dirnode_s), _DIRNODE_FLAG_ALLOC);
 
     }
 
@@ -158,7 +159,7 @@ struct sl_vector_s *create_vector_path(unsigned short level, struct sl_dirnode_s
     unsigned int size=sizeof(struct sl_vector_s) + (level+1) * sizeof(struct sl_path_s);
     struct sl_vector_s *vector=malloc(size);
 
-    logoutput("create_vector_path: level %i", level);
+    // logoutput("create_vector_path: level %i", level);
 
     if (vector) {
 
@@ -187,6 +188,7 @@ void init_sl_searchresult(struct sl_searchresult_s *result, void *lookupdata, un
 {
     result->lookupdata=lookupdata;
     result->found=NULL;
+    result->ctr=0;
     result->flags=flags;
     result->row=0;
     result->step=0;

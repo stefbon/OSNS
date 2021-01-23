@@ -115,7 +115,7 @@ static void sl_delete_cb(struct sl_skiplist_s *sl, struct sl_lockops_s *lockops,
     struct sl_dirnode_s *dirnode=vector->path[0].dirnode;
     void (* cb)(struct sl_skiplist_s *sl, struct sl_vector_s *vector, unsigned int level, struct sl_move_dirnode_s *move);
 
-    logoutput("sl_delete_cb");
+    // logoutput("sl_delete_cb");
     cb=correct_sl_dirnodes_ignore;
 
     /* upgrade to write lock */
@@ -124,7 +124,7 @@ static void sl_delete_cb(struct sl_skiplist_s *sl, struct sl_lockops_s *lockops,
 	struct list_element_s *list=result->found;
 	struct sl_move_dirnode_s move;
 
-	logoutput("sl_delete_cb: A");
+	// logoutput("sl_delete_cb: A");
 
 	move.flags=0;
 	move.dirnode=NULL;
@@ -255,7 +255,7 @@ static void sl_delete_cb(struct sl_skiplist_s *sl, struct sl_lockops_s *lockops,
 	remove_list_element(list);
 	result->flags |= SL_SEARCHRESULT_FLAG_OK;
 
-	logoutput("sl_delete_cb: unlock");
+	// logoutput("sl_delete_cb: unlock");
 	(* lockops->remove_lock_vector)(sl, vector, cb, &move);
 	return;
 
@@ -263,7 +263,7 @@ static void sl_delete_cb(struct sl_skiplist_s *sl, struct sl_lockops_s *lockops,
 
     if ((result->flags & SL_SEARCHRESULT_FLAG_EXACT)==0) {
 
-	logoutput("sl_delete_cb: not able to update readlock");
+	// logoutput("sl_delete_cb: not able to update readlock");
 
     } else {
 

@@ -77,8 +77,8 @@ static void init_session_config(struct ssh_session_s *session)
     config->max_receive_size=SSH_CONFIG_RECEIVE_BUFFER_SIZE;
     config->port=22;
     // config->init_expire=(fs_config.ssh.init_timeout) ? fs_config.ssh.init_timeout : SSH_CONFIG_INIT_EXPIRE;
-    config->connection_expire=(fs_options.ssh.session_timeout) ? fs_options.ssh.session_timeout : SSH_CONFIG_CONNECTION_EXPIRE;
-    config->userauth_expire=(fs_options.ssh.userauth_timeout) ? fs_options.ssh.userauth_timeout : SSH_CONFIG_USERAUTH_EXPIRE;
+    config->connection_expire=(fs_options.ssh.timeout_session) ? fs_options.ssh.timeout_session : SSH_CONFIG_CONNECTION_EXPIRE;
+    config->userauth_expire=(fs_options.ssh.timeout_userauth) ? fs_options.ssh.timeout_userauth : SSH_CONFIG_USERAUTH_EXPIRE;
     config->max_receiving_threads=SSH_CONFIG_MAX_RECEIVING_THREADS;
     config->max_sending_threads=SSH_CONFIG_MAX_SENDING_THREADS;
 
@@ -155,7 +155,7 @@ int init_ssh_backend()
 	init_ssh_receive_once();
 	init_ssh_utils();
 	init_keyex_once();
-	//result=init_ssh_backend_library();
+	result=init_ssh_backend_library();
 	// init_custom_memory_handlers();
 	if (result==0) init_done=1;
 

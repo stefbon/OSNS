@@ -146,7 +146,7 @@ struct directory_s *get_directory(struct inode_s *inode)
     struct simple_lock_s wlock;
     struct directory_s *directory=&dummy_directory;
 
-    init_simple_writelock(&dummy_directory.locking, &wlock);
+    init_simple_writelock(&directory->locking, &wlock);
 
     if (simple_lock(&wlock)==0) {
 	struct directory_s *tmp=(struct directory_s *) inode->link.link.ptr;
@@ -165,7 +165,7 @@ struct directory_s *remove_directory(struct inode_s *inode, unsigned int *error)
     struct simple_lock_s wlock;
     struct directory_s *directory=&dummy_directory;
 
-    init_simple_writelock(&dummy_directory.locking, &wlock);
+    init_simple_writelock(&directory->locking, &wlock);
 
     if (simple_lock(&wlock)==0) {
 	struct directory_s *tmp=(struct directory_s *) inode->link.link.ptr;
@@ -324,13 +324,13 @@ struct directory_s *get_dummy_directory()
 
 /* FUNCTIONS to CREATE an entry and inode */
 
-static struct entry_s *_cb_create_entry(struct entry_s *parent, struct name_s *name)
+static struct entry_s *_cb_create_entry(struct name_s *name)
 {
     return create_entry(name);
 }
-static struct inode_s *_cb_create_inode(unsigned int s)
+static struct inode_s *_cb_create_inode()
 {
-    return create_inode(s);
+    return create_inode();
 }
 static struct entry_s *_cb_insert_entry(struct directory_s *directory, struct entry_s *entry, unsigned int flags, unsigned int *error)
 {
@@ -469,6 +469,7 @@ void init_create_entry(struct create_entry_s *ce, struct name_s *n, struct entry
     ce->flags=0;
     ce->ptr=ptr;
     ce->error=0;
+    ce->cache_size=0;
 
     ce->cb_create_entry=_cb_create_entry;
     ce->cb_create_inode=_cb_create_inode;
@@ -495,13 +496,16 @@ static struct entry_s *_create_entry_extended_common(struct create_entry_s *ce)
     unsigned int error=0;
     struct entry_s *parent=NULL;
     struct directory_s *directory=NULL;
-    unsigned int cache_size=(* ce->cb_cache_size)(ce);
+
+    ce->cache_size=(* ce->cb_cache_size)(ce);
 
     directory=(* ce->get_directory)(ce);
     parent=directory->inode->alias;
 
-    entry=(* ce->cb_create_entry)(parent, ce->name);
-    inode=(* ce->cb_create_inode)(cache_size);
+    entry=(* ce->cb_create_entry)(ce->name);
+    inode=(* ce->cb_create_inode)();
+
+    logoutput("_create_entry_extended_common: create entry %.*s and ino %li", ce->name->len, ce->name->name, inode->st.st_ino);
 
     if (entry && inode) {
 
@@ -511,17 +515,19 @@ static struct entry_s *_create_entry_extended_common(struct create_entry_s *ce)
 
 	    /* new */
 
+	    logoutput("_create_entry_extended_common: entry %.*s added", ce->name->len, ce->name->name);
+
 	    inode->alias=entry;
 	    entry->inode=inode;
 	    (* ce->cb_created)(entry, ce);
 
 	} else {
 
-	    logoutput("_create_entry_extended_common: error insert entry %.*s", ce->name->len, ce->name->name);
-
 	    if (error==EEXIST) {
 
 		/* existing found */
+
+		logoutput("_create_entry_extended_common: entry %.*s does already exist", ce->name->len, ce->name->name);
 
 		destroy_entry(entry);
 		entry=result;
@@ -529,12 +535,14 @@ static struct entry_s *_create_entry_extended_common(struct create_entry_s *ce)
 		inode=entry->inode;
 
 		error=0;
-		if (cache_size != inode->cache_size) inode=realloc_inode(inode, cache_size); /* assume this always goes good .... */
+
 		(* ce->cb_found)(entry, ce);
 
 	    } else {
 
 		/* another error */
+
+		logoutput("_create_entry_extended_common: error add entry %.*s", ce->name->len, ce->name->name);
 
 		destroy_entry(entry);
 		free(inode);
@@ -563,6 +571,7 @@ static struct entry_s *_create_entry_extended_common(struct create_entry_s *ce)
 
 struct entry_s *create_entry_extended(struct create_entry_s *ce)
 {
+    logoutput("create_entry_extended: %.*s", ce->name->len, ce->name->name);
     return _create_entry_extended_common(ce);
 }
 
@@ -571,6 +580,8 @@ struct entry_s *create_entry_extended(struct create_entry_s *ce)
 struct entry_s *create_entry_extended_batch(struct create_entry_s *ce)
 {
     ce->cb_insert_entry=_cb_insert_entry_batch;
+
+    logoutput("create_entry_extended_batch: %.*s", ce->name->len, ce->name->name);
     return _create_entry_extended_common(ce);
 }
 

@@ -21,6 +21,7 @@
 #define _LIB_FUSE_DENTRY_H
 
 #include "list.h"
+#include "datatypes.h"
 
 #define MODEMASK 07777
 
@@ -28,6 +29,7 @@
 #define _ENTRY_FLAG_VIRTUAL					2
 #define _ENTRY_FLAG_REMOTECHANGED				4
 #define _ENTRY_FLAG_ROOT					8
+#define _ENTRY_FLAG_NOBUFFER					16
 
 #define _INODE_DIRECTORY_SIZE					4096
 #define _DEFAULT_BLOCKSIZE					4096
@@ -43,6 +45,20 @@
 #define INODE_FLAG_CACHED					2
 #define INODE_FLAG_DELETED					4
 #define INODE_FLAG_REMOVED					8
+
+#define INODECACHE_FLAG_STAT					1
+#define INODECACHE_FLAG_READDIR					2
+#define INODECACHE_FLAG_XATTR					4
+#define INODECACHE_FLAG_STAT_EQUAL_READDIR			8
+
+struct inodecache_s {
+    ino_t				ino;
+    unsigned char			flags;
+    struct list_element_s		list;
+    struct ssh_string_s			stat;
+    struct ssh_string_s			readdir;
+    struct ssh_string_s			xattr;
+};
 
 union datalink_u {
     void				*ptr;
@@ -63,8 +79,7 @@ struct inode_s {
     struct timespec			stim;
     struct fuse_fs_s			*fs;
     struct inode_link_s			link;
-    unsigned int			cache_size;
-    char				cache[];
+    struct inodecache_s			*cache;
 };
 
 struct name_s {
@@ -90,13 +105,13 @@ struct entry_s *create_entry(struct name_s *xname);
 void destroy_entry(struct entry_s *entry);
 
 void init_inode(struct inode_s *inode);
-struct inode_s *create_inode(unsigned int s);
+struct inode_s *create_inode();
 void free_inode(struct inode_s *inode);
+
+int check_create_inodecache(struct inode_s *inode, unsigned int size, char *buffer, unsigned int flag);
 
 void fill_inode_stat(struct inode_s *inode, struct stat *st);
 void get_inode_stat(struct inode_s *inode, struct stat *st);
-
-struct inode_s *realloc_inode(struct inode_s *inode, unsigned int new);
 
 #define INODE_INFORMATION_OWNER						(1 << 0)
 #define INODE_INFORMATION_GROUP						(1 << 1)

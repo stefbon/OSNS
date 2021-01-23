@@ -713,6 +713,11 @@ static signed char hidefile_default(struct fuse_opendir_s *opendir, struct inode
 
 }
 
+static void add_direntry_default(struct fuse_opendir_s *o, struct list_element_s *l)
+{
+    /* not known here what to add: do nothing */
+}
+
 void _fuse_fs_opendir(struct service_context_s *context, struct inode_s *inode, struct fuse_request_s *request, struct fuse_open_in *open_in)
 {
     struct fuse_opendir_s *opendir=NULL;
@@ -736,6 +741,11 @@ void _fuse_fs_opendir(struct service_context_s *context, struct inode_s *inode, 
 	opendir->fsyncdir=inode->fs->type.dir.fsyncdir;
 
 	opendir->hidefile=hidefile_default;
+
+	init_list_header(&opendir->entries, SIMPLE_LIST_TYPE_EMPTY, NULL);
+	pthread_mutex_init(&opendir->mutex, NULL);
+	pthread_cond_init(&opendir->cond, NULL);
+	opendir->add_direntry=add_direntry_default;
 
 	(* inode->fs->type.dir.opendir)(opendir, request, open_in->flags);
 

@@ -93,13 +93,14 @@ static void insert_element_after_tail_default(struct list_element_s *p, struct l
 static void insert_element_before_default(struct list_element_s *n, struct list_element_s *e)
 {
     struct list_header_s *h=(n->h) ? n->h : e->h;
+    struct list_element_s *p=n->p;
 
     init_list_element(e, h);
 
-    n->p->n=e;
+    p->n=e;
     n->p=e;
     e->n=n;
-    e->p=n->p;
+    e->p=p;
 
     set_element_ops_default(&e->ops);
 
@@ -129,13 +130,14 @@ static void insert_element_before_head_default(struct list_element_s *n, struct 
 static void delete_element_default(struct list_element_s *e)
 {
     struct list_header_s *h=e->h;
+    struct list_element_s *p=e->p;
+    struct list_element_s *n=e->n;
 
-    e->n->p=e->p;
-    e->p->n=e->n;
+    n->p=p;
+    p->n=n;
 
     init_list_element(e, NULL);
     h->count--;
-    init_list_element(e, NULL);
 
 }
 

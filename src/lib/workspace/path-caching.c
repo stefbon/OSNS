@@ -71,24 +71,27 @@ int get_service_path_default(struct inode_s *inode, struct fuse_path_s *fpath)
 
     logoutput_info("get_service_path_default");
 
-    appendname:
-
-    xname=&entry->name;
-
-    fpath->pathstart-=xname->len;
-    memcpy(fpath->pathstart, xname->name, xname->len);
-    fpath->pathstart--;
-    *(fpath->pathstart)='/';
-    pathlen+=xname->len+1;
-
-    /* go one entry higher */
-
-    entry=get_parent_entry(entry);
-    inode=entry->inode;
-    fs=inode->fs;
-
     fs_get_inode_link(inode, &link);
-    if (link->type!=INODE_LINK_TYPE_CONTEXT) goto appendname;
+
+    /* walk back to the root of the context or the root of the mountpoint: whatever comes first */
+
+    while (inode->st.st_ino > FUSE_ROOT_ID && link->type!=INODE_LINK_TYPE_CONTEXT) {
+
+	xname=&entry->name;
+
+	fpath->pathstart-=xname->len;
+	memcpy(fpath->pathstart, xname->name, xname->len);
+	fpath->pathstart--;
+	*(fpath->pathstart)='/';
+	pathlen+=xname->len+1;
+
+	/* go one entry higher */
+
+	entry=get_parent_entry(entry);
+	inode=entry->inode;
+	fs_get_inode_link(inode, &link);
+
+    }
 
     /* inode is the "root" of the service: data is holding the context */
 

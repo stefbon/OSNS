@@ -47,7 +47,7 @@
 static void remove_lock_vector(struct sl_skiplist_s *sl, struct sl_vector_s *vector, void (* cb)(struct sl_skiplist_s *sl, struct sl_vector_s *v, unsigned int l, struct sl_move_dirnode_s *m), struct sl_move_dirnode_s *move)
 {
 
-    logoutput("remove_lock_vector: sl level %i vector level %i vector maxlevel %i", sl->dirnode.level, vector->level, vector->maxlevel);
+    // logoutput("remove_lock_vector: sl level %i vector level %i vector maxlevel %i", sl->dirnode.level, vector->level, vector->maxlevel);
 
     pthread_mutex_lock(&sl->mutex);
 
@@ -63,7 +63,7 @@ static void remove_lock_vector(struct sl_skiplist_s *sl, struct sl_vector_s *vec
 
 	}
 
-	logoutput("remove_lock_vector: i %i lock %i lockset %i dlock %i dlockers %i", i, vector->path[i].lock, vector->path[i].lockset, dirnode->lock, dirnode->lockers);
+	// logoutput("remove_lock_vector: i %i lock %i lockset %i dlock %i dlockers %i", i, vector->path[i].lock, vector->path[i].lockset, dirnode->lock, dirnode->lockers);
 
 	// vector->path[i].dirnode=NULL;
 	vector->path[i].lock=0;

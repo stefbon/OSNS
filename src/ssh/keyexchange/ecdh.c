@@ -115,7 +115,7 @@ static void convert_hex2char(unsigned char **p_hex, unsigned char *uchar)
     *p_hex+=2;
 }
 
-static int tmp_gcry_ecc_mul_point(int algo, unsigned char *buffer, struct ssh_string_s *skey, struct ssh_string_s *pkey)
+static int gcry_ecc_mul_point_tmp(int algo, unsigned char *buffer, struct ssh_string_s *skey, struct ssh_string_s *pkey)
 {
     gpg_error_t err=0;
     gcry_sexp_t s_pkey=NULL;
@@ -283,7 +283,7 @@ static void ecdh_msg_write_local_key(struct msg_buffer_s *mb, struct ssh_keyex_s
 
     if (len>0) {
 	char buffer[len];
-	gpg_error_t err=gcry_ecc_mul_point(GCRY_ECC_CURVE25519, (unsigned char *) buffer, skey_c, NULL); /* not providing the mpoint so the basepoint is used */
+	gpg_error_t err=gcry_ecc_mul_point_tmp(GCRY_ECC_CURVE25519, (unsigned char *) buffer, skey_c, NULL); /* not providing the mpoint so the basepoint is used */
 
 	if (err) {
 
@@ -335,7 +335,7 @@ static int ecdh_calc_sharedkey(struct ssh_keyex_s *k)
 
 	/* shared key is multiplaction of the server public key and the client private key */
 
-	err=gcry_ecc_mul_point(GCRY_ECC_CURVE25519, buffer, skey_c, pkey_s);
+	err=gcry_ecc_mul_point_tmp(GCRY_ECC_CURVE25519, buffer, skey_c, pkey_s);
 
 	if (err) {
 

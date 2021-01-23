@@ -26,7 +26,7 @@ void remove_sl_dirnode(struct sl_skiplist_s *sl, struct sl_dirnode_s *dirnode);
 void move_sl_dirnode_left(struct sl_skiplist_s *sl, struct sl_move_dirnode_s *insert);
 void move_sl_dirnode_right(struct sl_skiplist_s *sl, struct sl_move_dirnode_s *insert);
 
-void _init_sl_dirnode(struct sl_skiplist_s *sl, struct sl_dirnode_s *dirnode, unsigned short level, unsigned char flag);
+void _init_sl_dirnode(struct sl_skiplist_s *sl, struct sl_dirnode_s *dirnode, unsigned int size, unsigned char flag);
 struct sl_dirnode_s *create_sl_dirnode(struct sl_skiplist_s *sl, unsigned short level);
 unsigned short resize_sl_dirnode(struct sl_dirnode_s *dirnode, unsigned short level);
 struct sl_vector_s *create_vector_path(unsigned short level, struct sl_dirnode_s *d);

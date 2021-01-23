@@ -69,7 +69,7 @@ static void _attr_cb_user(struct attr_buffer_s *buffer, struct ssh_string_s *s, 
     user.remote.name.ptr=av->version.v46.owner.ptr;
     user.remote.name.len=av->version.v46.owner.len;
 
-    logoutput("_attr_cb_user: %.*s pos %i", user.remote.name.len, user.remote.name.ptr, (int)(buffer->pos - buffer->buffer));
+    // logoutput("_attr_cb_user: %.*s pos %i", user.remote.name.len, user.remote.name.ptr, (int)(buffer->pos - buffer->buffer));
     (* sftp->usermapping.get_local_uid)(sftp, &user);
 
     attr->user.uid=user.uid;
@@ -88,7 +88,7 @@ static void _attr_cb_group(struct attr_buffer_s *buffer, struct ssh_string_s *s,
     group.remote.name.ptr=av->version.v46.group.ptr;
     group.remote.name.len=av->version.v46.group.len;
 
-    logoutput("_attr_cb_group: %.*s pos %i", group.remote.name.len, group.remote.name.ptr, (int)(buffer->pos - buffer->buffer));
+    // logoutput("_attr_cb_group: %.*s pos %i", group.remote.name.len, group.remote.name.ptr, (int)(buffer->pos - buffer->buffer));
     (* sftp->usermapping.get_local_gid)(sftp, &group);
 
     attr->group.gid=group.gid;
@@ -265,7 +265,7 @@ static void read_sftp_attributes(struct sftp_client_s *sftp, unsigned int valid,
     av04.attrcb=valid_attr04;
     av04.ntimecb=valid_ntime04;
 
-    logoutput_debug("read_sftp_attributes: len %i pos %i", buffer->len , (int)(buffer->pos - buffer->buffer));
+    // logoutput_debug("read_sftp_attributes: len %i pos %i", buffer->len , (int)(buffer->pos - buffer->buffer));
     // logoutput_base64encoded("read_sftp_attributes", buffer->buffer, buffer->len);
 
     /* read type (always present)
@@ -278,14 +278,14 @@ static void read_sftp_attributes(struct sftp_client_s *sftp, unsigned int valid,
 
     read_sftp_attributes_generic(sftp, &av04, 8, buffer, attr);
 
-    logoutput_debug("read_sftp_attributes: received %i", attr->received);
+    // logoutput_debug("read_sftp_attributes: received %i", attr->received);
 
 }
 
 void read_attributes_v04(struct sftp_client_s *sftp, struct attr_buffer_s *buffer, struct sftp_attr_s *attr)
 {
     unsigned int valid=(* buffer->ops->rw.read.read_uint32)(buffer);
-    logoutput_debug("read_attributes_v04: valid %i", valid);
+    // logoutput_debug("read_attributes_v04: valid %i", valid);
     read_sftp_attributes(sftp, valid, buffer, attr);
 }
 

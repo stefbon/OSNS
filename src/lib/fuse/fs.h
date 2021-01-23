@@ -76,6 +76,10 @@ struct fuse_opendir_s {
     void 					(* releasedir) (struct fuse_opendir_s *opendir, struct fuse_request_s *request);
     void 					(* fsyncdir) (struct fuse_opendir_s *opendir, struct fuse_request_s *request, unsigned char datasync);
     signed char					(* hidefile)(struct fuse_opendir_s *opendir, struct inode_s *inode);
+    struct list_header_s			entries;
+    pthread_mutex_t				mutex;
+    pthread_cond_t				cond;
+    void					(* add_direntry)(struct fuse_opendir_s *opendir, struct list_element_s *list);
     union {
 	uint64_t				fd;
 	void					*ptr;

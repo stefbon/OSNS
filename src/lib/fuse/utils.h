@@ -28,8 +28,8 @@ struct create_entry_s {
 	struct fuse_opendir_s		*opendir;
     } tree;
     struct service_context_s		*context;
-    struct entry_s 			*(*cb_create_entry)(struct entry_s *p, struct name_s *n);
-    struct inode_s			*(*cb_create_inode)(unsigned int size);
+    struct entry_s 			*(*cb_create_entry)(struct name_s *n);
+    struct inode_s			*(*cb_create_inode)();
     struct entry_s			*(*cb_insert_entry)(struct directory_s *d, struct entry_s *e, unsigned int f, unsigned int *error);
     void				(*cb_created)(struct entry_s *e, struct create_entry_s *ce);
     void				(*cb_found)(struct entry_s *e, struct create_entry_s *ce);
@@ -42,6 +42,7 @@ struct create_entry_s {
     void				(*cb_context_found)(struct create_entry_s *ce, struct entry_s *e);
     struct directory_s 			*(* get_directory)(struct create_entry_s *ce);
     unsigned int			pathlen;
+    unsigned int			cache_size;
     union {
 	struct stat			st;
 	struct inode_link_s 		link;

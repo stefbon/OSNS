@@ -434,8 +434,6 @@ void get_net_services(struct timespec *since, process_new_service cb, void *ptr)
 	if (result & _ADD_NET_SERVICE_SERVICE) added++;
 	free(queue);
 
-	logoutput("get_net_services: next");
-
 	queue=get_next_queued_service_found();
 
     }
@@ -518,13 +516,12 @@ void set_discover_net_cb(process_new_service cb)
     process_services.cb=cb;
 }
 
-static unsigned int convert_avahi_service_type(const char *name, unsigned int *depends)
+static unsigned int convert_avahi_service_type(const char *name)
 {
 
     if (strcmp(name, "_sftp-ssh._tcp")==0) {
 
-	if (depends) *depends=WORKSPACE_SERVICE_SSH;
-	return WORKSPACE_SERVICE_SFTP;
+	return WORKSPACE_SERVICE_SSH;
 
     } else if (strcmp(name, "_ssh._tcp")==0) {
 
@@ -648,7 +645,7 @@ static unsigned int add_net_service_common(unsigned int code, char *hostname, ch
 	service.target.port.type=_NETWORK_PORT_TCP; /* for sure? TODO add flag for TCP and/or UDP */
 
 	added=add_net_service_unlocked(code, method, &host, &service, 0, &error);
-	if (error>0) logoutput_info("add_net_service_avahi: error %i:%s", error, strerror(error));
+	if (error>0) logoutput_info("add_net_service_common: error %i:%s", error, strerror(error));
 
 	/* if service is a new or added but found earlier process futher */
 
@@ -687,7 +684,7 @@ static unsigned int add_net_service_common(unsigned int code, char *hostname, ch
 
     } else {
 
-	logoutput_warning("add_net_service_avahi: error %i:%s", lock, strerror(lock));
+	logoutput_warning("add_net_service_common: error %i:%s", lock, strerror(lock));
 
     }
 
@@ -699,8 +696,7 @@ unsigned int add_net_service_generic(const char *type, char *hostname, char *ip,
 {
 
     if (method==DISCOVER_METHOD_AVAHI) {
-	unsigned int depends=0;
-	unsigned int service=convert_avahi_service_type(type, &depends);
+	unsigned int service=convert_avahi_service_type(type);
 
 	if (service>0) {
 	    unsigned int len=(hostname) ? strlen(hostname) : 0;
@@ -720,7 +716,7 @@ unsigned int add_net_service_generic(const char *type, char *hostname, char *ip,
 
 	    /* TODO: get the **real** hostname, the hostname with avvahi has this .local appended, irritating */
 
-	    return add_net_service_common(service, realhostname, ip, port, DISCOVER_METHOD_AVAHI, depends);
+	    return add_net_service_common(service, realhostname, ip, port, DISCOVER_METHOD_AVAHI, 0);
 
 	}
 

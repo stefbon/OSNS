@@ -177,6 +177,10 @@ static int signal_context_ssh(struct context_interface_s *interface, const char 
 
 	    option->value.integer=(fs_options.ssh.keyx & (1 << (_OPTIONS_SSH_KEYX_ECDH - 1))) ? 1 : -1;
 
+	} else if (strcmp(&what[pos], "none")==0) {
+
+	    option->value.integer=(fs_options.ssh.keyx & (1 << (_OPTIONS_SSH_KEYX_NONE - 1))) ? 1 : -1;
+
 	} else {
 
 	    option->value.integer=0;
@@ -229,25 +233,25 @@ static int signal_context_ssh(struct context_interface_s *interface, const char 
 
 	}
 
-    } else if (strcmp(what, "option:ssh.init_timeout")==0) {
+    } else if (strcmp(what, "option:ssh.timeout_init")==0) {
 
 	option->type=_CTX_OPTION_TYPE_INT;
-	option->value.integer=(unsigned int) fs_options.ssh.init_timeout;
+	option->value.integer=(unsigned int) fs_options.ssh.timeout_init;
 
-    } else if (strcmp(what, "option:ssh.session_timeout")==0) {
-
-	option->type=_CTX_OPTION_TYPE_INT;
-	option->value.integer=(unsigned int) fs_options.ssh.session_timeout;
-
-    } else if (strcmp(what, "option:ssh.exec_timeout")==0) {
+    } else if (strcmp(what, "option:ssh.timeout_init")==0) {
 
 	option->type=_CTX_OPTION_TYPE_INT;
-	option->value.integer=(unsigned int) fs_options.ssh.exec_timeout;
+	option->value.integer=(unsigned int) fs_options.ssh.timeout_session;
 
-    } else if (strcmp(what, "option:ssh.userauth_timeout")==0) {
+    } else if (strcmp(what, "option:ssh.timeout_exec")==0) {
 
 	option->type=_CTX_OPTION_TYPE_INT;
-	option->value.integer=(unsigned int) fs_options.ssh.userauth_timeout;
+	option->value.integer=(unsigned int) fs_options.ssh.timeout_exec;
+
+    } else if (strcmp(what, "option:ssh.timeout_userauth")==0) {
+
+	option->type=_CTX_OPTION_TYPE_INT;
+	option->value.integer=(unsigned int) fs_options.ssh.timeout_userauth;
 
     } else if (strcmp(what, "io:shared-mutex")==0) {
 	struct service_context_s *root_context=get_root_context(context);
@@ -318,12 +322,12 @@ static struct service_context_s *connect_ssh_server(struct workspace_mount_s *wo
 
 }
 
-static void get_remote_supported_services(struct service_context_s *context, struct inode_s *inode, struct interface_list_s *ailist)
+static void get_remote_supported_services(struct service_context_s *context, struct inode_s *inode, struct interface_list_s *ailist, unsigned int count)
 {
     struct context_interface_s *interface=&context->interface;
     struct ctx_option_s option;
     int size=0;
-    unsigned int count=0;
+    unsigned int cntr=0;
 
     logoutput_info("get_remote_supported_services");
 
@@ -361,8 +365,8 @@ static void get_remote_supported_services(struct service_context_s *context, str
 		if (strncmp(&service[pos], "sftp:", 5)==0) {
 
 		    pos+=5;
-		    add_shared_map_sftp(context, inode, &service[pos], ailist);
-		    count++;
+		    add_shared_map_sftp(context, inode, &service[pos], ailist, count);
+		    cntr++;
 
 		}
 
@@ -379,10 +383,10 @@ static void get_remote_supported_services(struct service_context_s *context, str
 
     trydefault:
 
-    if (count==0) {
+    if (cntr==0) {
 
 	logoutput("get_remote_supported_services: no services found, try the default (home)");
-	add_shared_map_sftp(context, inode, _SFTP_HOME_MAP, ailist);
+	add_shared_map_sftp(context, inode, _SFTP_HOME_MAP, ailist, count);
 
     }
 
@@ -412,7 +416,6 @@ static struct entry_s *install_virtualnetwork_map(struct service_context_s *cont
 
 	xname.name=name;
 	xname.len=strlen(name);
-	xname.index=0;
 	calculate_nameindex(&xname);
 
 	entry=find_entry_batch(directory01, &xname, &error);
@@ -466,7 +469,7 @@ static struct entry_s *install_virtualnetwork_map(struct service_context_s *cont
 
 		/* attach the server context to the inode representing the ssh server */
 
-		link.type=INODE_LINK_TYPE_CONTEXT;
+		link.type=INODE_LINK_TYPE_DATA;
 		link.link.ptr=(void *) context;
 		set_inode_link_directory(inode, &link);
 
@@ -675,7 +678,7 @@ int install_ssh_server_context(struct workspace_mount_s *workspace, struct entry
 
 	    /* create sftp shared directories in server map */
 
-	    get_remote_supported_services(context, entry->inode, ailist);
+	    get_remote_supported_services(context, entry->inode, ailist, count+1);
 	    result=0;
 
 	}

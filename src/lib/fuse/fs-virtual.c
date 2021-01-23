@@ -80,7 +80,7 @@ static void _fs_get_inode_link_dir(struct inode_s *inode, struct inode_link_s **
 {
     struct directory_s *directory=NULL;
 
-    logoutput("_fs_get_inode_link_dir: ino %li", inode->st.st_ino);
+    logoutput_debug("_fs_get_inode_link_dir: ino %li", inode->st.st_ino);
 
     pthread_mutex_lock(&datalink_mutex);
     directory=(struct directory_s *) inode->link.link.ptr;
@@ -92,7 +92,7 @@ static void _fs_get_inode_link_dir(struct inode_s *inode, struct inode_link_s **
 static void _fs_get_inode_link_nondir(struct inode_s *inode, struct inode_link_s **link)
 {
 
-    logoutput("_fs_get_inode_link_nondir");
+    logoutput_debug("_fs_get_inode_link_nondir");
 
     pthread_mutex_lock(&datalink_mutex);
     *link=&inode->link;

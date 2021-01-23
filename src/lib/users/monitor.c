@@ -61,17 +61,22 @@ static pthread_mutex_t monitor_mutex=PTHREAD_MUTEX_INITIALIZER;
 static void sort_array_uids(struct _login_uids_s *new)
 {
 
-    for (unsigned int i=1; i<new->len; i++) {
+    if (new->len==0 || new->len==1) return;
 
-	unsigned int j=i-1;
+    logoutput("sort_array_uids: new len %i", new->len);
+
+    for (unsigned int i=1; i<new->len; i++) {
+	int j=i-1;
 
 	while (j>=0) {
+
+	    logoutput("sort_array_uids: i %i j %i", i, j);
 
 	    /* compare element j and j+1 
                if element j has a bigger value, than swap and continue 
                if not than stop */
 
-	    if ( new->uid[j] > new->uid[j+1] ) {
+	    if (new->uid[j] > new->uid[j+1]) {
 		uid_t tuid=new->uid[j];
 
 		new->uid[j]=new->uid[j+1];
@@ -226,6 +231,8 @@ void close_user_monitor()
 int read_user_monitor_event(int fd, void *data, uint32_t event)
 {
     struct _login_uids_s new = {.uid=NULL, .len=0};
+    int result=0;
+    uid_t *uid=NULL;
 
     pthread_mutex_lock(&monitor_mutex);
 
@@ -247,9 +254,21 @@ int read_user_monitor_event(int fd, void *data, uint32_t event)
 
     sd_login_monitor_flush(monitor);
 
-    new.len=sd_get_uids(&new.uid);
-    sort_array_uids(&new);
-    compare_uids(&new);
+    result=sd_get_uids(&uid);
+
+    if (result>=0) {
+
+	new.len=result;
+	new.uid=uid;
+        sort_array_uids(&new);
+	compare_uids(&new);
+
+    } else {
+
+	result=abs(result);
+	logoutput("read_user_monitor_event: sd_get_uids returned %i:%s", result, strerror(result));
+
+    }
 
     pthread_mutex_lock(&monitor_mutex);
     if (monitor_flags & _MONITOR_FLAG_CHANGED) goto process;

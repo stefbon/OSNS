@@ -95,8 +95,6 @@ void get_local_user_byuid(uid_t uid, struct ssh_string_s *user)
 
     }
 
-    return len;
-
 }
 
 void unlock_local_userbase()

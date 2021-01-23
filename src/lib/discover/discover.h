@@ -22,7 +22,7 @@
 
 #define WORKSPACE_SERVICE_SMB				1
 #define WORKSPACE_SERVICE_SFTP				2
-#define WORKSPACE_SERVICE_SSH				0 /* is not an fs */
+#define WORKSPACE_SERVICE_SSH				3
 #define WORKSPACE_SERVICE_WEBDAV			4
 #define WORKSPACE_SERVICE_NFS				5
 

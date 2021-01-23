@@ -43,11 +43,22 @@
 #include "skiplist-utils.h"
 #include "log.h"
 
+static char *get_logname_default(struct list_element_s *l)
+{
+    return "";
+}
+
+static int compare_end(struct list_element_s *l, void *n)
+{
+    return 1;
+}
+
 int init_sl_skiplist(struct sl_skiplist_s *sl,
 		    int (* compare) (struct list_element_s *l, void *b),
 		    void (* insert) (struct list_element_s *l),
 		    void (* delete) (struct list_element_s *l),
-		    struct list_element_s *(* get_list_element) (void *lookupdata, struct sl_skiplist_s *sl))
+		    struct list_element_s *(* get_list_element) (void *lookupdata, struct sl_skiplist_s *sl),
+		    char *(* get_logname)(struct list_element_s *l))
 {
     unsigned int error=0;
 
@@ -67,6 +78,15 @@ int init_sl_skiplist(struct sl_skiplist_s *sl,
 	sl->ops.insert=insert;
 	sl->ops.delete=delete;
 	sl->ops.get_list_element=get_list_element;
+	if (get_logname) {
+
+	    sl->ops.get_logname=get_logname;
+
+	} else {
+
+	    sl->ops.get_logname=get_logname_default;
+
+	}
 
 	for (unsigned int i=0; i<=sl->maxlevel+1; i++) {
 
@@ -74,6 +94,17 @@ int init_sl_skiplist(struct sl_skiplist_s *sl,
 	    sl->dirnode.junction[i].p=&sl->dirnode;
 
 	}
+
+	if (sl->dirnode.flags & _DIRNODE_FLAG_START) {
+
+	    sl->dirnode.compare = compare_end;
+
+	} else {
+
+	    sl->dirnode.compare = compare;
+
+	}
+
 	return 0;
 
     }
@@ -83,31 +114,69 @@ int init_sl_skiplist(struct sl_skiplist_s *sl,
 
 }
 
-struct sl_skiplist_s *create_sl_skiplist(struct sl_skiplist_s *sl, unsigned char prob, unsigned char maxlanes)
+static unsigned char calc_nrlanes_from_size(unsigned int size)
 {
-    unsigned int tmp=(prob==0) ? _SKIPLIST_PROB : prob;
-    unsigned char lanes=(maxlanes>0) ? maxlanes : _SKIPLIST_MAXLANES;
-    unsigned int size=sizeof(struct sl_skiplist_s) + (lanes + 2)  * sizeof(struct sl_junction_s);
+    int tmp=(int) size;
+    unsigned char nrlanes=0;
+
+    if (tmp<=sizeof(struct sl_skiplist_s)) return 0;
+    tmp-=sizeof(struct sl_skiplist_s);
+    nrlanes=(tmp / sizeof(struct sl_junction_s));
+    if (nrlanes <= 1) return 0;
+    nrlanes-=1;
+
+    return nrlanes;
+
+}
+
+struct sl_skiplist_s *create_sl_skiplist(struct sl_skiplist_s *sl, unsigned char prob, unsigned int size, unsigned char maxlanes)
+{
+    unsigned char nrlanes=0;
+
+    logoutput_debug("create_sl_skiplist: prob %i size %i maxlanes %i", prob, size, maxlanes);
+
+    prob=((prob==0) ? _SKIPLIST_PROB : prob);
 
     if (sl==NULL) {
+
+	nrlanes=calc_nrlanes_from_size(size);
+	if (nrlanes==0) return NULL;
+	if (nrlanes != maxlanes) logoutput_warning("create_sl_skiplist: nrlanes %i differs from maxlanes %i", nrlanes, maxlanes);
 
 	sl=malloc(size);
 	if (sl==NULL) return NULL;
 	memset(sl, 0, size);
 	sl->flags=_SKIPLIST_FLAG_ALLOC;
+	sl->size=size;
+
+    } else {
+
+	if (sl->size==0) sl->size=size;
+	if (size>0 && size != sl->size) logoutput_warning("create_sl_skiplist: sl size %i differs from size %s", sl->size, size);
+
+	if (sl->size>0) {
+
+	    nrlanes=calc_nrlanes_from_size(sl->size);
+	    if (nrlanes==0) return NULL;
+	    if (nrlanes != maxlanes) logoutput_warning("create_sl_skiplist: nrlanes %i differs from maxlanes %i", nrlanes, maxlanes);
+
+	}
 
     }
 
-    sl->prob=tmp;
+
+    sl->maxlevel=nrlanes - 1;
+    sl->prob=prob;
     pthread_mutex_init(&sl->mutex, NULL);
     pthread_cond_init(&sl->cond, NULL);
-    sl->maxlevel=lanes + 1;
     init_list_header(&sl->header, SIMPLE_LIST_TYPE_EMPTY, NULL);
 
-    logoutput("create_sl_skiplist: ml %i", lanes);
+    logoutput_debug("create_sl_skiplist: max nr lanes: %i", nrlanes);
 
-    _init_sl_dirnode(sl, &sl->dirnode, sl->maxlevel, _DIRNODE_FLAG_START);
+    _init_sl_dirnode(sl, &sl->dirnode, size - sizeof(struct sl_skiplist_s), _DIRNODE_FLAG_START);
     sl->dirnode.level=0;
+
+    logoutput_debug("create_sl_skiplist: ready");
     return sl;
 
 }
@@ -124,9 +193,8 @@ unsigned int get_size_sl_skiplist(unsigned char *p_maxlanes)
 
     }
 
-    size=sizeof(struct sl_skiplist_s) + (maxlanes+2) * sizeof(struct sl_junction_s);
-    logoutput("get_size_sl_skiplist: size %i = %i + (%i + 2) x %i" , size, sizeof(struct sl_skiplist_s), maxlanes, sizeof(struct sl_junction_s));
-
+    size=sizeof(struct sl_skiplist_s) + (maxlanes+1) * sizeof(struct sl_junction_s);
+    logoutput("get_size_sl_skiplist: size %i = %i + (%i + 1) x %i" , size, sizeof(struct sl_skiplist_s), maxlanes, sizeof(struct sl_junction_s));
     return size;
 }
 

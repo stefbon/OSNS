@@ -55,7 +55,7 @@ static int compare_dentry(struct list_element_s *list, void *b)
     struct name_s *name=(struct name_s *) b;
     struct entry_s *entry=(struct entry_s *)((char *) list - offsetof(struct entry_s, list));
 
-    //  logoutput("compare_dentry: name %s - entry %s", name->name, entry->name.name);
+    logoutput_debug("compare_dentry: name %s - entry %s", name->name, entry->name.name);
 
     if (entry->name.index==name->index) {
 
@@ -100,6 +100,13 @@ static void _insert_dentry_cb(struct list_element_s *list)
     /* set a flag entry is inserted in list */
 }
 
+static char *get_logname(struct list_element_s *l)
+{
+    struct entry_s *entry=(struct entry_s *) ((char *) l - offsetof(struct entry_s, list));
+
+    return entry->name.name;
+}
+
 struct directory_s *get_directory_entry(struct entry_s *entry)
 {
     struct list_header_s *h=entry->list.h;
@@ -116,9 +123,8 @@ struct directory_s *get_directory_entry(struct entry_s *entry)
 struct entry_s *get_parent_entry(struct entry_s *entry)
 {
     struct directory_s *directory=get_directory_entry(entry);
-    struct inode_s *inode=directory->inode;
-
-    return (inode) ? inode->alias : NULL;
+    struct inode_s *inode=(directory) ? directory->inode : NULL;
+    return ((inode) ? inode->alias : NULL);
 }
 
 void init_directory_readlock(struct directory_s *directory, struct simple_lock_s *lock)
@@ -178,7 +184,7 @@ struct entry_s *get_prev_entry(struct entry_s *entry)
 
 /* callbacks for the skiplist */
 
-int init_directory(struct directory_s *directory, int maxlanes)
+int init_directory(struct directory_s *directory, unsigned char maxlanes)
 {
     int result=0;
 
@@ -205,9 +211,8 @@ int init_directory(struct directory_s *directory, int maxlanes)
     if (directory->size>0) {
 	struct sl_skiplist_s *sl=(struct sl_skiplist_s *) directory->buffer;
 
-	create_sl_skiplist(sl, 0, (unsigned char) maxlanes);
-	result=init_sl_skiplist(sl, compare_dentry, _insert_dentry_cb, _delete_dentry_cb, get_list_element);
-
+	create_sl_skiplist(sl, 0, directory->size, 0);
+	result=init_sl_skiplist(sl, compare_dentry, _insert_dentry_cb, _delete_dentry_cb, get_list_element, get_logname);
 	if (result==-1) logoutput_warning("init_directory: error initializing skiplist");
 
     }
@@ -232,14 +237,14 @@ struct directory_s *_create_directory(struct inode_s *inode, void (* init_cb)(st
 {
     struct directory_s *directory=NULL;
     unsigned char maxlanes=0;
-    unsigned int size=sizeof(struct directory_s) + get_size_sl_skiplist(&maxlanes);
+    unsigned int size=get_size_sl_skiplist(&maxlanes);
 
     logoutput("_create_directory: inode %li size %li", inode->st.st_ino, size);
 
-    directory=malloc(size);
+    directory=malloc(sizeof(struct directory_s) + size);
     if (directory==NULL) return NULL;
 
-    memset(directory, 0, size);
+    memset(directory, 0, sizeof(struct directory_s) + size);
     directory->flags=_DIRECTORY_FLAG_ALLOC;
     directory->size=size;
 
@@ -251,7 +256,7 @@ struct directory_s *_create_directory(struct inode_s *inode, void (* init_cb)(st
     }
 
     directory->inode=inode;
-    (* init_cb)(directory);
+    if (init_cb) (* init_cb)(directory);
     return directory;
 
 }

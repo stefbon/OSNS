@@ -19,6 +19,6 @@
 #ifndef FUSE_SFTP_H
 #define FUSE_SFTP_H
 
-void add_shared_map_sftp(struct service_context_s *parent_context, struct inode_s *inode, char *name, struct interface_list_s *ilist);
+void add_shared_map_sftp(struct service_context_s *parent_context, struct inode_s *inode, char *name, struct interface_list_s *ilist, unsigned int count);
 
 #endif

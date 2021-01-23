@@ -312,7 +312,7 @@ static int dh_create_local_key(struct ssh_keyex_s *k)
     int result=-1;
     struct ssh_mpint_s q=SSH_MPINT_INIT;
     struct ssh_mpint_s tmp=SSH_MPINT_INIT;
-    struct ssh_mpint_s *ef=(struct ssh_mpint_s *)(k->flags & SSH_KEYEX_FLAG_SERVER) ? &dh->f : &dh->e;
+    struct ssh_mpint_s *ef=(struct ssh_mpint_s *)((k->flags & SSH_KEYEX_FLAG_SERVER) ? &dh->f : &dh->e);
 
 
     if (create_ssh_mpint(&dh->p)==-1) goto out;
@@ -524,10 +524,10 @@ static int dh_init_keyex(struct ssh_keyex_s *k, char *name)
 
     k->ops=&dh_ops;
 
-    dh->modp.ptr=p;
+    dh->modp.ptr=(char *)p;
     dh->modp.len=lenp;
 
-    dh->modg.ptr=g;
+    dh->modg.ptr=(char *)g;
     dh->modg.len=leng;
 
     logoutput("dh_init_keyex: %s: len p %i len g %i", name, lenp, leng);

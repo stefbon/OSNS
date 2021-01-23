@@ -59,7 +59,6 @@
 #include "fuse/ssh.h"
 
 extern struct fs_options_s fs_options;
-extern unsigned int get_ssh_interface_info(struct context_interface_s *interface, const char *what, void *data, struct common_buffer_s *buffer);
 
 struct entry_s *create_network_map_entry(struct service_context_s *context, struct directory_s *directory, struct name_s *xname, unsigned int *error)
 {
@@ -99,6 +98,8 @@ static void install_net_services_context(struct host_address_s *host, struct ser
     struct directory_s *root_directory=NULL;
     struct simple_lock_s wlock;
     unsigned int error=0;
+    char *target=NULL;
+    unsigned int port=0;
 
     logoutput("install_net_services_context");
 
@@ -121,21 +122,20 @@ static void install_net_services_context(struct host_address_s *host, struct ser
 
     unlock_directory(root_directory, &wlock);
 
-    if (code==WORKSPACE_SERVICE_SFTP) {
-	unsigned int error=0;
-	char *target=NULL;
-	unsigned int port=22;
+    translate_context_host_address(host, &target, NULL);
+    translate_context_network_port(service, &port);
 
-	translate_context_host_address(host, &target, NULL);
-	translate_context_network_port(service, &port);
+    logoutput("install_net_services_context: connecting to %s:%i", target, port);
 
-	logoutput("install_net_services_context: connecting to %s:%i", target, port);
+    if (code==WORKSPACE_SERVICE_SMB) {
 
-	if (install_ssh_server_context(workspace, inode->alias, host, service, &error)!=0) {
+	logoutput("install_net_services_context: SMB noy supported yet");
 
-	    logoutput("install_net_services_context: unable to connect to %s:%i", target, port);
+    } else if (code==WORKSPACE_SERVICE_SSH) {
 
-	}
+	int result=install_ssh_server_context(workspace, inode->alias, host, service, &error);
+
+	if (result != 0) logoutput("install_net_services_context: unable to connect to %s:%i error %i:%s", target, port, error, strerror(error));
 
     }
 
@@ -158,12 +158,9 @@ static void install_net_services_all(struct host_address_s *host, struct service
     init_rlock_users_hash(&rlock);
 
     rlock:
-    logoutput("install_net_services_all: rlock");
-
     lock_users_hash(&rlock);
 
     nextuser:
-    logoutput("install_net_services_all: nextuser");
 
     user=get_next_fuse_user(&index, &hashvalue);
     if (user==NULL) {
@@ -235,31 +232,27 @@ void install_net_services_cb(struct host_address_s *host, struct service_address
 
     logoutput("install_net_services_cb");
 
-    if (code==WORKSPACE_SERVICE_SFTP) {
+    switch (code) {
 
-	logoutput("install_net_services_cb: found sftp");
+	case WORKSPACE_SERVICE_SSH:
 
-    } else {
+	    if ((fs_options.network.services & _OPTIONS_NETWORK_ENABLE_SSH)==0) return;
+	    break;
 
-	if (code==WORKSPACE_SERVICE_SMB) {
+	case WORKSPACE_SERVICE_SMB:
 
-	    logoutput("install_net_services_cb: found smb:// not supported yet");
+	    if ((fs_options.network.services & _OPTIONS_NETWORK_ENABLE_SMB)==0) return;
+	    break;
 
-	} else if (code==WORKSPACE_SERVICE_NFS) {
+	case WORKSPACE_SERVICE_WEBDAV:
 
-	    logoutput("install_net_services_cb: found nfs:// not supported yet");
+	    if ((fs_options.network.services & _OPTIONS_NETWORK_ENABLE_WEBDAV)==0) return;
+	    break;
 
-	} else if (code==WORKSPACE_SERVICE_WEBDAV) {
+	default:
 
-	    logoutput("install_net_services_cb: found webdav not supported yet");
-
-	} else if (code==WORKSPACE_SERVICE_SSH) {
-
-	    logoutput("install_net_services_cb: found ssh ignoring");
-
-	}
-
-	return;
+	    logoutput("install_net_services_cb: service %i not supported", code);
+	    return;
 
     }
 

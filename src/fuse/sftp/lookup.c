@@ -101,7 +101,8 @@ static void _sftp_lookup_cb_created(struct entry_s *entry, struct create_entry_s
     memcpy(&parent->inode->st.st_mtim, &inode->stim, sizeof(struct timespec));
     _fs_common_cached_lookup(context, r, inode); /* reply FUSE/VFS */
     adjust_pathmax(context->workspace, ce->pathlen);
-    memcpy(inode->cache, response->buff, response->size);
+
+    check_create_inodecache(inode, response->size, (char *)response->buff, INODECACHE_FLAG_STAT);
     inode->flags|=INODE_FLAG_CACHED;
 
 }
@@ -115,7 +116,7 @@ static void _sftp_lookup_cb_found(struct entry_s *entry, struct create_entry_s *
 
     // logoutput("_sftp_lookup_cb_found: name %s ino %li", entry->name.name, inode->st.st_ino);
 
-    if (response->size !=  inode->cache_size || memcmp(inode->cache, response->buff, response->size)!=0) {
+    if (check_create_inodecache(inode, response->size, (char *)response->buff, INODECACHE_FLAG_STAT)==1) {
 	struct sftp_attr_s attr;
 	struct timespec mtim;
 
@@ -138,7 +139,6 @@ static void _sftp_lookup_cb_found(struct entry_s *entry, struct create_entry_s *
 
 	}
 
-	memcpy(inode->cache, response->buff, response->size);
 	inode->flags|=INODE_FLAG_CACHED;
 
     }
@@ -294,33 +294,21 @@ void _fs_sftp_lookup_existing(struct service_context_s *context, struct fuse_req
 		struct attr_response_s *response=&reply->response.attr;
 		struct inode_s *inode=entry->inode;
 
-		// logoutput("_fs_sftp_lookup_existing: %s reply %i size %i", pathinfo->path, sftp_r.reply.type, response->size);
-
 		/* do this different: let this to the cb's */
 
-		if (response->size != inode->cache_size || memcmp(inode->cache, response->buff, response->size)) {
+		if (check_create_inodecache(inode, response->size, (char *)response->buff, INODECACHE_FLAG_STAT)==1) {
 		    struct sftp_attr_s attr;
 
-		    // logoutput("_fs_sftp_lookup_existing: sftp attr size %i : cache %i", response->size, inode->cache_size);
+		    logoutput("_fs_sftp_lookup_existing: cache differs");
 
 		    memset(&attr, 0, sizeof(struct sftp_attr_s));
 		    read_sftp_attributes_ctx(interface, response, &attr);
-
-		    if (response->size != inode->cache_size) {
-
-			inode=realloc_inode(inode, response->size); /* assume always good */
-			if (inode==NULL) {
-
-			    error=ENOMEM;
-			    goto out;
-
-			}
-
-		    }
-
 		    fill_inode_attr_sftp(interface, &inode->st, &attr);
-		    memcpy(inode->cache, response->buff, response->size);
 		    inode->flags|=INODE_FLAG_CACHED;
+
+		} else {
+
+		    logoutput("_fs_sftp_lookup_existing: cache the same");
 
 		}
 

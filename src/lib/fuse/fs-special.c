@@ -260,8 +260,9 @@ void set_fs_special(struct inode_s *inode)
 void create_desktopentry_file(char *path, struct entry_s *parent, struct workspace_mount_s *workspace)
 {
     struct stat st;
+    unsigned int len=strlen(path);
 
-    logoutput("create_desktopentry_file: path %s", path);
+    logoutput("create_desktopentry_file: %i path %.*s", len, len, path);
 
     if (lstat(path, &st)==0 && S_ISREG(st.st_mode)) {
 	struct name_s xname;
@@ -272,13 +273,18 @@ void create_desktopentry_file(char *path, struct entry_s *parent, struct workspa
 	xname.len=strlen(xname.name);
 	calculate_nameindex(&xname);
 
+	logoutput("create_desktopentry_file: name %s", xname.name);
+
 	struct entry_s *entry=_fs_common_create_entry_unlocked(workspace, directory, &xname, &st, 0, 0, &error);
 
 	if (entry) {
-	    struct special_path_s *s=malloc(sizeof(struct special_path_s) + strlen(path) + 1); /* inlcuding terminating zero */
+	    unsigned int size=sizeof(struct special_path_s) + strlen(path) + 1;  /* inlcuding terminating zero */
+	    struct special_path_s *s=malloc(size);
 
 	    if (s) {
 		struct inode_s *inode=entry->inode;
+
+		memset(s, 0, size);
 
 		inode->fs=&fs;
 		s->ino=inode->st.st_ino;

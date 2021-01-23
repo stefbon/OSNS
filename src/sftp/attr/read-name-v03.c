@@ -85,7 +85,7 @@ static void _dummy_cb(struct attr_buffer_s *buffer, struct ssh_string_s *s, void
 void read_name_nameresponse_v03(struct sftp_client_s *sftp, struct attr_buffer_s *buffer, struct ssh_string_s *name)
 {
     uint32_t len=(* buffer->ops->rw.read.read_string)(buffer, name, _dummy_cb, NULL);
-    logoutput_debug("read_attr_response_v03: name %.*s", name->len, name->ptr);
+    // logoutput_debug("read_attr_response_v03: name %.*s", name->len, name->ptr);
 }
 
 void read_attr_nameresponse_v03(struct sftp_client_s *sftp, struct attr_buffer_s *buffer, struct sftp_attr_s *attr)
@@ -96,7 +96,7 @@ void read_attr_nameresponse_v03(struct sftp_client_s *sftp, struct attr_buffer_s
     /* longname */
 
     uint32_t len=(* buffer->ops->rw.read.read_string)(buffer, &longname, _dummy_cb, NULL);
-    logoutput_debug("read_attr_response_v03: longname %.*s", longname.len, longname.ptr);
+    // logoutput_debug("read_attr_response_v03: longname %.*s", longname.len, longname.ptr);
 
     /* attr */
 

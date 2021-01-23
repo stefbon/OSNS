@@ -145,7 +145,7 @@ static uint32_t read_string(struct attr_buffer_s *ab, struct ssh_string_s *s, vo
 {
     s->len=(* ab->ops->rw.read.read_uint32)(ab);
 
-    logoutput("read_string");
+    // logoutput("read_string");
 
     if (s->len>0 && ab->left>= s->len) {
 

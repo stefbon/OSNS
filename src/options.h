@@ -23,6 +23,7 @@
 
 #define _OPTIONS_MAIN_CONFIGFILE 					"/etc/osns/options"
 #define _OPTIONS_MAIN_SOCKET 						"/run/osns/sock"
+#define _OPTIONS_MAIN_FLAG_SERVER					1
 
 /* FUSE */
 
@@ -82,6 +83,7 @@
 
 #define _OPTIONS_SSH_KEYX_DH						1
 #define _OPTIONS_SSH_KEYX_ECDH						2
+#define _OPTIONS_SSH_KEYX_NONE						3
 
 #define _OPTIONS_SSH_CERTIFICATE_RSA_CERT_V01_OPENSSH_COM		1
 #define _OPTIONS_SSH_CERTIFICATE_DSS_CERT_V01_OPENSSH_COM		2
@@ -92,10 +94,10 @@
 #define _OPTIONS_SSH_EXTENSION_NO_FLOW_CONTROL				3
 #define _OPTIONS_SSH_EXTENSION_ELEVATION				4
 
-#define _OPTIONS_SSH_INIT_TIMEOUT_DEFAULT				2
-#define _OPTIONS_SSH_SESSION_TIMEOUT_DEFAULT				2
-#define _OPTIONS_SSH_EXEC_TIMEOUT_DEFAULT				2
-#define _OPTIONS_SSH_USERAUTH_TIMEOUT_DEFAULT				12
+#define _OPTIONS_SSH_TIMEOUT_INIT_DEFAULT				2
+#define _OPTIONS_SSH_TIMEOUT_SESSION_DEFAULT				2
+#define _OPTIONS_SSH_TIMEOUT_EXEC_DEFAULT				2
+#define _OPTIONS_SSH_TIMEOUT_USERAUTH_DEFAULT				12
 
 #define _OPTIONS_SSH_BACKEND_OPENSSH					1
 
@@ -163,10 +165,10 @@ struct ssh_options_s {
     unsigned int			certificate;
     unsigned int			compression;
     unsigned int			keyx;
-    unsigned int 			init_timeout;
-    unsigned int 			session_timeout;
-    unsigned int 			exec_timeout;
-    unsigned int			userauth_timeout;
+    unsigned int 			timeout_init;
+    unsigned int 			timeout_session;
+    unsigned int 			timeout_exec;
+    unsigned int			timeout_userauth;
     unsigned int 			backend;
     unsigned int 			trustdb;
     unsigned int			required_authmethods;
@@ -191,6 +193,8 @@ struct nfs_options_s {
 
 struct network_options_s {
     unsigned int 			flags;
+    unsigned int			services;
+    unsigned int			discover;
     struct pathinfo_s 			discover_static_file;
     char				*path_icon_network;
     char				*path_icon_domain;
@@ -204,9 +208,9 @@ struct network_options_s {
 
 struct fuse_options_s {
     unsigned int			flags;
-    struct timespec			attr_timeout;
-    struct timespec			entry_timeout;
-    struct timespec			negative_timeout;
+    struct timespec			timeout_attr;
+    struct timespec			timeout_entry;
+    struct timespec			timeout_negative;
 };
 
 struct user_options_s {
@@ -216,6 +220,7 @@ struct user_options_s {
 };
 
 struct fs_options_s {
+    unsigned int			flags;
     struct pathinfo_s			configfile;
     struct pathinfo_s			socket;
     struct pathinfo_s			discovermap;

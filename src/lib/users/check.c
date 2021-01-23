@@ -56,8 +56,8 @@
 #include <security/pam_appl.h>
 
 struct _tmp_pamconv_s {
-    char			*username;
-    char			*password;
+    const char			*username;
+    const char			*password;
 };
 
 static int pam_password_conversation(int num, const struct pam_message **p_msg, struct pam_response **p_resp, void *ptr)

@@ -109,7 +109,7 @@ static void _cb_created(struct entry_s *entry, struct create_entry_s *ce)
 
     memcpy(&directory->inode->st.st_ctim, &directory->synctime, sizeof(struct timespec));
     memcpy(&directory->inode->st.st_mtim, &directory->synctime, sizeof(struct timespec));
-    memcpy(inode->cache, buffer->pos - inode->cache_size, inode->cache_size);
+    check_create_inodecache(inode, ce->cache_size, buffer->pos - ce->cache_size, INODECACHE_FLAG_READDIR);
     inode->flags |= INODE_FLAG_CACHED;
 
 }
@@ -124,12 +124,11 @@ static void _cb_found(struct entry_s *entry, struct create_entry_s *ce)
 
     logoutput("_cb_found");
 
-    if (memcmp(inode->cache, buffer->pos - inode->cache_size, inode->cache_size)!=0) {
+    if (check_create_inodecache(inode, ce->cache_size, buffer->pos - ce->cache_size, INODECACHE_FLAG_READDIR)==1) {
 
 	fill_inode_stat(inode, &ce->cache.st);
 	inode->st.st_mode=ce->cache.st.st_mode;
 	inode->st.st_size=ce->cache.st.st_size;
-	memcpy(inode->cache, buffer->pos - inode->cache_size, inode->cache_size);
 	inode->flags |= INODE_FLAG_CACHED;
 
     }
@@ -168,8 +167,6 @@ void _fs_sftp_opendir(struct fuse_opendir_s *opendir, struct fuse_request_s *f_r
     unsigned int pathlen=(* interface->backend.sftp.get_complete_pathlen)(interface, pathinfo->len);
     char path[pathlen];
 
-    logoutput("_fs_sftp_opendir_common: send opendir %i %s", pathinfo->len, pathinfo->path);
-
     /* test a full opendir/readdir is required: test entries are deleted and/or created */
 
     if (directory && directory->synctime.tv_sec>0) {
@@ -192,6 +189,8 @@ void _fs_sftp_opendir(struct fuse_opendir_s *opendir, struct fuse_request_s *f_r
     }
 
     pathinfo->len += (* interface->backend.sftp.complete_path)(interface, path, pathinfo);
+
+    logoutput("_fs_sftp_opendir_common: send opendir %i %s", pathinfo->len, pathinfo->path);
 
     memset(&sftp_r, 0, sizeof(struct sftp_request_s));
     sftp_r.id=0;
@@ -237,9 +236,8 @@ void _fs_sftp_opendir(struct fuse_opendir_s *opendir, struct fuse_request_s *f_r
 
 	    } else if (reply->type==SSH_FXP_STATUS) {
 
-		logoutput("_fs_sftp_opendir_common:");
-
 		error=reply->response.status.linux_error;
+		logoutput("_fs_sftp_opendir_common: error %i:%s", error, strerror(error));
 
 	    } else {
 
@@ -1019,7 +1017,6 @@ int test_valid_sftp_readdir(struct context_interface_s *interface, void *ptr, un
 
 	valid=_fs_sftp_readdir_root(&opendir, interface, 1024, 0, attr, len);
 	if ((opendir.mode & _FUSE_READDIR_MODE_FINISH)==0) goto readdir;
-
 	_fs_sftp_releasedir_root(&opendir, interface);
 	result=0;
 

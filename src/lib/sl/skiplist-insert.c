@@ -67,7 +67,7 @@ static int do_levelup(struct sl_skiplist_s *sl)
     int level=-1;
     unsigned hlp=0;
 
-    logoutput("do_levelup");
+    // logoutput("do_levelup");
 
     pthread_mutex_lock(&sl->mutex);
 
@@ -113,7 +113,7 @@ static void correct_dirnodes_insert(struct sl_skiplist_s *sl, struct sl_vector_s
     if (new && new->level>=level) {
 	struct sl_dirnode_s *next=prev->junction[level].n;
 
-	logoutput("correct_dirnodes_insert: level %i new level %i prev flag %i next flags %i", level, new->level, prev->flags, next->flags);
+	// logoutput("correct_dirnodes_insert: level %i new level %i prev flag %i next flags %i", level, new->level, prev->flags, next->flags);
 
 	/* put new between prev and next on this level/lane */
 
@@ -152,7 +152,7 @@ static void correct_dirnodes_insert(struct sl_skiplist_s *sl, struct sl_vector_s
 
 	    if (new->level > vector->maxlevel) {
 
-		logoutput("correct_dirnodes_insert: new level %i bigger than vector level %i", new->level, vector->maxlevel);
+		// logoutput("correct_dirnodes_insert: new level %i bigger than vector level %i", new->level, vector->maxlevel);
 
 	    }
 
@@ -160,7 +160,7 @@ static void correct_dirnodes_insert(struct sl_skiplist_s *sl, struct sl_vector_s
 
     } else {
 
-	logoutput("correct_dirnodes_insert: level %i prev flag %i", level, prev->flags);
+	// logoutput("correct_dirnodes_insert: level %i prev flag %i", level, prev->flags);
 
 	/* adjust the lanes above the new dirnode
 	    next and previous stay the same */
@@ -180,7 +180,7 @@ static struct sl_dirnode_s *insert_sl_dirnode(struct sl_skiplist_s *sl, struct l
     struct sl_dirnode_s *new=NULL;
     int newlevel=do_levelup(sl);
 
-    logoutput("insert_sl_dirnode: newlevel %i left %i right %i", newlevel, insert->left, insert->right);
+    // logoutput("insert_sl_dirnode: newlevel %i left %i right %i", newlevel, insert->left, insert->right);
 
     if (newlevel>=0) {
 
@@ -226,7 +226,7 @@ static void insert_sl_dirnode_right(struct sl_skiplist_s *sl, struct list_elemen
 static void sl_insert_cb(struct sl_skiplist_s *sl, struct sl_lockops_s *lockops, struct sl_vector_s *vector, struct sl_searchresult_s *result)
 {
 
-    logoutput("sl_insert_cb");
+    logoutput_debug("sl_insert_cb");
 
     if ((result->flags & SL_SEARCHRESULT_FLAG_EXACT)==0 && (* lockops->upgrade_readlock_vector)(sl, vector, 0)==0) {
 	struct list_element_s *list=(* sl->ops.get_list_element)(result->lookupdata, sl);
@@ -249,9 +249,9 @@ static void sl_insert_cb(struct sl_skiplist_s *sl, struct sl_lockops_s *lockops,
 
 	result->flags |= SL_SEARCHRESULT_FLAG_OK;
 
-	logoutput("sl_insert_cb: result step %i dirnode step %i", result->step, (prev) ? prev->junction[0].step : -1);
-
 	if (result->flags & SL_SEARCHRESULT_FLAG_EMPTY) {
+
+	    logoutput_debug("sl_insert_cb: add %s first result step %i dirnode step %i", sl->ops.get_logname(list), result->step, (prev) ? prev->junction[0].step : -1);
 
 	    add_list_element_first(&sl->header, list);
 	    sl->dirnode.junction[0].step=1; /* one element */
@@ -261,6 +261,8 @@ static void sl_insert_cb(struct sl_skiplist_s *sl, struct sl_lockops_s *lockops,
 
 	} else if (result->flags & SL_SEARCHRESULT_FLAG_BEFORE) {
 
+	    logoutput_debug("sl_insert_cb: add %s before %s result step %i dirnode step %i", sl->ops.get_logname(list), sl->ops.get_logname(result->found), result->step, (prev) ? prev->junction[0].step : -1);
+
 	    add_list_element_before(&sl->header, result->found, list);
 	    insert.left=result->step;
 	    insert.right=prev->junction[0].step - result->step + 1;
@@ -269,11 +271,17 @@ static void sl_insert_cb(struct sl_skiplist_s *sl, struct sl_lockops_s *lockops,
 
 	} else if (result->flags & SL_SEARCHRESULT_FLAG_AFTER) {
 
+	    logoutput_debug("sl_insert_cb: add %s after %s result step %i dirnode step %i", sl->ops.get_logname(list), sl->ops.get_logname(result->found), result->step, (prev) ? prev->junction[0].step : -1);
+
 	    add_list_element_after(&sl->header, result->found, list);
 	    insert.left=result->step + 1;
 	    insert.right=prev->junction[0].step - result->step;
 	    result->flags |= SL_SEARCHRESULT_FLAG_OK;
 	    result->found=list;
+
+	} else {
+
+	    logoutput_warning("sl_insert_cb: no add_list_element flags %i", result->flags);
 
 	}
 
@@ -281,7 +289,7 @@ static void sl_insert_cb(struct sl_skiplist_s *sl, struct sl_lockops_s *lockops,
 
 	    /* put an dirnode on the list element */
 
-	    logoutput("sl_insert_cb: C left %i right %i", insert.left, insert.right);
+	    logoutput_debug("sl_insert_cb: C left %i right %i", insert.left, insert.right);
 	    insert_sl_dirnode(sl, list, &insert);
 
 	} else if ((insert.left + insert.right + 1 >= 2 * sl->prob) || insert.left > sl->prob + 1 || insert.left > sl->prob + 1) {
@@ -290,21 +298,21 @@ static void sl_insert_cb(struct sl_skiplist_s *sl, struct sl_lockops_s *lockops,
 
 		/* left of the new entry is more space */
 
-		logoutput("sl_insert_cb: D left %i right %i", insert.left, insert.right);
+		logoutput_debug("sl_insert_cb: D left %i right %i", insert.left, insert.right);
 		insert_sl_dirnode_left(sl, list, &insert);
 
 	    } else if (insert.right > insert.left) {
 
 		/* right of the new entry is more space */
 
-		logoutput("sl_insert_cb: E left %i right %i", insert.left, insert.right);
+		logoutput_debug("sl_insert_cb: E left %i right %i", insert.left, insert.right);
 		insert_sl_dirnode_right(sl, list, &insert);
 
 	    }
 
 	} else {
 
-	    logoutput("sl_insert_cb: F left %i right %i", insert.left, insert.right);
+	    logoutput_debug("sl_insert_cb: F left %i right %i", insert.left, insert.right);
 
 	}
 

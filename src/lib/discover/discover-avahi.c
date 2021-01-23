@@ -47,7 +47,7 @@ static AvahiThreadedPoll *threadedpoll = NULL;
 static AvahiClient *client = NULL;
 static AvahiStringList *types = NULL;
 
-extern void add_net_service_avahi(const char *type, char *hostname, char *ipv4, unsigned int port);
+extern unsigned int add_net_service_generic(const char *type, char *hostname, char *ipv4, unsigned int port, unsigned char method);
 
 static void service_resolver_cb(AvahiServiceResolver *r, AvahiIfIndex interface, AvahiProtocol protocol, AvahiResolverEvent event,
 				const char *name, const char *type, const char *domain, const char *hostname, const AvahiAddress *a, uint16_t port,

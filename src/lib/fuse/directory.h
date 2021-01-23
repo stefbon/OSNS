@@ -74,7 +74,7 @@ struct directory_s {
     char				buffer[];
 };
 
-int init_directory(struct directory_s *directory, int maxlanes);
+int init_directory(struct directory_s *directory, unsigned char maxlanes);
 struct directory_s *_create_directory(struct inode_s *inode, void (* init_cb)(struct directory_s *directory));
 
 struct directory_s *get_directory_entry(struct entry_s *entry);

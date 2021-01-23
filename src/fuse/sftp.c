@@ -146,26 +146,16 @@ static int get_service_info_prefix(struct ctx_option_s *option, char **prefix, c
     return 0;
 }
 
-static int add_sftp_context(struct service_context_s *parent_context, struct inode_s *inode, char *name, char *prefix, char *uri, struct interface_list_s *ailist)
+static int add_sftp_context(struct service_context_s *parent_context, struct inode_s *inode, char *name, char *prefix, char *uri, struct interface_list_s *ilist)
 {
     struct workspace_mount_s *workspace=parent_context->workspace;
     struct service_context_s *context=NULL;
     struct context_interface_s *interface=NULL;
     struct service_address_s service;
     int fd=-1;
-    struct interface_list_s *ilist=NULL;
     unsigned int error=0;
 
-    ilist=get_interface_ops(ailist, 0, _INTERFACE_TYPE_SFTP);
-    if (ilist==NULL) {
-
-	logoutput("add_sftp_context: interface not found");
-	return -1;
-
-    }
-
     context=create_service_context(workspace, parent_context, ilist, SERVICE_CTX_TYPE_FILESYSTEM, NULL);
-
     if (context==NULL) {
 
 	logoutput("add_sftp_context: error allocating context");
@@ -245,7 +235,7 @@ static int add_sftp_context(struct service_context_s *parent_context, struct ino
 
 /* add a sftp shared map */
 
-void add_shared_map_sftp(struct service_context_s *parent_context, struct inode_s *inode, char *name, struct interface_list_s *ailist)
+void add_shared_map_sftp(struct service_context_s *parent_context, struct inode_s *inode, char *name, struct interface_list_s *ailist, unsigned int count)
 {
     struct workspace_mount_s *workspace=parent_context->workspace;
     struct context_interface_s *interface=&parent_context->interface;
@@ -257,6 +247,15 @@ void add_shared_map_sftp(struct service_context_s *parent_context, struct inode_
     unsigned int len=strlen(name);
     struct ctx_option_s option;
     unsigned char done=0;
+    struct interface_list_s *ilist=NULL;
+
+    ilist=get_interface_ops(ailist, count, _INTERFACE_TYPE_SFTP);
+    if (ilist==NULL) {
+
+	logoutput("add_shared_map_sftp: sftp interface not found");
+	return;
+
+    }
 
     logoutput("add_shared_map_sftp: name %s", name);
 
@@ -398,7 +397,7 @@ void add_shared_map_sftp(struct service_context_s *parent_context, struct inode_
 
 	    }
 
-	    if (add_sftp_context(parent_context, inode, name, prefix, uri, ailist)==0) {
+	    if (add_sftp_context(parent_context, inode, name, prefix, uri, ilist)==0) {
 
 		logoutput("add_shared_map_sftp: sftp context added");
 		done=1;
@@ -417,7 +416,7 @@ void add_shared_map_sftp(struct service_context_s *parent_context, struct inode_
 
     if (done==0) {
 
-	if (add_sftp_context(parent_context, inode, name, NULL, NULL, ailist)==0) {
+	if (add_sftp_context(parent_context, inode, name, NULL, NULL, ilist)==0) {
 
 	    logoutput("add_shared_map_sftp: sftp context added");
 
