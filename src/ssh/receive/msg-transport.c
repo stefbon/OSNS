@@ -49,9 +49,32 @@
 #include "ssh-data.h"
 #include "ssh-send.h"
 #include "ssh-keyexchange.h"
-#include "extensions/extension.h"
+#include "ssh-extensions.h"
 
 /* various callbacks for SSH transport */
+
+/*
+
+    possible values:
+
+    SSH_MSG_DISCONNECT                        	1
+    SSH_MSG_IGNORE				2
+    SSH_MSG_UNIMPLEMENTED			3
+    SSH_MSG_DEBUG				4
+    SSH_MSG_SERVICE_REQUEST			5
+    SSH_MSG_SERVICE_ACCEPT			6
+    SSH_MSG_EXT_INFO				7
+    SSH_MSG_KEXINIT				20
+    SSH_MSG_NEWKEYS				21
+
+    SSH_MSG_KEXDH_REPLY				31
+
+    SSH_MSG_GLOBAL_REQUEST			80
+    SSH_MSG_REQUEST_SUCCESS			81
+    SSH_MSG_REQUEST_FAILURE			82
+
+*/
+
 
 /* disconnect */
 
@@ -420,6 +443,91 @@ static void receive_msg_kexdh_reply(struct ssh_connection_s *connection, struct 
 
 }
 
+/*
+    - byte		SSH_MSG_GLOBAL_REQUEST
+    - string		request name
+    - boolean		want reply
+    ....		request specific data
+
+    like "hostkeys-00@openssh.com"
+*/
+
+static void receive_msg_global_request(struct ssh_connection_s *connection, struct ssh_payload_s *payload)
+{
+    struct ssh_string_s name=SSH_STRING_INIT;
+
+    if (read_ssh_string(&payload->buffer[1], payload->len - 1, &name) > 3) {
+
+	logoutput("receive_msg_global_request: received request %.*s", name.len, name.ptr);
+
+    } else {
+
+	logoutput("receive_msg_global_request: received request, cannot read name");
+
+    }
+
+    pthread_mutex_lock(connection->setup.mutex);
+
+    if (connection->setup.flags & SSH_SETUP_FLAG_DISCONNECT) {
+
+	free_payload(&payload);
+
+    } else if (connection->setup.flags & SSH_SETUP_FLAG_SERVICE_CONNECTION) {
+	struct payload_queue_s *queue = &connection->setup.queue;
+
+	queue_ssh_payload_locked(queue, payload);
+	payload=NULL;
+
+    }
+
+    pthread_mutex_unlock(connection->setup.mutex);
+
+    if (payload) {
+
+	logoutput("receive_msg_global_request: disconnect");
+	free_payload(&payload);
+	disconnect_ssh_connection(connection);
+
+    }
+
+}
+
+static void receive_msg_request_common(struct ssh_connection_s *connection, struct ssh_payload_s *payload)
+{
+    logoutput("receive_msg_request_common");
+
+    pthread_mutex_lock(connection->setup.mutex);
+
+    if (connection->setup.flags & SSH_SETUP_FLAG_DISCONNECT) {
+
+	free_payload(&payload);
+
+    } else if (connection->setup.flags & SSH_SETUP_FLAG_SERVICE_CONNECTION) {
+	struct payload_queue_s *queue = &connection->setup.queue;
+
+	/* queue it in the general channel independant queue */
+
+	queue_ssh_payload_locked(queue, payload);
+	payload=NULL;
+
+    }
+
+    connection->flags &= ~SSH_CONNECTION_FLAG_GLOBAL_REQUEST;
+
+    pthread_cond_broadcast(connection->setup.cond);
+    pthread_mutex_unlock(connection->setup.mutex);
+
+    if (payload) {
+
+	logoutput("receive_msg_request_common: disconnect");
+	free_payload(&payload);
+	disconnect_ssh_connection(connection);
+
+    }
+
+}
+
+
 void register_transport_cb(struct ssh_connection_s *c)
 {
     register_msg_cb(c, SSH_MSG_DISCONNECT, receive_msg_disconnect);
@@ -434,4 +542,11 @@ void register_transport_cb(struct ssh_connection_s *c)
     register_msg_cb(c, SSH_MSG_NEWKEYS, receive_msg_newkeys);
 
     register_msg_cb(c, SSH_MSG_KEXDH_REPLY, receive_msg_kexdh_reply);
+
+    /* global requests like enabling port forwarding on server to client */
+
+    register_msg_cb(c, SSH_MSG_GLOBAL_REQUEST, receive_msg_global_request);
+    register_msg_cb(c, SSH_MSG_REQUEST_SUCCESS, receive_msg_request_common);
+    register_msg_cb(c, SSH_MSG_REQUEST_FAILURE, receive_msg_request_common);
+
 }

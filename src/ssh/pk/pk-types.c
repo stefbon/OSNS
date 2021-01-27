@@ -180,7 +180,7 @@ struct ssh_pkalgo_s *get_pkalgo(char *name, unsigned int len, int *index)
 
     while (available_algos[i].id>0) {
 
-	logoutput("get_pkalgo: test %s", available_algos[i].name);
+	logoutput_debug("get_pkalgo: test %s", available_algos[i].name);
 
 	if (strlen(available_algos[i].name)==len && strncmp(available_algos[i].name, name, len)==0) {
 

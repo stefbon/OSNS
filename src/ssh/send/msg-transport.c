@@ -44,7 +44,7 @@
 #include "ssh-common.h"
 #include "ssh-common-protocol.h"
 #include "ssh-send.h"
-#include "extensions/extension.h"
+#include "ssh-extensions.h"
 
 #include "ssh-utils.h"
 #include "ssh-keyexchange.h"
@@ -390,6 +390,7 @@ int send_service_accept_message(struct ssh_connection_s *connection, const char 
 
 int send_global_request_message(struct ssh_connection_s *connection, const char *service, char *data, unsigned int size, unsigned int *seq)
 {
+    struct ssh_connections_s *connections=get_ssh_connection_connections(connection);
     unsigned int len=strlen(service);
     char buffer[sizeof(struct ssh_payload_s) + 5 + len + 1 + size];
     struct ssh_payload_s *payload=(struct ssh_payload_s *) buffer;
@@ -417,6 +418,68 @@ int send_global_request_message(struct ssh_connection_s *connection, const char 
 
     }
 
+    payload->len=(unsigned int)(pos - payload->buffer);
+
+    /* prevent more than one GLOBAL_REQUEST pending */
+
+    pthread_mutex_lock(connections->mutex);
+
+    while ((connections->flags & SSH_CONNECTIONS_FLAG_DISCONNECT)==0 && (connection->flags & SSH_CONNECTION_FLAG_GLOBAL_REQUEST)) {
+
+	pthread_cond_wait(connections->cond, connections->mutex);
+
+	if ((connection->flags & SSH_CONNECTION_FLAG_GLOBAL_REQUEST)==0) {
+
+	    break;
+
+	} else if (connections->flags & SSH_CONNECTIONS_FLAG_DISCONNECT) {
+
+	    pthread_mutex_unlock(connections->mutex);
+	    return -1;
+
+	}
+
+    }
+
+    connection->flags |= SSH_CONNECTION_FLAG_GLOBAL_REQUEST;
+    pthread_mutex_unlock(connections->mutex);
+
+    return write_ssh_packet(connection, payload, seq);
+}
+
+int send_request_success_message(struct ssh_connection_s *connection, char *data, unsigned int size, unsigned int *seq)
+{
+    char buffer[sizeof(struct ssh_payload_s) + 5 + size];
+    struct ssh_payload_s *payload=(struct ssh_payload_s *) buffer;
+    char *pos=payload->buffer;
+
+    init_ssh_payload(payload, 5 + size);
+    payload->type=SSH_MSG_REQUEST_SUCCESS;
+
+    *pos=SSH_MSG_REQUEST_SUCCESS;
+    pos++;
+
+    store_uint32(pos, size);
+    pos+=4;
+
+    memcpy(pos, data, size);
+    pos+=size;
+    payload->len=(unsigned int)(pos - payload->buffer);
+
+    return write_ssh_packet(connection, payload, seq);
+}
+
+int send_request_failure_message(struct ssh_connection_s *connection, unsigned int *seq)
+{
+    char buffer[sizeof(struct ssh_payload_s) + 1];
+    struct ssh_payload_s *payload=(struct ssh_payload_s *) buffer;
+    char *pos=payload->buffer;
+
+    init_ssh_payload(payload, 1);
+    payload->type=SSH_MSG_REQUEST_FAILURE;
+
+    *pos=SSH_MSG_REQUEST_FAILURE;
+    pos++;
     payload->len=(unsigned int)(pos - payload->buffer);
     return write_ssh_packet(connection, payload, seq);
 }

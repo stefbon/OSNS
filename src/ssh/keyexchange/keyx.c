@@ -278,6 +278,7 @@ static unsigned int build_hostkey_list(struct ssh_connection_s *c, struct algo_l
 
 static unsigned int build_keyex_list(struct ssh_connection_s *c, struct algo_list_s *alist, unsigned int start)
 {
+    struct ssh_session_s *session=get_ssh_connection_session(c);
     struct list_element_s *list=NULL;
 
     if ((c->setup.flags & SSH_SETUP_FLAG_TRANSPORT)==0) {
@@ -288,8 +289,19 @@ static unsigned int build_keyex_list(struct ssh_connection_s *c, struct algo_lis
 
 		alist[start].type=SSH_ALGO_TYPE_KEX;
 		alist[start].order=SSH_ALGO_ORDER_MEDIUM; /* RFC 8380 2.1 Signaling of Extension Negotiation in SSH_MSG_KEXINIT */
-		alist[start].sshname="ext-info-c";
-		alist[start].libname="ext-info-c";
+
+		if (session->flags & SSH_SESSION_FLAG_SERVER) {
+
+		    alist[start].sshname="ext-info-s";
+		    alist[start].libname="ext-info-s";
+
+		} else {
+
+		    alist[start].sshname="ext-info-c";
+		    alist[start].libname="ext-info-c";
+
+		}
+
 		alist[start].ptr=NULL;
 
 	    }
@@ -516,7 +528,7 @@ int key_exchange(struct ssh_connection_s *connection)
 
 void init_keyex_once()
 {
-    //init_keyex_ecdh();
+    init_keyex_ecdh();
     init_keyex_dh();
     add_keyex_ops(&dhnone_ops);
 }

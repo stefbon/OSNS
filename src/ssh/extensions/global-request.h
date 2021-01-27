@@ -17,13 +17,12 @@
 
 */
 
-#ifndef _SSH_EXTENSIONS_EXTENSION_H
-#define _SSH_EXTENSIONS_EXTENSION_H
+#ifndef _SSH_EXTENSIONS_GLOBAL_REQUEST_H
+#define _SSH_EXTENSIONS_GLOBAL_REQUEST_H
 
 /* prototypes */
 
-void init_ssh_extensions(struct ssh_session_s *session);
-const char *get_extension_name(unsigned int code);
-void process_msg_ext_info(struct ssh_connection_s *connection, struct ssh_payload_s *payload);
+int process_global_request_message(struct ssh_connection_s *connection, char *request, unsigned char reply, char *data, unsigned int size, void (* cb)(struct ssh_connection_s *connection, struct ssh_payload_s *payload, void *ptr), void *ptr);
+void find_globalrequests_supported(struct ssh_connection_s *connection);
 
 #endif

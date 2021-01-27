@@ -11,11 +11,11 @@ fs-workspace tries to establish a connection using the keys available for the us
 
 The mountpoint for network services looks like:
 
-/run/network/$USER
+/run/network/$USER/fs
 
 this gives a FUSE fs like:
 
-/run/network/$USER/fs/example.org/server/home
+/run/network/$USER/fs/Open Secure Network/example.org/server/home
 
 are created to offer access to the user's home directory on server when
 the server server.example.org is detected on the network as a host providing ssh/sftp.

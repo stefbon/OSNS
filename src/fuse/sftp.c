@@ -59,6 +59,7 @@
 
 #define _SFTP_NETWORK_NAME			"SFTP_Network"
 #define _SFTP_HOME_MAP				"home"
+#define _SFTP_DEFAULT_SERVICE			"ssh-channel:sftp:home"
 
 extern struct fs_options_s fs_options;
 
@@ -126,6 +127,16 @@ static int signal_sftp2ctx(struct context_interface_s *interface, const char *wh
 
     return (unsigned int) option->type;
 }
+
+/* get prefix and uri from a string like:
+
+    /home/sbon|
+    /home/public|/var/run/sftp.sock|
+    /home/admin|ssh://192.168.1.6:3001|
+
+    the first part is the prefix on the server,
+    the second part is the uri to connect to (if empty the default sftp subsystem is used)
+*/
 
 static int get_service_info_prefix(struct ctx_option_s *option, char **prefix, char **uri)
 {
@@ -235,7 +246,7 @@ static int add_sftp_context(struct service_context_s *parent_context, struct ino
 
 /* add a sftp shared map */
 
-void add_shared_map_sftp(struct service_context_s *parent_context, struct inode_s *inode, char *name, struct interface_list_s *ailist, unsigned int count)
+void add_shared_map_sftp(struct service_context_s *parent_context, struct inode_s *inode, char *service, struct interface_list_s *ailist, unsigned int count)
 {
     struct workspace_mount_s *workspace=parent_context->workspace;
     struct context_interface_s *interface=&parent_context->interface;
@@ -244,20 +255,26 @@ void add_shared_map_sftp(struct service_context_s *parent_context, struct inode_
     struct directory_s *directory=NULL;
     struct name_s xname;
     unsigned int error=0;
-    unsigned int len=strlen(name);
+    unsigned int len=0;
     struct ctx_option_s option;
     unsigned char done=0;
     struct interface_list_s *ilist=NULL;
+    char name[64];
+
+    memset(name, 0, 64);
+    if (strlen(service) <= strlen("ssh-channel:sftp:")) return;
+    strcpy(name, &service[strlen("ssh-channel:sftp:")]);
+    len=strlen(name);
 
     ilist=get_interface_ops(ailist, count, _INTERFACE_TYPE_SFTP);
     if (ilist==NULL) {
 
-	logoutput("add_shared_map_sftp: sftp interface not found");
+	logoutput_warning("add_shared_map_sftp: sftp interface not found");
 	return;
 
     }
 
-    logoutput("add_shared_map_sftp: name %s", name);
+    logoutput("add_shared_map_sftp: service %s name %s", service, name);
 
     /* get rid of nasty/unwanted characters in name: note the name will be used a name for an entry in the filesystem */
 
@@ -326,7 +343,7 @@ void add_shared_map_sftp(struct service_context_s *parent_context, struct inode_
 	struct simple_lock_s wlock2;
 
 	xname.name=name;
-	xname.len=strlen(name);
+	xname.len=len;
 	calculate_nameindex(&xname);
 	directory=get_directory(parent->inode);
 
@@ -365,7 +382,7 @@ void add_shared_map_sftp(struct service_context_s *parent_context, struct inode_
 
     inode=entry->inode;
     init_ctx_option(&option, _CTX_OPTION_TYPE_PCHAR);
-    option.value.name=name;
+    option.value.name=service;
 
     if ((* interface->signal_interface)(interface, "info:service:", &option)>=0 &&
 	option.type==_CTX_OPTION_TYPE_BUFFER && option.value.buffer.ptr && option.value.buffer.len>0) {

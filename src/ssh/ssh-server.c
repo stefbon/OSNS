@@ -57,7 +57,7 @@
 #include "ssh-signal.h"
 #include "ssh-userauth.h"
 #include "ssh-connections.h"
-#include "extensions/extension.h"
+#include "extensions.h"
 #include "alloc/init.h"
 
 #define UINT32_T_MAX		0xFFFFFFFF

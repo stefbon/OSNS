@@ -314,7 +314,6 @@ static int dh_create_local_key(struct ssh_keyex_s *k)
     struct ssh_mpint_s tmp=SSH_MPINT_INIT;
     struct ssh_mpint_s *ef=(struct ssh_mpint_s *)((k->flags & SSH_KEYEX_FLAG_SERVER) ? &dh->f : &dh->e);
 
-
     if (create_ssh_mpint(&dh->p)==-1) goto out;
     if (create_ssh_mpint(&dh->g)==-1) goto out;
 

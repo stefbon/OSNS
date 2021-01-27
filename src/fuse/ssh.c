@@ -60,6 +60,7 @@
 
 #define _SFTP_NETWORK_NAME			"SFTP_Network"
 #define _SFTP_HOME_MAP				"home"
+#define _SFTP_DEFAULT_SERVICE			"ssh-channel:sftp:home"
 
 extern struct fs_options_s fs_options;
 
@@ -343,12 +344,13 @@ static void get_remote_supported_services(struct service_context_s *context, str
 	char list[option.value.buffer.len + 2];
 	char *sep=NULL;
 	char *service=NULL;
-	unsigned int left=strlen(list);
+	unsigned int left=0;
 
 	memcpy(list, option.value.buffer.ptr, option.value.buffer.len);
 	list[option.value.buffer.len]=',';
 	list[option.value.buffer.len+1]='\0';
 	service=list;
+	left=strlen(list);
 
 	findservice:
 
@@ -365,7 +367,7 @@ static void get_remote_supported_services(struct service_context_s *context, str
 		if (strncmp(&service[pos], "sftp:", 5)==0) {
 
 		    pos+=5;
-		    add_shared_map_sftp(context, inode, &service[pos], ailist, count);
+		    add_shared_map_sftp(context, inode, service, ailist, count);
 		    cntr++;
 
 		}
@@ -386,7 +388,7 @@ static void get_remote_supported_services(struct service_context_s *context, str
     if (cntr==0) {
 
 	logoutput("get_remote_supported_services: no services found, try the default (home)");
-	add_shared_map_sftp(context, inode, _SFTP_HOME_MAP, ailist, count);
+	add_shared_map_sftp(context, inode, _SFTP_DEFAULT_SERVICE, ailist, count);
 
     }
 

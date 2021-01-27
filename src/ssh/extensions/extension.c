@@ -53,6 +53,7 @@ static struct ssh_extension_s available_extensions[] = {
     { .name = "delay-compression", .code = SSH_EXTENSION_DELAY_COMPRESSION},
     { .name = "no-flow-control", .code = SSH_EXTENSION_NO_FLOW_CONTROL},
     { .name = "elevation", .code = SSH_EXTENSION_ELEVATION},
+    { .name = "global_request:supported", .code = SSH_EXTENSION_GR_SUPPORT},
     { .name = NULL, .code=0}
 };
 
@@ -113,11 +114,15 @@ void process_server_sig_algs(struct ssh_session_s *session, struct ssh_string_s 
     char *sep=NULL;
     char search[data->len + 1];
     unsigned int left=0;
+    unsigned int index=_OPTIONS_SSH_EXTENSION_SERVER_SIG_ALGS - 1;
+
+    session->config.extensions|=(1 << ( 2 * index + 1));
+    if ((session->config.extensions & (1 << ( 2 * index)))==0) return; /* server sigs algos are not supported from config */
 
     memcpy(search, data->ptr, data->len);
     search[data->len]=',';
 
-    /* ssh string is a namelist of acceptable signalgo's */
+    /* ssh string is a namelist of acceptable sign algo's */
 
     name=search;
     left=data->len + 1;
@@ -165,22 +170,16 @@ void process_server_sig_algs(struct ssh_session_s *session, struct ssh_string_s 
 void process_delay_compression(struct ssh_session_s *session, struct ssh_string_s *data)
 {
     struct msg_buffer_s mb=INIT_SSH_MSG_BUFFER;
-    unsigned int len=0;
     struct ssh_string_s compr_c2s;
     struct ssh_string_s compr_s2c;
+    unsigned int index=_OPTIONS_SSH_EXTENSION_DELAY_COMPRESSION - 1;
+
+    session->config.extensions|=(1 << ( 2 * index + 1));
+    if ((session->config.extensions & (1 << ( 2 * index)))==0) return; /* delay compression not supported from config */
 
     set_msg_buffer_string(&mb, data);
     init_ssh_string(&compr_c2s);
     init_ssh_string(&compr_s2c);
-
-    msg_read_ssh_string_header(&mb, &len);
-
-    if (mb.pos + len != data->len) {
-
-	logoutput("process_delay_compression: error data");
-	return;
-
-    }
 
     msg_read_ssh_string(&mb, &compr_c2s);
     msg_read_ssh_string(&mb, &compr_s2c);
@@ -200,46 +199,32 @@ void process_delay_compression(struct ssh_session_s *session, struct ssh_string_
 
 void process_no_flow_control(struct ssh_session_s *session, struct ssh_string_s *data)
 {
-    struct msg_buffer_s mb=INIT_SSH_MSG_BUFFER;
-    struct ssh_string_s choice;
+    unsigned int index=_OPTIONS_SSH_EXTENSION_NO_FLOW_CONTROL - 1;
 
-    set_msg_buffer_string(&mb, data);
-    init_ssh_string(&choice);
+    session->config.extensions|=(1 << ( 2 * index + 1));
+    if ((session->config.extensions & (1 << ( 2 * index)))==0) return; /* no flow control not supported from config */
 
-    msg_read_ssh_string(&mb, &choice);
-
-    if (mb.error==0) {
-
-	logoutput("process_no_flow_control: received choice %.*s", choice.len, choice.ptr);
-
-    } else {
-
-	logoutput("process_no_flow_control: error %i reading data", mb.error);
-
-    }
-
+    logoutput("process_no_flow_control: received choice %.*s", data->len, data->ptr);
 }
 
 void process_elevation(struct ssh_session_s *session, struct ssh_string_s *data)
 {
-    struct msg_buffer_s mb=INIT_SSH_MSG_BUFFER;
-    struct ssh_string_s choice;
+    unsigned int index=_OPTIONS_SSH_EXTENSION_ELEVATION - 1;
 
-    set_msg_buffer_string(&mb, data);
-    init_ssh_string(&choice);
+    session->config.extensions|=(1 << ( 2 * index + 1));
+    if ((session->config.extensions & (1 << ( 2 * index)))==0) return; /* elevation not supported from config */
 
-    msg_read_ssh_string(&mb, &choice);
+    logoutput("process_elevation: received choice %.*s", data->len, data->ptr);
+}
 
-    if (mb.error==0) {
+void process_gr_support(struct ssh_session_s *session, struct ssh_string_s *data)
+{
+    unsigned int index=_OPTIONS_SSH_EXTENSION_GR_SUPPORT - 1;
 
-	logoutput("process_elevation: received choice %.*s", choice.len, choice.ptr);
+    session->config.extensions|=(1 << ( 2 * index + 1));
+    if ((session->config.extensions & (1 << ( 2 * index)))==0) return; /* global request support not supported from config */
 
-    } else {
-
-	logoutput("process_elevation: error %i reading data", mb.error);
-
-    }
-
+    logoutput("process_gr_support: received %.*s", data->len, data->ptr);
 }
 
 void process_msg_ext_info(struct ssh_connection_s *connection, struct ssh_payload_s *payload)
@@ -289,6 +274,11 @@ void process_msg_ext_info(struct ssh_connection_s *connection, struct ssh_payloa
 	    case SSH_EXTENSION_ELEVATION:
 
 		process_no_flow_control(session, &data);
+		break;
+
+	    case SSH_EXTENSION_GR_SUPPORT:
+
+		process_gr_support(session, &data);
 		break;
 
 	    default:

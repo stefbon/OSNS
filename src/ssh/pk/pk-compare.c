@@ -50,7 +50,7 @@ int compare_ssh_keys(struct ssh_key_s *a, struct ssh_key_s *b)
     if (a->algo==NULL || b->algo==NULL) return -1;
     if (a->algo != b->algo) return -1;
 
-    logoutput("compare_ssh_keys");
+    logoutput_debug("compare_ssh_keys");
 
     if (a->algo->id == SSH_PKALGO_ID_RSA) {
 
@@ -104,9 +104,7 @@ int compare_ssh_keys(struct ssh_key_s *a, struct ssh_key_s *b)
     }
 
     ready:
-
     return 0;
-
 }
 
 /* compare a key with a representation of the (same?) key in another format
@@ -137,14 +135,8 @@ int compare_ssh_key_data(struct ssh_key_s *a, char *buffer, unsigned int len, un
 
     result=compare_ssh_keys(a, &b);
 
-    logoutput("compare_ssh_key_data: free");
-
     out:
-
     (* b.free_param)(&b);
-
-    logoutput("compare_ssh_key_data: result %i", result);
-
     return result;
 
 }

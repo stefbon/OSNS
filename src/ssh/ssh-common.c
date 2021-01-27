@@ -58,7 +58,7 @@
 #include "ssh-signal.h"
 #include "ssh-userauth.h"
 #include "ssh-connections.h"
-#include "extensions/extension.h"
+#include "ssh-extensions.h"
 #include "alloc/init.h"
 
 #define UINT32_T_MAX		0xFFFFFFFF
@@ -81,6 +81,7 @@ static void init_session_config(struct ssh_session_s *session)
     config->userauth_expire=(fs_options.ssh.timeout_userauth) ? fs_options.ssh.timeout_userauth : SSH_CONFIG_USERAUTH_EXPIRE;
     config->max_receiving_threads=SSH_CONFIG_MAX_RECEIVING_THREADS;
     config->max_sending_threads=SSH_CONFIG_MAX_SENDING_THREADS;
+    config->extensions = fs_options.ssh.extensions;
 
 }
 

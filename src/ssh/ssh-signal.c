@@ -47,6 +47,7 @@
 #include "ssh-send.h"
 #include "ssh-receive.h"
 #include "ssh-connections.h"
+#include "ssh-extensions.h"
 
 #define REMOTE_COMMAND_DIRECTORY_DEFAULT		"/usr/lib/osns/"
 #define REMOTE_COMMAND_DIRECTORY_TMP			"/tmp/"
@@ -54,7 +55,6 @@
 #define REMOTE_COMMAND_ENUM_SERVICES			"enumservices"
 #define REMOTE_COMMAND_GET_SERVICE			"getservice"
 #define REMOTE_COMMAND_MAXLEN				256
-#define GLOBAL_REQUEST_INFO_NAME			"signal@osns.org"
 
 static unsigned int get_ssh2remote_command(char *command, unsigned int size, const char *what, struct ctx_option_s *o, const char *how)
 {
@@ -247,7 +247,7 @@ static int select_payload_request_reply(struct ssh_connection_s *connection, str
     custom SSH_MSG_GLOBAL_REQUEST to get info of server
 
     byte		SSH_MSG_GLOBAL_REQUEST
-    string		"signal@osns.org"
+    string		"info-command@osns.net"
     byte		want reply
     string		what
     string		name (optional)
@@ -256,124 +256,73 @@ static int select_payload_request_reply(struct ssh_connection_s *connection, str
     different GLOBAL_REQUEST 's at the same time may lead to unexpected behaviour (replies got mixed)
 */
 
+static void process_info_command_cb(struct ssh_connection_s *connection, struct ssh_payload_s *payload, void *ptr)
+{
+    if (payload->type==SSH_MSG_REQUEST_SUCCESS) {
+
+	if (payload->len>5) {
+	    struct ctx_option_s *option=(struct ctx_option_s *) ptr;
+	    unsigned int size=get_uint32(&payload->buffer[1]);
+
+	    logoutput("process_info_command_cb: received message (size=%i)", size);
+
+	    /* reply is in string */
+
+	    option->type=_CTX_OPTION_TYPE_BUFFER;
+	    option->value.buffer.ptr=isolate_payload_buffer(&payload, 5, size);
+	    option->value.buffer.size=size;
+	    option->value.buffer.len=size;
+
+	} else {
+
+	    logoutput("process_info_command_cb: received message not big enough");
+
+	}
+
+    } else if (payload->type==SSH_MSG_REQUEST_FAILURE) {
+
+	logoutput("process_info_command_cb: request not supported");
+
+    }
+
+}
+
 static int _signal_ssh2remote_global_request(struct ssh_session_s *session, const char *what, struct ctx_option_s *option)
 {
     struct ssh_connections_s *connections=&session->connections;
     struct ssh_connection_s *connection=connections->main;
-    uint32_t seq=0;
-    unsigned int len=4 + strlen(what) + ((strcmp(what, "info:service:")==0) ? (4 + strlen(option->value.name)) : 0);
-    char data[len];
-    char *pos=data;
     int result=-1;
+    unsigned int len=strlen(what);
+    char buffer[4 + len];
 
-    pthread_mutex_lock(connections->mutex);
+    store_uint32(buffer, len);
+    memcpy(&buffer[4], what, len);
 
-    while ((connections->flags & SSH_CONNECTIONS_FLAG_DISCONNECT)==0 && (connection->flags & SSH_CONNECTION_FLAG_GLOBAL_REQUEST)) {
+    if (process_global_request_message(connection, "info-command@osns.net", 0, buffer, len+4, process_info_command_cb, (void *) option)==0) {
 
-	pthread_cond_wait(connections->cond, connections->mutex);
-
-	if ((connection->flags & SSH_CONNECTION_FLAG_GLOBAL_REQUEST)==0) {
-
-	    break;
-
-	} else if (connections->flags & SSH_CONNECTIONS_FLAG_DISCONNECT) {
-
-	    pthread_mutex_unlock(connections->mutex);
-	    return -1;
-
-	}
-
-    }
-
-    connection->flags |= SSH_CONNECTION_FLAG_GLOBAL_REQUEST;
-    pthread_mutex_unlock(connections->mutex);
-
-    len=strlen(what);
-    store_uint32(pos, len);
-    pos+=4;
-    memcpy(pos, what, len);
-    pos+=len;
-
-    if (strcmp(what, "info:service")==0) {
-
-	len=strlen(option->value.name);
-	store_uint32(pos, len);
-	pos+=4;
-	memcpy(pos, option->value.name, len);
-
-    }
-
-    if (send_global_request_message(connection, GLOBAL_REQUEST_INFO_NAME, data, (unsigned int)(pos-data), &seq)==0) {
-	struct timespec expire;
-	struct ssh_payload_s *payload=NULL;
-
-	get_ssh_connection_expire_init(connection, &expire);
-
-	getpayload:
-
-	payload=get_ssh_payload(connection, &connection->setup.queue, &expire, &seq, select_payload_request_reply, NULL, NULL);
-
-	if (payload==NULL) {
-
-	    /**/
-	    logoutput("signal_ssh2remote_global_request: no payload received");
-
-	} else if (payload->type==SSH_MSG_REQUEST_SUCCESS) {
-
-	    if (payload->len>5) {
-		unsigned int size=0;
-
-		/* reply is in string */
-
-		size=get_uint32(&payload->buffer[1]);
-		option->type=_CTX_OPTION_TYPE_BUFFER;
-		option->value.buffer.ptr=isolate_payload_buffer(&payload, 5, size);
-		option->value.buffer.size=size;
-		option->value.buffer.len=size;
-		result=(int) size;
-
-	    }
-
-	} else if (payload->type==SSH_MSG_REQUEST_FAILURE) {
-
-	    logoutput("signal_ssh2remote_global_request: request not supported");
-	    result=-2;
-
-	} else {
-
-	    free_payload(&payload);
-	    goto getpayload;
-
-	}
+	logoutput("signal_ssh2remote_global_request: request not supported");
+	result=0;
 
     } else {
 
-	logoutput("signal_ssh2remote_global_request: failed to send request");
+	logoutput("signal_ssh2remote_global_request: request not supported");
 
     }
 
-    pthread_mutex_lock(connections->mutex);
-    connection->flags -= SSH_CONNECTION_FLAG_GLOBAL_REQUEST;
-    pthread_cond_broadcast(connections->cond);
-    pthread_mutex_unlock(connections->mutex);
     return result;
 }
 
 static int _signal_ssh2remote(struct ssh_session_s *session, const char *what, struct ctx_option_s *option)
 {
     int result=-1;
+    struct ssh_session_ctx_s *context=&session->context;
 
-    if (strcmp(what, "info:enumservices")==0) {
-	struct ssh_session_ctx_s *context=&session->context;
+    if (context->flags & SSH_CONTEXT_FLAG_SSH2REMOTE_GLOBAL_REQUEST) {
 
-	if (context->flags & SSH_CONTEXT_FLAG_SSH2REMOTE_GLOBAL_REQUEST) {
+	/* prefer via global request */
 
-	    /* prefer sending of enumservices via global request */
-
-	    result=_signal_ssh2remote_global_request(session, what, option);
-	    if (result>-2) return result;
-
-	}
+	result=_signal_ssh2remote_global_request(session, what, option);
+	if (result>-2) return result;
 
     }
 

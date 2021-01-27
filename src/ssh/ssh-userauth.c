@@ -50,6 +50,7 @@
 #include "ssh-send.h"
 #include "ssh-connections.h"
 #include "ssh-utils.h"
+#include "users.h"
 
 #include "userauth/pubkey.h"
 #include "userauth/hostbased.h"

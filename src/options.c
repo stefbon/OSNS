@@ -153,20 +153,29 @@ static void parse_ssh_extensions_cb(char *name, void *ptr)
     struct ssh_options_s *ssh=(struct ssh_options_s *) ptr;
 
     if (strcmp(name, "server-sig-algs")==0) {
+	unsigned int index=_OPTIONS_SSH_EXTENSION_SERVER_SIG_ALGS - 1;
 
-	ssh->extensions|=(1 << (_OPTIONS_SSH_EXTENSION_SERVER_SIG_ALGS - 1));
+	ssh->extensions|=(1 << ( 2 * index));
 
     } else if (strcmp(name, "delay-compression")==0) {
+	unsigned int index=_OPTIONS_SSH_EXTENSION_DELAY_COMPRESSION - 1;
 
-	ssh->extensions|=(1 << (_OPTIONS_SSH_EXTENSION_DELAY_COMPRESSION - 1));
+	ssh->extensions|=(1 << ( 2 * index));
 
     } else if (strcmp(name, "no-flow-control")==0) {
+	unsigned int index=_OPTIONS_SSH_EXTENSION_NO_FLOW_CONTROL - 1;
 
-	ssh->extensions|=(1 << (_OPTIONS_SSH_EXTENSION_NO_FLOW_CONTROL - 1));
+	ssh->extensions|=(1 << ( 2 * index));
 
     } else if (strcmp(name, "elevation")==0) {
+	unsigned int index=_OPTIONS_SSH_EXTENSION_ELEVATION - 1;
 
-	ssh->extensions|=(1 << (_OPTIONS_SSH_EXTENSION_ELEVATION - 1));
+	ssh->extensions|=(1 << ( 2 * index));
+
+    } else if (strcmp(name, "global_request:supported")==0) {
+	unsigned int index=_OPTIONS_SSH_EXTENSION_GR_SUPPORT - 1;
+
+	ssh->extensions|=(1 << ( 2 * index));
 
     }
 

@@ -269,7 +269,7 @@ int verify_sig_ecc(struct ssh_key_s *key, unsigned char *buffer, unsigned int si
 
     if (key->algo->id == SSH_PKALGO_ID_ED25519) {
 
-	curve="Ed25519";
+	curve="Curve25519";
 
     } else {
 

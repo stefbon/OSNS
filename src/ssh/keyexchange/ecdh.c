@@ -80,11 +80,6 @@ static unsigned int populate_keyex_ecdh(struct ssh_connection_s *c, struct keyex
 
 #define _ED25519_BASEPOINT			"0x0000000000000000000000000000000000000000000000000000000000000009"
 
-static unsigned int gcry_ecc_get_algo_len(int algo)
-{
-    return (algo==GCRY_ECC_CURVE25519) ? ECC_CURVE25519_LENGTH : 0;
-}
-
 static unsigned char convert_hex2dec(unsigned char *hex)
 {
     unsigned char result=0;
@@ -115,113 +110,69 @@ static void convert_hex2char(unsigned char **p_hex, unsigned char *uchar)
     *p_hex+=2;
 }
 
-static int gcry_ecc_mul_point_tmp(int algo, unsigned char *buffer, struct ssh_string_s *skey, struct ssh_string_s *pkey)
+static int ecc_mul_point(int algo, unsigned char *buffer, struct ssh_string_s *skey, struct ssh_string_s *pkey)
 {
     gpg_error_t err=0;
-    gcry_sexp_t s_pkey=NULL;
-    gcry_sexp_t s_skey=NULL;
-    gcry_sexp_t s_result=NULL;
-    gcry_sexp_t s_token=NULL;
-    gcry_mpi_t m_skey=NULL;
-    unsigned int len=gcry_ecc_get_algo_len(algo);
+    unsigned int len=gcry_ecc_get_algo_keylen(algo);
     int result=-1;
+    char point[len];
 
-    if (len==0) return -1;
+    if (len==0) {
+
+	logoutput_warning("ecc_mul_point: algo %i not reckognized", algo);
+	return -1;
+
+    } else if (len != skey->len || (pkey && len != pkey->len)) {
+
+	logoutput_warning("ecc_mul_point: key length of public and/or private not equal to %i", len);
+	return -1;
+
+    }
 
     /* what to do when pkey is empty? then it should take the basepoint {9} but how to do this? */
 
+    memset(point, 0, len);
+
     if (pkey) {
 
-	/* create the s-expression for the public key to "encrypt" to secret key */
-
-	err = gcry_sexp_build(&s_pkey, NULL, "(public-key (ecc (curve \"Curve25519\") (flags djb-tweak) (q%b)))", pkey->len, pkey->ptr);
+	memcpy(point, pkey->ptr, len);
 
     } else {
 	unsigned int tmp=strlen(_ED25519_BASEPOINT) - 2; /* length minus 0x prefix */
 	unsigned int size=((tmp+1) / 2);
-	unsigned char hex[tmp];
-	unsigned char buffer[size + 1];
-	unsigned char *pos=hex;
+	unsigned char hexbuff[tmp];
+	unsigned char charbuff[size + 1];
+	unsigned char *pos=hexbuff;
 
-	memcpy(hex, (char *)(_ED25519_BASEPOINT + 2), tmp); /* skip the prefix */
-	memset(buffer, '\0', size+1);
+	memcpy(hexbuff, (char *)(_ED25519_BASEPOINT + 2), tmp); /* skip the prefix */
+	memset(charbuff, '\0', size+1);
 
-	for (unsigned int i=0; i<size; i++) convert_hex2char(&pos, &buffer[i]);
+	for (unsigned int i=0; i<size; i++) convert_hex2char(&pos, &charbuff[i]);
 
-	err = gcry_sexp_build(&s_pkey, NULL, "(public-key (ecc (curve \"Curve25519\") (flags djb-tweak) (q%b)))", size, buffer);
+	if (size==len) {
 
-    }
+	    memcpy(point, charbuff, size);
 
-    if (err) {
+	} else {
+	    unsigned int cnt=(len>size) ? size : len;
 
-	logoutput("gcry_ecc_mul_point: gcry_sexp_build error %s/%s", gcry_strsource(err), gcry_strerror(err));
-	goto out;
-
-    }
-
-    err = gcry_mpi_scan(&m_skey, GCRYMPI_FMT_USG, skey->ptr, skey->len, NULL);
-
-    if (err) {
-
-	logoutput("gcry_ecc_mul_point: gcry_mpi_scan error %s/%s", gcry_strsource(err), gcry_strerror(err));
-	goto out;
-
-    }
-
-    err=gcry_sexp_build(&s_skey, NULL, "%m", m_skey);
-
-    if (err) {
-
-	logoutput("gcry_ecc_mul_point: gcry_sexp_build error %s/%s", gcry_strsource(err), gcry_strerror(err));
-	goto out;
-
-    }
-
-    err=gcry_pk_encrypt(&s_result, s_skey, s_pkey);
-
-    if (err) {
-
-	logoutput("gcry_ecc_mul_point: gcry_sexp_build error %s/%s", gcry_strsource(err), gcry_strerror(err));
-	goto out;
-
-    }
-
-    /* find the "s" buffer */
-
-    s_token=gcry_sexp_find_token(s_result, "s", 0);
-
-    if (s_token==NULL) {
-
-	logoutput("gcry_ecc_mul_point: missing s token");
-	goto out;
-
-    } else {
-	size_t size=0;
-	unsigned char *ptr=gcry_sexp_nth_buffer(s_token, 1, &size);
-	unsigned int pos=0;
-
-	/* if there is a prefix (like 0x40) skip that */
-	if (size>len) {
-
-	    logoutput("gcry_ecc_mul_point: skip prefix %i bytes", (size-len));
-	    pos=(size - len);
+	    memcpy(point, charbuff + size, cnt);
 
 	}
 
-	logoutput("gcry_ecc_mul_point: created encrypted %i bytes", len);
-
-	memcpy(buffer, &ptr[pos], len);
-	result=0;
-	gcry_sexp_release(s_token);
-
     }
 
-    out:
+    err=gcry_ecc_mul_point(algo, buffer, skey->ptr, point);
 
-    gcry_sexp_release(s_pkey);
-    gcry_sexp_release(s_skey);
-    gcry_sexp_release(s_result);
-    gcry_mpi_release(m_skey);
+    if (err) {
+
+	logoutput("ecc_mul_point: gcry_ecc_mul_point error %s/%s", gcry_strsource(err), gcry_strerror(err));
+
+    } else {
+
+	result=0; /* no error */
+
+    }
 
     return result;
 
@@ -247,7 +198,7 @@ static int gcry_ecc_mul_point_tmp(int algo, unsigned char *buffer, struct ssh_st
 static int ecdh_create_local_key(struct ssh_keyex_s *k)
 {
     struct ssh_ecdh_s *ecdh=&k->method.ecdh;
-    unsigned int len=gcry_ecc_get_algo_len(GCRY_ECC_CURVE25519);
+    unsigned int len=gcry_ecc_get_algo_keylen(GCRY_ECC_CURVE25519);
     int result=-1;
 
     if (len>0) {
@@ -279,20 +230,20 @@ static void ecdh_msg_write_local_key(struct msg_buffer_s *mb, struct ssh_keyex_s
 {
     struct ssh_ecdh_s *ecdh=&k->method.ecdh;
     struct ssh_string_s *skey_c=&ecdh->skey_c;
-    unsigned int len=gcry_ecc_get_algo_len(GCRY_ECC_CURVE25519);
+    unsigned int len=gcry_ecc_get_algo_keylen(GCRY_ECC_CURVE25519);
 
     if (len>0) {
 	char buffer[len];
-	gpg_error_t err=gcry_ecc_mul_point_tmp(GCRY_ECC_CURVE25519, (unsigned char *) buffer, skey_c, NULL); /* not providing the mpoint so the basepoint is used */
+	int result=ecc_mul_point(GCRY_ECC_CURVE25519, (unsigned char *) buffer, skey_c, NULL); /* not providing the mpoint so the basepoint is used */
 
-	if (err) {
-
-	    logoutput("ecdh_msg_write_local_key: error %s/%s", gcry_strsource(err), gcry_strerror(err));
-
-	} else {
+	if (result==0) {
 	    struct ssh_string_s pkey_c=SSH_STRING_SET(len, buffer); /* make it a string */
 
 	    msg_write_ssh_string(mb, 's', (void *) &pkey_c);
+
+	} else {
+
+	    logoutput("ecdh_msg_write_local_key: unknown error writing pkey");
 
 	}
 
@@ -324,27 +275,28 @@ static int ecdh_calc_sharedkey(struct ssh_keyex_s *k)
     struct ssh_string_s *pkey_s=&ecdh->pkey_s; /* server public key */
     struct ssh_string_s *skey_c=&ecdh->skey_c; /* client private key */
     struct ssh_string_s *sharedkey=&ecdh->sharedkey;
-    unsigned int len=gcry_ecc_get_algo_len(GCRY_ECC_CURVE25519);
+    unsigned int len=gcry_ecc_get_algo_keylen(GCRY_ECC_CURVE25519);
     int result=-1;
 
     /* check both have the same lengths */
 
     if (pkey_s->len==len && skey_c->len==len) {
 	unsigned char buffer[len];
-	gpg_error_t err=0;
 
 	/* shared key is multiplaction of the server public key and the client private key */
 
-	err=gcry_ecc_mul_point_tmp(GCRY_ECC_CURVE25519, buffer, skey_c, pkey_s);
+	if (ecc_mul_point(GCRY_ECC_CURVE25519, buffer, skey_c, pkey_s)==0) {
 
-	if (err) {
+	    if (create_ssh_string(&sharedkey, len, (char *) buffer, SSH_STRING_FLAG_ALLOC)) {
 
-	    logoutput("ecdh_calc_sharedkey: error %s/%s", gcry_strsource(err), gcry_strerror(err));
+		logoutput("ecdh_calc_sharedkey: created shared key using curve 25519 (%i bytes)", len);
+		result=0;
 
-	} else if (create_ssh_string(&sharedkey, len, (char *) buffer, SSH_STRING_FLAG_ALLOC)) {
+	    } else {
 
-	    logoutput("ecdh_calc_sharedkey: created shared key using curve 25519 (%i bytes)", len);
-	    result=0;
+		logoutput("ecdh_calc_sharedkey: error allocating %i bytes for string", len);
+
+	    }
 
 	} else {
 
@@ -364,26 +316,22 @@ static void ecdh_msg_write_sharedkey(struct msg_buffer_s *mb, struct ssh_keyex_s
     struct ssh_string_s *sharedkey=&ecdh->sharedkey;
     unsigned int len=sharedkey->len;
     char buffer[len];
-    struct ssh_mpint_s mpint;
+    struct ssh_mpint_s mpint=SSH_MPINT_INIT;
     unsigned int error=0;
+    gpg_error_t err=0;
 
     /* reverse the buffer: create a temporary buffer for that */
 
     for (unsigned int i=0; i<len; i++) buffer[i]=sharedkey->ptr[len-i];
 
-    /* convert to a ssh mpint to write to message buffer */
-
-    memset(&mpint, 0, sizeof(struct ssh_mpint_s));
-    if (create_ssh_mpint(&mpint)==-1) {
-
-	logoutput("ecdh_msg_write_sharedkey: failed to create a ssh mpint");
-	return;
-
-    }
-
-    if (read_ssh_mpint(&mpint, buffer, len, SSH_MPINT_FORMAT_USC, &error)>0) {
+    if (read_ssh_mpint(&mpint, buffer, len, SSH_MPINT_FORMAT_USC, &error)>=0) {
 
 	msg_write_ssh_mpint(mb, &mpint);
+	free_ssh_mpint(&mpint);
+
+    } else {
+
+	logoutput("ecdh_msg_write_sharedkey: error reading %u bytes", len);
 
     }
 

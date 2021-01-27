@@ -32,6 +32,7 @@
 #include "datatypes.h"
 #include "ssh-pk.h"
 #include "ssh-common-protocol.h"
+#include "ssh-hash.h"
 
 struct ssh_session_s;
 struct ssh_connection_s;
@@ -76,7 +77,8 @@ struct ssh_config_s {
     unsigned int					userauth_expire;
     unsigned char					max_receiving_threads;
     unsigned char					max_sending_threads;
-    // unsigned int					channels_table_size;
+    unsigned int					extensions;
+    unsigned int					global_requests;
 };
 
 #define CHANNEL_FLAG_INIT				(1 << 0)
@@ -741,12 +743,19 @@ struct ssh_setup_s {
 #define SSH_EXTENSION_DELAY_COMPRESSION			2
 #define SSH_EXTENSION_NO_FLOW_CONTROL			3
 #define SSH_EXTENSION_ELEVATION				4
+#define SSH_EXTENSION_GR_SUPPORT			5
 
-#define SSH_EXTENSIONS_COUNT				4
+#define SSH_EXTENSIONS_COUNT				5
 
-#define SSH_EXTENSION_SUPPORTED_UNKNOWN			1
-#define SSH_EXTENSION_SUPPORTED_TRUE			2
-#define SSH_EXTENSION_SUPPORTED_FALSE			3
+#define SSH_GLOBAL_REQUEST_ENUM_SUPPORTED		1
+#define SSH_GLOBAL_REQUEST_ENUM_SERVICES		2
+#define SSH_GLOBAL_REQUEST_INFO_SERVICE			3
+#define SSH_GLOBAL_REQUEST_INFO_COMMAND			4
+#define SSH_GLOBAL_REQUEST_UDP_CHANNEL			5
+#define SSH_GLOBAL_REQUEST_TCPIP_FORWARD		6
+#define SSH_GLOBAL_REQUEST_CANCEL_TCPIP_FORWARD		7
+#define SSH_GLOBAL_REQUEST_STREAMLOCAL_FORWARD		8
+#define SSH_GLOBAL_REQUEST_CANCEL_STREAMLOCAL_FORWARD	9
 
 struct ssh_extension_s {
     char						*name;
@@ -756,6 +765,7 @@ struct ssh_extension_s {
 struct ssh_extensions_s {
     unsigned int					supported;
     unsigned int					received;
+    unsigned int					global_requests;
 };
 
 #define SSH_CONNECTION_FLAG_MAIN			1

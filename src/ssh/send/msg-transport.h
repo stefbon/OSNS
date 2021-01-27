@@ -32,5 +32,7 @@ int send_service_request_message(struct ssh_connection_s *c, const char *service
 int send_service_accept_message(struct ssh_connection_s *c, const char *service, uint32_t *seq);
 
 int send_global_request_message(struct ssh_connection_s *c, const char *service, char *data, unsigned int size, uint32_t *seq);
+int send_request_success_message(struct ssh_connection_s *connection, char *data, unsigned int size, unsigned int *seq);
+int send_request_failure_message(struct ssh_connection_s *connection, unsigned int *seq);
 
 #endif
