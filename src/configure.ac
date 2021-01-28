@@ -2,9 +2,9 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.68])
-AC_INIT([osns], [1.0a1], [none])
+AC_INIT([osns_client], [1.0a1], [none])
 AM_INIT_AUTOMAKE([subdir-objects])
-AC_CONFIG_SRCDIR([main.h])
+AC_CONFIG_SRCDIR([osns_client.h])
 AC_CONFIG_HEADERS([config.h])
 
 # Checks for programs.

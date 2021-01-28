@@ -17,13 +17,13 @@
 
 */
 
-#ifndef FS_WORKSPACE_MAIN_H
-#define FS_WORKSPACE_MAIN_H
+#ifndef OSNS_MAIN_H
+#define OSNS_MAIN_H
 
 #ifndef ENOATTR
 #define ENOATTR ENODATA        /* No such attribute */
 #endif
 
-#define FS_WORKSPACE_VERSION "1.0a1"
+#define OSNS_VERSION "1.0a1"
 
 #endif

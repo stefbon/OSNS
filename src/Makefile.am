@@ -1,12 +1,12 @@
-sbin_PROGRAMS = osns
+sbin_PROGRAMS = osns_client
 
 extra_CFLAGS = -fasynchronous-unwind-tables -fexceptions -fstack-clash-protection
 
-osns_CFLAGS = $(CFLAGS) $(GLIB_CFLAGS) $(LIBGCRYPT_CFLAGS) $(SYSTEMD_CFLAGS) $(AVAHI_CORE_CFLAGS) $(AVAHI_CLIENT_CFLAGS) -ggdb -Og  -D_FILE_OFFSET_BITS=64 -lz -lpthread -fPIC -lm -I . -I ./ssh -I ./lib -Wall -Wno-unused-but-set-variable -Wno-uninitialized -Wno-unused-variable -Wno-unused-label -Wno-unused-function
-osns_CPPFLAGS = $(CXXFLAGS) $(GLIB_CFLAGS) $(LIBGCRYPT_CFLAGS) $(SYSTEMD_CFLAGS)  $(AVAHI_CORE_CFLAGS) $(AVAHI_CLIENT_CFLAGS) -ggdb -Og -D_FILE_OFFSET_BITS=64 -lz -lpthread -fPIC -lm -I . -I ./ssh -I ./lib -Wall -Wno-unused-but-set-variable -Wno-uninitialized -Wno-unused-variable -Wno-unused-label -Wno-unused-function
-osns_LDADD = $(GLIB_LIBS) $(LIBGCRYPT_LIBS) $(SYSTEMD_LIBS) $(AVAHI_CORE_LIBS) $(AVAHI_CLIENT_LIBS) $(LDFLAGS)
+osns_client_CFLAGS = $(CFLAGS) $(GLIB_CFLAGS) $(LIBGCRYPT_CFLAGS) $(SYSTEMD_CFLAGS) $(AVAHI_CORE_CFLAGS) $(AVAHI_CLIENT_CFLAGS) -ggdb -Og  -D_FILE_OFFSET_BITS=64 -lz -lpthread -fPIC -lm -I . -I ./ssh -I ./lib -Wall -Wno-unused-but-set-variable -Wno-uninitialized -Wno-unused-variable -Wno-unused-label -Wno-unused-function
+osns_client_CPPFLAGS = $(CXXFLAGS) $(GLIB_CFLAGS) $(LIBGCRYPT_CFLAGS) $(SYSTEMD_CFLAGS)  $(AVAHI_CORE_CFLAGS) $(AVAHI_CLIENT_CFLAGS) -ggdb -Og -D_FILE_OFFSET_BITS=64 -lz -lpthread -fPIC -lm -I . -I ./ssh -I ./lib -Wall -Wno-unused-but-set-variable -Wno-uninitialized -Wno-unused-variable -Wno-unused-label -Wno-unused-function
+osns_client_LDADD = $(GLIB_LIBS) $(LIBGCRYPT_LIBS) $(SYSTEMD_LIBS) $(AVAHI_CORE_LIBS) $(AVAHI_CLIENT_LIBS) $(LDFLAGS)
 
-osns_SOURCES =  	lib/fuse/directory.c lib/fuse/dentry.c lib/fuse/utils.c \
+osns_client_SOURCES =  	lib/fuse/directory.c lib/fuse/dentry.c lib/fuse/utils.c \
 			lib/fuse/fuse-interface.c lib/fuse/fs.c \
 			lib/fuse/fs-common.c lib/fuse/fs-virtual.c lib/fuse/fs-special.c \
 			lib/fuse/context-fs-common.c lib/fuse/context-fs-root.c lib/fuse/context-fs.c \
@@ -28,7 +28,7 @@ osns_SOURCES =  	lib/fuse/directory.c lib/fuse/dentry.c lib/fuse/utils.c \
 			lib/log/logging.c \
 			lib/mime/handlemime.c  lib/misc/replaceandskip.c \
 			options.c \
-			main.c \
+			osns_client.c \
 			lib/datatypes/ssh-string.c lib/datatypes/ssh-uint.c \
 			lib/datatypes/ssh-namelist.c lib/datatypes/ssh-payload.c lib/datatypes/ssh-mpint.c lib/datatypes/ssh-msg-buffer.c \
 			lib/users/check.c lib/users/local.c lib/users/monitor.c \
@@ -71,38 +71,37 @@ osns_SOURCES =  	lib/fuse/directory.c lib/fuse/dentry.c lib/fuse/utils.c \
 			ssh/ssh-pubkey.c \
 			ssh/ssh-utils.c
 
-
-
 if LIBRSYNC_AVAIL
-osns_CFLAGS += -lrsync
-osns_CPPFLAGS += -lrsync
-osns_LDADD += -L/usr/lib64 -lrsync
+osns_client_CFLAGS += -lrsync
+osns_client_CPPFLAGS += -lrsync
+osns_client_LDADD += -L/usr/lib64 -lrsync
 endif
 
 if GLIB2_AVAIL
-osns_CFLAGS += $(GLIB_CFLAGS)
-osns_CPPFLAGS += $(GLIB_CFLAGS)
-osns_LDADD += $(GLIB_LIBS)
+osns_client_CFLAGS += $(GLIB_CFLAGS)
+osns_client_CPPFLAGS += $(GLIB_CFLAGS)
+osns_client_LDADD += $(GLIB_LIBS)
 endif
 
 if GOBJECT2_AVAIL
-osns_CFLAGS += $(GOBJECT2_CFLAGS)
-osns_CPPFLAGS += $(GOBJECT2_CFLAGS)
-osns_LDADD += $(GOBJECT2_LIBS)
+osns_client_CFLAGS += $(GOBJECT2_CFLAGS)
+osns_client_CPPFLAGS += $(GOBJECT2_CFLAGS)
+osns_client_LDADD += $(GOBJECT2_LIBS)
 endif
 
 if GIO2_AVAIL
-osns_CFLAGS += $(GIO_CFLAGS)
-osns_CPPFLAGS += $(GIO_CFLAGS)
-osns_LDADD += $(GIO_LIBS)
+osns_client_CFLAGS += $(GIO_CFLAGS)
+osns_client_CPPFLAGS += $(GIO_CFLAGS)
+osns_client_LDADD += $(GIO_LIBS)
 endif
 
 if LIBPAM_AVAIL
-osns_CFLAGS += -lpam
-osns_CPPFLAGS += -lpam
+osns_client_CFLAGS += -lpam
+osns_client_CPPFLAGS += -lpam
 else
-osns_CFLAGS += -lcrypt
-osns_CPPFLAGS += -lcrypt
+osns_client_CFLAGS += -lcrypt
+osns_client_CPPFLAGS += -lcrypt
 endif
 
 
+osns_server_SOURCES =  	osns_server.c 

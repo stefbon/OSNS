@@ -180,19 +180,19 @@
 #define LSTAT_FOLLOWS_SLASHED_SYMLINK 1
 
 /* Name of package */
-#define PACKAGE "osns"
+#define PACKAGE "osns_client"
 
 /* Define to the address where bug reports for this package should be sent. */
 #define PACKAGE_BUGREPORT "none"
 
 /* Define to the full name of this package. */
-#define PACKAGE_NAME "osns"
+#define PACKAGE_NAME "osns_client"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "osns 1.0a1"
+#define PACKAGE_STRING "osns_client 1.0a1"
 
 /* Define to the one symbol short name of this package. */
-#define PACKAGE_TARNAME "osns"
+#define PACKAGE_TARNAME "osns_client"
 
 /* Define to the home page for this package. */
 #define PACKAGE_URL ""
