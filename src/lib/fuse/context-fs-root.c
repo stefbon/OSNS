@@ -67,7 +67,7 @@ static void service_fs_forget(struct inode_s *inode)
     if (link->type==INODE_LINK_TYPE_CONTEXT) { /* must be true */
 	struct service_context_s *context=(struct service_context_s *) link->link.ptr;
 	struct workspace_mount_s *workspace=context->workspace;
-	struct fuse_user_s *user=workspace->user;
+	struct osns_user_s *user=workspace->user;
 
 	logoutput("FORGET context %s", context->name);
 

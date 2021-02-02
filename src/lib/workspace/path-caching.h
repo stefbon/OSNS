@@ -23,8 +23,18 @@
 #include "fuse.h"
 #include "workspaces.h"
 
+/* fuse path relative to the root of a service context */
+
+struct fuse_path_s {
+    struct service_context_s 			*context;
+    char					*pathstart;
+    char					*path;
+    unsigned int				len;
+};
+
 // Prototypes
 
+int get_path_root(struct inode_s *inode, struct fuse_path_s *fpath);
 int get_service_path_default(struct inode_s *inode, struct fuse_path_s *fpath);
 unsigned int add_name_path(struct fuse_path_s *fpath, struct name_s *xname);
 void init_fuse_path(struct fuse_path_s *fpath, char *path, unsigned int len);

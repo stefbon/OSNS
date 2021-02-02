@@ -43,39 +43,35 @@
 #endif
 
 #include "misc.h"
-#include "misc.h"
-
 #include "workspaces.h"
-
-#include "list.h"
-#undef LOGGING
+#include "session.h"
 #include "log.h"
 
-static struct simple_hash_s fuse_users_hash;
+static struct simple_hash_s osns_users_hash;
 
 /* functions to lookup a user using the uid */
 
 static unsigned int calculate_uid_hash(uid_t uid)
 {
-    return uid % fuse_users_hash.len;
+    return uid % osns_users_hash.len;
 }
 
 static unsigned int uid_hashfunction(void *data)
 {
-    struct fuse_user_s *user=(struct fuse_user_s *) data;
+    struct osns_user_s *user=(struct osns_user_s *) data;
     return calculate_uid_hash(user->pwd.pw_uid);
 }
 
-struct fuse_user_s *lookup_fuse_user(uid_t uid)
+struct osns_user_s *lookup_osns_user(uid_t uid)
 {
     unsigned int hashvalue=calculate_uid_hash(uid);
     void *index=NULL;
-    struct fuse_user_s *user=(struct fuse_user_s *) get_next_hashed_value(&fuse_users_hash, &index, hashvalue);
+    struct osns_user_s *user=(struct osns_user_s *) get_next_hashed_value(&osns_users_hash, &index, hashvalue);
 
     while(user) {
 
 	if (user->pwd.pw_uid==uid) break;
-	user=(struct fuse_user_s *) get_next_hashed_value(&fuse_users_hash, &index, hashvalue);
+	user=(struct osns_user_s *) get_next_hashed_value(&osns_users_hash, &index, hashvalue);
 
     }
 
@@ -83,24 +79,24 @@ struct fuse_user_s *lookup_fuse_user(uid_t uid)
 
 }
 
-void add_fuse_user_hash(struct fuse_user_s *user)
+void add_osns_user_hash(struct osns_user_s *user)
 {
-    add_data_to_hash(&fuse_users_hash, (void *) user);
+    add_data_to_hash(&osns_users_hash, (void *) user);
 }
 
-void remove_fuse_user_hash(struct fuse_user_s *user)
+void remove_osns_user_hash(struct osns_user_s *user)
 {
-    remove_data_from_hash(&fuse_users_hash, (void *) user);
+    remove_data_from_hash(&osns_users_hash, (void *) user);
 }
 
 void init_rlock_users_hash(struct simple_lock_s *l)
 {
-    init_rlock_hashtable(&fuse_users_hash, l);
+    init_rlock_hashtable(&osns_users_hash, l);
 }
 
 void init_wlock_users_hash(struct simple_lock_s *l)
 {
-    init_wlock_hashtable(&fuse_users_hash, l);
+    init_wlock_hashtable(&osns_users_hash, l);
 }
 
 void lock_users_hash(struct simple_lock_s *l)
@@ -113,40 +109,40 @@ void unlock_users_hash(struct simple_lock_s *l)
     simple_unlock(l);
 }
 
-struct fuse_user_s *get_next_fuse_user(void **index, unsigned int *hashvalue)
+struct osns_user_s *get_next_osns_user(void **index, unsigned int *hashvalue)
 {
-    struct fuse_user_s *user=(struct fuse_user_s *) get_next_hashed_value(&fuse_users_hash, index, *hashvalue);
+    struct osns_user_s *user=(struct osns_user_s *) get_next_hashed_value(&osns_users_hash, index, *hashvalue);
 
-    while(user==NULL && *hashvalue<fuse_users_hash.len) {
+    while(user==NULL && *hashvalue<osns_users_hash.len) {
 
 	(*hashvalue)++;
-	user=(struct fuse_user_s *) get_next_hashed_value(&fuse_users_hash, index, *hashvalue);
+	user=(struct osns_user_s *) get_next_hashed_value(&osns_users_hash, index, *hashvalue);
 
     }
 
     return user;
 }
 
-static void add_workspace(struct fuse_user_s *user, struct workspace_mount_s *w)
+static void add_list(struct osns_user_s *user, struct list_element_s *l)
 {
     pthread_mutex_lock(&user->mutex);
-    add_list_element_last(&user->workspaces, &w->list);
+    add_list_element_last(&user->header, l);
     pthread_mutex_unlock(&user->mutex);
 }
 
-static void remove_workspace(struct fuse_user_s *user, struct workspace_mount_s *w)
+static void remove_list(struct osns_user_s *user, struct list_element_s *l)
 {
     pthread_mutex_lock(&user->mutex);
-    remove_list_element(&w->list);
+    remove_list_element(l);
     pthread_mutex_unlock(&user->mutex);
 }
 
-struct fuse_user_s *add_fuse_user(uid_t uid, unsigned int *error)
+struct osns_user_s *add_osns_user(uid_t uid, unsigned int *error)
 {
-    struct fuse_user_s *user=NULL;
+    struct osns_user_s *user=NULL;
     unsigned int size=128;
 
-    user=lookup_fuse_user(uid);
+    user=lookup_osns_user(uid);
 
     if (user) {
 
@@ -157,7 +153,7 @@ struct fuse_user_s *add_fuse_user(uid_t uid, unsigned int *error)
 
     allocuser:
 
-    user=realloc(user, sizeof(struct fuse_user_s) + size);
+    user=realloc(user, sizeof(struct osns_user_s) + size);
 
     if (user) {
 	struct passwd *result=NULL;
@@ -175,20 +171,24 @@ struct fuse_user_s *add_fuse_user(uid_t uid, unsigned int *error)
 
 	    }
 
-	    logoutput("add_fuse_user: adding user uid %i failed with error %i (%s)", uid, errno, strerror(errno));
+	    logoutput("add_osns_user: adding user uid %i failed with error %i (%s)", uid, errno, strerror(errno));
 	    free(user);
 	    return NULL;
+
+	} else {
+
+	    logoutput("add_osns_user: adding user uid %i:%s - %s at %s", uid, user->pwd.pw_name, user->pwd.pw_gecos, user->pwd.pw_dir);
 
 	}
 
 	user->size=size;
 	user->flags=0;
-	init_list_header(&user->workspaces, SIMPLE_LIST_TYPE_EMPTY, NULL);
+	init_list_header(&user->header, SIMPLE_LIST_TYPE_EMPTY, NULL);
 	pthread_mutex_init(&user->mutex, NULL);
-	user->add_workspace=add_workspace;
-	user->remove_workspace=remove_workspace;
+	user->add=add_list;
+	user->remove=remove_list;
 
-	add_fuse_user_hash(user);
+	add_osns_user_hash(user);
 	*error=0;
 
     } else {
@@ -201,10 +201,10 @@ struct fuse_user_s *add_fuse_user(uid_t uid, unsigned int *error)
 
 }
 
-void free_fuse_user(void *data)
+void free_osns_user(void *data)
 {
     if (data) {
-	struct fuse_user_s *user=(struct fuse_user_s *) data;
+	struct osns_user_s *user=(struct osns_user_s *) data;
 
 	pthread_mutex_destroy(&user->mutex);
 	free(user);
@@ -213,15 +213,15 @@ void free_fuse_user(void *data)
 
 }
 
-int initialize_fuse_users(unsigned int *error)
+int initialize_osns_users(unsigned int *error)
 {
     int result=0;
 
-    result=initialize_group(&fuse_users_hash, uid_hashfunction, 32, error);
+    result=initialize_group(&osns_users_hash, uid_hashfunction, 32, error);
 
     if (result<0) {
 
-    	logoutput("initialize_fuse_users: error %i:%s initializing hashtable fuse users", *error, strerror(*error));
+    	logoutput("initialize_osns_users: error %i:%s initializing hashtable fuse users", *error, strerror(*error));
 	return -1;
 
     }
@@ -230,7 +230,7 @@ int initialize_fuse_users(unsigned int *error)
 
 }
 
-void free_fuse_users()
+void free_osns_users()
 {
-    free_group(&fuse_users_hash, free_fuse_user);
+    free_group(&osns_users_hash, free_osns_user);
 }

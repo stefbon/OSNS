@@ -170,6 +170,7 @@ void init_ssh_connection_setup(struct ssh_connection_s *connection, const char *
 	init_payload_queue(connection, &setup->queue);
 	setup->status=0;
 	setup->flags=0;
+	setup->error=0;
 
     } else if (strcmp(phase, "transport")==0) {
 

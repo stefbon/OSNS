@@ -78,7 +78,7 @@ static unsigned int populate_keyex_ecdh(struct ssh_connection_s *c, struct keyex
 #define ECC_CURVE25519_LENGTH			32
 #define GCRY_ECC_CURVE25519			1
 
-#define _ED25519_BASEPOINT			"0x0000000000000000000000000000000000000000000000000000000000000009"
+#define _ED25519_BASEPOINT			"0x0900000000000000000000000000000000000000000000000000000000000000"
 
 static unsigned char convert_hex2dec(unsigned char *hex)
 {
@@ -310,6 +310,24 @@ static int ecdh_calc_sharedkey(struct ssh_keyex_s *k)
 
 }
 
+static unsigned char reverse_single_byte(unsigned char byte)
+{
+    unsigned char result=0;
+    unsigned char keep=byte;
+
+    for (unsigned int i=0; i<8; i++) {
+
+	unsigned char a=byte & (1 << i);
+
+	if (a>0) result |= (1 << (7-i));
+
+    }
+
+    logoutput("reverse_single_byte: %i to %i", keep, result);
+    return result;
+
+}
+
 static void ecdh_msg_write_sharedkey(struct msg_buffer_s *mb, struct ssh_keyex_s *k)
 {
     struct ssh_ecdh_s *ecdh=&k->method.ecdh;
@@ -320,9 +338,15 @@ static void ecdh_msg_write_sharedkey(struct msg_buffer_s *mb, struct ssh_keyex_s
     unsigned int error=0;
     gpg_error_t err=0;
 
-    /* reverse the buffer: create a temporary buffer for that */
+    /* reverse the buffer to network byte order: create a temporary buffer for that */
 
-    for (unsigned int i=0; i<len; i++) buffer[i]=sharedkey->ptr[len-i];
+    // for (unsigned int i=0; i<len; i++) {
+
+	//buffer[i]=sharedkey->ptr[len-i];
+	//buffer[i]=reverse_single_byte(buffer[i]);
+
+    //}
+    for (unsigned int i=0; i<len; i++) buffer[i]=sharedkey->ptr[i];
 
     if (read_ssh_mpint(&mpint, buffer, len, SSH_MPINT_FORMAT_USC, &error)>=0) {
 

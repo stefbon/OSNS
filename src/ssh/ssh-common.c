@@ -637,14 +637,58 @@ int setup_ssh_session(struct ssh_session_s *session, int fd)
 
 }
 
-static void analyze_connection_problem(void *ptr)
+static void analyze_ssh_connection_problem(void *ptr)
 {
     struct ssh_connection_s *connection=(struct ssh_connection_s *) ptr;
     unsigned int error=0;
 
-    error=get_status_ssh_connection(connection);
+    if ((connection->flags & SSH_CONNECTION_FLAG_TROUBLE)==0) {
+
+	/* this flag should be set */
+	logoutput("analyze_ssh_connection_problem: flag SSH_CONNECTION_FLAG_TROUBLE not set as it should be ... warning");
+
+    }
+
+    if (connection->setup.error>0) {
+
+	error=connection->setup.error;
+	logoutput("analyze_ssh_connection_problem: found error %i:%s", error, strerror(error));
+
+    } else {
+
+	logoutput("analyze_ssh_connection_problem: errorcode unknown, trying to find it");
+
+    }
+
+    if (error==0) error=get_status_ssh_connection(connection);
+
+    if (error==0) {
+	struct socket_ops_s *sops=connection->connection.io.socket.sops;
+
+	/* error==0 -> maybe a normal shutdown */
+
+	size_t size=10; /* arbitrary size */
+	char tmp[size];
+	int bytesread=0;
+
+	bytesread=(* sops->recv)(&connection->connection.io.socket, (void *) tmp, size, MSG_PEEK);
+	error=errno;
+
+    }
+
+    if (error==0) {
+
+	if (connection->setup.flags & SSH_SETUP_FLAG_RECV_EMPTY) {
+
+	    error=ESHUTDOWN;
+
+	}
+
+    }
 
     if (error>0) {
+
+	logoutput("analyze_connection_problem: error %i (%s): disconnecting", error, strerror(error));
 
 	switch (error) {
 
@@ -659,8 +703,6 @@ static void analyze_connection_problem(void *ptr)
 	    case ECONNREFUSED:
 	    case EHOSTDOWN:
 	    case EHOSTUNREACH:
-
-	    logoutput("analyze_connection_problem: error %i (%s): disconnecting", error, strerror(error));
 
 	    change_ssh_connection_setup(connection, "setup", 0, SSH_SETUP_FLAG_DISCONNECTING, 0, NULL, 0);
 	    remove_ssh_connection_eventloop(connection);
@@ -693,7 +735,7 @@ static void analyze_connection_problem(void *ptr)
 static int setup_cb_thread_connection_problem(struct ssh_connection_s *connection, void *data)
 {
     struct generic_error_s error=GENERIC_ERROR_INIT;
-    work_workerthread(NULL, 0, analyze_connection_problem, (void *) connection, &error);
+    work_workerthread(NULL, 0, analyze_ssh_connection_problem, (void *) connection, &error);
     return 0;
 }
 

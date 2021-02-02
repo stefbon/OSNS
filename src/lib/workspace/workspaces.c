@@ -93,19 +93,25 @@ void clear_workspace_mount(struct workspace_mount_s *workspace)
 }
 
 
-static void _add_service_context(struct workspace_mount_s *workspace, struct service_context_s *context)
+static void _add_service_context(struct workspace_mount_s *workspace, struct list_element_s *l)
 {
     pthread_mutex_lock(&workspace->mutex);
-    add_list_element_last(&workspace->contexes, &context->list);
+    add_list_element_last(&workspace->contexes, l);
     pthread_mutex_unlock(&workspace->mutex);
 }
 
-static void _remove_service_context(struct service_context_s *context)
+static void _remove_service_context(struct list_element_s *l)
 {
-    struct workspace_mount_s *workspace=context->workspace;
-    pthread_mutex_lock(&workspace->mutex);
-    remove_list_element(&context->list);
-    pthread_mutex_unlock(&workspace->mutex);
+    struct list_header_s *h=l->h;
+
+    if (h) {
+	struct workspace_mount_s *workspace=(struct workspace_mount_s *)((char *) h - offsetof(struct workspace_mount_s, contexes));
+
+	pthread_mutex_lock(&workspace->mutex);
+	remove_list_element(l);
+	pthread_mutex_unlock(&workspace->mutex);
+
+    }
 }
 
 static void init_workspace_inodes(struct workspace_mount_s *workspace)
@@ -215,33 +221,6 @@ int init_workspace_mount(struct workspace_mount_s *workspace, unsigned int *erro
     init_workspace_inodes(workspace);
 
     return 0;
-
-}
-
-/* get the path to the root (mountpoint) of this fuse fs */
-
-int get_path_root(struct inode_s *inode, struct fuse_path_s *fpath)
-{
-    struct entry_s *entry=inode->alias;
-    unsigned int pathlen=(unsigned int) (fpath->path + fpath->len - fpath->pathstart);
-    struct name_s *xname=NULL;
-
-    appendname:
-
-    xname=&entry->name;
-
-    fpath->pathstart-=xname->len;
-    memcpy(fpath->pathstart, xname->name, xname->len);
-    fpath->pathstart--;
-    *(fpath->pathstart)='/';
-    pathlen+=xname->len+1;
-
-    /* go one entry higher */
-
-    entry=get_parent_entry(entry);
-    inode=entry->inode;
-    if (inode->st.st_ino>FUSE_ROOT_ID) goto appendname;
-    return pathlen;
 
 }
 

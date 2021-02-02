@@ -20,19 +20,33 @@
 #ifndef _LIB_WORKSPACE_SESSION_H
 #define _LIB_WORKSPACE_SESSION_H
 
+#include "pwd.h"
 #include "list.h"
 
-int initialize_fuse_users(unsigned int *error);
-void free_fuse_users();
+#define OSNS_USER_FLAG_INSTALL_SERVICES 			1
 
-void add_fuse_user_hash(struct fuse_user_s *user);
-void remove_fuse_user_hash(struct fuse_user_s *user);
+struct osns_user_s {
+    unsigned int				flags;
+    struct passwd				pwd;
+    pthread_mutex_t				mutex;
+    struct list_header_s			header;
+    void					(* add)(struct osns_user_s *u, struct list_element_s *l);
+    void					(* remove)(struct osns_user_s *u, struct list_element_s *w);
+    unsigned int				size;
+    char					buffer[];
+};
 
-struct fuse_user_s *add_fuse_user(uid_t uid, unsigned int *error);
-void free_fuse_user(void *data);
+int initialize_osns_users(unsigned int *error);
+void free_osns_users();
 
-struct fuse_user_s *lookup_fuse_user(uid_t uid);
-struct fuse_user_s *get_next_fuse_user(void **index, unsigned int *hashvalue);
+void add_osns_user_hash(struct osns_user_s *user);
+void remove_osns_user_hash(struct osns_user_s *user);
+
+struct osns_user_s *add_osns_user(uid_t uid, unsigned int *error);
+void free_osns_user(void *data);
+
+struct osns_user_s *lookup_osns_user(uid_t uid);
+struct osns_user_s *get_next_osns_user(void **index, unsigned int *hashvalue);
 
 void init_rlock_users_hash(struct simple_lock_s *l);
 void init_wlock_users_hash(struct simple_lock_s *l);

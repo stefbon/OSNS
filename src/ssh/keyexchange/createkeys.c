@@ -242,6 +242,8 @@ int create_keyx_hashes(struct ssh_connection_s *connection, struct ssh_keyex_s *
     unsigned int keylen=0;
     int index=0;
 
+    logoutput("create_keyx_hashes: hash %s", k->digestname);
+
     /* iv cipher client to server: c2s
 	get the length of the iv from the encrypt ops belonging to the algo chosen */
 

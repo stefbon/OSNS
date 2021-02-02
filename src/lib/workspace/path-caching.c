@@ -42,11 +42,38 @@
 #include "log.h"
 
 #include "misc.h"
-#include "misc.h"
 #include "workspace-interface.h"
 #include "workspaces.h"
+#include "context.h"
 #include "fuse.h"
 #include "path-caching.h"
+
+/* get the path to the root (mountpoint) of this fuse fs */
+
+int get_path_root(struct inode_s *inode, struct fuse_path_s *fpath)
+{
+    struct entry_s *entry=inode->alias;
+    unsigned int pathlen=(unsigned int) (fpath->path + fpath->len - fpath->pathstart);
+    struct name_s *xname=NULL;
+
+    appendname:
+
+    xname=&entry->name;
+
+    fpath->pathstart-=xname->len;
+    memcpy(fpath->pathstart, xname->name, xname->len);
+    fpath->pathstart--;
+    *(fpath->pathstart)='/';
+    pathlen+=xname->len+1;
+
+    /* go one entry higher */
+
+    entry=get_parent_entry(entry);
+    inode=entry->inode;
+    if (inode->st.st_ino>FUSE_ROOT_ID) goto appendname;
+    return pathlen;
+
+}
 
 /*
 

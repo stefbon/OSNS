@@ -90,18 +90,18 @@ static int update_mountinfo(unsigned long generation, struct mountentry_s *(*nex
     while (entry) {
 	void *index2=NULL;
 	unsigned int hash=0;
-	struct fuse_user_s *user=NULL;
+	struct osns_user_s *user=NULL;
 	struct simple_lock_s rlock;
 
 	init_rlock_users_hash(&rlock);
 	lock_users_hash(&rlock);
 
-	user=get_next_fuse_user(&index2, &hash);
+	user=get_next_osns_user(&index2, &hash);
 
 	while (user) {
 	    struct list_element_s *list=NULL;
 
-	    list=get_list_head(&user->workspaces, 0);
+	    list=get_list_head(&user->header, 0);
 
 	    while (list) {
 
@@ -120,7 +120,7 @@ static int update_mountinfo(unsigned long generation, struct mountentry_s *(*nex
 	    }
 
 	    if (workspace) break;
-	    user=get_next_fuse_user(&index2, &hash);
+	    user=get_next_osns_user(&index2, &hash);
 
 	}
 

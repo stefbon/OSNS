@@ -140,7 +140,7 @@ static int _init_interface_buffer_fuse(struct context_interface_s *interface, st
 {
     struct service_context_s *context=get_service_context(interface);
     struct workspace_mount_s *workspace=context->workspace;
-    struct fuse_user_s *user=workspace->user;
+    struct osns_user_s *user=workspace->user;
     struct interface_ops_s *ops=ilist->ops;
 
     logoutput("_init_interface_buffer_fuse");

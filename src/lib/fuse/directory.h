@@ -32,6 +32,7 @@
 #define _DIRECTORY_LOCK_EXCL					3
 
 struct directory_s;
+struct fuse_path_s;
 
 #define _PATHCACHE_TYPE_ROOT					1
 #define _PATHCACHE_TYPE_DEFAULT					2

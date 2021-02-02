@@ -368,7 +368,7 @@ static int _init_interface_buffer_ssh_session(struct context_interface_s *interf
     struct ssh_session_s *session=NULL;
     struct service_context_s *context=get_service_context(interface);
     struct workspace_mount_s *workspace=context->workspace;
-    struct fuse_user_s *user=workspace->user;
+    struct osns_user_s *user=workspace->user;
     struct interface_ops_s *ops=ilist->ops;
 
     if (interface->size < (* ops->get_buffer_size)(ilist)) {
@@ -412,7 +412,7 @@ static int _init_interface_buffer_ssh_channel(struct context_interface_s *interf
     struct ssh_session_s *session=NULL;
     struct service_context_s *context=get_service_context(interface);
     struct workspace_mount_s *workspace=context->workspace;
-    struct fuse_user_s *user=workspace->user;
+    struct osns_user_s *user=workspace->user;
     struct context_interface_s *parent=(context->parent) ? (&context->parent->interface) : NULL;
     struct interface_ops_s *ops=ilist->ops;
 

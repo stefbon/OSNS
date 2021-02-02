@@ -147,7 +147,7 @@ void end_finish_scripts()
     pthread_mutex_destroy(&finish_scripts_mutex);
 }
 
-static void terminate_user_connections(struct fuse_user_s *user)
+static void terminate_user_connections(struct osns_user_s *user)
 {
     struct list_element_s *list=NULL;
 
@@ -174,11 +174,11 @@ static void terminate_user_connections(struct fuse_user_s *user)
 
 }
 
-static void end_fuse_user_session(void *ptr)
+static void end_osns_user_session(void *ptr)
 {
-    struct fuse_user_s *user=(struct fuse_user_s *) ptr;
+    struct osns_user_s *user=(struct osns_user_s *) ptr;
 
-    logoutput("end_fuse_user_session: %i: %s", user->pwd.pw_uid, user->pwd.pw_name);
+    logoutput("end_osns_user_session: %i: %s", user->pwd.pw_uid, user->pwd.pw_name);
     terminate_user_workspaces(user);
     pthread_mutex_destroy(&user->mutex);
     free(user);
@@ -186,14 +186,14 @@ static void end_fuse_user_session(void *ptr)
 
 }
 
-static void end_fuse_user_sessions(void *ptr)
+static void end_osns_user_sessions(void *ptr)
 {
-    struct fuse_user_s *user=NULL;
+    struct osns_user_s *user=NULL;
     void *index=NULL;
     unsigned int hashvalue=0;
     struct simple_lock_s wlock;
 
-    logoutput("end_fuse_user_sessions");
+    logoutput("end_osns_user_sessions");
     init_wlock_users_hash(&wlock);
 
     getuser:
@@ -201,13 +201,13 @@ static void end_fuse_user_sessions(void *ptr)
     index=NULL;
 
     lock_users_hash(&wlock);
-    user=get_next_fuse_user(&index, &hashvalue);
-    if (user) remove_fuse_user_hash(user);
+    user=get_next_osns_user(&index, &hashvalue);
+    if (user) remove_osns_user_hash(user);
     unlock_users_hash(&wlock);
 
     if (user) {
 
-	work_workerthread(NULL, 0, end_fuse_user_session, (void *) user, NULL);
+	work_workerthread(NULL, 0, end_osns_user_session, (void *) user, NULL);
 	index=NULL;
 	goto getuser;
 
@@ -215,14 +215,14 @@ static void end_fuse_user_sessions(void *ptr)
 
 }
 
-static void add_fuse_user_session(uid_t uid)
+static void add_osns_user_session(uid_t uid)
 {
-    struct fuse_user_s *user=NULL;
+    struct osns_user_s *user=NULL;
     unsigned int error=0;
 
-    logoutput_info("add_fuse_user_session: %i", (int) uid);
+    logoutput_info("add_osns_user_session: %i", (int) uid);
 
-    user=add_fuse_user(uid, &error);
+    user=add_osns_user(uid, &error);
 
     if (user && error==0) {
 	struct passwd *pwd=&user->pwd;
@@ -237,15 +237,15 @@ static void add_fuse_user_session(uid_t uid)
 
 		if (pwd->pw_gid==fs_options.user.network_mount_group) {
 
-		    logoutput("add_fuse_user_session: user %i: %s is part of group %i: %s", pwd->pw_uid, pwd->pw_name, grp->gr_gid, grp->gr_name);
+		    logoutput("add_osns_user_session: user %i: %s is part of group %i: %s", pwd->pw_uid, pwd->pw_name, grp->gr_gid, grp->gr_name);
 
 		} else if (user_is_groupmember(pwd->pw_name, grp)==1) {
 
-		    logoutput("add_fuse_user_session: user %i: %s is part of group %i: %s", pwd->pw_uid, pwd->pw_name, grp->gr_gid, grp->gr_name);
+		    logoutput("add_osns_user_session: user %i: %s is part of group %i: %s", pwd->pw_uid, pwd->pw_name, grp->gr_gid, grp->gr_name);
 
 		} else {
 
-		    logoutput("add_fuse_user_session: user %i: %s is not part of group %i: %s", pwd->pw_uid, pwd->pw_name, grp->gr_gid, grp->gr_name);
+		    logoutput("add_osns_user_session: user %i: %s is not part of group %i: %s", pwd->pw_uid, pwd->pw_name, grp->gr_gid, grp->gr_name);
 		    return;
 
 		}
@@ -256,12 +256,12 @@ static void add_fuse_user_session(uid_t uid)
 
 	    if (pwd->pw_gid < _OPTIONS_USER_FLAG_NETWORK_GID_MIN) {
 
-		logoutput("add_fuse_user_session: user %i: %s group id %i is less than %i", pwd->pw_uid, pwd->pw_name, pwd->pw_gid, _OPTIONS_USER_FLAG_NETWORK_GID_MIN);
+		logoutput("add_osns_user_session: user %i: %s group id %i is less than %i", pwd->pw_uid, pwd->pw_name, pwd->pw_gid, _OPTIONS_USER_FLAG_NETWORK_GID_MIN);
 		return;
 
 	    } else {
 
-		logoutput("add_fuse_user_session: user %i: %s group id %i is not less than %i", pwd->pw_uid, pwd->pw_name, pwd->pw_gid, _OPTIONS_USER_FLAG_NETWORK_GID_MIN);
+		logoutput("add_osns_user_session: user %i: %s group id %i is not less than %i", pwd->pw_uid, pwd->pw_name, pwd->pw_gid, _OPTIONS_USER_FLAG_NETWORK_GID_MIN);
 
 	    }
 
@@ -277,17 +277,17 @@ static void add_fuse_user_session(uid_t uid)
 
 		if (create_mount_context(user, &mountpoint, WORKSPACE_TYPE_NETWORK)) {
 
-		    logoutput("add_fuse_user_session: network mount context created");
+		    logoutput("add_osns_user_session: network mount context created");
 
 		} else {
 
-		    logoutput("add_fuse_user_session: network mount context not created");
+		    logoutput("add_osns_user_session: network mount context not created");
 
 		}
 
 	    } else {
 
-		logoutput_error("add_fuse_user_session: error %i:%s creating directory %s", error, strerror(error), mountpoint);
+		logoutput_error("add_osns_user_session: error %i:%s creating directory %s", error, strerror(error), mountpoint);
 
 	    }
 
@@ -301,7 +301,7 @@ static void add_fuse_user_session(uid_t uid)
 
 static void change_usersessions(uid_t uid, signed char change, void *ptr)
 {
-    struct fuse_user_s *user=NULL;
+    struct osns_user_s *user=NULL;
     struct simple_lock_s wlock;
 
     logoutput("change_usersession: %s user %i", (change==1) ? "add" : "remove", uid);
@@ -309,22 +309,22 @@ static void change_usersessions(uid_t uid, signed char change, void *ptr)
     init_wlock_users_hash(&wlock);
     lock_users_hash(&wlock);
 
-    user=lookup_fuse_user(uid);
+    user=lookup_osns_user(uid);
 
     if (user) {
 
 	if (change==-1) {
 
-	    remove_fuse_user_hash(user);
+	    remove_osns_user_hash(user);
 	    unlock_users_hash(&wlock);
-	    work_workerthread(NULL, 0, end_fuse_user_session, NULL, (void *) user);
+	    work_workerthread(NULL, 0, end_osns_user_session, NULL, (void *) user);
 	    return;
 
 	}
 
     } else {
 
-	if (change==1 || change==0) add_fuse_user_session(uid);
+	if (change==1 || change==0) add_osns_user_session(uid);
 
     }
 
@@ -389,7 +389,7 @@ static void workspace_signal_handler(struct beventloop_s *bloop, void *data, str
 
 struct fs_connection_s *accept_client_connection(uid_t uid, gid_t gid, pid_t pid, struct fs_connection_s *s_conn)
 {
-    struct fuse_user_s *user=NULL;
+    struct osns_user_s *user=NULL;
     struct simple_lock_s wlock;
 
     logoutput_info("accept_client_connection");
@@ -397,7 +397,7 @@ struct fs_connection_s *accept_client_connection(uid_t uid, gid_t gid, pid_t pid
 
     lock_users_hash(&wlock);
 
-    user=lookup_fuse_user(uid);
+    user=lookup_osns_user(uid);
 
     if (user) {
 	struct fs_connection_s *c_conn=malloc(sizeof(struct fs_connection_s));
@@ -465,7 +465,7 @@ int main(int argc, char *argv[])
 
     switch_logging_backend("syslog");
 
-    if (initialize_fuse_users(&error)==-1) {
+    if (initialize_osns_users(&error)==-1) {
 
 	logoutput_error("MAIN: error, cannot initialize fuse users hash table, error: %i (%s).", error, strerror(error));
 	goto post;
@@ -632,7 +632,7 @@ int main(int argc, char *argv[])
 
     logoutput_info("MAIN: close sessions monitor");
     close_user_monitor();
-    end_fuse_user_sessions(NULL);
+    end_osns_user_sessions(NULL);
 
     logoutput_info("MAIN: end fschangenotify");
     end_fschangenotify();
@@ -651,7 +651,7 @@ int main(int argc, char *argv[])
     logoutput_info("MAIN: destroy eventloop");
     clear_beventloop(NULL);
 
-    free_fuse_users();
+    free_osns_users();
     remove_pid_file(&fs_options.socket, getpid());
 
     options:

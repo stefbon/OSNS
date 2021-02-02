@@ -77,7 +77,7 @@ static int read_ssh_connection_socket(struct ssh_connection_s *connection, int f
 
 	pthread_mutex_unlock(&receive->mutex);
 
-	logoutput_info("read_ssh_connection_socket: bytesread %i", bytesread);
+	logoutput_info("read_ssh_connection_socket: bytesread %i error %i", bytesread, error);
 
 	/* handle error */
 
@@ -85,6 +85,14 @@ static int read_ssh_connection_socket(struct ssh_connection_s *connection, int f
 
 	    /* peer has performed an orderly shutdown */
 
+	    connection->flags |= SSH_CONNECTION_FLAG_TROUBLE;
+	    connection->setup.flags |= SSH_SETUP_FLAG_RECV_EMPTY;
+	    if (error>0) {
+
+		connection->setup.error=error;
+		connection->setup.flags |= SSH_SETUP_FLAG_RECV_ERROR;
+
+	    }
 	    start_thread_connection_problem(connection);
 	    return -1;
 
@@ -95,6 +103,9 @@ static int read_ssh_connection_socket(struct ssh_connection_s *connection, int f
 	} else if (error==ECONNRESET || error==ENOTCONN || error==EBADF || error==ENOTSOCK) {
 
 	    logoutput_warning("read_ssh_connection_socket: socket is not connected? error %i:%s", error, strerror(error));
+	    connection->flags |= SSH_CONNECTION_FLAG_TROUBLE;
+	    connection->setup.error=error;
+	    connection->setup.flags |= SSH_SETUP_FLAG_RECV_ERROR;
 	    start_thread_connection_problem(connection);
 
 	} else {
@@ -141,11 +152,12 @@ int read_ssh_connection_signal(int fd, void *ptr, uint32_t events)
     struct ssh_connection_s *connection=(struct ssh_connection_s *) ptr;
     int result=0;
 
-    if ( events & (EPOLLERR | EPOLLHUP) ) {
+    if ( events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP) ) {
 
 	/* the remote side disconnected */
 
         logoutput("read_ssh_connection_signal: event %i causes connection break", events);
+        connection->flags |= SSH_CONNECTION_FLAG_TROUBLE;
 	start_thread_connection_problem(connection);
 
     } else if (events & EPOLLIN) {

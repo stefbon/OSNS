@@ -147,7 +147,7 @@ static void install_net_services_context(struct host_address_s *host, struct ser
 
 static void install_net_services_all(struct host_address_s *host, struct service_address_s *service, unsigned int code, struct timespec *found, unsigned long hostid, unsigned long serviceid)
 {
-    struct fuse_user_s *user=NULL;
+    struct osns_user_s *user=NULL;
     unsigned int hashvalue=0;
     void *index=NULL;
     struct list_element_s *wlist=NULL;
@@ -162,7 +162,7 @@ static void install_net_services_all(struct host_address_s *host, struct service
 
     nextuser:
 
-    user=get_next_fuse_user(&index, &hashvalue);
+    user=get_next_osns_user(&index, &hashvalue);
     if (user==NULL) {
 
 	logoutput("install_net_services_all: ready");
@@ -174,13 +174,13 @@ static void install_net_services_all(struct host_address_s *host, struct service
     logoutput("install_net_services_all: found user %i: %s", user->pwd.pw_uid, user->pwd.pw_name);
 
     pthread_mutex_lock(&user->mutex);
-    user->flags |= FUSE_USER_FLAG_INSTALL_SERVICES;
+    user->flags |= OSNS_USER_FLAG_INSTALL_SERVICES;
     pthread_mutex_unlock(&user->mutex);
     unlock_users_hash(&rlock);
 
     /* walk every workspace (=mount) for this user */
 
-    wlist=get_list_head(&user->workspaces, 0);
+    wlist=get_list_head(&user->header, 0);
 
     while (wlist) {
 	struct workspace_mount_s *workspace=NULL;
@@ -220,7 +220,7 @@ static void install_net_services_all(struct host_address_s *host, struct service
     }
 
     pthread_mutex_lock(&user->mutex);
-    user->flags -= FUSE_USER_FLAG_INSTALL_SERVICES;
+    user->flags -= OSNS_USER_FLAG_INSTALL_SERVICES;
     pthread_mutex_unlock(&user->mutex);
 
     goto rlock;

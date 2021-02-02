@@ -142,7 +142,7 @@ struct service_context_s *create_service_context(struct workspace_mount_s *works
     if (workspace) {
 
 	context->workspace=workspace;
-	(* workspace->add_context)(workspace, context);
+	(* workspace->add_context)(workspace, &context->list);
 
     }
 
@@ -158,7 +158,7 @@ struct service_context_s *create_service_context(struct workspace_mount_s *works
 
     } else {
 
-	if (workspace) (* workspace->remove_context)(context);
+	if (workspace) (* workspace->remove_context)(&context->list);
 	free(context);
 	context=NULL;
 
@@ -205,7 +205,7 @@ struct service_context_s *get_root_context(struct service_context_s *context)
     return get_workspace_context(workspace);
 }
 
-struct fuse_user_s *get_user_context(struct service_context_s *context)
+struct osns_user_s *get_user_context(struct service_context_s *context)
 {
     struct workspace_mount_s *workspace=context->workspace;
     return workspace->user;

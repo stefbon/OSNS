@@ -714,6 +714,9 @@ struct ssh_service_s {
 /* service rekex active */
 #define SSH_SETUP_FLAG_REKEX				(1 << 5)
 
+#define SSH_SETUP_FLAG_RECV_ERROR			(1 << 24)
+#define SSH_SETUP_FLAG_SEND_ERROR			(1 << 25)
+#define SSH_SETUP_FLAG_RECV_EMPTY			(1 << 26)
 #define SSH_SETUP_FLAG_SETUPTHREAD			(1 << 27)
 #define SSH_SETUP_FLAG_HOSTINFO				(1 << 28)
 #define SSH_SETUP_FLAG_ANALYZETHREAD			(1 << 29)
@@ -727,6 +730,7 @@ struct ssh_service_s {
 struct ssh_setup_s {
     unsigned int					status;
     unsigned int 					flags;
+    unsigned int					error;
     union {
 	struct ssh_transport_s				transport;
 	struct ssh_service_s				service;
@@ -772,6 +776,7 @@ struct ssh_extensions_s {
 #define SSH_CONNECTION_FLAG_DISCONNECT_SEND		2
 /* global request pending */
 #define SSH_CONNECTION_FLAG_GLOBAL_REQUEST		4
+#define SSH_CONNECTION_FLAG_TROUBLE			8
 
 struct ssh_connection_s {
     unsigned char					unique;
