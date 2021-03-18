@@ -278,6 +278,8 @@ static int ecdh_calc_sharedkey(struct ssh_keyex_s *k)
     unsigned int len=gcry_ecc_get_algo_keylen(GCRY_ECC_CURVE25519);
     int result=-1;
 
+    logoutput("ecdh_calc_sharedkey");
+
     /* check both have the same lengths */
 
     if (pkey_s->len==len && skey_c->len==len) {

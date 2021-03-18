@@ -205,3 +205,52 @@ void service_fs_releasedir(struct fuse_opendir_s *opendir, struct fuse_request_s
     if (directory) release_directory_pathcache(directory);
 
 }
+
+static struct entry_s *_fs_get_fuse_direntry_common(struct fuse_opendir_s *opendir, struct list_header_s *header, struct fuse_request_s *request)
+{
+    struct list_element_s *list=NULL;
+    struct fuse_direntry_s *direntry=NULL;
+    struct entry_s *entry=NULL;
+
+    logoutput("service_fs_get_fuse_direntry");
+
+    pthread_mutex_lock(opendir->mutex);
+
+    while ((list=get_list_head(header, SIMPLE_LIST_FLAG_REMOVE))==NULL) {
+
+	int result=pthread_cond_wait(opendir->cond, opendir->mutex);
+
+	if ((list=get_list_head(header, SIMPLE_LIST_FLAG_REMOVE))) {
+
+	    break;
+
+	} else if (request->flags & FUSE_REQUEST_FLAG_INTERRUPTED) {
+
+	    pthread_mutex_unlock(opendir->mutex);
+	    return NULL;
+
+	} else if (opendir->flags & (_FUSE_OPENDIR_FLAG_READDIR_FINISH | _FUSE_OPENDIR_FLAG_READDIR_INCOMPLETE | _FUSE_OPENDIR_FLAG_READDIR_ERROR)) {
+
+	    pthread_mutex_unlock(opendir->mutex);
+	    return NULL;
+
+	}
+
+    }
+
+    pthread_mutex_unlock(opendir->mutex);
+    direntry=(struct fuse_direntry_s *)((char *)list - offsetof(struct fuse_direntry_s, list));
+    entry=direntry->entry;
+    free(direntry);
+    return entry;
+}
+
+struct entry_s *service_fs_get_fuse_direntry(struct fuse_opendir_s *opendir, struct fuse_request_s *request)
+{
+    return _fs_get_fuse_direntry_common(opendir, &opendir->entries, request);
+}
+
+struct entry_s *service_fs_get_fuse_symlinks(struct fuse_opendir_s *opendir, struct fuse_request_s *request)
+{
+    return _fs_get_fuse_direntry_common(opendir, &opendir->symlinks, request);
+}

@@ -249,3 +249,9 @@ void init_host_address(struct host_address_s *a)
     a->flags=0;
     a->ip.family=0;
 }
+
+unsigned char socket_network_connection_error(unsigned int error)
+{
+    return ( error==EBADF || error==ENETDOWN || error==ENETUNREACH || error==ENETRESET || error==ECONNABORTED || error==ECONNRESET ||
+	    error==ENOBUFS || error==ENOTCONN || error==ESHUTDOWN || error==ECONNREFUSED || error==EHOSTDOWN || error==EHOSTUNREACH) ? 1 : 0;
+}

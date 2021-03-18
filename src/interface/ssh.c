@@ -51,6 +51,7 @@
 #include "workspace.h"
 
 #include "ssh/ssh-common.h"
+#include "ssh/ssh-common-client.h"
 #include "ssh-utils.h"
 #include "ssh/send/msg-channel.h"
 
@@ -94,7 +95,7 @@ static int _connect_interface_ssh_session(uid_t uid, struct context_interface_s 
 
     }
 
-    fd=connect_ssh_session(session, target, port);
+    fd=connect_ssh_session_client(session, target, port);
 
     out:
     return fd;
@@ -388,7 +389,7 @@ static int _init_interface_buffer_ssh_session(struct context_interface_s *interf
     interface->type=_INTERFACE_TYPE_SSH_SESSION;
     session=(struct ssh_session_s *) interface->buffer;
 
-    if (init_ssh_session(session, user->pwd.pw_uid, (void *) interface)==0) {
+    if (init_ssh_session_client(session, user->pwd.pw_uid, (void *) interface)==0) {
 
 	interface->connect=_connect_interface_ssh_session;
 	interface->start=_start_interface_ssh_session;

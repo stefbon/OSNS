@@ -20,10 +20,17 @@
 #ifndef _LIB_MISC_PIDFILE_H
 #define _LIB_MISC_PIDFILE_H
 
+#define CHECK_PF_FLAG_REMOVE_IF_ORPHAN				1
+
+
 /* Prototypes */
 
-void create_pid_file(struct pathinfo_s *pathinfo);
-unsigned int check_pid_file(struct pathinfo_s *pathinfo);
-void remove_pid_file(struct pathinfo_s *pathinfo, pid_t pid);
+void create_pid_file(char *path, char *name, char *user, pid_t pid, char **p_keep);
+pid_t check_pid_file(char *path, char *name, char *user, int (* cb)(pid_t pid, void *ptr), unsigned int flags);
+void remove_pid_file(char *path);
+
+int create_fullpath(struct pathinfo_s *pathinfo);
+int check_socket_path(struct pathinfo_s *pathinfo, unsigned int alreadyrunning);
+int check_pid_running(pid_t pid, char **p_cmdline);
 
 #endif

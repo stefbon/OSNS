@@ -644,10 +644,16 @@ int start_diffiehellman(struct ssh_connection_s *connection, struct ssh_keyex_s 
 
 	if (store_ssh_session_id(session, &tmp)==-1) {
 
-	    logoutput("start_diffiehellman: failed to store session identifier");
+	    logoutput_warning("start_diffiehellman: failed to store session identifier");
 	    goto out;
 
 	}
+
+	logoutput("start_diffiehellman: stored session identifier (%i bytes)", H->len);
+
+    } else {
+
+	logoutput_warning("start_diffiehellman: not created a session identifier");
 
     }
 

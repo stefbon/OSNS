@@ -165,7 +165,7 @@ void notify_kernel_change(char *ptr, uint64_t ino, uint32_t mask)
 
 }
 
-int add_direntry_buffer(char *ptr, struct direntry_buffer_s *buffer, struct name_s *xname, struct stat *st)
+int add_direntry_buffer(void *ptr, struct direntry_buffer_s *buffer, struct name_s *xname, struct stat *st)
 {
     size_t dirent_size=offsetof(struct fuse_dirent, name) + xname->len;
     size_t dirent_size_alligned=(((dirent_size) + sizeof(uint64_t) - 1) & ~(sizeof(uint64_t) - 1));
@@ -182,8 +182,6 @@ int add_direntry_buffer(char *ptr, struct direntry_buffer_s *buffer, struct name
 	buffer->pos += dirent_size_alligned;
 	buffer->left-= dirent_size_alligned;
 	buffer->offset++;
-
-	// logoutput("add_direntry_buffer: name %.*s ibo %li type %i", xname->len, xname->name, st->st_ino, dirent->type);
 	return 0;
 
     }
@@ -192,7 +190,7 @@ int add_direntry_buffer(char *ptr, struct direntry_buffer_s *buffer, struct name
 
 }
 
-int add_direntry_plus_buffer(char *ptr, struct direntry_buffer_s *buffer, struct name_s *xname, struct stat *st)
+int add_direntry_plus_buffer(void *ptr, struct direntry_buffer_s *buffer, struct name_s *xname, struct stat *st)
 {
     size_t dirent_size=offsetof(struct fuse_direntplus, dirent.name) + xname->len;
     size_t dirent_size_alligned=(((dirent_size) + sizeof(uint64_t) - 1) & ~(sizeof(uint64_t) - 1));
@@ -236,8 +234,6 @@ int add_direntry_plus_buffer(char *ptr, struct direntry_buffer_s *buffer, struct
 	direntplus->entry_out.attr.uid=st->st_uid;
 	direntplus->entry_out.attr.gid=st->st_gid;
 	direntplus->entry_out.attr.rdev=0;
-
-	direntplus->entry_out.attr.padding=0;
 
 	buffer->pos += dirent_size_alligned;
 	buffer->left-= dirent_size_alligned;
@@ -885,7 +881,7 @@ void init_fusesocket(char *ptr, void *ctx, size_t size, unsigned char flags)
     fusesocket->negative_timeout.tv_sec=1;
     fusesocket->negative_timeout.tv_nsec=0;
 
-    logoutput("init_fusesocket: A");
+    // logoutput("init_fusesocket: A");
 
     init_connection(&fusesocket->connection, FS_CONNECTION_TYPE_FUSE, FS_CONNECTION_ROLE_CLIENT);
 
@@ -896,14 +892,14 @@ void init_fusesocket(char *ptr, void *ctx, size_t size, unsigned char flags)
     fusesocket->fuse_cb[FUSE_FORGET]=do_noreply;
     fusesocket->fuse_cb[FUSE_BATCH_FORGET]=do_noreply;
 
-    logoutput("init_fusesocket: B");
+    // logoutput("init_fusesocket: B");
 
     fusesocket->get_masked_perm=get_masked_perm_default;
 
     pthread_mutex_init(&fusesocket->signal.mutex, NULL);
     pthread_cond_init(&fusesocket->signal.cond, NULL);
 
-    logoutput("init_fusesocket: C");
+    // logoutput("init_fusesocket: C");
 
     fusesocket->read=0;
     fusesocket->threads=0;
@@ -913,7 +909,7 @@ void init_fusesocket(char *ptr, void *ctx, size_t size, unsigned char flags)
     pthread_mutex_init(&fusesocket->mutex, NULL);
     pthread_cond_init(&fusesocket->cond, NULL);
 
-    logoutput("init_fusesocket: D");
+    // logoutput("init_fusesocket: D");
 
 }
 

@@ -143,7 +143,7 @@ struct ssh_channel_s *lookup_session_channel(struct channel_table_s *table, unsi
     return channel;
 }
 
-void init_channels_table(struct ssh_session_s *session, unsigned int size)
+void init_ssh_channels_table(struct ssh_session_s *session, unsigned int size)
 {
     struct channel_table_s *table=&session->channel_table;
 
@@ -160,7 +160,7 @@ void init_channels_table(struct ssh_session_s *session, unsigned int size)
 
 }
 
-void free_channels_table(struct ssh_session_s *session)
+void free_ssh_channels_table(struct ssh_session_s *session)
 {
     struct channel_table_s *table=&session->channel_table;
 

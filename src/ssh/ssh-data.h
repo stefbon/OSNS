@@ -21,7 +21,7 @@
 #define _SSH_DATA_H
 
 int store_ssh_session_id(struct ssh_session_s *session, struct ssh_string_s *H);
-void init_session_data(struct ssh_session_s *session);
-void free_session_data(struct ssh_session_s *session);
+void init_ssh_session_data(struct ssh_session_s *session);
+void free_ssh_session_data(struct ssh_session_s *session);
 
 #endif

@@ -489,7 +489,7 @@ static int _signal_ctx2ssh(void **p_ptr, const char *what, struct ctx_option_s *
 
 }
 
-void init_ssh_session_signals(struct ssh_session_ctx_s *context)
+void init_ssh_session_signals_client(struct ssh_session_ctx_s *context)
 {
     context->signal_ctx2ssh=_signal_ctx2ssh;
     context->signal_ssh2ctx=_signal_ssh2ctx_default;

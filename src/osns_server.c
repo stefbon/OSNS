@@ -332,6 +332,57 @@ static void change_usersessions(uid_t uid, signed char change, void *ptr)
 
 }
 
+static int filter_user_login(uid_t uid, void *ptr)
+{
+    int result=-1;
+    struct passwd *pwd=getpwuid(uid);
+
+    if (pwd) {
+
+	if (fs_options.user.flags & _OPTIONS_USER_FLAG_NETWORK_GID_MIN) {
+
+	    if (pwd->pw_gid >= _OPTIONS_USER_FLAG_NETWORK_GID_MIN) {
+
+		result=0;
+		goto out;
+
+	    }
+
+	}
+
+	if (fs_options.user.flags & _OPTIONS_USER_FLAG_NETWORK_GID_PARTOF) {
+
+	    if (fs_options.user.network_mount_group>0) {
+		struct group *grp=getgrgid(fs_options.user.network_mount_group);
+
+		if (grp) {
+
+		    if (pwd->pw_gid==grp->gr_gid) {
+
+			/* users primary group */
+			result=0;
+			goto out;
+
+		    } else if (user_is_groupmember(pwd->pw_name, grp)==1) {
+
+			/* users secondary group */
+			result=0;
+			goto out;
+
+		    }
+
+		}
+
+	    }
+
+	}
+
+    }
+
+    out:
+    return result;
+}
+
 static void workspace_signal_handler(struct beventloop_s *bloop, void *data, struct signalfd_siginfo *fdsi)
 {
     unsigned int signo=fdsi->ssi_signo;
@@ -601,7 +652,7 @@ int main(int argc, char *argv[])
     }
 
     create_pid_file(&fs_options.socket);
-    res=create_user_monitor(change_usersessions, NULL);
+    res=create_user_monitor(change_usersessions, NULL, filter_user_login);
 
     if (res<0) {
 

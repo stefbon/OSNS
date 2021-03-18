@@ -1014,6 +1014,7 @@ static void init_service_fs()
     fs->type.dir.readdirplus=service_fs_readdirplus;
     fs->type.dir.releasedir=service_fs_releasedir;
     fs->type.dir.fsyncdir=service_fs_fsyncdir;
+    fs->type.dir.get_fuse_direntry=service_fs_get_fuse_direntry;
 
     fs->getxattr=service_fs_getxattr;
     fs->setxattr=service_fs_setxattr;

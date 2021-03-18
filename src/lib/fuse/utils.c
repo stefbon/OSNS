@@ -217,6 +217,7 @@ struct entry_s *insert_entry(struct directory_s *directory, struct entry_s *entr
     } else if (result.flags & SL_SEARCHRESULT_FLAG_EXACT) {
 
 	*error=EEXIST;
+	return (struct entry_s *)((char *) result.found - offsetof(struct entry_s, list));
 
     } else {
 
@@ -355,6 +356,10 @@ static unsigned int _cb_cache_size(struct create_entry_s *ce)
 {
     return 0;
 }
+static int _cb_check(struct create_entry_s *ce)
+{
+    return 0;
+}
 static void _cb_cache_created(struct entry_s *entry, struct create_entry_s *ce)
 {
     fill_inode_stat(entry->inode, &ce->cache.st);
@@ -470,6 +475,7 @@ void init_create_entry(struct create_entry_s *ce, struct name_s *n, struct entry
     ce->ptr=ptr;
     ce->error=0;
     ce->cache_size=0;
+    ce->cache.buffer=NULL;
 
     ce->cb_create_entry=_cb_create_entry;
     ce->cb_create_inode=_cb_create_inode;
@@ -482,6 +488,7 @@ void init_create_entry(struct create_entry_s *ce, struct name_s *n, struct entry
     ce->cb_cache_size=_cb_cache_size;
     ce->cb_cache_created=_cb_cache_created;
     ce->cb_cache_found=_cb_cache_found;
+    ce->cb_check=_cb_check;
 
     ce->cb_adjust_pathmax=_cb_adjust_pathmax_default;
     ce->cb_context_created=_cb_context_created;
@@ -501,6 +508,13 @@ static struct entry_s *_create_entry_extended_common(struct create_entry_s *ce)
 
     directory=(* ce->get_directory)(ce);
     parent=directory->inode->alias;
+
+    if ((error=(* ce->cb_check)(ce))>0) {
+
+	(* ce->cb_error) (parent, ce->name, ce, error);
+	return NULL;
+
+    }
 
     entry=(* ce->cb_create_entry)(ce->name);
     inode=(* ce->cb_create_inode)();

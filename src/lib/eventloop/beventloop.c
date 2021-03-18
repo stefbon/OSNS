@@ -441,3 +441,18 @@ struct beventloop_s *get_mainloop()
 {
     return &beventloop_main;
 }
+
+uint32_t signal_is_error(uint32_t event)
+{
+    return (event & BEVENT_CODE_ERR);
+}
+
+uint32_t signal_is_hangup(uint32_t event)
+{
+    return (event & (BEVENT_CODE_RDHUP | BEVENT_CODE_HUP));
+}
+
+uint32_t signal_is_dataavail(uint32_t event)
+{
+    return (event & BEVENT_CODE_IN);
+}

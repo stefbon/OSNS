@@ -297,7 +297,7 @@ static int _write_ssh_packet(struct ssh_connection_s *connection, struct ssh_pay
     queue_compressor(compressor);
     compressor=NULL;
 
-    // logoutput("_write_ssh_packet: written %i", written);
+    logoutput("_write_ssh_packet: written %i", written);
 
     return written;
 

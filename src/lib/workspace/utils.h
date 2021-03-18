@@ -27,6 +27,5 @@ char *get_path_from_template(char *template, struct passwd *pwd, char *buff, siz
 
 int create_directory(char *p, mode_t mode, unsigned int *error);
 unsigned char ismounted(char *path);
-unsigned char user_is_groupmember(char *username, struct group *grp);
 
 #endif

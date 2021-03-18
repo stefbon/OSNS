@@ -319,7 +319,6 @@ int send_sftp_write_v03(struct sftp_client_s *sftp, struct sftp_request_s *sftp_
     pos+=sftp_r->call.write.size;
 
     return (* sftp->context.send_data)(sftp, data, pos, &sftp_r->reply.sequence);
-
 }
 
 /*
@@ -335,11 +334,9 @@ int send_sftp_readdir_v03(struct sftp_client_s *sftp, struct sftp_request_s *sft
     char data[13 + sftp_r->call.readdir.len];
     unsigned int pos=0;
 
-    logoutput("send_sftp_readdir_v03: A");
+    logoutput("send_sftp_readdir_v03");
 
     sftp_r->id=get_sftp_request_id(sftp);
-
-    logoutput("send_sftp_readdir_v03: B");
 
     store_uint32(&data[pos], 9 + sftp_r->call.readdir.len);
     pos+=4;
@@ -352,10 +349,7 @@ int send_sftp_readdir_v03(struct sftp_client_s *sftp, struct sftp_request_s *sft
     memcpy((char *) &data[pos], sftp_r->call.readdir.handle, sftp_r->call.readdir.len);
     pos+=sftp_r->call.readdir.len;
 
-    logoutput("send_sftp_readdir_v03: C");
-
     return (* sftp->context.send_data)(sftp, data, pos, &sftp_r->reply.sequence);
-
 }
 
 /*

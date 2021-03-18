@@ -49,6 +49,7 @@
 #include "fuse.h"
 
 extern int check_entry_special(struct inode_s *inode);
+extern int get_fuse_direntry_custom(struct fuse_opendir_s *opendir, struct fuse_request_s *request, struct name_s *xname, struct stat *st);
 
 void copy_fuse_fs(struct fuse_fs_s *to, struct fuse_fs_s *from)
 {
@@ -693,29 +694,37 @@ void fuse_fs_create(struct fuse_request_s *request)
 
 }
 
-static signed char hidefile_default(struct fuse_opendir_s *opendir, struct inode_s *inode)
+static signed char hidefile_default(struct fuse_opendir_s *opendir, struct entry_s *entry)
 {
 
-    if (opendir->hideflags & _FUSE_OPENDIR_FLAG_HIDE_SPECIALFILES) {
+    if (opendir->flags & _FUSE_OPENDIR_FLAG_HIDE_SPECIALFILES) {
 
-	if (check_entry_special(inode)==0) return 0;
+	if (check_entry_special(entry->inode)) {
 
-    }
-
-    if (opendir->hideflags & _FUSE_OPENDIR_FLAG_HIDE_DOTFILES) {
-	struct entry_s *entry=inode->alias;
-
-	if (entry && entry->name.name[0]=='.') return 0;
+	    logoutput("hidefile_default: %.*s is special entry", entry->name.len, entry->name.name);
+	    return 1;
+	}
 
     }
 
-    return -1;
+    if (opendir->flags & _FUSE_OPENDIR_FLAG_HIDE_DOTFILES) {
+
+	if (entry->name.name[0]=='.' && entry->name.len>1 && entry->name.name[1]!='.') {
+
+	    logoutput("hidefile_default: %.*s starts with dot", entry->name.len, entry->name.name);
+	    return 1;
+
+	}
+
+    }
+
+    return 0;
 
 }
 
-static void add_direntry_default(struct fuse_opendir_s *o, struct list_element_s *l)
+static int get_fuse_direntry_null(struct fuse_opendir_s *opendir, struct fuse_request_s *request, struct name_s *name, struct stat *st)
 {
-    /* not known here what to add: do nothing */
+    return -1;
 }
 
 void _fuse_fs_opendir(struct service_context_s *context, struct inode_s *inode, struct fuse_request_s *request, struct fuse_open_in *open_in)
@@ -728,10 +737,10 @@ void _fuse_fs_opendir(struct service_context_s *context, struct inode_s *inode, 
 
 	memset(opendir, 0, sizeof(struct fuse_opendir_s));
 
+	opendir->flags=0;
 	opendir->context=context;
 	opendir->inode=inode;
-	opendir->entry=NULL;
-	opendir->mode=0;
+	opendir->ino=0;
 	opendir->count_created=0;
 	opendir->count_found=0;
 	opendir->error=0;
@@ -739,13 +748,19 @@ void _fuse_fs_opendir(struct service_context_s *context, struct inode_s *inode, 
 	opendir->readdirplus=inode->fs->type.dir.readdirplus;
 	opendir->releasedir=inode->fs->type.dir.releasedir;
 	opendir->fsyncdir=inode->fs->type.dir.fsyncdir;
+	opendir->get_fuse_direntry=inode->fs->type.dir.get_fuse_direntry;
+
+	/* make hide file depend on the context? 
+	    like:
+	    hide files starting with a dot on unix like systems when the fs is sftp/ssh for example
+	*/
 
 	opendir->hidefile=hidefile_default;
 
 	init_list_header(&opendir->entries, SIMPLE_LIST_TYPE_EMPTY, NULL);
-	pthread_mutex_init(&opendir->mutex, NULL);
-	pthread_cond_init(&opendir->cond, NULL);
-	opendir->add_direntry=add_direntry_default;
+	init_list_header(&opendir->symlinks, SIMPLE_LIST_TYPE_EMPTY, NULL);
+	opendir->mutex = get_fuse_pthread_mutex(request->ptr);
+	opendir->cond = get_fuse_pthread_cond(request->ptr);
 
 	(* inode->fs->type.dir.opendir)(opendir, request, open_in->flags);
 
@@ -783,8 +798,6 @@ void fuse_fs_opendir(struct fuse_request_s *request)
 
     } else {
 	struct inode_s *inode=lookup_workspace_inode(workspace, ino);
-
-	logoutput("fuse_fs_opendir: B");
 
 	if (inode) {
 	    struct fuse_open_in *open_in=(struct fuse_open_in *) request->buffer;
@@ -1568,4 +1581,54 @@ void clear_fuse_buffer(struct fuse_buffer_s *buffer)
 
     init_fuse_buffer(buffer, NULL, 0, 0, -1);
 
+}
+
+void queue_fuse_direntry_symlinks(struct fuse_opendir_s *opendir, struct entry_s *entry)
+{
+    struct fuse_direntry_s *direntry=malloc(sizeof(struct fuse_direntry_s));
+
+    logoutput("queue_fuse_direntry: %.*s", entry->name.len, entry->name.name);
+
+    if (direntry) {
+
+	memset(direntry, 0, sizeof(struct fuse_direntry_s));
+	direntry->entry=entry;
+	init_list_element(&direntry->list, NULL);
+
+	pthread_mutex_lock(opendir->mutex);
+	add_list_element_last(&opendir->symlinks, &direntry->list);
+	pthread_cond_broadcast(opendir->cond);
+	pthread_mutex_unlock(opendir->mutex);
+
+    }
+
+}
+
+void queue_fuse_direntry(struct fuse_opendir_s *opendir, struct entry_s *entry)
+{
+    struct fuse_direntry_s *direntry=malloc(sizeof(struct fuse_direntry_s));
+
+    logoutput("queue_fuse_direntry: %.*s", entry->name.len, entry->name.name);
+
+    if (direntry) {
+
+	memset(direntry, 0, sizeof(struct fuse_direntry_s));
+	direntry->entry=entry;
+	init_list_element(&direntry->list, NULL);
+
+	pthread_mutex_lock(opendir->mutex);
+	add_list_element_last(&opendir->entries, &direntry->list);
+	pthread_cond_broadcast(opendir->cond);
+	pthread_mutex_unlock(opendir->mutex);
+
+    }
+
+}
+
+void set_flag_fuse_opendir(struct fuse_opendir_s *opendir, uint32_t flag)
+{
+    pthread_mutex_lock(opendir->mutex);
+    opendir->flags |= flag;
+    pthread_cond_broadcast(opendir->cond);
+    pthread_mutex_unlock(opendir->mutex);
 }

@@ -584,6 +584,8 @@ struct ssh_hostinfo_s {
     void						(* correct_time_c2s)(struct ssh_session_s *session, struct timespec *time);
 };
 
+#define SSH_IDENTITY_FLAG_VALID				1
+
 struct ssh_identity_s {
     struct passwd					pwd;
     char						*buffer;
@@ -777,6 +779,7 @@ struct ssh_extensions_s {
 /* global request pending */
 #define SSH_CONNECTION_FLAG_GLOBAL_REQUEST		4
 #define SSH_CONNECTION_FLAG_TROUBLE			8
+#define SSH_CONNECTION_FLAG_DISCONNECTED		16
 
 struct ssh_connection_s {
     unsigned char					unique;
@@ -858,21 +861,27 @@ struct ssh_server_s {
 
 /* prototypes */
 
+void init_ssh_session_config(struct ssh_session_s *s);
+int init_ssh_backend();
+
+void free_ssh_identity(struct ssh_session_s *s);
+void init_ssh_identity(struct ssh_session_s *s);
+
+void _clear_ssh_session(struct ssh_session_s *s);
+void _free_ssh_session(void **p_ptr);
+
 void _close_ssh_session_connections(struct ssh_session_s *session, const char *how);
 void _close_ssh_session_channels(struct ssh_session_s *session, const char *how);
-
-unsigned int get_ssh_session_buffer_size();
 
 struct ssh_session_s *create_ssh_session(unsigned int flags, struct generic_error_s *error);
 int init_ssh_session(struct ssh_session_s *session, uid_t uid, void *ptr);
 int connect_ssh_session(struct ssh_session_s *session, char *target, unsigned int port);
 int setup_ssh_session(struct ssh_session_s *session, int fd);
-void _free_ssh_session(void **p_ptr);
 
 unsigned int get_window_size(struct ssh_session_s *session);
 unsigned int get_max_packet_size(struct ssh_session_s *session);
 void set_max_packet_size(struct ssh_session_s *session, unsigned int size);
 
-int start_thread_connection_problem(struct ssh_connection_s *connection);
+int start_thread_ssh_connection_problem(struct ssh_connection_s *connection);
 
 #endif

@@ -214,6 +214,131 @@ void set_io_socket_ops_default(struct io_socket_s *s)
     s->sops=&default_sops;
 }
 
+/* STD ops: connect and use the std fd's like stdin, stdout and stderr */
+
+/* ZERO std ops */
+
+static int std_zero_open(struct io_std_s *s, unsigned int flags)
+{
+    return -1;
+}
+
+static int std_zero_close(struct io_std_s *s)
+{
+    return 0;
+}
+
+static int std_zero_read(struct io_std_s *s, char *buffer, unsigned int size)
+{
+    return -1;
+}
+
+static int std_zero_write(struct io_std_s *s, char *data, unsigned int size)
+{
+    return -1;
+}
+
+struct std_ops_s zero_std_ops = {
+    .type				= STD_OPS_TYPE_DEFAULT,
+    .open				= std_zero_open,
+    .close				= std_zero_close,
+    .read				= std_zero_read,
+    .write				= std_zero_write,
+};
+
+void set_io_std_ops_zero(struct io_std_s *s)
+{
+    s->sops=&zero_std_ops;
+}
+
+/* Default std ops */
+
+static int std_default_open(struct io_std_s *s, unsigned int flags)
+{
+
+    if (s->type==STD_SOCKET_TYPE_STDIN) {
+
+	return STDIN_FILENO;
+
+    } else if (s->type==STD_SOCKET_TYPE_STDOUT) {
+
+	return STDOUT_FILENO;
+
+    } else if (s->type==STD_SOCKET_TYPE_STDERR) {
+
+	return STDERR_FILENO;
+
+    }
+
+    /* everything else */
+
+    return -1;
+
+}
+
+static int std_default_close(struct io_std_s *s)
+{
+    /* the std fd's are left open: it's up to the os to close them */
+    return 0;
+}
+
+static int std_default_read(struct io_std_s *s, char *buffer, unsigned int size)
+{
+    return read(s->bevent.fd, buffer, size);
+}
+
+static int std_default_write(struct io_std_s *s, char *data, unsigned int size)
+{
+    return write(s->bevent.fd, data, size);
+}
+
+struct std_ops_s default_std_ops = {
+    .type				= STD_OPS_TYPE_DEFAULT,
+    .open				= std_default_open,
+    .close				= std_default_close,
+    .read				= std_default_read,
+    .write				= std_default_write,
+};
+
+void set_io_std_ops_default(struct io_std_s *s)
+{
+    s->sops=&default_std_ops;
+}
+
+void set_io_std_type(struct fs_connection_s *c, const char *what)
+{
+    struct io_std_s *s=&c->io.std;
+
+    if (c->type==FS_CONNECTION_TYPE_STD) {
+
+	if (strcmp(what, "stdin")==0) {
+
+	    s->type=STD_SOCKET_TYPE_STDIN;
+
+	} else if (strcmp(what, "stdout")==0) {
+
+	    s->type=STD_SOCKET_TYPE_STDOUT;
+
+	} else if (strcmp(what, "stderr")==0) {
+
+	    s->type=STD_SOCKET_TYPE_STDERR;
+
+	} else {
+
+	    logoutput_warning("%s not reckognized", what);
+
+	}
+
+    } else {
+
+	logoutput_warning("Cannot set type std, connection of type %i", c->type);
+
+    }
+
+}
+
+/* FUSE socket operations */
+
 /* ZERO fuse ops */
 
 static int zero_fuse_open(char *path, unsigned int flags)
@@ -232,7 +357,7 @@ static int zero_fuse_read(struct io_fuse_s *s, void *buffer, size_t size)
 {
     return -1;
 }
-static struct fuse_ops_s zero_fops = {
+static struct fuse_ops_s zero_fuse_ops = {
     .type				=	FUSE_OPS_TYPE_ZERO,
     .open				=	zero_fuse_open,
     .close				=	zero_fuse_close,
@@ -242,7 +367,7 @@ static struct fuse_ops_s zero_fops = {
 
 void set_io_fuse_ops_zero(struct io_fuse_s *s)
 {
-    s->fops=&zero_fops;
+    s->fops=&zero_fuse_ops;
 }
 
 /* DEFAULT fuse ops */
@@ -263,7 +388,7 @@ static int default_fuse_read(struct io_fuse_s *s, void *buffer, size_t size)
 {
     return read(s->bevent.fd, buffer, size);
 }
-static struct fuse_ops_s default_fops = {
+static struct fuse_ops_s default_fuse_ops = {
     .type				=	FUSE_OPS_TYPE_DEFAULT,
     .open				=	default_fuse_open,
     .close				=	default_fuse_close,
@@ -273,84 +398,7 @@ static struct fuse_ops_s default_fops = {
 
 void set_io_fuse_ops_default(struct io_fuse_s *s)
 {
-    s->fops=&default_fops;
-}
-
-int create_socket_path(struct pathinfo_s *pathinfo)
-{
-    char path[pathinfo->len + 1];
-    char *slash=NULL;
-
-    memcpy(path, pathinfo->path, pathinfo->len + 1);
-    unslash(path);
-
-    /* create the parent path */
-
-    slash=strchr(path, '/');
-
-    while (slash) {
-
-	*slash='\0';
-
-	if (strlen(path)==0) goto next;
-
-	if (mkdir(path, S_IFDIR | S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)==-1) {
-
-	    if (errno != EEXIST) {
-
-		logoutput("create_socket_path: error %i%s creating %s", errno, strerror(errno), path);
-		return -1;
-
-	    }
-
-	}
-
-	next:
-
-	*slash='/';
-	slash=strchr(slash+1, '/');
-
-    }
-
-    return 0;
-
-}
-
-int check_socket_path(struct pathinfo_s *pathinfo, unsigned int alreadyrunning)
-{
-    struct stat st;
-
-    if (stat(pathinfo->path, &st)==0) {
-
-	/* path to socket does exists */
-
-	if (S_ISSOCK(st.st_mode)) {
-
-	    if (alreadyrunning==0) {
-
-		logoutput("check_socket_path: socket %s does already exist but no other process found, remove it", pathinfo->path);
-
-		unlink(pathinfo->path);
-		return 0;
-
-	    } else {
-
-		logoutput("check_socket_path: socket %s does already exist (running with pid %i), cannot continue", pathinfo->path, alreadyrunning);
-
-	    }
-
-	} else {
-
-	    logoutput("check_socket_path: %s does already already exist (but is not a socket?!), cannot continue", pathinfo->path);
-
-	}
-
-	return -1;
-
-    }
-
-    return 0;
-
+    s->fops=&default_fuse_ops;
 }
 
 struct fs_connection_s *accept_local_cb_dummy(uid_t uid, gid_t gid, pid_t pid, struct fs_connection_s *s_conn)
@@ -387,17 +435,36 @@ void init_cb_dummy(struct fs_connection_s *conn, unsigned int fd)
 void init_connection(struct fs_connection_s *c, unsigned char type, unsigned char role)
 {
 
-    if (type != FS_CONNECTION_TYPE_LOCAL && type != FS_CONNECTION_TYPE_TCP4 && type != FS_CONNECTION_TYPE_TCP6 && type != FS_CONNECTION_TYPE_UDP4 && type != FS_CONNECTION_TYPE_UDP6 && type != FS_CONNECTION_TYPE_FUSE) {
+    switch (type) {
 
-	logoutput("init_connection: type %i not supported", type);
-	return;
+	case FS_CONNECTION_TYPE_LOCAL:
+	case FS_CONNECTION_TYPE_TCP4:
+	case FS_CONNECTION_TYPE_TCP6:
+	case FS_CONNECTION_TYPE_UDP4:
+	case FS_CONNECTION_TYPE_UDP6:
+	case FS_CONNECTION_TYPE_FUSE:
+	case FS_CONNECTION_TYPE_STD:
+
+	    break;
+
+	default:
+
+	    logoutput("init_connection: type %i not supported", type);
+	    return;
 
     }
 
-    if (role != FS_CONNECTION_ROLE_SERVER && role != FS_CONNECTION_ROLE_CLIENT) {
+    switch (role) {
 
-	logoutput("init_connection: role %i not supported", role);
-	return;
+	case FS_CONNECTION_ROLE_SERVER:
+	case FS_CONNECTION_ROLE_CLIENT:
+
+	    break;
+
+	default:
+
+	    logoutput("init_connection: role %i not supported", role);
+	    return;
 
     }
 
@@ -416,6 +483,11 @@ void init_connection(struct fs_connection_s *c, unsigned char type, unsigned cha
 
 	init_bevent(&c->io.fuse.bevent);
 	set_io_fuse_ops_default(&c->io.fuse);
+
+    } else if (type==FS_CONNECTION_TYPE_STD) {
+
+	init_bevent(&c->io.std.bevent);
+	set_io_std_ops_default(&c->io.std);
 
     } else {
 
@@ -461,6 +533,17 @@ void init_connection(struct fs_connection_s *c, unsigned char type, unsigned cha
 	c->ops.client.disconnect=disconnect_cb_dummy;
 	c->ops.client.init=init_cb_dummy;
 	c->ops.client.server=NULL;
+
+    }
+
+}
+
+void free_connection(struct fs_connection_s *c)
+{
+
+    if (c->role==FS_CONNECTION_ROLE_SERVER) {
+
+	pthread_mutex_destroy(&c->ops.server.mutex);
 
     }
 

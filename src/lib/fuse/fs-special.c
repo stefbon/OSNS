@@ -303,7 +303,6 @@ void create_desktopentry_file(char *path, struct entry_s *parent, struct workspa
 
 int check_entry_special(struct inode_s *inode)
 {
-    int result=-1;
-    if (! S_ISDIR(inode->st.st_mode)) result=(inode->fs==&fs) ? 0 : -1;
-    return result;
+    if (! S_ISDIR(inode->st.st_mode)) return ((inode->fs==&fs) ? 1 : 0);
+    return 0;
 }

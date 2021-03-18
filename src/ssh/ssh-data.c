@@ -52,7 +52,7 @@ int store_ssh_session_id(struct ssh_session_s *session, struct ssh_string_s *H)
     return create_copy_ssh_string(&sessionid, H);
 }
 
-void init_session_data(struct ssh_session_s *session)
+void init_ssh_session_data(struct ssh_session_s *session)
 {
     struct session_data_s *data=&session->data;
 
@@ -64,7 +64,7 @@ void init_session_data(struct ssh_session_s *session)
     init_ssh_string(&data->greeter_client);
 }
 
-void free_session_data(struct ssh_session_s *session)
+void free_ssh_session_data(struct ssh_session_s *session)
 {
     struct session_data_s *data=&session->data;
 

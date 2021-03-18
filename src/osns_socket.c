@@ -60,13 +60,174 @@
 
 extern struct fs_options_s fs_options;
 
-static void process_osns_packet(struct osns_localsocket_s *localsocket, struct osns_packet_s *packet)
+static void start_read_localsocket_buffer(struct osns_localsocket_s *localsocket);
+
+static void disconnect_osns_localsocket(struct osns_localsocket_s *localsocket)
 {
+    struct socket_ops_s *sops=localsocket->connection.io.socket.sops;
+    remove_bevent_from_beventloop(&localsocket->connection.io.socket.bevent);
+    (* sops->close)(localsocket->connection.io.socket.bevent.fd);
+    localsocket->connection.io.socket.bevent.fd=-1;
 }
 
-static void read_localsocket_buffer(struct osns_localsocket_s *localsocket)
+static void process_osns_packet(struct osns_localsocket_s *localsocket, struct osns_packet_s *packet)
+{
+    switch (packet->type) {
+
+	case OSNS_MSG_VERSION:
+
+	    break;
+
+	case OSNS_MSG_DISCONNECT:
+
+	    break;
+
+	case OSNS_MSG_NOTSUPPORTED:
+
+	    break;
+
+	case OSNS_MSG_SERVICE_REQUEST:
+	case OSNS_MSG_SERVICE_ACCEPT:
+	case OSNS_MSG_SERVICE_DENY:
+
+	    break;
+
+	case OSNS_MSG_COMMAND:
+	case OSNS_MSG_COMMAND_SUCCESS:
+	case OSNS_MSG_COMMAND_FAILURE:
+
+	    break;
+
+	case OSNS_MSG_SSH_CHANNEL_OPEN:
+	case OSNS_MSG_SSH_CHANNEL_OPEN_CONFIRMATION:
+	case OSNS_MSG_SSH_CHANNEL_OPEN_FAILURE:
+	case OSNS_MSG_SSH_CHANNEL_DATA:
+	case OSNS_MSG_SSH_CHANNEL_EXTENDED_DATA:
+	case OSNS_MSG_SSH_CHANNEL_EOF:
+	case OSNS_MSG_SSH_CHANNEL_CLOSE:
+
+	    break;
+
+    }
+
+}
+
+static void read_localsocket_buffer(void *ptr)
 {
     /* read the bytes from the buffer, check all values are correct and process the packet */
+    struct osns_localsocket_s *localsocket=(struct osns_localsocket_s *) ptr;
+    struct osns_packet_s packet;
+
+    pthread_mutex_lock(&localsocket->mutex);
+
+    if (localsocket->read==0 || (localsocket->status & OSNS_LOCALSOCKET_STATUS_WAIT) || localsocket->threads>1) {
+
+	pthread_mutex_unlock(&localsocket->mutex);
+	return;
+
+    }
+
+    localsocket->status |= ((localsocket->read < 4) ? OSNS_LOCALSOCKET_STATUS_WAITING1 : 0);
+    localsocket->threads++;
+
+    while (localsocket->status & (OSNS_LOCALSOCKET_STATUS_WAITING1 | OSNS_LOCALSOCKET_STATUS_PACKET)) {
+
+	int result=pthread_cond_wait(&localsocket->cond, &localsocket->mutex);
+
+	if (localsocket->read >= 4) {
+
+	    localsocket->status &= ~OSNS_LOCALSOCKET_STATUS_WAITING1;
+
+	} else if (localsocket->read==0) {
+
+	    localsocket->status &= ~OSNS_LOCALSOCKET_STATUS_WAITING1;
+	    localsocket->threads --;
+	    pthread_mutex_unlock(&localsocket->mutex);
+	    return;
+
+	} else if (result>0 || (localsocket->status & OSNS_LOCALSOCKET_STATUS_DISCONNECT)) {
+
+	    pthread_mutex_unlock(&localsocket->mutex);
+	    return;
+
+	}
+
+    }
+
+    localsocket->status |= OSNS_LOCALSOCKET_STATUS_PACKET;
+    pthread_mutex_unlock(&localsocket->mutex);
+
+    readpacket:
+
+    packet.len=get_uint32(localsocket->buffer + localsocket->read);
+
+    if (packet.len > localsocket->size) {
+
+	logoutput_warning("read_localsocket_buffer: tid %i packet length %i too big for buffer size %i", gettid(), packet.len, localsocket->size);
+	pthread_mutex_lock(&localsocket->mutex);
+	localsocket->status &= ~OSNS_LOCALSOCKET_STATUS_PACKET;
+	localsocket->threads--;
+	goto disconnect;
+
+    } else {
+	char data[packet.len];
+
+	pthread_mutex_lock(&localsocket->mutex);
+
+	while (localsocket->read < packet.len + 4) {
+
+	    localsocket->status |= OSNS_LOCALSOCKET_STATUS_WAITING2;
+	    int result=pthread_cond_wait(&localsocket->cond, &localsocket->mutex);
+
+	    if (localsocket->read >= packet.len + 4) {
+
+		localsocket->status &= ~OSNS_LOCALSOCKET_STATUS_WAITING2;
+		break;
+
+	    } else if (result>0 || (localsocket->status & OSNS_LOCALSOCKET_STATUS_DISCONNECT)) {
+
+		localsocket->status &= ~OSNS_LOCALSOCKET_STATUS_WAITING2;
+		localsocket->status &= ~OSNS_LOCALSOCKET_STATUS_PACKET;
+		pthread_mutex_unlock(&localsocket->mutex);
+		goto disconnect;
+
+	    }
+
+	}
+
+	memcpy(data, localsocket->buffer + 4, packet.len);
+	localsocket->read -= (packet.len + 4);
+	localsocket->status &= ~OSNS_LOCALSOCKET_STATUS_PACKET;
+	localsocket->threads--;
+
+	if (localsocket->read>0) {
+
+	    memmove(localsocket->buffer, (char *)(localsocket->buffer + packet.len + 4), localsocket->read);
+	    if (localsocket->threads==0) start_read_localsocket_buffer(localsocket);
+
+	}
+
+	pthread_cond_broadcast(&localsocket->cond);
+	pthread_mutex_unlock(&localsocket->mutex);
+	packet.buffer=data;
+
+	/* packet is complete: ready to process it now */
+
+	packet.type=data[0];
+	process_osns_packet(localsocket, &packet);
+
+    }
+
+    return;
+
+    disconnect:
+    disconnect_osns_localsocket(localsocket);
+
+}
+
+static void start_read_localsocket_buffer(struct osns_localsocket_s *localsocket)
+{
+    work_workerthread(NULL, 0, read_localsocket_buffer, (void *) localsocket, NULL);
 }
 
 static int read_localsocket(struct osns_localsocket_s *localsocket, int fd)
@@ -98,9 +259,7 @@ static int read_localsocket(struct osns_localsocket_s *localsocket, int fd)
 
 	    /* peer has performed an orderly shutdown */
 
-	    remove_bevent_from_beventloop(&localsocket->connection.io.socket.bevent);
-	    (* sops->close)(localsocket->connection.io.socket.bevent.fd);
-	    localsocket->connection.io.socket.bevent.fd=-1;
+	    disconnect_osns_localsocket(localsocket);
 
 	} else {
 
@@ -124,7 +283,7 @@ static int read_localsocket(struct osns_localsocket_s *localsocket, int fd)
 
 	    /* start a thread (but max number of threads may not exceed 2)*/
 
-	    read_localsocket_buffer(localsocket);
+	    start_read_localsocket_buffer(localsocket);
 
 	}
 

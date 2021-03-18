@@ -1,4 +1,4 @@
-/*
+				/*
   2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017 Stef Bon <stefbon@gmail.com>
 
   This program is free software; you can redistribute it and/or
@@ -30,12 +30,16 @@
 #define FS_SERVICE_FLAG_DIR					4
 #define FS_SERVICE_FLAG_NONDIR					8
 
-#define _FUSE_OPENDIR_FLAG_HIDE_SPECIALFILES			1
-#define _FUSE_OPENDIR_FLAG_HIDE_DOTFILES			2
+#define _FUSE_OPENDIR_FLAG_NONEMPTY				1 << 0
 
-#define _FUSE_READDIR_MODE_FINISH				1
-#define _FUSE_READDIR_MODE_NONEMPTY				2
-#define _FUSE_READDIR_MODE_INCOMPLETE				4
+#define _FUSE_OPENDIR_FLAG_READDIR_FINISH			1 << 1
+#define _FUSE_OPENDIR_FLAG_READDIR_INCOMPLETE			1 << 2
+#define _FUSE_OPENDIR_FLAG_READDIR_ERROR			1 << 3
+
+#define _FUSE_OPENDIR_FLAG_HIDE_SPECIALFILES			1 << 20
+#define _FUSE_OPENDIR_FLAG_HIDE_DOTFILES			1 << 21
+#define _FUSE_OPENDIR_FLAG_IGNORE_BROKEN_SYMLINKS		1 << 22
+#define _FUSE_OPENDIR_FLAG_IGNORE_XDEV_SYMLINKS			1 << 23
 
 struct fuse_openfile_s {
     struct service_context_s 			*context;
@@ -55,19 +59,22 @@ struct fuse_openfile_s {
 struct fuse_buffer_s {
     char					*data;
     char					*pos;
-    unsigned int				left;
+    int						left;
     unsigned int				size;
     signed char					eof;
     unsigned int				count;
 };
 
+struct fuse_direntry_s {
+    struct list_element_s			list;
+    struct entry_s				*entry;
+};
+
 struct fuse_opendir_s {
-    unsigned char				flags;
-    unsigned char				hideflags;
+    uint32_t					flags;
     struct service_context_s 			*context;
     struct inode_s				*inode;
-    struct entry_s				*entry;
-    unsigned char				mode;
+    ino_t					ino;
     unsigned int 				error;
     unsigned int				count_created;
     unsigned int				count_found;
@@ -75,11 +82,15 @@ struct fuse_opendir_s {
     void 					(* readdirplus) (struct fuse_opendir_s *opendir, struct fuse_request_s *request, size_t size, off_t offset);
     void 					(* releasedir) (struct fuse_opendir_s *opendir, struct fuse_request_s *request);
     void 					(* fsyncdir) (struct fuse_opendir_s *opendir, struct fuse_request_s *request, unsigned char datasync);
-    signed char					(* hidefile)(struct fuse_opendir_s *opendir, struct inode_s *inode);
+    signed char					(* hidefile)(struct fuse_opendir_s *opendir, struct entry_s *entry);
+    struct entry_s 				*(* get_fuse_direntry)(struct fuse_opendir_s *opendir, struct fuse_request_s *request);
+    int 					(* add_direntry_buffer)(void *ptr, struct direntry_buffer_s *buffer, struct name_s *xname, struct stat *st);
+    void					(* clear)(struct fuse_opendir_s *opendir);
     struct list_header_s			entries;
-    pthread_mutex_t				mutex;
-    pthread_cond_t				cond;
-    void					(* add_direntry)(struct fuse_opendir_s *opendir, struct list_element_s *list);
+    struct list_header_s			symlinks;
+    pthread_mutex_t				*mutex;
+    pthread_cond_t				*cond;
+    unsigned char				threads;
     union {
 	uint64_t				fd;
 	void					*ptr;
@@ -163,6 +174,7 @@ struct fuse_fs_s {
 	    void (*readdirplus) (struct fuse_opendir_s *opendir, struct fuse_request_s *request, size_t size, off_t offset);
 	    void (*releasedir) (struct fuse_opendir_s *opendir, struct fuse_request_s *request);
 	    void (*fsyncdir) (struct fuse_opendir_s *opendir, struct fuse_request_s *request, unsigned char datasync);
+	    struct entry_s *(* get_fuse_direntry)(struct fuse_opendir_s *opendir, struct fuse_request_s *request);
 
 	} dir;
 
@@ -228,5 +240,9 @@ void register_fuse_functions(struct context_interface_s *interface);
 
 void init_fuse_buffer(struct fuse_buffer_s *buffer, char *data, unsigned int size, unsigned int count, signed char eof);
 void clear_fuse_buffer(struct fuse_buffer_s *buffer);
+
+void queue_fuse_direntry(struct fuse_opendir_s *opendir, struct entry_s *entry);
+void queue_fuse_direntry_symlinks(struct fuse_opendir_s *opendir, struct entry_s *entry);
+void set_flag_fuse_opendir(struct fuse_opendir_s *opendir, uint32_t flag);
 
 #endif

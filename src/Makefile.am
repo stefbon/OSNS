@@ -1,4 +1,5 @@
 bin_PROGRAMS = osns_client
+sbin_PROGRAMS =
 
 extra_CFLAGS = -fasynchronous-unwind-tables -fexceptions -fstack-clash-protection
 
@@ -63,8 +64,8 @@ osns_client_SOURCES =  	lib/fuse/directory.c lib/fuse/dentry.c lib/fuse/utils.c 
 			ssh/send/compress.c ssh/send/compress-none.c ssh/send/compressors.c ssh/send/encrypt.c ssh/send/encrypt-chacha20-poly1305.c ssh/send/encrypt-generic.c \
 			ssh/send/encryptors.c ssh/send/greeter.c ssh/send/init.c ssh/send/msg-channel.c ssh/send/msg-transport.c ssh/send/msg-userauth.c ssh/send/send.c ssh/send/write-socket.c \
 			ssh/ssh-userauth.c ssh/userauth/pubkey.c ssh/userauth/utils.c ssh/userauth/hostbased.c ssh/userauth/none.c ssh/userauth/password.c \
-			ssh/ssh-common-protocol.c ssh/ssh-common.c \
-			ssh/ssh-signal.c \
+			ssh/ssh-common-protocol.c ssh/ssh-common.c ssh/ssh-common-client.c \
+			ssh/ssh-signal-client.c \
 			ssh/ssh-data.c \
 			ssh/ssh-hostinfo.c \
 			ssh/ssh-language.c \
@@ -103,7 +104,9 @@ osns_client_CFLAGS += -lcrypt
 osns_client_CPPFLAGS += -lcrypt
 endif
 
-sbin_PROGRAMS = osns_server
+if BUILD_SSH_SERVER
+sbin_PROGRAMS += osns_server
+endif
 
 osns_server_CFLAGS = $(CFLAGS) $(GLIB_CFLAGS) $(LIBGCRYPT_CFLAGS) $(SYSTEMD_CFLAGS) -ggdb -Og  -D_FILE_OFFSET_BITS=64 -lz -lpthread -fPIC -lm -I . -I ./ssh -I ./lib -Wall -Wno-unused-but-set-variable -Wno-uninitialized -Wno-unused-variable -Wno-unused-label -Wno-unused-function
 osns_server_CPPFLAGS = $(CXXFLAGS) $(GLIB_CFLAGS) $(LIBGCRYPT_CFLAGS) $(SYSTEMD_CFLAGS)  -ggdb -Og -D_FILE_OFFSET_BITS=64 -lz -lpthread -fPIC -lm -I . -I ./ssh -I ./lib -Wall -Wno-unused-but-set-variable -Wno-uninitialized -Wno-unused-variable -Wno-unused-label -Wno-unused-function
@@ -190,4 +193,32 @@ osns_server_CPPFLAGS += -lpam
 else
 osns_server_CFLAGS += -lcrypt
 osns_server_CPPFLAGS += -lcrypt
+endif
+
+if BUILD_SFTP_SUBSYSTEM
+
+bin_PROGRAMS += osns_sftp_subsystem
+
+osns_sftp_subsystem_CFLAGS = $(CFLAGS) $(GLIB_CFLAGS) $(SYSTEMD_CFLAGS) $(AVAHI_CORE_CFLAGS) $(AVAHI_CLIENT_CFLAGS) -ggdb -Og  -D_FILE_OFFSET_BITS=64 -lz -lpthread -fPIC -lm -I . -I . -I ./lib -Wall -Wno-unused-but-set-variable -Wno-uninitialized -Wno-unused-variable -Wno-unused-label -Wno-unused-function
+osns_sftp_subsystem_CPPFLAGS = $(CXXFLAGS) $(GLIB_CFLAGS) $(SYSTEMD_CFLAGS) -ggdb -Og -D_FILE_OFFSET_BITS=64 -lz -lpthread -fPIC -lm -I . -I ./lib -Wall -Wno-unused-but-set-variable -Wno-uninitialized -Wno-unused-variable -Wno-unused-label -Wno-unused-function
+osns_sftp_subsystem_LDADD = $(GLIB_LIBS) $(SYSTEMD_LIBS) $(LDFLAGS)
+
+
+osns_sftp_subsystem_SOURCES	=	osns_sftp_subsystem.c \
+					ssh/subsystem/sftp/attributes-read.c ssh/subsystem/sftp/attributes-write.c \
+					ssh/subsystem/sftp/cb-opendir.c ssh/subsystem/sftp/cb-open.c ssh/subsystem/sftp/cb-stat.c \
+					ssh/subsystem/sftp/path.c ssh/subsystem/sftp/payload.c \
+					ssh/subsystem/commonhandle.c ssh/subsystem/sftp/connect.c \
+					ssh/subsystem/sftp/handle.c ssh/subsystem/sftp/init.c \
+					ssh/subsystem/sftp/ownergroup.c ssh/subsystem/sftp/supported.c \
+					ssh/subsystem/sftp/receive.c ssh/subsystem/sftp/send.c \
+					lib/datatypes/ssh-string.c lib/datatypes/ssh-uint.c \
+					lib/eventloop/bevent.c lib/eventloop/beventloop.c lib/eventloop/beventsignal.c lib/eventloop/beventtimer.c \
+					lib/error/error-handling.c \
+					lib/list/simple-list.c lib/list/simple-locking.c lib/list/simple-hash.c \
+					lib/log/logging.c \
+					lib/misc/pidfile.c lib/misc/utils.c \
+					lib/network/connection.c lib/network/utils.c \
+					lib/threads/workerthreads.c 
+
 endif

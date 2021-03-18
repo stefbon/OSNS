@@ -152,3 +152,26 @@ void unlock_local_groupbase()
 {
     pthread_mutex_unlock(&grp_mutex);
 }
+
+unsigned char user_is_groupmember(char *username, struct group *grp)
+{
+    unsigned char found=0;
+    char **member=grp->gr_mem;
+
+    while(*member && found==0) {
+
+	if (strcmp(username, *member)==0) {
+
+	    found=1;
+
+	} else {
+
+	    member++;
+
+	}
+
+    }
+
+    return found;
+
+}

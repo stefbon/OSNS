@@ -55,6 +55,7 @@ static sd_login_monitor *monitor=NULL;
 static struct _login_uids_s current = {.uid=NULL, .len=0};
 static void *monitor_ptr=NULL;
 static void (* monitor_cb)(uid_t uid, int what, void *ptr);
+static int (* monitor_filter)(uid_t uid, void *ptr);
 static unsigned char monitor_flags=0;
 static pthread_mutex_t monitor_mutex=PTHREAD_MUTEX_INITIALIZER;
 
@@ -122,7 +123,12 @@ static void compare_uids(struct _login_uids_s *new)
 
     if (current.len==0) {
 
-	for (unsigned int i=0; i<new->len; i++) (* monitor_cb)(new->uid[i], 1, monitor_ptr);
+	for (unsigned int i=0; i<new->len; i++) {
+
+	    if ((*monitor_filter)(new->uid[i], monitor_ptr)==0) (* monitor_cb)(new->uid[i], 1, monitor_ptr);
+
+	}
+
 	current.uid=new->uid;
 	current.len=new->len;
 	new->uid=NULL;
@@ -130,7 +136,12 @@ static void compare_uids(struct _login_uids_s *new)
 
     } else if (new->len==0) {
 
-	for (unsigned int i=0; i<current.len; i++) (* monitor_cb)(current.uid[i], -1, monitor_ptr);
+	for (unsigned int i=0; i<current.len; i++) {
+
+	    if ((*monitor_filter)(current.uid[i], monitor_ptr)==0) (* monitor_cb)(current.uid[i], -1, monitor_ptr);
+
+	}
+
 	free(current.uid);
 	current.uid=NULL;
 	current.len=0;
@@ -152,13 +163,13 @@ static void compare_uids(struct _login_uids_s *new)
 
 		} else if (new->uid[j]<current.uid[i]) {
 
-		    (* monitor_cb)(new->uid[j], 1, monitor_ptr);
+		    if ((*monitor_filter)(new->uid[i], monitor_ptr)==0) (* monitor_cb)(new->uid[j], 1, monitor_ptr);
 		    j++;
 		    continue;
 
 		} else {
 
-		    (* monitor_cb)(current.uid[i], -1, monitor_ptr);
+		    if ((*monitor_filter)(current.uid[i], monitor_ptr)==0) (* monitor_cb)(current.uid[i], -1, monitor_ptr);
 		    i++;
 		    continue;
 
@@ -166,13 +177,13 @@ static void compare_uids(struct _login_uids_s *new)
 
 	    } else if (i<current.len) {
 
-		(* monitor_cb)(current.uid[i], -1, monitor_ptr);
+		if ((*monitor_filter)(current.uid[i], monitor_ptr)==0) (* monitor_cb)(current.uid[i], -1, monitor_ptr);
 		i++;
 		continue;
 
 	    } else if (j<new->len) {
 
-		(* monitor_cb)(new->uid[j], 1, monitor_ptr);
+		if ((*monitor_filter)(new->uid[i], monitor_ptr)==0) (* monitor_cb)(new->uid[j], 1, monitor_ptr);
 		j++;
 		continue;
 
@@ -195,16 +206,22 @@ static void compare_uids(struct _login_uids_s *new)
 
 }
 
-void user_monitor_cb_dummy(uid_t uid, int what, void *ptr)
+static void user_monitor_cb_dummy(uid_t uid, int what, void *ptr)
 {
     logoutput("user_monitor_cb_dummy: %s %i", (what==1) ? "added" : "removed", uid);
 }
 
-int create_user_monitor(void (* cb)(uid_t uid, int what, void *ptr), void *ptr)
+static int user_monitor_filter_dummy(uid_t uid, void *ptr)
+{
+    return 0;	/* by default do not filter any uid */
+}
+
+int create_user_monitor(void (* cb)(uid_t uid, int what, void *ptr), void *ptr, int (* filter)(uid_t uid, void *ptr))
 {
     int fd=-1;
 
     monitor_cb=(cb) ? cb : user_monitor_cb_dummy;
+    monitor_filter=(filter) ? filter : user_monitor_filter_dummy;
     monitor_ptr=ptr;
 
     if (sd_login_monitor_new("uid", &monitor)==0) {

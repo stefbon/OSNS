@@ -93,20 +93,20 @@ static int read_ssh_connection_socket(struct ssh_connection_s *connection, int f
 		connection->setup.flags |= SSH_SETUP_FLAG_RECV_ERROR;
 
 	    }
-	    start_thread_connection_problem(connection);
+	    start_thread_ssh_connection_problem(connection);
 	    return -1;
 
 	} else if (error==EAGAIN || error==EWOULDBLOCK) {
 
 	    return 0;
 
-	} else if (error==ECONNRESET || error==ENOTCONN || error==EBADF || error==ENOTSOCK) {
+	} else if (socket_network_connection_error(error)) {
 
 	    logoutput_warning("read_ssh_connection_socket: socket is not connected? error %i:%s", error, strerror(error));
 	    connection->flags |= SSH_CONNECTION_FLAG_TROUBLE;
 	    connection->setup.error=error;
 	    connection->setup.flags |= SSH_SETUP_FLAG_RECV_ERROR;
-	    start_thread_connection_problem(connection);
+	    start_thread_ssh_connection_problem(connection);
 
 	} else {
 
@@ -152,17 +152,21 @@ int read_ssh_connection_signal(int fd, void *ptr, uint32_t events)
     struct ssh_connection_s *connection=(struct ssh_connection_s *) ptr;
     int result=0;
 
-    if ( events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP) ) {
+    if (signal_is_error(events) || signal_is_hangup(events)) {
 
 	/* the remote side disconnected */
 
         logoutput("read_ssh_connection_signal: event %i causes connection break", events);
         connection->flags |= SSH_CONNECTION_FLAG_TROUBLE;
-	start_thread_connection_problem(connection);
+	start_thread_ssh_connection_problem(connection);
 
-    } else if (events & EPOLLIN) {
+    } else if (signal_is_dataavail(events)) {
 
 	result=read_ssh_connection_socket(connection, fd, events);
+
+    } else {
+
+	logoutput_warning("read_ssh_connection_signal: event %i not reckognized", events);
 
     }
 

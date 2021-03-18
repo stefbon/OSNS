@@ -22,7 +22,7 @@
 
 struct create_entry_s {
     struct name_s			*name;
-    union {
+    union tree_u {
 	struct entry_s			*parent;
 	struct directory_s 		*directory;
 	struct fuse_opendir_s		*opendir;
@@ -35,6 +35,7 @@ struct create_entry_s {
     void				(*cb_found)(struct entry_s *e, struct create_entry_s *ce);
     void				(*cb_error)(struct entry_s *p, struct name_s *n, struct create_entry_s *ce, unsigned int e);
     unsigned int			(*cb_cache_size)(struct create_entry_s *ce);
+    int					(*cb_check)(struct create_entry_s *ce);
     void				(*cb_cache_created)(struct entry_s *e, struct create_entry_s *ce);
     void				(*cb_cache_found)(struct entry_s *e, struct create_entry_s *ce);
     void				(*cb_adjust_pathmax)(struct create_entry_s *ce);
@@ -43,9 +44,10 @@ struct create_entry_s {
     struct directory_s 			*(* get_directory)(struct create_entry_s *ce);
     unsigned int			pathlen;
     unsigned int			cache_size;
-    union {
+    struct _cache_s {
 	struct stat			st;
 	struct inode_link_s 		link;
+	struct fuse_buffer_s		*buffer;
     } cache;
     unsigned int			flags;
     void				*ptr;

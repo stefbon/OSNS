@@ -42,12 +42,20 @@
 #define FS_CONNECTION_TYPE_UDP4						4
 #define FS_CONNECTION_TYPE_UDP6						5
 #define FS_CONNECTION_TYPE_FUSE						6
+#define FS_CONNECTION_TYPE_STD						7
 
 #define SOCKET_OPS_TYPE_ZERO						0
 #define SOCKET_OPS_TYPE_DEFAULT						1
 
 #define FUSE_OPS_TYPE_ZERO						0
 #define FUSE_OPS_TYPE_DEFAULT						1
+
+#define STD_OPS_TYPE_ZERO						0
+#define STD_OPS_TYPE_DEFAULT						1
+
+#define STD_SOCKET_TYPE_STDIN						1
+#define STD_SOCKET_TYPE_STDOUT						2
+#define STD_SOCKET_TYPE_STDERR						3
 
 #define FS_CONNECTION_FLAG_INIT						1
 #define FS_CONNECTION_FLAG_CONNECTING					2
@@ -77,7 +85,6 @@ struct io_socket_s {
 	struct sockaddr_in6			inet6;
     } sockaddr;
 };
-
 
 struct socket_ops_s {
     unsigned char				type;
@@ -110,6 +117,20 @@ struct fuse_ops_s {
     int						(* read)(struct io_fuse_s *s, void *buffer, size_t size);
 };
 
+struct io_std_s {
+    unsigned char				type;
+    struct std_ops_s				*sops;
+    struct bevent_s				bevent;
+};
+
+struct std_ops_s {
+    unsigned char				type;
+    int						(* open)(struct io_std_s *s, unsigned int flags);
+    int						(* close)(struct io_std_s *s);
+    int						(* read)(struct io_std_s *s, char *buffer, unsigned int size);
+    int						(* write)(struct io_std_s *s, char *data, unsigned int size);
+};
+
 struct fs_connection_s {
     unsigned char 				type;
     unsigned char				role;
@@ -121,6 +142,7 @@ struct fs_connection_s {
     union io_target_s {
 	struct io_socket_s			socket;
 	struct io_fuse_s			fuse;
+	struct io_std_s				std;
     } io;
     union {
 	struct server_ops_s {
@@ -155,13 +177,15 @@ struct fs_connection_s {
 
 void set_io_socket_ops_zero(struct io_socket_s *s);
 void set_io_socket_ops_default(struct io_socket_s *s);
+void set_io_std_ops_zero(struct io_std_s *s);
+void set_io_std_ops_default(struct io_std_s *s);
 void set_io_fuse_ops_zero(struct io_fuse_s *s);
 void set_io_fuse_ops_default(struct io_fuse_s *s);
 
-int create_socket_path(struct pathinfo_s *pathinfo);
-int check_socket_path(struct pathinfo_s *pathinfo, unsigned int already);
+void set_io_std_type(struct fs_connection_s *c, const char *what);
 
 void init_connection(struct fs_connection_s *connection, unsigned char type, unsigned char role);
+void free_connection(struct fs_connection_s *c);
 int create_local_serversocket(char *path, struct fs_connection_s *conn, struct beventloop_s *loop, struct fs_connection_s *(* accept_cb)(uid_t uid, gid_t gid, pid_t pid, struct fs_connection_s *s_conn), struct generic_error_s *error);
 int create_network_serversocket(char *address, unsigned int port, struct fs_connection_s *conn, struct beventloop_s *loop, struct fs_connection_s *(* accept_cb)(struct host_address_s *h, struct fs_connection_s *s), struct generic_error_s *error);
 

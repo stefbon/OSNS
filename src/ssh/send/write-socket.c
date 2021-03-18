@@ -53,7 +53,7 @@ int write_socket(struct ssh_connection_s *connection, struct ssh_packet_s *packe
     struct socket_ops_s *sops=connection->connection.io.socket.sops;
     ssize_t written=0;
     char *pos=packet->buffer;
-    unsigned int left=packet->size;
+    int left=(int) packet->size;
 
     writesocket:
 

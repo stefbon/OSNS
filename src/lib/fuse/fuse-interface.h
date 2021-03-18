@@ -91,8 +91,8 @@ struct timespec *get_fuse_attr_timeout(char *ptr);
 struct timespec *get_fuse_entry_timeout(char *ptr);
 struct timespec *get_fuse_negative_timeout(char *ptr);
 
-int add_direntry_buffer(char *ptr, struct direntry_buffer_s *buffer, struct name_s *xname, struct stat *st);
-int add_direntry_plus_buffer(char *ptr, struct direntry_buffer_s *buffer, struct name_s *xname, struct stat *st);
+int add_direntry_buffer(void *ptr, struct direntry_buffer_s *buffer, struct name_s *xname, struct stat *st);
+int add_direntry_plus_buffer(void *ptr, struct direntry_buffer_s *buffer, struct name_s *xname, struct stat *st);
 
 struct fs_connection_s *get_fs_connection_fuse(char *ptr);
 signal_ctx2fuse_t get_signal_ctx2fuse(char *ptr);

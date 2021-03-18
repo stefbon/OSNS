@@ -17,8 +17,8 @@
 
 */
 
-#ifndef _LIB_MOUNTINFO_MONITORMOUNTS_H
-#define _LIB_MOUNTINFO_MONITORMOUNTS_H
+#ifndef ONSN_LIB_MOUNTINFO_MONITORMOUNTS_H
+#define OSNS_LIB_MOUNTINFO_MONITORMOUNTS_H
 
 int add_mountinfo_watch(struct beventloop_s *loop, unsigned int *error);
 void remove_mountinfo_watch();

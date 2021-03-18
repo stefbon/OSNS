@@ -242,20 +242,13 @@ static void read_ssh_buffer_packet(void *ptr)
 
 		if ((receive->status & SSH_RECEIVE_STATUS_SERIAL)==0) {
 
-		    if (receive->threads==0) {
-
-			read_ssh_connection_buffer(connection);
-
-		    } else {
-
-			pthread_cond_broadcast(&receive->cond);
-
-		    }
+		    if (receive->threads==0) read_ssh_connection_buffer(connection);
 
 		}
 
 	    }
 
+	    pthread_cond_broadcast(&receive->cond);
 	    pthread_mutex_unlock(&receive->mutex);
 	    packet.buffer=data;
 

@@ -17,8 +17,8 @@
 
 */
 
-#ifndef SB_COMMON_UTILS_MOUNTINFO_UTILS_H
-#define SB_COMMON_UTILS_MOUNTINFO_UTILS_H
+#ifndef OSNS_LIB_MOUNTINFO_UTILS_H
+#define OSNS_LIB_MOUNTINFO_UTILS_H
 
 char *get_device_from_uuid(const char *uuid);
 char *get_real_root_device(int major, int minor);

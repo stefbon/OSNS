@@ -24,18 +24,22 @@
 
 #define OSNS_MSG_VERSION				1
 #define OSNS_MSG_DISCONNECT				2
+#define OSNS_MSG_NOTSUPPORTED				3
 
-#define OSNS_MSG_SERVICE_REQUEST			3
-#define OSNS_MSG_SERVICE_ACCEPT				4
-#define OSNS_MSG_SERVICE_DENY				5
+#define OSNS_MSG_SERVICE_REQUEST			10
+#define OSNS_MSG_SERVICE_ACCEPT				11
+#define OSNS_MSG_SERVICE_DENY				12
 
-#define OSNS_MSG_ENUM_SERVICES				6
-#define OSNS_MSG_INFO_PATH				7
+#define OSNS_MSG_COMMAND				20
+#define OSNS_MSG_COMMAND_SUCCESS			21
+#define OSNS_MSG_COMMAND_FAILURE			22
+
+#define OSNS_COMMAND_ENUM_SERVICES			"enum-services@osns.net"
+#define OSNS_COMMAND_INFO_PATH				"info-path@osns.net"
 
 /* SSH */
 
 #define OSNS_SERVICE_REQUEST_SSH_CONNECTION		"ssh-connection@osns.net"
-
 #define OSNS_SERVICE_SSH_REQUEST_FORWARD		"ssh-request-forward@osns.net"
 
 /* message looks like:
@@ -43,8 +47,6 @@
     - byte						OSNS_MSG_SSH_REQUEST_FORWARD
     - ssh string					socket://path or tcpip4:// or tcpip6://
 */
-
-
 
 /* open a channel for:
     - session -> subsystem sftp, exec, shell and or forward (tcpip4/6 and streamlocal) */
@@ -57,7 +59,6 @@
 #define OSNS_MSG_SSH_CHANNEL_EOF			96
 #define OSNS_MSG_SSH_CHANNEL_CLOSE			97
 
-
 #define OSNS_LOCALSOCKET_STATUS_VERSION			1
 #define OSNS_LOCALSOCKET_STATUS_SESSION			2
 #define OSNS_LOCALSOCKET_STATUS_PACKET			4
@@ -69,11 +70,16 @@
 struct osns_packet_s {
     uint32_t				len;
     unsigned char			type;
+    uint32_t				seq;
     char				*buffer;
 };
 
 struct osns_localsocket_s {
     unsigned int			status;
+    unsigned int			s_major;
+    unsigned int			s_minor;
+    unsigned int			c_major;
+    unsigned int			c_minor;
     struct fs_connection_s		connection;
     pthread_mutex_t			mutex;
     pthread_cond_t			cond;

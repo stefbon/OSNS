@@ -38,4 +38,7 @@ void service_fs_readdirplus(struct fuse_opendir_s *opendir, struct fuse_request_
 void service_fs_fsyncdir(struct fuse_opendir_s *opendir, struct fuse_request_s *request, unsigned char datasync);
 void service_fs_releasedir(struct fuse_opendir_s *opendir, struct fuse_request_s *request);
 
+struct entry_s *service_fs_get_fuse_direntry(struct fuse_opendir_s *opendir, struct fuse_request_s *request);
+struct entry_s *service_fs_get_fuse_symlinks(struct fuse_opendir_s *opendir, struct fuse_request_s *request);
+
 #endif

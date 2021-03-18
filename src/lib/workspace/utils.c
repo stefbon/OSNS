@@ -258,27 +258,3 @@ unsigned char ismounted(char *path)
     return ismounted;
 
 }
-
-unsigned char user_is_groupmember(char *username, struct group *grp)
-{
-    unsigned char found=0;
-    char **member;
-
-    member=grp->gr_mem;
-
-    while(*member) {
-
-	if (strcmp(username, *member)==0) {
-
-	    found=1;
-	    break;
-
-	}
-
-	member++;
-
-    }
-
-    return found;
-
-}

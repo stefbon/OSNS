@@ -27,8 +27,8 @@ struct ssh_channel_s *lookup_session_channel_for_payload(struct channel_table_s 
 struct ssh_channel_s *lookup_session_channel_for_data(struct channel_table_s *table, unsigned int nr, struct ssh_payload_s **p_payload);
 struct ssh_channel_s *lookup_session_channel(struct channel_table_s *table, unsigned int nr);
 
-void init_channels_table(struct ssh_session_s *session, unsigned int size);
-void free_channels_table(struct ssh_session_s *session);
+void init_ssh_channels_table(struct ssh_session_s *session, unsigned int size);
+void free_ssh_channels_table(struct ssh_session_s *session);
 
 struct ssh_channel_s *find_channel(struct ssh_session_s *session, unsigned int type);
 struct ssh_channel_s *get_next_channel(struct ssh_session_s *session, struct ssh_channel_s *channel);

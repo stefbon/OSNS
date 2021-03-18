@@ -17,11 +17,11 @@
 
 */
 
-#ifndef _SSH_SIGNAL_H
-#define _SSH_SIGNAL_H
+#ifndef _SSH_SIGNAL_SERVER_H
+#define _SSH_SIGNAL_SERVER_H
 
 /* prototypes */
 
-void init_ssh_session_signals(struct ssh_session_ctx_s *context);
+void init_ssh_session_signals_server(struct ssh_session_ctx_s *context);
 
 #endif

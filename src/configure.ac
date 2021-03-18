@@ -4,7 +4,7 @@
 AC_PREREQ([2.68])
 AC_INIT([osns_client], [1.0a1], [none])
 AM_INIT_AUTOMAKE([subdir-objects])
-AC_CONFIG_SRCDIR([osns_client.h])
+AC_CONFIG_SRCDIR([main.h])
 AC_CONFIG_HEADERS([config.h])
 
 # Checks for programs.
@@ -57,11 +57,35 @@ PKG_CHECK_MODULES(GIO, [ gio-2.0 ], [AC_DEFINE([HAVE_GIO2], [1], [Define if Gio 
 
 AM_PATH_LIBGCRYPT([1.7.0], [AC_DEFINE([HAVE_LIBGCRYPT], [1], [Check for libgcrypt])], AC_MSG_ERROR([Please install libgcrypt.]))
 
+AC_ARG_WITH([sftp-subsystem], [AS_HELP_STRING([--with-sftp-subsystem], [Enable building OSNS sftp subsystem yes/mo.])])
+
+AS_IF([test "x$with_sftp_subsystem" = "xyes"], [
+    AC_DEFINE([WITH_OSNS_SFTP_SUBSYSTEM], [1], [Define to build OSNS SFTP Substem])
+    AC_MSG_NOTICE([Build the sftp subsystem])
+    BUILD_OSNS_SFTP_SUBSYSTEM=1
+], [
+    AC_MSG_NOTICE([Build WITHOUT the sftp subsystem])
+])
+
+AC_ARG_WITH([ssh-server], [AS_HELP_STRING([--with-ssh-server], [Enable building OSNS ssh server yes/mo.])])
+
+AS_IF([test "x$with_ssh_server" = "xyes"], [
+    AC_DEFINE([WITH_OSNS_SFTP_SUBSYSTEM], [1], [Define to build OSNS SSH Server])
+    AC_MSG_NOTICE([Build the sftp subsystem])
+    BUILD_OSNS_SSH_SERVER=1
+], [
+    AC_MSG_NOTICE([Build WITHOUT the ssh server.])
+])
+
+
 PKG_CHECK_MODULES([SYSTEMD], [libsystemd], [AC_DEFINE([HAVE_LIBSYSTEMD], [1], [Define libsystemd is available])], AC_MSG_ERROR([Error: libsystemd not found.]))
 PKG_CHECK_MODULES([AVAHI_CORE], [avahi-core], [AC_DEFINE([HAVE_AVAHI_CORE], [1], [Define Avahi core is available])], AC_MSG_ERROR([Error: avahi core not found.]))
 PKG_CHECK_MODULES([AVAHI_CLIENT], [avahi-client], [AC_DEFINE([HAVE_AVAHI_CLIENT], [1], [Define Avahi client is available])], AC_MSG_ERROR([Error: avahi client not found.]))
 
 PKG_CHECK_MODULES(UDT, [ udt ], [AC_DEFINE([HAVE_UDT], [1], [Define if libudt is available])], AC_MSG_WARN([libudt not found. not able to add a udp channel for data transfer]))
+
+AM_CONDITIONAL([BUILD_SFTP_SUBSYSTEM], [ test "x$with_sftp_subsystem" = "xyes" ])
+AM_CONDITIONAL([BUILD_SSH_SERVER], [ test "x$with_ssh_server" = "xyes" ])
 
 AM_CONDITIONAL([LIBUDT_AVAIL], [ test HAVE_UDT ])
 AM_CONDITIONAL([LIBRSYNC_AVAIL], [ test HAVE_LIBRSYNC ])

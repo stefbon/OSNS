@@ -20,6 +20,9 @@
 #ifndef _LIB_USERS_LOCAL_H
 #define _LIB_USERS_LOCAL_H
 
+#include "pwd.h"
+#include "grp.h"
+
 /* prototypes */
 
 void lock_local_userbase();
@@ -31,5 +34,7 @@ void lock_local_groupbase();
 void get_local_gid_byname(char *name, gid_t *gid);
 unsigned int get_local_group_bygid(gid_t gid, struct ssh_string_s *group);
 void unlock_local_groupbase();
+
+unsigned char user_is_groupmember(char *username, struct group *grp);
 
 #endif

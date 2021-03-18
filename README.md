@@ -64,17 +64,11 @@ You won't find any of this in the mainline of the program.
 BUILD
 =====
 
-Create directory to get the sources.
+Create directory to get the source:
 
-git clone git@github.com:stefbon/fs-workspace.git
-
-git clone git@github.com:stefbon/common-utils.git
-
-cd fs-workspace
-
-Create a symbolic link to the shared utilities:
-
-ln -sf ../common-utils common-utils
+git clone git@github.com:stefbon/OSNS.git
+cd OSNS
+cd src
 
 Run the autogen.sh script to create the different buildfiles:
 
@@ -85,7 +79,7 @@ Run the configure script, and make:
 ./configure
 make
 
-This will build the fs-workspace executable.
+This will build the osns_client executable.
 
 As root:
 
@@ -110,7 +104,7 @@ I'm using the network-workgroup and network-server icons from Adwaita icons coll
 
 Start the executable
 
-./fs-workspace
+./osns_client
 
 
 Other filesystems

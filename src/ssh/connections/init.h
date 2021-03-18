@@ -20,7 +20,7 @@
 #ifndef _SSH_CONNECTION_INIT_H
 #define _SSH_CONNECTION_INIT_H
 
-int init_ssh_connections(struct ssh_session_s *session);
+void init_ssh_connections(struct ssh_session_s *session);
 int set_ssh_connections_signal(struct ssh_session_s *session, pthread_mutex_t *mutex, pthread_cond_t *cond);
 void free_ssh_connections(struct ssh_session_s *session);
 

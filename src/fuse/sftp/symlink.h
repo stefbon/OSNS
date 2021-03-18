@@ -20,6 +20,8 @@
 #ifndef _FUSE_SFTP_READLINK_H
 #define _FUSE_SFTP_READLINK_H
 
+unsigned int check_valid_target_symlink(struct context_interface_s *interface, char *path, char *target, unsigned int len);
+
 void _fs_sftp_readlink(struct service_context_s *c, struct fuse_request_s *f, struct inode_s *inode, struct pathinfo_s *pathinfo);
 void _fs_sftp_symlink(struct service_context_s *c, struct fuse_request_s *f, struct entry_s *entry, struct pathinfo_s *pathinfo, const char *target);
 int _fs_sftp_symlink_validate(struct service_context_s *context, struct pathinfo_s *pathinfo, char *target, char **remote_target);

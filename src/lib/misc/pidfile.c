@@ -36,115 +36,295 @@
 #include <sys/stat.h>
 #include <sys/param.h>
 #include <dirent.h>
+#include <fcntl.h>
 
 #include "log.h"
 #include "utils.h"
 #include "pathinfo.h"
+#include "pidfile.h"
 
-void create_pid_file(struct pathinfo_s *pathinfo)
+static unsigned int create_pid_path(char *path, char *name, char *user, pid_t pid, char *fullpath, unsigned int len)
 {
-    char path[pathinfo->len + 32]; /* must be enough to hold the durectory and the %pid%.pid file */
-    char *slash=NULL;
+    unsigned int pos=0;
 
-    memset(path, '\0', pathinfo->len + 32);
-    memcpy(path, pathinfo->path, pathinfo->len + 1);
-    // unslash(path);
+    if (fullpath) {
 
-    slash=strrchr(path, '/');
+	if (path) {
 
-    if (slash) {
-
-	/* there must be a slash */
-
-	sprintf(slash+1, "%i.pid", (int) getpid());
-
-	if (mknod(path, S_IFREG | S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH, 0)==0) {
-
-	    logoutput("create_pid_file: created pid file %s", path);
-
-	} else {
-
-	    logoutput("create_pid_file: error %i:%s creating pid file %s", errno, strerror(errno), path);
+	    memcpy(&fullpath[pos], path, strlen(path));
+	    pos+=strlen(path);
+    	    fullpath[pos]='/';
+	    pos++;
 
 	}
 
+	if (name) {
+
+	    memcpy(&fullpath[pos], name, strlen(name));
+	    pos+=strlen(name);
+	    fullpath[pos]='-';
+	    pos++;
+
+	}
+
+	if (user) {
+
+	    memcpy(&fullpath[pos], user, strlen(user));
+	    pos+=strlen(user);
+	    fullpath[pos]='-';
+	    pos++;
+
+	}
+
+	if (pid>0) pos+=snprintf(&fullpath[pos], len - pos, "%i.pid", pid);
+
+    } else {
+
+	pos+=strlen(path) + 1 + strlen(name) + 1 + strlen(user) + 32;
+
+    }
+
+    return pos;
+
+}
+
+void create_pid_file(char *path, char *name, char *user, pid_t pid, char **p_keep)
+{
+    unsigned int len = create_pid_path(path, name, user, pid, NULL, 0);
+    char fullpath[len];
+    unsigned int pos=0;
+
+    memset(fullpath, '\0', len);
+    pos=create_pid_path(path, name, user, pid, fullpath, len);
+
+    if (mknod(fullpath, S_IFREG | S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH, 0)==0) {
+
+	logoutput("create_pid_file: created pid file %s", fullpath);
+
+	if (p_keep) *p_keep=strdup(fullpath);
+
+    } else {
+
+	logoutput("create_pid_file: error %i:%s creating pid file %s", errno, strerror(errno), fullpath);
+
     }
 
 }
 
-void remove_pid_file(struct pathinfo_s *pathinfo, pid_t pid)
+void remove_pid_file(char *path)
 {
-    char path[pathinfo->len + 32]; /* must be enough to hold the durectory and the %pid%.pid file */
-    char *slash=NULL;
-
-    memcpy(path, pathinfo->path, pathinfo->len + 1);
-    unslash(path);
-
-    slash=strrchr(path, '/');
-
-    if (slash) {
-
-	/* there must be a slash */
-
-	sprintf(slash+1, "%i.pid", pid);
-	unlink(path);
-
-    }
-
+    unlink(path);
 }
 
-unsigned int check_pid_file(struct pathinfo_s *pathinfo)
+void remove_pid_fileat(int fd, char *name)
 {
-    char path[pathinfo->len + 1];
+    unlinkat(fd, name, 0);
+}
+
+pid_t check_pid_file(char *path, char *name, char *user, int (* cb)(pid_t pid, void *ptr), unsigned int flags)
+{
+    unsigned int len1 = create_pid_path(NULL, name, user, 0, NULL, 0);
+    char partname[len1];
     char *slash=NULL;
     pid_t pid=0;
+    DIR *dp=NULL;
+    struct dirent *de=NULL;
+    unsigned int pos=0;
+    int result=-1;
 
-    memcpy(path, pathinfo->path, pathinfo->len + 1);
-    unslash(path);
+    memset(partname, '\0', len1);
+    pos=create_pid_path(NULL, name, user, 0, partname, len1);
 
-    slash=strrchr(path, '/');
+    dp=opendir(path);
+    if (dp==NULL) return 0;
+    de=readdir(dp);
 
-    if (slash) {
-	DIR *dp=NULL;
+    while (de) {
 
-	*slash='\0';
-	dp=opendir(path);
+	if (strcmp(de->d_name, ".")==0 || strcmp(de->d_name, "..")==0) goto next;
 
-	if (dp) {
-	    struct dirent *de=NULL;
-	    char *sep=NULL;
+	/* does this file also start with the desired name ? */
 
-	    de=readdir(dp);
+	if (strlen(de->d_name) > pos && memcmp(de->d_name, partname, pos)==0) {
+	    char *sep=strrchr(de->d_name, '.');
 
-	    while(de) {
+	    if (sep && strcmp(sep, ".pid")==0) {
 
-		if (strcmp(de->d_name, ".")==0 || strcmp(de->d_name, "..")==0) goto next;
+		*sep='\0';
+		pid = (pid_t) atoi((char *)(de->d_name + pos));
 
-		sep=strrchr(de->d_name, '.');
+		if (pid>0) {
+		    unsigned int len2=create_pid_path(NULL, name, user, pid, NULL, 0);
+		    char tmp[len2];
 
-		if (sep && strcmp(sep, ".pid")==0) {
-		    unsigned int len=(int) (sep - de->d_name);
-		    char name[len + 1];
+		    memset(tmp, '\0', len2);
+		    pos=create_pid_path(NULL, name, user, pid, tmp, len2);
 
-		    memcpy(name, de->d_name, len + 1);
-		    name[len]='\0';
-		    pid=(pid_t) atoi(name);
-		    break;
+		    if (strcmp(de->d_name, tmp)==0) {
+
+			result=(* cb)(pid, (void *)name);
+
+			switch (result) {
+
+			    case -2:
+				break;
+			    case -1:
+			    case 0:
+
+				if (flags & CHECK_PF_FLAG_REMOVE_IF_ORPHAN) {
+
+				    remove_pid_fileat(dirfd(dp), de->d_name);
+				    logoutput("check_pid_file: remove file %s", de->d_name);
+
+				}
+
+				break;
+
+			    case 1:
+
+				logoutput("check_pid_file: %s is already running (pid=%i)", de->d_name, pid);
+				result=0;
+				break;
+
+			    default:
+
+				logoutput("check_pid_file: result %i not reckognized", result);
+
+			}
+
+			/* pidfile found in path belongs to process pid and is of the right format */
+
+			if (result==1) break;
+
+		    }
 
 		}
 
-		next:
-		de=readdir(dp);
+	    }
+
+	}
+
+	next:
+	de=readdir(dp);
+
+    }
+
+    closedir(dp);
+    return (result==1) ? pid : 0;
+
+}
+
+int create_fullpath(struct pathinfo_s *pathinfo)
+{
+    char path[pathinfo->len + 1];
+    char *slash=NULL;
+
+    memcpy(path, pathinfo->path, pathinfo->len);
+    path[pathinfo->len] = '\0';
+    unslash(path);
+
+    /* create the parent path */
+
+    slash=strchr(path, '/');
+
+    while (slash) {
+
+	*slash='\0';
+	if (strlen(path)==0) goto next;
+
+	if (mkdir(path, S_IFDIR | S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)==-1) {
+
+	    if (errno != EEXIST) {
+
+		logoutput("create_fullpath: error %i%s creating %s", errno, strerror(errno), path);
+		return -1;
 
 	    }
 
-	    closedir(dp);
+	}
+
+	next:
+
+	*slash='/';
+	slash=strchr(slash+1, '/');
+
+    }
+
+    return 0;
+
+}
+
+int check_socket_path(struct pathinfo_s *pathinfo, unsigned int alreadyrunning)
+{
+    struct stat st;
+
+    if (stat(pathinfo->path, &st)==0) {
+
+	/* path to socket does exists */
+
+	if (S_ISSOCK(st.st_mode)) {
+
+	    if (alreadyrunning==0) {
+
+		logoutput("check_socket_path: socket %s does already exist but no other process found, remove it", pathinfo->path);
+
+		unlink(pathinfo->path);
+		return 0;
+
+	    } else {
+
+		logoutput("check_socket_path: socket %s does already exist (running with pid %i), cannot continue", pathinfo->path, alreadyrunning);
+
+	    }
+
+	} else {
+
+	    logoutput("check_socket_path: %s does already already exist (but is not a socket?!), cannot continue", pathinfo->path);
+
+	}
+
+	return -1;
+
+    }
+
+    return 0;
+
+}
+
+int check_pid_running(pid_t pid, char **p_cmdline)
+{
+    char procpath[64];
+    int result=-1;
+
+    if (pid==0) return -1;
+
+    if (snprintf(procpath, 64, "/proc/%i/cmdline", (int) pid)>0) {
+	struct stat st;
+
+	if (stat(procpath, &st)==0) {
+
+	    result=0;
+
+	    if (p_cmdline) {
+		int fd=open(procpath, O_RDONLY);
+
+		if (fd>0) {
+		    char buffer[st.st_size + 1];
+
+		    memset(buffer, 0, st.st_size + 1);
+		    ssize_t bytesread=read(fd, buffer, st.st_size + 1);
+
+		    if (bytesread>0) *p_cmdline=strdup(buffer);
+		    close(fd);
+
+		}
+
+	    }
 
 	}
 
     }
 
-    if (pid>0) logoutput("check_pid_file: found pid file %i.pid", (int) pid);
-    return (unsigned int) pid;
-
+    return result;
 }
+

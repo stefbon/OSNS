@@ -55,7 +55,7 @@
 #include "ssh-send.h"
 #include "ssh-data.h"
 #include "ssh-channel.h"
-#include "ssh-signal.h"
+// #include "ssh-signal.h"
 #include "ssh-userauth.h"
 #include "ssh-connections.h"
 #include "ssh-extensions.h"
@@ -67,7 +67,7 @@ static unsigned char init_done=0;
 static pthread_mutex_t init_mutex=PTHREAD_MUTEX_INITIALIZER;
 extern struct fs_options_s fs_options;
 
-static void init_session_config(struct ssh_session_s *session)
+void init_ssh_session_config(struct ssh_session_s *session)
 {
     struct ssh_config_s *config=&session->config;
 
@@ -85,7 +85,7 @@ static void init_session_config(struct ssh_session_s *session)
 
 }
 
-static void free_ssh_identity(struct ssh_session_s *session)
+void free_ssh_identity(struct ssh_session_s *session)
 {
     struct ssh_identity_s *identity=&session->identity;
 
@@ -100,47 +100,15 @@ static void free_ssh_identity(struct ssh_session_s *session)
     memset(identity, 0, sizeof(struct ssh_identity_s));
 }
 
-static int init_ssh_identity(struct ssh_session_s *session, uid_t uid)
+void init_ssh_identity(struct ssh_session_s *session)
 {
     struct ssh_identity_s *identity=&session->identity;
-    struct passwd *result=NULL;
 
     memset(identity, 0, sizeof(struct ssh_identity_s));
     identity->buffer=NULL;
     identity->size=128;
     init_ssh_string(&identity->remote_user);
     identity->identity_file=NULL;
-
-    getpw:
-
-    memset(&identity->pwd, 0, sizeof(struct passwd));
-    result=NULL;
-
-    identity->buffer=realloc(identity->buffer, identity->size);
-    if(identity->buffer==NULL) goto error;
-
-    if (getpwuid_r(uid, &identity->pwd, identity->buffer, identity->size, &result)==-1) {
-
-	if (errno==ERANGE) {
-
-	    identity->size+=128;
-	    goto getpw; /* size buffer too small, increase and try again */
-
-	}
-
-	goto error;
-
-    }
-
-    logoutput("init_ssh_identity: found user %s (uid=%i, info %s) home %s", result->pw_name, result->pw_uid, result->pw_gecos, result->pw_dir);
-
-    return 0;
-
-    error:
-
-    free_ssh_identity(session);
-    return -1;
-
 }
 
 int init_ssh_backend()
@@ -151,13 +119,11 @@ int init_ssh_backend()
 
     if (init_done==0) {
 
-	// init_list_header(&sessions, SIMPLE_LIST_TYPE_EMPTY, NULL);
 	init_ssh_send_once();
 	init_ssh_receive_once();
 	init_ssh_utils();
 	init_keyex_once();
 	result=init_ssh_backend_library();
-	// init_custom_memory_handlers();
 	if (result==0) init_done=1;
 
     }
@@ -167,13 +133,13 @@ int init_ssh_backend()
 
 }
 
-static void _clear_ssh_session(struct ssh_session_s *session)
+void _clear_ssh_session(struct ssh_session_s *session)
 {
     free_ssh_connections(session);
-    free_channels_table(session);
+    free_ssh_channels_table(session);
     free_ssh_hostinfo(session);
     free_ssh_identity(session);
-    free_session_data(session);
+    free_ssh_session_data(session);
     free_ssh_pubkey(session);
 }
 
@@ -352,9 +318,6 @@ static int signal_ctx2ssh_default(void **ptr, const char *what, struct ctx_optio
 
 int init_ssh_session(struct ssh_session_s *session, uid_t uid, void *ctx)
 {
-
-    if (init_ssh_backend()==-1) goto error;
-
     session->context.ctx=ctx;
     session->context.unique=0;
     session->context.signal_ssh2ctx=signal_ssh2ctx_default;
@@ -362,133 +325,14 @@ int init_ssh_session(struct ssh_session_s *session, uid_t uid, void *ctx)
     session->context.signal_ssh2remote=signal_ssh2ctx_default;
     session->context.add_connection_eventloop=NULL;
 
-    /* set the right handlers */
-    init_ssh_session_signals(&session->context);
-
     init_list_element(&session->list, NULL);
-    init_session_config(session);
-    init_channels_table(session, CHANNELS_TABLE_SIZE);
-    init_session_data(session);
+    init_ssh_session_config(session);
+    init_ssh_channels_table(session, CHANNELS_TABLE_SIZE);
+    init_ssh_session_data(session);
     init_ssh_hostinfo(session);
     init_ssh_extensions(session);
     init_ssh_pubkey(session);
-
-    if (init_ssh_connections(session)==-1) {
-
-	logoutput("_init_ssh_session: error initializing connections subsystem");
-	goto error;
-
-    }
-
-    if (init_ssh_identity(session, uid)==-1) {
-
-	logoutput("_init_ssh_session: error getting user identity for uid %i", (unsigned int) uid);
-	goto error;
-
-    }
-
-    return 0;
-
-    error:
-
-    free_ssh_hostinfo(session);
-    free_session_data(session);
-    free_channels_table(session);
-    free_ssh_identity(session);
-    free_ssh_connections(session);
-    return -1;
-
-}
-
-unsigned int get_ssh_session_buffer_size()
-{
-    return sizeof(struct ssh_session_s);
-}
-
-int connect_ssh_session(struct ssh_session_s *session, char *target, unsigned int port)
-{
-    struct ssh_connection_s *connection=NULL;
-    struct ctx_option_s option;
-    int fd=-1;
-    pthread_mutex_t *mutex=NULL;
-    pthread_cond_t *cond=NULL;
-
-    /* get the ctx for values like:
-	- shared mutex and cond for shared event signalling when for example the connection and/or
-	is disconnected and the waiting thread wants to be informed about that (while waiting for a response)
-	- timeout
-    */
-
-    memset(&option, 0, sizeof(struct ctx_option_s));
-    option.type=_CTX_OPTION_TYPE_PVOID;
-    if ((* session->context.signal_ssh2ctx)(session, "io:shared-mutex", &option)>=0) {
-
-	mutex=(pthread_mutex_t *) option.value.ptr;
-	logoutput("connect_ssh_session: received shared mutex");
-
-    }
-
-    memset(&option, 0, sizeof(struct ctx_option_s));
-    option.type=_CTX_OPTION_TYPE_PVOID;
-    if ((* session->context.signal_ssh2ctx)(session, "io:shared-cond", &option)>=0) {
-
-	cond=(pthread_cond_t *) option.value.ptr;
-	logoutput("connect_ssh_session: received shared cond");
-
-    }
-
-    if ((mutex==NULL || cond==NULL) && (mutex || cond)) {
-
-	logoutput_warning("connect_ssh_session: both mutex and cond must be suplied by ctx, not only the %s", (mutex) ? "mutex" : "cond");
-	mutex=NULL;
-	cond=NULL;
-
-    }
-
-    memset(&option, 0, sizeof(struct ctx_option_s));
-    option.type=_CTX_OPTION_TYPE_INT;
-    if ((* session->context.signal_ssh2ctx)(session, "option:ssh.init_timeout", &option)>0) {
-
-	session->config.connection_expire=option.value.integer;
-	logoutput("init_ssh_session: received connection timeout %i", option.value.integer);
-
-    }
-
-    if (set_ssh_connections_signal(session, mutex, cond)==-1) {
-
-	logoutput("_init_ssh_session: error setting shared signal");
-	goto out;
-
-    }
-
-    if (add_main_ssh_connection(session)==0) {
-
-	logoutput("connect_ssh_session: main connection added to session");
-
-    } else {
-
-	logoutput("connect_ssh_session: error adding main connection");
-	goto out;
-
-    }
-
-    connection=session->connections.main;
-    fd=connect_ssh_connection(connection, target, port);
-
-    if (fd>0) {
-
-	logoutput("connect_ssh_session: connected to %s:%i with fd %i", target, port, fd);
-
-    } else {
-
-	logoutput("connect_ssh_session: unable to connect to %s:%i", target, port);
-
-    }
-
-    out:
-
-    return fd;
-
+    init_ssh_connections(session);
 }
 
 int setup_ssh_session(struct ssh_session_s *session, int fd)
@@ -642,6 +486,8 @@ static void analyze_ssh_connection_problem(void *ptr)
     struct ssh_connection_s *connection=(struct ssh_connection_s *) ptr;
     unsigned int error=0;
 
+    if (connection->setup.flags & SSH_SETUP_FLAG_DISCONNECT) return; /* already disconnect(ing/ed)*/
+
     if ((connection->flags & SSH_CONNECTION_FLAG_TROUBLE)==0) {
 
 	/* this flag should be set */
@@ -678,11 +524,7 @@ static void analyze_ssh_connection_problem(void *ptr)
 
     if (error==0) {
 
-	if (connection->setup.flags & SSH_SETUP_FLAG_RECV_EMPTY) {
-
-	    error=ESHUTDOWN;
-
-	}
+	if (connection->setup.flags & SSH_SETUP_FLAG_RECV_EMPTY) error=ESHUTDOWN;
 
     }
 
@@ -692,6 +534,7 @@ static void analyze_ssh_connection_problem(void *ptr)
 
 	switch (error) {
 
+	    case EBADF:
 	    case ENETDOWN:
 	    case ENETUNREACH:
 	    case ENETRESET:
@@ -712,7 +555,7 @@ static void analyze_ssh_connection_problem(void *ptr)
 	    if (connection->refcount>0) {
 		struct ssh_session_s *session=get_ssh_connection_session(connection);
 
-		/* send to channels context using this connection */
+		/* send close to channels context using this connection */
 
 		_walk_ssh_session_channels(session, "close", connection, 1);
 
@@ -739,7 +582,7 @@ static int setup_cb_thread_connection_problem(struct ssh_connection_s *connectio
     return 0;
 }
 
-int start_thread_connection_problem(struct ssh_connection_s *connection)
+int start_thread_ssh_connection_problem(struct ssh_connection_s *connection)
 {
     return change_ssh_connection_setup(connection, "setup", 0, SSH_SETUP_FLAG_ANALYZETHREAD, SSH_SETUP_OPTION_XOR, setup_cb_thread_connection_problem, NULL);
 }

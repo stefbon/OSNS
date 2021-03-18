@@ -30,7 +30,7 @@
 #define IP_ADDRESS_FAMILY_IPv4			1
 #define IP_ADDRESS_FAMILY_IPv6			2
 
-struct ip_adddress_s {
+struct ip_address_s {
     unsigned char				family;
     union {
 	char					v4[INET_ADDRSTRLEN + 1];
@@ -44,7 +44,7 @@ struct ip_adddress_s {
 struct host_address_s {
     unsigned int				flags;
     char					hostname[HOST_HOSTNAME_FQDN_MAX_LENGTH + 1];
-    struct ip_adddress_s			ip;
+    struct ip_address_s				ip;
 };
 
 /* prototypes */
@@ -61,5 +61,7 @@ int set_host_address(struct host_address_s *a, char *hostname, char *ipv4, char 
 void translate_context_host_address(struct host_address_s *host, char **target, unsigned int *family);
 void get_host_address(struct host_address_s *a, char **hostname, char **ipv4, char **ipv6);
 void init_host_address(struct host_address_s *a);
+
+unsigned char socket_network_connection_error(unsigned int error);
 
 #endif

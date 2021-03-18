@@ -149,14 +149,14 @@ static void init_ssh_session_connection_cb(struct fs_connection_s *connection, u
 
     }
 
-    if (error->value.errnum>0) logoutput("init_ssh_session_connection_cb: error %s starting thread to complete the session", get_description(error));
+    if (error->value.errnum>0) logoutput("init_ssh_session_connection_cb: error %s starting thread to complete the session", get_error_description(error));
 }
 
 static struct fs_connection_s *accept_ssh_session_connection(struct host_address_s *host, struct fs_connection_s *server)
 {
     struct generic_error_s error=GENERIC_HOST_INIT;
     struct ssh_session_s *session=NULL;
-    struct fs_connection_s *connection=NULL;
+    struct ssh_connection_s *connection=NULL;
 
     /* filter host 
 	TODO: do not accept every host, depending the configuration */
@@ -198,8 +198,8 @@ static struct fs_connection_s *accept_ssh_session_connection(struct host_address
     }
 
     connection=server->connections.main;
-    connection->ops.client.init=init_ssh_server_connection_cb;
-    return connection;
+    connection->connection.ops.client.init=init_ssh_server_connection_cb;
+    return &connection->connection;
 
     error:
 
@@ -217,12 +217,13 @@ int setup_ssh_server_socket(struct ssh_server_s *server, char *address, unsigned
 
     if (result==-1) {
 
-	logoutput("setup_ssh_server_socket: unable to create network serversocket (%s:%i) error %s", address, port, get_description(&error));
+	logoutput("setup_ssh_server_socket: unable to create network serversocket (%s:%i) error %s", address, port, get_error_description(&error));
 	return -1;
 
     }
 
-    
+    logoutput("setup_ssh_server_socket: created network serversocket (%s:%i) listning to fd", address, port, server->listen.io.socket.bevent.fd);
+    return 0;
 
 }
 

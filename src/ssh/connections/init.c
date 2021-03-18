@@ -224,18 +224,15 @@ void free_ssh_connection(struct ssh_connection_s **p_connection)
     *p_connection=NULL;
 }
 
-int init_ssh_connections(struct ssh_session_s *session)
+void init_ssh_connections(struct ssh_session_s *session)
 {
     struct ssh_connections_s *connections=&session->connections;
-
     connections->flags=0;
     connections->unique=0;
     connections->mutex=NULL;
     connections->cond=NULL;
     connections->main=NULL;
     init_list_header(&connections->header, SIMPLE_LIST_TYPE_EMPTY, NULL);
-    return 0;
-
 }
 
 int set_ssh_connections_signal(struct ssh_session_s *session, pthread_mutex_t *mutex, pthread_cond_t *cond)

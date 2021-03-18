@@ -22,7 +22,7 @@
 
 /* prototypes */
 
-int create_user_monitor(void (* cb)(uid_t uid, signed char what, void *ptr), void *ptr);
+int create_user_monitor(void (* cb)(uid_t uid, int what, void *ptr), void *ptr, int (* filter)(uid_t uid, void *ptr));
 void close_user_monitor();
 int read_user_monitor_event(int fd, void *data, uint32_t event);
 

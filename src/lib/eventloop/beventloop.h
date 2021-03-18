@@ -63,6 +63,7 @@
 #define BEVENT_CODE_OUT				EPOLLOUT
 #define BEVENT_CODE_ERR				EPOLLERR
 #define BEVENT_CODE_HUP				EPOLLHUP
+#define BEVENT_CODE_RDHUP			EPOLLRDHUP
 #define BEVENT_CODE_PRI				EPOLLPRI
 
 typedef int (*bevent_cb)(int fd, void *data, uint32_t eventcode);
@@ -137,5 +138,9 @@ struct beventloop_s *get_mainloop();
 
 uint32_t map_epollevent_to_bevent(uint32_t e_event);
 uint32_t map_bevent_to_epollevent(uint32_t code);
+
+uint32_t signal_is_error(uint32_t event);
+uint32_t signal_is_hangup(uint32_t event);
+uint32_t signal_is_dataavail(uint32_t event);
 
 #endif

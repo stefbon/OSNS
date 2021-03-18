@@ -246,6 +246,108 @@ static unsigned int get_pathmax_system()
 #endif
 }
 
+static void check_backslashes_path(char *path, unsigned int len, unsigned int *p_count1, unsigned int *p_count2)
+{
+    unsigned int left=len;
+    char *start=path;
+    char *pos=memchr(start, '/', len);
+    unsigned int count1=*p_count1;
+    unsigned int count2=*p_count2;
+
+    while (pos) {
+
+	left -= (unsigned int)(pos - start);
+
+	if (left>2 && memcmp(pos, "/..", 3)==0) {
+
+	    count1++;
+	    start=pos+3;
+	    left-=3;
+
+	} else if (left>1) {
+
+	    /* normal directory */
+
+	    if (memcmp(pos, "/.", 2)!=0) count2++;
+	    start=pos+1;
+	    left--;
+
+	} else {
+
+	    break;
+
+	}
+
+	pos=memchr(start, '/', left);
+
+    }
+
+    *p_count1=count1;
+    *p_count2=count2;
+
+}
+
+unsigned int check_valid_target_symlink(struct context_interface_s *interface, char *path, char *target, unsigned int len)
+{
+    unsigned int result=EIO; /* default */
+
+    if (target[0] == '/') {
+	struct pathinfo_s prefix;
+	unsigned int tmp=get_sftp_prefix(interface, &prefix);
+
+	logoutput("check_valid_target_symlink: compare %s with prefix %.*s", target, tmp, prefix.path);
+
+	/* target is absolute path on server: this is not suitable, needed is the path relative to the prefix
+	    so remove the prefix (if the first part of the target is the prefix) */
+
+	if (tmp==0 || (tmp<len && strncmp(target, prefix.path, tmp)==0 && target[tmp]=='/')) {
+	    unsigned int count1=0;
+	    unsigned int count2=0;
+
+	    check_backslashes_path(&target[tmp], len - tmp, &count1, &count2);
+	    result=(count1 >= count2) ? EXDEV : 0;
+
+	} else {
+
+	    /* target does not start with the prefix
+		note again that this check does not belong here but on the server */
+
+	    result=EXDEV;
+
+	}
+
+    } else {
+
+	logoutput("check_valid_target_symlink: check %s", target);
+
+	if (memchr(target, '/', len)==NULL) {
+
+	    /* no path elements: in the same directory */
+	    result=0;
+
+	} else if (strstr(target, "/..")==NULL) {
+
+	    /* no uplinks: garanteed that symlink target stays in "prefix" */ 
+
+	    result=0;
+
+	} else {
+	    unsigned int count1=0;
+	    unsigned int count2=0;
+
+	    check_backslashes_path(path, strlen(path), &count1, &count2);
+	    check_backslashes_path(target, len, &count1, &count2);
+
+	    result=(count1 >= count2) ? EXDEV : 0;
+
+	}
+
+    }
+
+    return result;
+
+}
+
 /* READLINK */
 
 void _fs_sftp_readlink(struct service_context_s *context, struct fuse_request_s *f_request, struct inode_s *inode, struct pathinfo_s *pathinfo)
@@ -285,6 +387,18 @@ void _fs_sftp_readlink(struct service_context_s *context, struct fuse_request_s 
 
     }
 
+    if ((inode->alias->flags & _ENTRY_FLAG_REMOTECHANGED)==0) {
+
+	if (inode->link.type==INODE_LINK_TYPE_SYMLINK) {
+	    char *target=inode->link.link.ptr;
+
+	    reply_VFS_data(f_request, target, strlen(target));
+	    return;
+
+	}
+
+    }
+
     if (send_sftp_readlink_ctx(interface, &sftp_r)==0) {
 	struct timespec timeout;
 
@@ -295,74 +409,35 @@ void _fs_sftp_readlink(struct service_context_s *context, struct fuse_request_s 
 
 	    if (reply->type==SSH_FXP_NAME) {
 		struct name_response_s *names=&reply->response.names;
-		unsigned int len=get_uint32(names->buff);
-		char target[len+1];
+		struct ssh_string_s tmp=SSH_STRING_INIT;
+		int result=0;
 
-		memcpy(target, names->buff + 4, len);
-		target[len]='\0';
-		free(reply->response.names.buff);
-		reply->response.names.buff=NULL;
+		if (read_ssh_string(names->buff, names->size, &tmp)>0) {
+		    char target[tmp.len+1];
 
-		logoutput("_fs_sftp_readlink_common: %s target %s", pathinfo->path, target);
+		    memcpy(target, tmp.ptr, tmp.len);
+		    target[tmp.len]='\0';
 
-		/* server replies with the target of the symlink. Some things are important to note:
-		    - if the reply path starts with a slash (=absolute path) this is an absolute path
-		    on the server, not on the client. So howto interpret this reply? Only accept the
-		    result if it has the same prefix (like the remote homedirectory). Disallowing "outside" shared
-		    sftp directories is not upto the client but the server.
-		    - if the reply path does not start with a slash (=relative path) check it's not pointing
-		    outside the shared directory
-		    */
+		    logoutput("_fs_sftp_readlink: %s target %s", pathinfo->path, target);
 
-		if (target[0] == '/') {
-		    struct pathinfo_s prefix;
-		    unsigned int tmp=get_sftp_prefix(interface, &prefix);
+		    error=check_valid_target_symlink(interface, origpath, target, tmp.len);
 
-		    /* target is absolute path on server: this is not suitable, needed is the path relative to the prefix
-			so remove the prefix (if the first part of the target is the prefix) */
+		    if (error==0) {
 
-		    if (tmp==0 || (tmp<len && strncmp(target, prefix.path, tmp)==0 && target[tmp]=='/')) {
-			unsigned int pathmax=get_pathmax_system();
-			char resolved[pathmax];
-
-			memset(resolved, 0, pathmax);
-
-			if (check_reply_symlink_target(context, origpath, &target[tmp], 0, resolved)) {
-
-			    reply_symlink_target(f_request, origpath, resolved);
-			    return;
-
-			}
-
-			error=errno;
-
-		    } else {
-
-			/* target does not start with the prefix
-			    note again that this check does not belong here but on the server */
-
-			reply_VFS_error(f_request, EPERM);
-
-		    }
-
-		} else {
-		    unsigned int pathmax=get_pathmax_system();
-		    char resolved[pathmax];
-
-		    memset(resolved, 0, pathmax);
-
-		    /* relative to path */
-
-		    if (check_reply_symlink_target(context, origpath, target, 1, resolved)) {
-
-			reply_symlink_target(f_request, origpath, resolved);
+			reply_VFS_data(f_request, target, tmp.len);
 			return;
 
 		    }
 
-		    error=errno;
+		} else {
+
+		    error=EPROTO;
 
 		}
+
+		free(names->buff);
+		names->buff=NULL;
+		names->size=0;
 
 	    } else if (reply->type==SSH_FXP_STATUS) {
 

@@ -654,7 +654,7 @@ static void change_usersessions(uid_t uid, signed char change, void *ptr)
 
 	    remove_osns_user_hash(user);
 	    unlock_users_hash(&wlock);
-	    work_workerthread(NULL, 0, end_osns_user_session, NULL, (void *) user);
+	    work_workerthread(NULL, 0, end_osns_user_session, (void *) user, NULL);
 	    return;
 
 	}
@@ -668,6 +668,58 @@ static void change_usersessions(uid_t uid, signed char change, void *ptr)
     unlock_users_hash(&wlock);
 
 }
+
+static int filter_user_login(uid_t uid, void *ptr)
+{
+    int result=-1;
+    struct passwd *pwd=getpwuid(uid);
+
+    if (pwd) {
+
+	if (fs_options.user.flags & _OPTIONS_USER_FLAG_NETWORK_GID_MIN) {
+
+	    if (pwd->pw_gid >= _OPTIONS_USER_FLAG_NETWORK_GID_MIN) {
+
+		result=0;
+		goto out;
+
+	    }
+
+	}
+
+	if (fs_options.user.flags & _OPTIONS_USER_FLAG_NETWORK_GID_PARTOF) {
+
+	    if (fs_options.user.network_mount_group>0) {
+		struct group *grp=getgrgid(fs_options.user.network_mount_group);
+
+		if (grp) {
+
+		    if (pwd->pw_gid==grp->gr_gid) {
+
+			/* users primary group */
+			result=0;
+			goto out;
+
+		    } else if (user_is_groupmember(pwd->pw_name, grp)==1) {
+
+			/* users secondary group */
+			result=0;
+			goto out;
+
+		    }
+
+		}
+
+	    }
+
+	}
+
+    }
+
+    out:
+    return result;
+}
+
 
 static void workspace_signal_handler(struct beventloop_s *bloop, void *data, struct signalfd_siginfo *fdsi)
 {
@@ -720,12 +772,88 @@ static void workspace_signal_handler(struct beventloop_s *bloop, void *data, str
 
 }
 
+/*
+    check the status of a process wit pid:
+    - result=-2		: pid is not valid
+    - result=-1		: it is not running
+    - result=0		: it is running, but is not the program looking for
+    - result=1		: it is running and the right program */
+
+static int check_pid_file_cb(pid_t pid, void *ptr)
+{
+    char *progname=(char *) ptr;
+    int result=-2;
+
+    if (pid>0) {
+	char *cmdline=NULL;
+
+	if (check_pid_running(pid, &cmdline)==0) {
+
+	    result=0;
+
+	    if (cmdline) {
+		char *slash=memrchr(cmdline, '/', strlen(cmdline));
+		char *start= (slash) ? slash+1 : cmdline;
+
+		logoutput("check_pid_file_cb: comparing cmdline %s of pid %i with prog %s", cmdline, pid, progname);
+
+		if (strcmp(start, progname)==0) {
+
+		    result=1;
+
+		}
+
+	    }
+
+	}
+
+    }
+
+    return result;
+
+}
+
+static int check_create_pid_file(struct pathinfo_s *socketpath, char *progname, char **p_pidfile)
+{
+    unsigned int len=socketpath->len;
+    char tmp[len + 1];
+    char *sep=NULL;
+    pid_t pid=0;
+
+    /* socketpath is something like /run/osns/sock
+	get the basename for the directory to look for pidfile */
+
+    memset(tmp, 0, len+1);
+    memcpy(tmp, socketpath->path, len);
+    sep=memrchr(tmp, '/', len);
+    if (sep==NULL) return -1;
+    *sep='\0';
+
+    checkpid:
+
+    pid=check_pid_file(tmp, progname, NULL, check_pid_file_cb, CHECK_PF_FLAG_REMOVE_IF_ORPHAN);
+
+    if (pid>0) {
+
+	logoutput_warning("check_create_pid_file: %s already running with pid %i", progname, pid);
+
+    } else {
+
+	create_pid_file(tmp, progname, NULL, getpid(), p_pidfile);
+
+    }
+
+    return (pid>0) ? -1 : 0;
+
+}
+
 int main(int argc, char *argv[])
 {
     int res=0;
     unsigned int error=0;
     struct bevent_s *bevent=NULL;
     struct fs_connection_s socket;
+    char *pidfile=NULL;
 
     switch_logging_backend("std");
     setlogmask(LOG_UPTO(LOG_DEBUG));
@@ -847,84 +975,27 @@ int main(int argc, char *argv[])
 
     }
 
-    if (create_socket_path(&fs_options.socket)==0) {
-	unsigned int alreadyrunning=0;
-	unsigned int count=0;
+    if (check_create_pid_file(&fs_options.socket, argv[0], &pidfile)==-1) {
 
-	checkpidfile:
-
-	alreadyrunning=check_pid_file(&fs_options.socket);
-
-	if (alreadyrunning>0 && count < 10) {
-	    char procpath[64];
-	    struct stat st;
-
-	    snprintf(procpath, 64, "/proc/%i/cmdline", alreadyrunning);
-
-	    /* check here for existence of cmdline
-		a better check will be to test also the cmdline contains this programname if it exists */
-
-	    if (stat(procpath, &st)==-1) {
-
-		/* pid file found, but no process, so it's not running: remove the pid file */
-
-		remove_pid_file(&fs_options.socket, (pid_t) alreadyrunning);
-		alreadyrunning=0;
-		count++;
-		goto checkpidfile;
-
-	    } else {
-		int fd=0;
-
-		/* check the contents of the procfile cmdline: it should be the same as argv[0] */
-
-		fd=open(procpath, O_RDONLY);
-
-		if (fd>0) {
-		    char buffer[PATH_MAX];
-		    ssize_t bytesread=0;
-
-		    memset(buffer, '\0', PATH_MAX);
-		    bytesread=read(fd, buffer, PATH_MAX);
-		    if (bytesread>0) {
-
-			// if (strcmp(buffer, argv[0]) != 0) {
-
-			    logoutput_info("MAIN: cmdline pid %i is %s", alreadyrunning, buffer);
-
-			//}
-
-		    }
-
-		    close(fd);
-
-		}
-
-	    }
-
-	}
-
-	if (check_socket_path(&fs_options.socket, alreadyrunning)==-1) goto out;
-	init_connection(&socket, FS_CONNECTION_TYPE_LOCAL, FS_CONNECTION_ROLE_SERVER);
-
-	if (create_local_serversocket(fs_options.socket.path, &socket, NULL, accept_client_connection_from_localsocket, NULL)>=0) {
-
-	    logoutput_info("MAIN: created socket %s", fs_options.socket.path);
-
-	} else {
-
-	    logoutput_info("MAIN: error %i creating socket %s (%s)", error, fs_options.socket.path, strerror(error));
-	    goto out;
-
-	}
-
-    } else {
-
-	logoutput_info("MAIN: error creating directory for socket %s", fs_options.socket.path);
+	logoutput_error("MAIN: cannot continue, %s already running", argv[0]);
+	goto out;
 
     }
 
-    create_pid_file(&fs_options.socket);
+    if (check_socket_path(&fs_options.socket, 0)==-1) goto out;
+
+    init_connection(&socket, FS_CONNECTION_TYPE_LOCAL, FS_CONNECTION_ROLE_SERVER);
+
+    if (create_local_serversocket(fs_options.socket.path, &socket, NULL, accept_client_connection_from_localsocket, NULL)>=0) {
+
+	logoutput_info("MAIN: created socket %s", fs_options.socket.path);
+
+    } else {
+
+	logoutput_info("MAIN: error %i creating socket %s (%s)", error, fs_options.socket.path, strerror(error));
+	goto out;
+
+    }
 
     if (fs_options.network.flags & _OPTIONS_NETWORK_DISCOVER_METHOD_FILE) {
 
@@ -934,7 +1005,7 @@ int main(int argc, char *argv[])
 
     browse_services_avahi();
 
-    res=create_user_monitor(change_usersessions, NULL);
+    res=create_user_monitor(change_usersessions, NULL, filter_user_login);
 
     if (res<0) {
 
@@ -989,7 +1060,13 @@ int main(int argc, char *argv[])
     clear_beventloop(NULL);
 
     free_osns_users();
-    remove_pid_file(&fs_options.socket, getpid());
+
+    if (pidfile) {
+
+	remove_pid_file(pidfile);
+	free(pidfile);
+
+    }
 
     options:
 

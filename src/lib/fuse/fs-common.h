@@ -32,6 +32,8 @@ void _fs_common_virtual_lookup(struct service_context_s *context, struct fuse_re
 void _fs_common_getattr(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode);
 void _fs_common_cached_create(struct service_context_s *context, struct fuse_request_s *request, struct fuse_openfile_s *openfile);
 
+struct entry_s *get_fuse_direntry_virtual(struct fuse_opendir_s *opendir, struct fuse_request_s *request);
+
 void _fs_common_virtual_opendir(struct fuse_opendir_s *opendir, struct fuse_request_s *request, unsigned int flags);
 void _fs_common_virtual_readdir(struct fuse_opendir_s *opendir, struct fuse_request_s *request, size_t size, off_t offset);
 void _fs_common_virtual_readdirplus(struct fuse_opendir_s *opendir, struct fuse_request_s *request, size_t size, off_t offset);

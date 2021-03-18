@@ -126,7 +126,17 @@ static unsigned int estimate_buffer_size(unsigned int lenSessionId, struct ssh_k
     /* basically (count - 1) * hashlen extra bytes */
 
     len = lenK + lenH + count * hashlen;
-    if (lenK + lenH + 1 + lenSessionId > len) len=lenK + lenH + 1 + lenSessionId;
+
+    if (lenK + lenH + 1 + lenSessionId > len) {
+
+	len=lenK + lenH + 1 + lenSessionId;
+	logoutput("estimate_buffer_size: %i = %i + %i + 1 + %i", len, lenK, lenH, lenSessionId);
+
+    } else {
+
+	logoutput("estimate_buffer_size: %i = %i + %i + %i x %i", len, lenK, lenH, count, hashlen);
+
+    }
 
     return len;
 
@@ -142,7 +152,6 @@ static void _create_keyx_hash(struct ssh_connection_s *connection, struct ssh_ke
     struct msg_buffer_s mb=INIT_SSH_MSG_BUFFER;
     unsigned int len = estimate_buffer_size(sessionId->len, k, H->len, hashlen, key->size);
     char buffer[len];
-    struct ssh_dh_s *dh=&k->method.dh;
     struct keyex_ops_s *ops=k->ops;
     unsigned int error=0;
 
@@ -151,12 +160,19 @@ static void _create_keyx_hash(struct ssh_connection_s *connection, struct ssh_ke
 
     /* create hash of K || H || "X" || session_id */
 
+    logoutput("_create_keyx_hash: K || H || %i || sid", singlechar);
+
     (* ops->msg_write_sharedkey)(&mb, k);
     msg_write_bytes(&mb, (unsigned char *) H->digest, H->len);
     msg_write_byte(&mb, singlechar);
     msg_write_bytes(&mb, (unsigned char *) sessionId->ptr, sessionId->len);
 
+    /* adjust the behaviour to deal with openssh bug
+	was >= */
+
     if (out->size >= key->size) {
+
+	logoutput("_create_keyx_hash: enough data: out size %i >= key size %i", out->size, key->size);
 
 	/* enough data for the key */
 
@@ -168,8 +184,7 @@ static void _create_keyx_hash(struct ssh_connection_s *connection, struct ssh_ke
 
 	/* key requires more data */
 
-	// out.ptr=key->ptr;
-	// out.len=hashlen;
+	logoutput("_create_keyx_hash: not enough data: out size %i < key size %i", out->size, key->size);
 
 	if (create_hash(mb.data, mb.pos, out, &error)==0) goto error;
 	memcpy(key->ptr, out->digest, out->size);
@@ -189,6 +204,8 @@ static void _create_keyx_hash(struct ssh_connection_s *connection, struct ssh_ke
 
 	append:
 
+	logoutput("_create_keyx_hash: append");
+
 	/* append previous hash K1, K2, .... 
 	    to create a new hash K2, K3, .... */
 
@@ -198,11 +215,14 @@ static void _create_keyx_hash(struct ssh_connection_s *connection, struct ssh_ke
 	if (key->len + out->size >= key->size) {
 
 	    /* enough */
+	    logoutput("_create_keyx_hash: enough: %i + %i >= %i", key->len, out->size, key->size);
 
 	    memcpy(key->ptr + key->len, out->digest, key->size - key->len);
 	    key->len=key->size;
 
 	} else {
+
+	    logoutput("_create_keyx_hash: not enough: %i + %i < %i", key->len, out->size, key->size);
 
 	    memcpy(key->ptr + key->len, out->digest, out->size);
 	    key->len+=out->size;

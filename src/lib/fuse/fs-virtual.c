@@ -240,6 +240,11 @@ static void _fs_releasedir(struct fuse_opendir_s *opendir, struct fuse_request_s
     _fs_common_virtual_releasedir(opendir, request);
 }
 
+static struct entry_s *_fs_get_fuse_direntry(struct fuse_opendir_s *opendir, struct fuse_request_s *request)
+{
+    return get_fuse_direntry_virtual(opendir, request);
+}
+
 static void _fs_setxattr(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, const char *name, const char *value, size_t size, int flags)
 {
 
@@ -329,6 +334,7 @@ static void _set_virtual_fs(struct fuse_fs_s *fs)
 	fs->type.dir.readdirplus=_fs_readdirplus;
 	fs->type.dir.releasedir=_fs_releasedir;
 	fs->type.dir.fsyncdir=_fs_fsyncdir;
+	fs->type.dir.get_fuse_direntry=_fs_get_fuse_direntry;
 
     } else {
 

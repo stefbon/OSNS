@@ -62,6 +62,10 @@
 const char *rootpath="/";
 const char *dotdotname="..";
 const char *dotname=".";
+const struct name_s dotxname={".", 1, 0};
+const struct name_s dotdotxname={"..", 2, 0};
+
+extern struct fs_options_s fs_options;
 
 /*
     check an user has access to a path
@@ -107,11 +111,13 @@ void _fs_common_cached_lookup(struct service_context_s *context, struct fuse_req
     struct timespec *attr_timeout=NULL;
     struct timespec *entry_timeout=NULL;
 
-    logoutput("_fs_common_cached_lookup: ino %li name %.*s", inode->st.st_ino, inode->alias->name.len, inode->alias->name.name);
+    logoutput_debug("_fs_common_cached_lookup: ino %li name %.*s", inode->st.st_ino, inode->alias->name.len, inode->alias->name.name);
 
     context=get_root_context(context);
     attr_timeout=get_fuse_attr_timeout(request->ptr);
     entry_timeout=get_fuse_entry_timeout(request->ptr);
+
+    memset(&entry_out, 0, sizeof(struct fuse_entry_out));
 
     inode->nlookup++;
 
@@ -144,8 +150,6 @@ void _fs_common_cached_lookup(struct service_context_s *context, struct fuse_req
     entry_out.attr.gid=inode->st.st_gid;
     entry_out.attr.rdev=0; /* no special devices supported */
 
-    entry_out.attr.padding=0;
-
     reply_VFS_data(request, (char *) &entry_out, sizeof(entry_out));
 
 }
@@ -166,6 +170,7 @@ void _fs_common_cached_create(struct service_context_s *context, struct fuse_req
     char buffer[size_entry_out + size_open_out];
 
     // inode->nlookup++;
+    memset(&entry_out, 0, sizeof(struct fuse_entry_out));
 
     entry_out.nodeid=inode->st.st_ino;
     entry_out.generation=0; /* todo: add a generation field to reuse existing inodes */
@@ -197,11 +202,8 @@ void _fs_common_cached_create(struct service_context_s *context, struct fuse_req
     entry_out.attr.gid=inode->st.st_gid;
     entry_out.attr.rdev=0; /* no special devices supported */
 
-    entry_out.attr.padding=0;
-
     open_out.fh=(uint64_t) openfile;
     open_out.open_flags=FOPEN_KEEP_CACHE;
-    open_out.padding=0;
 
     /* put entry_out and open_out in one buffer */
 
@@ -288,6 +290,7 @@ void _fs_common_getattr(struct service_context_s *context, struct fuse_request_s
 
     logoutput("_fs_common_getattr: context %s", context->name);
 
+    memset(&attr_out, 0, sizeof(struct fuse_attr_out));
     context=get_root_context(context);
     attr_timeout=get_fuse_attr_timeout(request->ptr);
 
@@ -315,9 +318,6 @@ void _fs_common_getattr(struct service_context_s *context, struct fuse_request_s
     attr_out.attr.gid=inode->st.st_gid;
     attr_out.attr.rdev=0; /* no special devices supported */
 
-    attr_out.attr.padding=0;
-    attr_out.dummy=0;
-
     reply_VFS_data(request, (char *) &attr_out, sizeof(attr_out));
 
 }
@@ -334,24 +334,51 @@ void _fs_common_virtual_opendir(struct fuse_opendir_s *opendir, struct fuse_requ
     if (directory && get_directory_count(directory)>0) {
 	struct sl_skiplist_s *sl=(struct sl_skiplist_s *) directory->buffer;
 
-	opendir->mode |= _FUSE_READDIR_MODE_NONEMPTY;
+	opendir->flags |= _FUSE_OPENDIR_FLAG_NONEMPTY;
 	opendir->handle.ptr = (void *) sl->header.head;
 
     }
 
     open_out.fh=(uint64_t) opendir;
     open_out.open_flags=0;
-    open_out.padding=0;
     reply_VFS_data(request, (char *) &open_out, sizeof(open_out));
-    logoutput("_fs_common_virtual_opendir: ready");
+
+    opendir->flags |= (_FUSE_OPENDIR_FLAG_IGNORE_XDEV_SYMLINKS | _FUSE_OPENDIR_FLAG_IGNORE_BROKEN_SYMLINKS) ; /* sane flags */
+    if (fs_options.sftp.hideflags & _OPTIONS_SFTP_HIDE_FLAG_DOTFILE) opendir->flags |= _FUSE_OPENDIR_FLAG_HIDE_DOTFILES;
 
 }
 
-void _fs_common_virtual_readdir(struct fuse_opendir_s *opendir, struct fuse_request_s *request, size_t size, off_t offset)
+struct entry_s *get_fuse_direntry_virtual(struct fuse_opendir_s *opendir, struct fuse_request_s *request)
 {
-    struct stat st;
+    struct entry_s *entry=NULL;
+    struct list_element_s *list=(struct list_element_s *) opendir->handle.ptr;
+
+    while (list) {
+
+	entry=(struct entry_s *) ((char *) list - offsetof(struct entry_s, list));
+
+	if ((* opendir->hidefile)(opendir, entry)==1) {
+
+	    list=list->n;
+	    entry=NULL;
+
+	} else {
+
+	    opendir->handle.ptr=(void *) list->n;
+	    break;
+
+	}
+
+    }
+
+    return entry;
+}
+
+static void _fs_common_virtual_readdir_common(struct fuse_opendir_s *opendir, struct fuse_request_s *request, size_t size, off_t offset, unsigned char plus)
+{
+    struct service_context_s *context=opendir->context;
     struct directory_s *directory=NULL;
-    struct name_s xname={NULL, 0, 0};
+    struct name_s *xname=NULL;
     struct inode_s *inode=NULL;
     struct entry_s *entry=NULL;
     char buff[size];
@@ -359,16 +386,16 @@ void _fs_common_virtual_readdir(struct fuse_opendir_s *opendir, struct fuse_requ
     unsigned int error=0;
     struct simple_lock_s rlock;
 
-    if (opendir->mode & _FUSE_READDIR_MODE_FINISH) {
+    if (opendir->flags & _FUSE_OPENDIR_FLAG_READDIR_FINISH) {
 	char dummy='\0';
 
-	logoutput("_fs_common_virtual_readdir: finish");
+	logoutput("_fs_common_virtual_readdir_common: finish");
 	reply_VFS_data(request, &dummy, 0);
 	return;
 
     }
 
-    logoutput("_fs_common_virtual_readdir: size %i off %i", (unsigned int) size, (unsigned int) offset);
+    logoutput("_fs_common_virtual_readdir_common: size %i off %i", (unsigned int) size, (unsigned int) offset);
     directory=get_directory(opendir->inode);
 
     if (rlock_directory(directory, &rlock)==-1) {
@@ -378,14 +405,26 @@ void _fs_common_virtual_readdir(struct fuse_opendir_s *opendir, struct fuse_requ
 
     }
 
-    memset(&st, 0, sizeof(struct stat));
     direntries.data=buff;
     direntries.pos=buff;
     direntries.size=size;
     direntries.left=size;
     direntries.offset=offset;
 
+    if (plus) {
+
+	opendir->add_direntry_buffer=add_direntry_plus_buffer;
+
+    } else {
+
+	opendir->add_direntry_buffer=add_direntry_buffer;
+
+    }
+
     while (direntries.left>0 && (request->flags & FUSE_REQUEST_FLAG_INTERRUPTED)==0) {
+
+	entry=NULL;
+	xname=NULL;
 
 	if (direntries.offset==0) {
 
@@ -393,10 +432,7 @@ void _fs_common_virtual_readdir(struct fuse_opendir_s *opendir, struct fuse_requ
 
     	    /* the . entry */
 
-    	    st.st_ino = inode->st.st_ino;
-	    st.st_mode = S_IFDIR;
-	    xname.name = (char *) dotname;
-	    xname.len=1;
+	    xname=&dotxname;
 
     	} else if (direntries.offset==1) {
     	    struct directory_s *directory=NULL;
@@ -407,64 +443,47 @@ void _fs_common_virtual_readdir(struct fuse_opendir_s *opendir, struct fuse_requ
 
 	    directory=get_directory_entry(inode->alias);
 	    if (directory) inode=directory->inode;
-
-    	    st.st_ino = inode->st.st_ino;
-	    st.st_mode = S_IFDIR;
-	    xname.name = (char *) dotdotname;
-	    xname.len=2;
+	    xname=&dotdotxname;
 
     	} else {
 
-	    entry=opendir->entry;
+	    if (opendir->ino>0) {
+
+		inode=lookup_workspace_inode(context->workspace, opendir->ino);
+		opendir->ino=0;
+		if (inode) entry=inode->alias;
+
+	    }
+
+	    readdir:
 
 	    if (entry==NULL) {
-		struct list_element_s *list=NULL;
 
-		readdir:
+		if ((entry=(* opendir->get_fuse_direntry)(opendir, request))==NULL) {
 
-		list=(struct list_element_s *) opendir->handle.ptr;
-
-		if (list) {
-		    struct entry_s *next=NULL;
-
-		    entry=(struct entry_s *) ((char *) list - offsetof(struct entry_s, list));
-		    opendir->handle.ptr=(void *) ((entry) ? entry->list.n : NULL);
-
-		} else {
-
-		    opendir->mode |= _FUSE_READDIR_MODE_FINISH;
+		    set_flag_fuse_opendir(opendir, _FUSE_OPENDIR_FLAG_READDIR_FINISH);
 		    break;
 
 		}
 
-	    }
-
-	    inode=entry->inode;
-
-	    if ((* opendir->hidefile)(opendir, inode)==0) {
-
-		opendir->entry=NULL;
-		goto readdir;
+		inode=entry->inode;
 
 	    }
 
-	    st.st_ino=inode->st.st_ino;
-	    st.st_mode=inode->st.st_mode;
-	    xname.name=entry->name.name;
-	    xname.len=entry->name.len;
+	    xname=&entry->name;
 
 	}
 
-	logoutput("_fs_common_virtual_readdir: add %.*s", xname.len, xname.name);
+	logoutput("_fs_common_virtual_readdir_common: add %.*s", xname->len, xname->name);
 
-	if (add_direntry_buffer(request->ptr, &direntries, &xname, &st)==-1) {
+	/* add entry to the buffer to send to VFS: does it fit, if no keep the ino for adding later next batch */
 
-	    opendir->entry=entry; /* keep it for the next batch */
+	if ((* opendir->add_direntry_buffer)(request->ptr, &direntries, xname, &inode->st)==-1) {
+
+	    opendir->ino=inode->st.st_ino; /* keep it for the next batch */
 	    break;
 
 	}
-
-	opendir->entry=NULL; /* forget current entry to force readdir */
 
     }
 
@@ -473,19 +492,21 @@ void _fs_common_virtual_readdir(struct fuse_opendir_s *opendir, struct fuse_requ
 
 }
 
-/* TODO not ready yet */
+void _fs_common_virtual_readdir(struct fuse_opendir_s *opendir, struct fuse_request_s *request, size_t size, off_t offset)
+{
+    _fs_common_virtual_readdir_common(opendir, request, size, offset, 0);
+}
 
 void _fs_common_virtual_readdirplus(struct fuse_opendir_s *opendir, struct fuse_request_s *request, size_t size, off_t offset)
 {
-    reply_VFS_error(request, ENOSYS);
+    _fs_common_virtual_readdir_common(opendir, request, size, offset, 1);
 }
 
 void _fs_common_virtual_releasedir(struct fuse_opendir_s *opendir, struct fuse_request_s *request)
 {
-
+    set_flag_fuse_opendir(opendir, _FUSE_OPENDIR_FLAG_READDIR_FINISH);
     logoutput("_fs_common_virtual_releasedir");
     reply_VFS_error(request, 0);
-
 }
 
 void _fs_common_virtual_fsyncdir(struct fuse_opendir_s *opendir, struct fuse_request_s *request, unsigned char datasync)
@@ -528,6 +549,8 @@ void _fs_common_statfs(struct service_context_s *context, struct fuse_request_s 
 	it's not possible to determine those for all the backends/subfilesystems
     */
 
+    memset(&statfs_out, 0, sizeof(struct fuse_statfs_out));
+
     statfs_out.st.blocks=blocks;
     statfs_out.st.bfree=bfree;
     statfs_out.st.bavail=bavail;
@@ -538,8 +561,6 @@ void _fs_common_statfs(struct service_context_s *context, struct fuse_request_s 
 
     statfs_out.st.namelen=255; /* a sane default */
     statfs_out.st.frsize=bsize; /* use the same as block size */
-
-    statfs_out.st.padding=0;
 
     reply_VFS_data(request, (char *) &statfs_out, sizeof(struct fuse_statfs_out));
 

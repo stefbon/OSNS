@@ -65,7 +65,7 @@ struct list_header_s {
     char			*name;
 };
 
-struct header_ops_s empty_header_ops;
+extern struct header_ops_s empty_header_ops;
 
 #define				INIT_LIST_HEADER		{ 0, 0, 0, NULL, NULL, &empty_header_ops, NULL }
 
