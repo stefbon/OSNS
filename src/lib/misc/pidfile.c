@@ -80,7 +80,9 @@ static unsigned int create_pid_path(char *path, char *name, char *user, pid_t pi
 
     } else {
 
-	pos+=strlen(path) + 1 + strlen(name) + 1 + strlen(user) + 32;
+	pos+=((path) ? strlen(path) + 1 : 0) + 
+		((name) ? strlen(name) + 1 : 0) +
+		((user) ?  strlen(user) + 1 : 0) + 32;
 
     }
 
