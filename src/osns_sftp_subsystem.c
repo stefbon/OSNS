@@ -42,14 +42,6 @@
 #include <sys/statvfs.h>
 #include <sys/mount.h>
 
-#ifdef HAVE_SETXATTR
-#include <sys/xattr.h>
-#endif
-
-#ifndef ENOATTR
-#define ENOATTR ENODATA        /* No such attribute */
-#endif
-
 #include "log.h"
 
 #include "main.h"
@@ -136,22 +128,6 @@ int main(int argc, char *argv[])
 
     logoutput("%s started", argv[0]);
 
-    /* daemonize */
-
-    res=custom_fork();
-
-    if (res<0) {
-
-        logoutput_error("MAIN: error daemonize.");
-        return 1;
-
-    } else if (res>0) {
-
-	logoutput("MAIN: created a service with pid %i.", res);
-	return 0;
-
-    }
-
     /* output to stdout/stderr is useless since daemonized */
 
     switch_logging_backend("syslog");
@@ -163,7 +139,7 @@ int main(int argc, char *argv[])
 
     } else {
 
-	logoutput_info("MAIN: creating eventloop");
+	logoutput_info("MAIN: initializing eventloop");
 
     }
 
@@ -174,7 +150,7 @@ int main(int argc, char *argv[])
 
     } else {
 
-	logoutput_info("MAIN: adding signal handler");
+	logoutput_info("MAIN: adding signal handler to eventloop");
 
     }
 
