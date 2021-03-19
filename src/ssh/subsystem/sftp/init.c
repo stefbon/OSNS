@@ -199,12 +199,20 @@ static int init_sftp_identity(struct sftp_identity_s *user)
 {
     char *name=NULL;
 
+    memset(user, 0, sizeof(struct sftp_identity_s));
+
+    user->result=NULL;
+    user->buffer=NULL;
+    user->size=128;
+
     /* assume the process is running as the desired user already, so getting the environment variable LOGNAME is enough */
 
     name=getenv("LOGNAME");
 
     if (name) {
 	struct passwd *result=NULL;
+
+	logoutput("init_sftp_identity: found name %s", name);
 
 	getpw:
 
@@ -233,7 +241,7 @@ static int init_sftp_identity(struct sftp_identity_s *user)
 
 	}
 
-	user->len_home=strlen(result->pw_dir);
+	user->len_home=strlen(user->pwd.pw_dir);
 
     }
 

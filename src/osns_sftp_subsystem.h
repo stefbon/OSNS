@@ -205,6 +205,7 @@ struct sftp_payload_queue_s {
 
 struct sftp_identity_s {
     struct passwd					pwd;
+    struct passwd					*result;
     unsigned int					size;
     unsigned int 					len_home;
     char						*buffer;
