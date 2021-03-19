@@ -43,9 +43,50 @@
 #include "pathinfo.h"
 #include "pidfile.h"
 
+int create_fullpath_c(char *path)
+{
+    char *slash=NULL;
+
+    unslash(path);
+
+    /* create the parent path */
+
+    slash=strchr(path, '/');
+
+    while (slash) {
+
+	*slash='\0';
+	if (strlen(path)==0) goto next;
+
+	if (mkdir(path, S_IFDIR | S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)==-1) {
+
+	    if (errno != EEXIST) {
+
+		logoutput("create_fullpath_c: error %i%s creating %s", errno, strerror(errno), path);
+		return -1;
+
+	    }
+
+	}
+
+	next:
+
+	*slash='/';
+	slash=strchr(slash+1, '/');
+
+    }
+
+    return 0;
+
+}
+
 static unsigned int create_pid_path(char *path, char *name, char *user, pid_t pid, char *fullpath, unsigned int len)
 {
     unsigned int pos=0;
+
+    logoutput("create_pid_path: path %s", (path) ? path : "NULL");
+    logoutput("create_pid_path: name %s", (name) ? name : "NULL");
+    logoutput("create_pid_path: user %s", (user) ? user : "NULL");
 
     if (fullpath) {
 
@@ -95,9 +136,25 @@ void create_pid_file(char *path, char *name, char *user, pid_t pid, char **p_kee
     unsigned int len = create_pid_path(path, name, user, pid, NULL, 0);
     char fullpath[len];
     unsigned int pos=0;
+    char *slash=NULL;
 
     memset(fullpath, '\0', len);
     pos=create_pid_path(path, name, user, pid, fullpath, len);
+
+    slash=memrchr(fullpath, '/', pos);
+    if (slash) *slash='\0';
+
+    if (create_fullpath_c(fullpath)==0) {
+
+	logoutput("create_pid_file: created path %s", fullpath);
+
+    } else {
+
+	logoutput_warning("create_pid_file: creating path %s", fullpath);
+
+    }
+
+    if (slash) *slash='/';
 
     if (mknod(fullpath, S_IFREG | S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH, 0)==0) {
 
@@ -138,7 +195,14 @@ pid_t check_pid_file(char *path, char *name, char *user, int (* cb)(pid_t pid, v
     pos=create_pid_path(NULL, name, user, 0, partname, len1);
 
     dp=opendir(path);
-    if (dp==NULL) return 0;
+
+    if (dp==NULL) {
+
+	logoutput_warning("check_pid_file: error %i opening directory %s (%s)", errno, path, strerror(errno));
+	return 0;
+
+    }
+
     de=readdir(dp);
 
     while (de) {
@@ -223,36 +287,8 @@ int create_fullpath(struct pathinfo_s *pathinfo)
 
     memcpy(path, pathinfo->path, pathinfo->len);
     path[pathinfo->len] = '\0';
-    unslash(path);
 
-    /* create the parent path */
-
-    slash=strchr(path, '/');
-
-    while (slash) {
-
-	*slash='\0';
-	if (strlen(path)==0) goto next;
-
-	if (mkdir(path, S_IFDIR | S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)==-1) {
-
-	    if (errno != EEXIST) {
-
-		logoutput("create_fullpath: error %i%s creating %s", errno, strerror(errno), path);
-		return -1;
-
-	    }
-
-	}
-
-	next:
-
-	*slash='/';
-	slash=strchr(slash+1, '/');
-
-    }
-
-    return 0;
+    return create_fullpath_c(path);
 
 }
 
@@ -329,4 +365,3 @@ int check_pid_running(pid_t pid, char **p_cmdline)
 
     return result;
 }
-

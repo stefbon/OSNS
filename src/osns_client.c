@@ -819,6 +819,8 @@ static int check_create_pid_file(struct pathinfo_s *socketpath, char *progname, 
     char tmp[len + 1];
     char *sep=NULL;
     pid_t pid=0;
+    char *slash=memrchr(progname, '/', strlen(progname));
+    char *filename=(slash) ? slash + 1 : progname;
 
     /* socketpath is something like /run/osns/sock
 	get the basename for the directory to look for pidfile */
@@ -831,15 +833,15 @@ static int check_create_pid_file(struct pathinfo_s *socketpath, char *progname, 
 
     checkpid:
 
-    pid=check_pid_file(tmp, progname, NULL, check_pid_file_cb, CHECK_PF_FLAG_REMOVE_IF_ORPHAN);
+    pid=check_pid_file(tmp, filename, NULL, check_pid_file_cb, CHECK_PF_FLAG_REMOVE_IF_ORPHAN);
 
     if (pid>0) {
 
-	logoutput_warning("check_create_pid_file: %s already running with pid %i", progname, pid);
+	logoutput_warning("check_create_pid_file: %s already running with pid %i", filename, pid);
 
     } else {
 
-	create_pid_file(tmp, progname, NULL, getpid(), p_pidfile);
+	create_pid_file(tmp, filename, NULL, getpid(), p_pidfile);
 
     }
 
