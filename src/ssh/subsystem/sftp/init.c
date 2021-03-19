@@ -233,7 +233,7 @@ static int init_sftp_identity(struct sftp_identity_s *user)
 
 	}
 
-	user->len_home=strlen(user->pwd.pw_dir);
+	user->len_home=strlen(result->pw_dir);
 
     }
 
