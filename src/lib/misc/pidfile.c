@@ -43,6 +43,23 @@
 #include "pathinfo.h"
 #include "pidfile.h"
 
+static int mkdir_ext(char *path)
+{
+
+    if (mkdir(path, S_IFDIR | S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)==-1) {
+
+	if (errno != EEXIST) {
+
+	    logoutput("create_fullpath_c: error %i%s creating %s", errno, strerror(errno), path);
+	    return -1;
+
+	}
+
+    }
+
+    return 0;
+}
+
 int create_fullpath_c(char *path)
 {
     char *slash=NULL;
@@ -57,17 +74,7 @@ int create_fullpath_c(char *path)
 
 	*slash='\0';
 	if (strlen(path)==0) goto next;
-
-	if (mkdir(path, S_IFDIR | S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)==-1) {
-
-	    if (errno != EEXIST) {
-
-		logoutput("create_fullpath_c: error %i%s creating %s", errno, strerror(errno), path);
-		return -1;
-
-	    }
-
-	}
+	if (mkdir_ext(path)==-1) return -1;
 
 	next:
 
@@ -75,6 +82,8 @@ int create_fullpath_c(char *path)
 	slash=strchr(slash+1, '/');
 
     }
+
+    if (mkdir_ext(path)==-1) return -1;
 
     return 0;
 
