@@ -198,7 +198,9 @@ int main(int argc, char *argv[])
 
     }
 
-    create_pid_file(PIDFILE_PATH, "osns_sftp_subsystem", sftp.identity.pwd.pw_name, getpid(), &pidfile);
+    /* disable pidfile for now: find a location with write access first */
+
+    // create_pid_file(PIDFILE_PATH, "osns_sftp_subsystem", sftp.identity.pwd.pw_name, getpid(), &pidfile);
 
     res=start_beventloop(NULL);
 
@@ -219,7 +221,12 @@ int main(int argc, char *argv[])
     logoutput_info("MAIN: destroy eventloop");
     clear_beventloop(NULL);
 
-    remove_pid_file(pidfile);
+    if (pidfile) {
+
+	remove_pid_file(pidfile);
+	free(pidfile);
+
+    }
 
     if (error>0) {
 
