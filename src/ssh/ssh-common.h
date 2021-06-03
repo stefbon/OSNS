@@ -820,7 +820,7 @@ struct ssh_session_ctx_s {
     unsigned int					flags;
     uint64_t						unique;
     void 						*ctx;
-    int							(* add_connection_eventloop)(struct ssh_session_s *s, struct ssh_connection_s *conn, unsigned int fd, int (* cb)(int fd, void *ptr, uint32_t events), void *ptr);
+    int							(* add_connection_eventloop)(struct ssh_session_s *s, struct ssh_connection_s *conn, unsigned int fd, void (* cb)(int fd, void *ptr, struct event_s *event), void *ptr);
     int							(* signal_ctx2ssh)(void **p_ptr, const char *what, struct ctx_option_s *o);
     int							(* signal_ssh2ctx)(struct ssh_session_s *s, const char *what, struct ctx_option_s *o);
     int							(* signal_ssh2remote)(struct ssh_session_s *s, const char *what, struct ctx_option_s *o);

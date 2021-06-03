@@ -134,28 +134,39 @@ int set_host_address(struct host_address_s *a, char *hostname, char *ipv4, char 
 {
     int result=-1;
 
+    logoutput("set_host_address: hostname %s ipv4 %s ipv6 %s", (hostname) ? hostname : "NULL", (ipv4) ? ipv4 : "NULL", (ipv6) ? ipv6 : "NULL");
+
     if (hostname && strlen(hostname)>0) {
 	unsigned int len=strlen(hostname);
 
-	memset(a->hostname, '\0', NI_MAXHOST + 1);
+	memset(a->hostname, '\0', HOST_HOSTNAME_FQDN_MAX_LENGTH + 1);
 
-	if (len>NI_MAXHOST) len=NI_MAXHOST;
+	if (len>HOST_HOSTNAME_FQDN_MAX_LENGTH) len=HOST_HOSTNAME_FQDN_MAX_LENGTH;
 	memcpy(a->hostname, hostname, len);
 	a->flags|=HOST_ADDRESS_FLAG_HOSTNAME;
 	result=0;
+	logoutput_debug("set_host_address: set hostname %s", hostname);
 
     }
 
     if (ipv4 && strlen(ipv4)>0) {
 
+	logoutput_debug("set_host_address: ipv4");
+
 	memset(a->ip.ip.v4, '\0', INET_ADDRSTRLEN + 1);
 
 	if (strlen(ipv4) <=INET_ADDRSTRLEN) {
+
+	    logoutput("set_host_address: set ipv4 %s", ipv4);
 
 	    strcpy(a->ip.ip.v4, ipv4);
 	    a->ip.family=IP_ADDRESS_FAMILY_IPv4;
 	    a->flags|=HOST_ADDRESS_FLAG_IP;
 	    result=0;
+
+	} else {
+
+	    logoutput("set_host_address: not set ipv4 %s (too long: len %i max %i)", ipv4, strlen(ipv4), INET_ADDRSTRLEN);
 
 	}
 
@@ -254,4 +265,142 @@ unsigned char socket_network_connection_error(unsigned int error)
 {
     return ( error==EBADF || error==ENETDOWN || error==ENETUNREACH || error==ENETRESET || error==ECONNABORTED || error==ECONNRESET ||
 	    error==ENOBUFS || error==ENOTCONN || error==ESHUTDOWN || error==ECONNREFUSED || error==EHOSTDOWN || error==EHOSTUNREACH) ? 1 : 0;
+}
+
+char *get_socket_addr_hostname(struct sockaddr *addr, unsigned int len, struct generic_error_s *error)
+{
+    socklen_t size = sizeof(struct sockaddr);
+    int result = 0;
+    char tmp[NI_MAXHOST+1];
+    unsigned int count = 0;
+    char *hostname=NULL;
+
+    gethostname:
+
+    memset(tmp, '\0', NI_MAXHOST+1);
+    result=getnameinfo(addr, len, tmp, NI_MAXHOST+1, NULL, 0, 0); /*NI_NAMEREQD*/
+    count++;
+
+    if (result==0) {
+
+	hostname=strdup(tmp);
+	if (hostname==NULL) set_generic_error_system(error, ENOMEM, __PRETTY_FUNCTION__);
+
+    } else {
+
+	logoutput("get_connection_hostname: error %i:%s", result, gai_strerror(result));
+
+	switch (result) {
+
+	case EAI_MEMORY:
+
+	    set_generic_error_system(error, ENOMEM, __PRETTY_FUNCTION__);
+	    break;
+
+	case EAI_NONAME:
+
+	    set_generic_error_system(error, ENOENT, __PRETTY_FUNCTION__);
+	    break;
+
+	case EAI_SYSTEM:
+
+	    set_generic_error_system(error, errno, __PRETTY_FUNCTION__);
+	    break;
+
+	case EAI_OVERFLOW:
+
+	    set_generic_error_system(error, ENAMETOOLONG, __PRETTY_FUNCTION__);
+	    break;
+
+	case EAI_AGAIN:
+
+	    if (count<10) goto gethostname;
+
+	default:
+
+	    set_generic_error_system(error, EIO, __PRETTY_FUNCTION__);
+
+	}
+
+    }
+
+    return hostname;
+
+}
+
+char *gethostnamefromspec(struct host_address_s *address, unsigned int flags)
+{
+    char *hostname=NULL;
+    struct addrinfo hint;
+    struct addrinfo *ais=NULL;
+    int result=0;
+    char *host=NULL;
+
+    memset(&hint, 0, sizeof(struct addrinfo));
+
+    hint.ai_family		= AF_UNSPEC;
+    hint.ai_socktype		= 0;
+    hint.ai_protocol		= 0;
+    hint.ai_flags		= AI_PASSIVE | AI_CANONNAME;
+    hint.ai_addrlen		= 0;
+    hint.ai_addr		= NULL;
+    hint.ai_canonname		= NULL;
+    hint.ai_next		= NULL;
+
+    if (strlen(address->hostname)>0) {
+
+	host=address->hostname;
+
+    } else {
+
+	if (address->flags & HOST_ADDRESS_FLAG_IP) {
+
+	    if (address->ip.family & IP_ADDRESS_FAMILY_IPv4) {
+
+		hint.ai_family=AF_INET;
+		host=address->ip.ip.v4;
+
+	    } else if (address->ip.family & IP_ADDRESS_FAMILY_IPv6) {
+
+		hint.ai_family=AF_INET6;
+		host=address->ip.ip.v6;
+
+	    }
+
+	}
+
+    }
+
+    if (host==NULL) return NULL;
+
+    result=getaddrinfo(host, NULL, &hint, &ais);
+
+    if (result==0) {
+	struct addrinfo *ai=ais;
+
+	while (ai) {
+
+	    if (ai->ai_canonname) {
+
+		if (flags & GETHOSTNAME_FLAG_IGNORE_IPv4 && check_family_ip_address(ai->ai_canonname, "ipv4")==1) goto next;
+		if (flags & GETHOSTNAME_FLAG_IGNORE_IPv6 && check_family_ip_address(ai->ai_canonname, "ipv6")==1) goto next;
+		hostname=strdup(ai->ai_canonname);
+		if (hostname) break;
+
+	    }
+
+	    next:
+	    ai=ai->ai_next;
+
+	}
+
+    } else {
+
+	logoutput_warning("gethostnamefromip: error %i while getting hostname (%s)", result, gai_strerror(result));
+
+    }
+
+    if (ais) freeaddrinfo(ais);
+
+    return hostname;
 }

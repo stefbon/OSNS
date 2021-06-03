@@ -35,9 +35,6 @@
 #define _SERVICE_TYPE_SFTP_SUBSYSTEM			4
 #define _SERVICE_TYPE_SFTP_CLIENT			5
 
-#define _NETWORK_PORT_TCP				1
-#define _NETWORK_PORT_UDP				2
-
 #define _INTERFACE_BUFFER_FLAG_ALLOC			1
 #define _INTERFACE_BUFFER_FLAG_ERROR			2
 
@@ -72,11 +69,6 @@ struct ctx_option_s {
 	} buffer;
     } value;
     void						(* free)(struct ctx_option_s *o);
-};
-
-struct network_port_s {
-    unsigned int					nr;
-    unsigned char					type;
 };
 
 struct service_address_s {
@@ -124,6 +116,7 @@ struct context_interface_s {
 	struct _sftp_subsystem_s {
 	    unsigned int				flags;
 	    unsigned int				fattr_supported;
+	    char					*name;
 	    int						(* complete_path)(struct context_interface_s *interface, char *buffer, struct pathinfo_s *pathinfo);
 	    unsigned int				(* get_complete_pathlen)(struct context_interface_s *interface, unsigned int len);
 	    struct prefix_s {
@@ -161,6 +154,8 @@ struct interface_ops_s {
 
 /* prototypes */
 
+void init_interfaces();
+
 void init_ctx_option(struct ctx_option_s *option, unsigned char type);
 void set_ctx_option_free(struct ctx_option_s *option, const char *what);
 
@@ -169,6 +164,6 @@ void reset_context_interface(struct context_interface_s *interface);
 void add_interface_ops(struct interface_ops_s *ops);
 struct interface_ops_s *get_next_interface_ops(struct interface_ops_s *ops);
 unsigned int build_interface_ops_list(struct context_interface_s *interface, struct interface_list_s *ilist, unsigned int start);
-struct interface_list_s *get_interface_ops(struct interface_list_s *ailist, unsigned int count, int type);
+struct interface_list_s *get_interface_list(struct interface_list_s *ailist, unsigned int count, int type);
 
 #endif

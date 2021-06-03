@@ -123,7 +123,7 @@ void sl_find_generic(struct sl_skiplist_s *sl, unsigned char opcode, struct sl_l
 	TODO: do something with the information the name to lookup
 	is closer to the last than the first */
 
-    list=sl->header.tail;
+    list=get_list_tail(&sl->header, 0);
     diff=sl->ops.compare(list, result->lookupdata);
 
     if (diff<0) {
@@ -147,7 +147,7 @@ void sl_find_generic(struct sl_skiplist_s *sl, unsigned char opcode, struct sl_l
 
     }
 
-    list=sl->header.head;
+    list=get_list_head(&sl->header, 0);
     result->row=1;
     diff=sl->ops.compare(list, result->lookupdata);
 

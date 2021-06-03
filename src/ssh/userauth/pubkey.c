@@ -137,11 +137,32 @@ static int check_received_pubkey_pk(struct ssh_payload_s *payload, struct ssh_ke
     struct msg_buffer_s mb = INIT_SSH_MSG_BUFFER;
     unsigned int len = write_userauth_pubkey_ok_message(&mb, pkey) + 64;
     char buffer[len];
+    int result=-1;
 
     set_msg_buffer(&mb, buffer, len);
     len=write_userauth_pubkey_ok_message(&mb, pkey);
-    logoutput("check_received_pubkey_pk: len %i payload len %i", len, payload->len);
-    return (len==payload->len && memcmp(buffer, payload->buffer, len)==0) ? 0 : -1;
+
+    if (len==payload->len && memcmp(buffer, payload->buffer, len)==0) {
+
+	logoutput("check_received_pubkey_pk: len %i payload len %i message the same", len, payload->len);
+	result=0;
+
+    } else {
+
+	if (len==payload->len) {
+
+	    logoutput("check_received_pubkey_pk: len %i payload len %i message differs", len, payload->len);
+
+	} else {
+
+	    logoutput("check_received_pubkey_pk: len %i payload len %i and/or message differs", len, payload->len);
+
+	}
+
+    }
+
+    return result;
+
 }
 
 static int ssh_send_pk_signature(struct ssh_connection_s *connection, struct ssh_string_s *s_username, struct ssh_string_s *service, struct ssh_key_s *pkey, struct ssh_key_s *skey)
@@ -161,7 +182,7 @@ static int ssh_send_pk_signature(struct ssh_connection_s *connection, struct ssh
 
     /* send userauth publickey request to server with signature */
 
-    if (send_userauth_pubkey_message(connection, s_username, service, pkey, &signature, &seq)==0) {
+    if (send_userauth_pubkey_message(connection, s_username, service, pkey, &signature, &seq)>0) {
 	struct ssh_payload_s *payload=NULL;
 
 	payload=receive_message_common(connection, select_userauth_reply, NULL, NULL);
@@ -207,7 +228,7 @@ static int send_userauth_pubkey(struct ssh_connection_s *connection, struct ssh_
 
     logoutput("send_userauth_pubkey");
 
-    if (send_userauth_pubkey_message(connection, s_username, service, pkey, NULL, &seq)==0) {
+    if (send_userauth_pubkey_message(connection, s_username, service, pkey, NULL, &seq)>0) {
 	struct ssh_payload_s *payload=NULL;
 
 	payload=receive_message_common(connection, select_userauth_pubkey_reply, NULL, NULL);
@@ -380,7 +401,7 @@ int respond_userauth_publickey_request(struct ssh_connection_s *connection, stru
     msg_read_pkey(&mb1, &pkey, PK_DATA_FORMAT_SSH);
     if (mb1.error>0) goto out;
 
-    if (send_userauth_pubkey_ok_message(connection, &pkey, &seq)==0) {
+    if (send_userauth_pubkey_ok_message(connection, &pkey, &seq)>0) {
 	struct ssh_payload_s *payload=NULL;
 
 	/* wait for SSH_MSG_USERAUTH_REQUEST with signature */
@@ -418,7 +439,7 @@ int respond_userauth_publickey_request(struct ssh_connection_s *connection, stru
 
 	    }
 
-	    /* username, service and methods should ne the same as used in first message */
+	    /* username, service and methods should be the same as used in first message */
 
 	    if (compare_ssh_string(&username2, 's', username1) != 0 || compare_ssh_string(&service2, 's', service1) != 0 || compare_ssh_string(&method2, 'c', "publickey") != 0) {
 

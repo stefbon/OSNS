@@ -1,5 +1,6 @@
 /*
-  2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017 Stef Bon <stefbon@gmail.com>
+  2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021
+  Stef Bon <stefbon@gmail.com>
 
   This program is free software; you can redistribute it and/or
   modify it under the terms of the GNU General Public License
@@ -17,20 +18,13 @@
 
 */
 
-#ifndef _COMMON_UTILS_BEVENT_H
-#define _COMMON_UTILS_BEVENT_H
+#ifndef _LIB_FUSE_FS_SERVICE_BROWSE_H
+#define _LIB_FUSE_FS_SERVICE_BROWSE_H
 
 /* Prototypes */
 
-void init_bevent(struct bevent_s *bevent);
-struct bevent_s *get_next_bevent(struct beventloop_s *loop, struct bevent_s *bevent);
-
-struct bevent_s *add_to_beventloop(int fd, uint32_t code, bevent_cb callback, void *data, struct bevent_s *bevent, struct beventloop_s *loop);
-void remove_bevent_from_beventloop(struct bevent_s *bevent);
-void modify_bevent(struct bevent_s *bevent, uint32_t code);
-
-unsigned int set_bevent_name(struct bevent_s *xdata, char *name);
-char *get_bevent_name(struct bevent_s *xdata);
-int strcmp_bevent(struct bevent_s *b, char *name);
+void use_browse_fs(struct inode_s *inode);
+void init_browse_fs();
+void set_browse_fs(struct fuse_fs_s *fs);
 
 #endif

@@ -74,13 +74,13 @@ struct hash_element_s *lookup_simple_hash(struct simple_hash_s *group, void *dat
 
     i=((*group->hashfunction) (data) % group->len);
 
-    list=group->hash[i].head;
+    list=get_list_head(&group->hash[i], 0);
 
     while (list) {
 
 	element=get_hash_element(list);
 	if (element->data==data) break;
-	list=list->n;
+	list=get_next_element(list);
 	element=NULL; /* element has an invalid value... forget it otherwise this will be returned */
 
     }
@@ -113,7 +113,7 @@ int initialize_group(struct simple_hash_s *group, unsigned int (*hashfunction) (
 {
     int result=0;
 
-    *error=ENOMEM;
+    if (error) *error=ENOMEM;
 
     if (init_simple_locking(&group->locking)==-1) goto error;
 
@@ -125,17 +125,15 @@ int initialize_group(struct simple_hash_s *group, unsigned int (*hashfunction) (
 
 	group->hash=(struct list_header_s *) malloc(len * sizeof(struct list_header_s));
 	if (! group->hash) goto error;
-	*error=0;
+	if (error) *error=0;
 	for (unsigned int i=0;i<len;i++) init_list_header(&group->hash[i], SIMPLE_LIST_TYPE_EMPTY, NULL);
 
     }
 
     out:
-
     return 0;
 
     error:
-
     return -1;
 
 }
@@ -153,17 +151,16 @@ void free_group(struct simple_hash_s *group, void (*free_data) (void *data))
 
 	for (unsigned int i=0;i<group->len;i++) {
 
-	    list=group->hash[i].head;
+	    list=get_list_head(&group->hash[i], SIMPLE_LIST_FLAG_REMOVE);
 
-	    while(element) {
-
-		group->hash[i].head=list->n;
+	    while (list) {
 
 		element=get_hash_element(list);
 		if (free_data && element->data) free_data(element->data);
 		free(element);
+		element=NULL;
 
-		list=group->hash[i].head;
+		list=get_list_head(&group->hash[i], SIMPLE_LIST_FLAG_REMOVE);
 
 	    }
 
@@ -183,19 +180,21 @@ void free_group(struct simple_hash_s *group, void (*free_data) (void *data))
 void *get_next_hashed_value(struct simple_hash_s *group, void **index, unsigned int hashvalue)
 {
     struct hash_element_s *element=NULL;
+    struct list_element_s *list=NULL;
 
     if (*index) {
 
 	element=(struct hash_element_s *) *index;
-	element=(element->list.n) ? get_hash_element(element->list.n) : NULL;
+	list=get_next_element(&element->list);
 
     } else {
 
 	hashvalue=hashvalue % group->len;
-	element=(group->hash[hashvalue].head) ? get_hash_element(group->hash[hashvalue].head) : NULL;
+	list=get_list_head(&group->hash[hashvalue], 0);
 
     }
 
+    element=(list) ? get_hash_element(list) : NULL;
     *index=(void *) element;
     return (element) ? element->data : NULL;
 }
@@ -238,7 +237,6 @@ void remove_data_from_hash_index(struct simple_hash_s *group, void **index)
 
 	move_from_hash(group, element);
 	free(element);
-
 	*index=NULL;
 
     }

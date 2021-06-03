@@ -1,5 +1,5 @@
 /*
-  2017 Stef Bon <stefbon@gmail.com>
+  2010, 2011, 2012, 2013, 2014, 2015, 2016 Stef Bon <stefbon@gmail.com>
 
   This program is free software; you can redistribute it and/or
   modify it under the terms of the GNU General Public License
@@ -17,11 +17,13 @@
 
 */
 
-#ifndef FS_WORKSPACE_DISCOVER_STATICFILE_H
-#define FS_WORKSPACE_DISCOVER_STATICFILE_H
+#ifndef _LIB_WORKSPACE_CONTEXT_INIT_H
+#define _LIB_WORKSPACE_CONTEXT_INIT_H
 
-// Prototypes
+/* prototypes */
 
-void browse_services_staticfile(struct pathinfo_s *p);
+void set_name_service_context(struct service_context_s *ctx);
+struct service_context_s *create_service_context(struct workspace_mount_s *workspace, struct service_context_s *parent, struct interface_list_s *ilist, unsigned char type, struct service_context_s *primary);
+void free_service_context(struct service_context_s *context);
 
 #endif

@@ -23,7 +23,8 @@
 #define _FS_CREATE_ENTRY_MAYEXIST				1
 #define _FS_CREATE_ENTRY_CACHE					2
 
-int check_access_path(uid_t uid, gid_t gid, struct pathinfo_s *target, unsigned int *error);
+struct service_fs_s *get_service_context_fs(struct service_context_s *c);
+
 int symlink_generic_validate(struct service_context_s *context, char *target);
 
 void _fs_common_cached_lookup(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode);
@@ -32,7 +33,7 @@ void _fs_common_virtual_lookup(struct service_context_s *context, struct fuse_re
 void _fs_common_getattr(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode);
 void _fs_common_cached_create(struct service_context_s *context, struct fuse_request_s *request, struct fuse_openfile_s *openfile);
 
-struct entry_s *get_fuse_direntry_virtual(struct fuse_opendir_s *opendir, struct fuse_request_s *request);
+struct entry_s *get_fuse_direntry_virtual(struct fuse_opendir_s *opendir, struct list_header_s *h, struct fuse_request_s *request);
 
 void _fs_common_virtual_opendir(struct fuse_opendir_s *opendir, struct fuse_request_s *request, unsigned int flags);
 void _fs_common_virtual_readdir(struct fuse_opendir_s *opendir, struct fuse_request_s *request, size_t size, off_t offset);
@@ -44,5 +45,7 @@ struct entry_s *_fs_common_create_entry(struct workspace_mount_s *workspace, str
 struct entry_s *_fs_common_create_entry_unlocked(struct workspace_mount_s *workspace, struct directory_s *directory, struct name_s *xname, struct stat *st, unsigned int size, unsigned int flags, unsigned int *error);
 
 void _fs_common_statfs(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, uint64_t blocks, uint64_t bfree, uint64_t bavail, uint32_t bsize);
+
+void use_service_fs(struct service_context_s *context, struct inode_s *inode);
 
 #endif

@@ -119,10 +119,16 @@ int init_ssh_backend()
 
     if (init_done==0) {
 
+	logoutput("init_ssh_backend: A");
+
 	init_ssh_send_once();
+	logoutput("init_ssh_backend: B");
 	init_ssh_receive_once();
+	logoutput("init_ssh_backend: C");
 	init_ssh_utils();
+	logoutput("init_ssh_backend: D");
 	init_keyex_once();
+	logoutput("init_ssh_backend: E");
 	result=init_ssh_backend_library();
 	if (result==0) init_done=1;
 

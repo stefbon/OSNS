@@ -172,7 +172,7 @@ static int _signal_ssh2remote_channel(struct ssh_session_s *session, const char 
 
     }
 
-    if (result==0) {
+    if (result>0) {
 	struct timespec expire;
 	struct ssh_payload_s *payload=NULL;
 	unsigned int error=0;

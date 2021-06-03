@@ -194,7 +194,6 @@ static int ecc_mul_point(int algo, unsigned char *buffer, struct ssh_string_s *s
 	the result is when written to buffers reversed to Little Endian
     */
 
-
 static int ecdh_create_local_key(struct ssh_keyex_s *k)
 {
     struct ssh_ecdh_s *ecdh=&k->method.ecdh;
@@ -206,6 +205,9 @@ static int ecdh_create_local_key(struct ssh_keyex_s *k)
 	struct ssh_string_s *skey_c = &ecdh->skey_c;
 
 	gcry_create_nonce(buffer, (size_t) len);
+
+	/* test the highest bit is set ... */
+
 	buffer[0]	&= 248;
 	buffer[31]	&= 127;
 	buffer[31]	|= 64;

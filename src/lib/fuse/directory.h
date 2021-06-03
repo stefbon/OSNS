@@ -31,36 +31,9 @@
 #define _DIRECTORY_LOCK_PREEXCL					2
 #define _DIRECTORY_LOCK_EXCL					3
 
-struct directory_s;
-struct fuse_path_s;
-
-#define _PATHCACHE_TYPE_ROOT					1
-#define _PATHCACHE_TYPE_DEFAULT					2
-#define _PATHCACHE_TYPE_CACHE					3
-
-#define _PATHCACHE_TIMEOUT_DEFAULT				15
-
-struct pathcache_s {
-    unsigned char			type;
-    struct service_context_s		*context;
-    struct timespec			used;
-    int					refcount;
-    struct list_element_s		list;
-    int					(* get_path)(struct directory_s *directory, struct fuse_path_s *fpath);
-    unsigned int			len;
-    char 				path[];
-};
-
 struct dops_s {
-    struct entry_s 			*(*find_entry)(struct entry_s *parent, struct name_s *xname, unsigned int *error);
-    void 				(*remove_entry)(struct entry_s *entry, unsigned int *error);
-    struct entry_s 			*(*insert_entry)(struct directory_s *directory, struct entry_s *entry, unsigned int *error, unsigned short flags);
     struct directory_s			*(*get_directory)(struct inode_s *inode);
     struct directory_s			*(*remove_directory)(struct inode_s *inode, unsigned int *error);
-    struct entry_s 			*(*find_entry_batch)(struct directory_s *directory, struct name_s *xname, unsigned int *error);
-    void 				(*remove_entry_batch)(struct directory_s *directory, struct entry_s *entry, unsigned int *error);
-    struct entry_s 			*(*insert_entry_batch)(struct directory_s *directory, struct entry_s *entry, unsigned int *error, unsigned short flags);
-    void				(* get_inode_link)(struct directory_s *directory, struct inode_s *inode, struct inode_link_s **link);
 };
 
 struct directory_s {
@@ -69,8 +42,8 @@ struct directory_s {
     struct inode_s 			*inode;
     struct simple_locking_s		locking;
     struct dops_s 			*dops;
-    struct inode_link_s			link;
-    struct pathcache_s			*pathcache;
+    struct data_link_s			link;
+    struct getpath_s			*getpath;
     unsigned int			size;
     char				buffer[];
 };
@@ -78,7 +51,7 @@ struct directory_s {
 int init_directory(struct directory_s *directory, unsigned char maxlanes);
 struct directory_s *_create_directory(struct inode_s *inode, void (* init_cb)(struct directory_s *directory));
 
-struct directory_s *get_directory_entry(struct entry_s *entry);
+struct directory_s *get_upper_directory_entry(struct entry_s *entry);
 struct entry_s *get_parent_entry(struct entry_s *entry);
 
 struct directory_s *get_directory_dump(struct inode_s *inode);

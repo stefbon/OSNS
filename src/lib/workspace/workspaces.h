@@ -36,14 +36,19 @@ struct service_context_s;
 #define WORKSPACE_TYPE_FILE			4
 #define WORKSPACE_TYPE_BACKUP			8
 
-#define WORKSPACE_STATUS_OK			1
-#define WORKSPACE_STATUS_UNMOUNTING		2
-#define WORKSPACE_STATUS_UNMOUNTED		3
+#define WORKSPACE_FLAG_ALLOC			1
+#define WORKSPACE_FLAG_UNMOUNTING		2
+#define WORKSPACE_FLAG_UNMOUNTED		4
+
+#define WORKSPACE_FLAG_CTXSLOCKED		( 1 << 20 )
 
 #define WORKSPACE_INODE_HASHTABLE_SIZE		512
 
 #define FORGET_INODE_FLAG_FORGET		1
 #define FORGET_INODE_FLAG_DELETED		2
+
+#define WORKSPACE_MOUNT_EVENT_MOUNT		1
+#define WORKSPACE_MOUNT_EVENT_UMOUNT		2
 
 struct workspace_inodes_s {
     struct inode_s 				rootinode;
@@ -60,6 +65,7 @@ struct workspace_inodes_s {
 /* fuse mountpoint */
 
 struct workspace_mount_s {
+    unsigned int				flags;
     struct osns_user_s 				*user;
     unsigned char 				type;
     unsigned int				pathmax;
@@ -68,14 +74,21 @@ struct workspace_mount_s {
     struct timespec				syncdate;
     unsigned int				status;
     struct list_header_s			contexes;
-    void					(* add_context)(struct workspace_mount_s *mount, struct list_element_s *l);
+    void					(* mountevent)(struct workspace_mount_s *mount, unsigned char event);
     void					(* remove_context)(struct list_element_s *l);
     void					(* free)(struct workspace_mount_s *mount);
     struct list_element_s			list;
+    struct list_element_s			list_g;
     struct workspace_inodes_s			inodes;
 };
 
 /* prototypes */
+
+void init_workspaces_once();
+
+int lock_workspaces();
+int unlock_workspaces();
+struct workspace_mount_s *get_next_workspace_mount(struct workspace_mount_s *w);
 
 void adjust_pathmax(struct workspace_mount_s *w, unsigned int len);
 unsigned int get_pathmax(struct workspace_mount_s *w);

@@ -157,34 +157,37 @@ static void reply_symlink_target(struct fuse_request_s *f_request, char *path, c
 
 static char *check_reply_symlink_target(struct service_context_s *context, char *path, char *target, unsigned char relative, char *resolved)
 {
+    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
+    struct directory_s *directory=NULL;
     unsigned int len_p=strlen(path) ;
     unsigned int len_t=strlen(target);
-    struct workspace_mount_s *workspace=context->workspace;
     unsigned int pathmax=workspace->pathmax;
     unsigned int len=workspace->mountpoint.len + pathmax + len_p + len_t + 1;
     char fullpath[len]; /* for the full path including fuse mountpoint, network path to share, path and target */
-    char fusepath[pathmax]; /* for determing the network path to share */
-    struct fuse_path_s fpath;
+    char buffer[sizeof(struct fuse_path_s) + pathmax + 1]; /* for determing the network path to share */
+    struct fuse_path_s *fpath=(struct fuse_path_s *) buffer;
     char *sep=NULL;
     char *real=NULL;
     unsigned int written=0;
+    unsigned int len_s=0;
 
     /* fuse path from mountpoint to the entry where this remote directory is ""mounted"*/
 
-    init_fuse_path(&fpath, fusepath, pathmax);
-    fpath.len=get_path_root(context->service.filesystem.inode, &fpath);
+    init_fuse_path(fpath, pathmax + 1);
+    directory=get_directory(context->service.filesystem.inode);
+    len_s=get_path_root(directory, fpath);
 
     sep=(relative) ? memrchr(path, '/', len_p) : NULL;
 
     if (sep && (sep>path)) {
 
 	*sep='\0';
-	written=snprintf(fullpath, len, "%.*s%.*s%s/%s", workspace->mountpoint.len, workspace->mountpoint.path, fpath.len, fpath.pathstart, path, target);
+	written=snprintf(fullpath, len, "%.*s%.*s%s/%s", workspace->mountpoint.len, workspace->mountpoint.path, len_s, fpath->pathstart, path, target);
 
     } else {
 
 	/* no slash found or absolute path: direct in root of share */
-	written=snprintf(fullpath, len, "%.*s%.*s/%s", workspace->mountpoint.len, workspace->mountpoint.path, fpath.len, fpath.pathstart, target);
+	written=snprintf(fullpath, len, "%.*s%.*s/%s", workspace->mountpoint.len, workspace->mountpoint.path, len_s, fpath->pathstart, target);
 
     }
 
@@ -201,7 +204,7 @@ static char *check_reply_symlink_target(struct service_context_s *context, char 
 
 	/* test the path is a subdirectory of the shared directory */
 
-	written=snprintf(fullpath, len, "%.*s%.*s/", workspace->mountpoint.len, workspace->mountpoint.path, fpath.len, fpath.pathstart);
+	written=snprintf(fullpath, len, "%.*s%.*s/", workspace->mountpoint.len, workspace->mountpoint.path, len_s, fpath->pathstart);
 
 	if (len_r > written && memcmp(real, fullpath, written)==0) {
 
@@ -292,19 +295,13 @@ unsigned int check_valid_target_symlink(struct context_interface_s *interface, c
     unsigned int result=EIO; /* default */
 
     if (target[0] == '/') {
-	struct pathinfo_s prefix;
-	unsigned int tmp=get_sftp_prefix(interface, &prefix);
 
-	logoutput("check_valid_target_symlink: compare %s with prefix %.*s", target, tmp, prefix.path);
-
-	/* target is absolute path on server: this is not suitable, needed is the path relative to the prefix
-	    so remove the prefix (if the first part of the target is the prefix) */
-
-	if (tmp==0 || (tmp<len && strncmp(target, prefix.path, tmp)==0 && target[tmp]=='/')) {
+	if (issubdir_prefix_sftp_client(interface, target, len)==0) {
 	    unsigned int count1=0;
 	    unsigned int count2=0;
+	    unsigned int len_p=strlen(path);
 
-	    check_backslashes_path(&target[tmp], len - tmp, &count1, &count2);
+	    check_backslashes_path(&target[len_p], len - len_p, &count1, &count2);
 	    result=(count1 >= count2) ? EXDEV : 0;
 
 	} else {
@@ -342,7 +339,7 @@ unsigned int check_valid_target_symlink(struct context_interface_s *interface, c
 
 	}
 
-    }
+    }	
 
     return result;
 
@@ -367,7 +364,7 @@ void _fs_sftp_readlink(struct service_context_s *context, struct fuse_request_s 
 
     }
 
-    // logoutput("_fs_sftp_readlink_common");
+    logoutput("_fs_sftp_readlink");
 
     strcpy(origpath, pathinfo->path);
     pathinfo->len += (* interface->backend.sftp.complete_path)(interface, pathinfobuffer, pathinfo);
@@ -389,7 +386,7 @@ void _fs_sftp_readlink(struct service_context_s *context, struct fuse_request_s 
 
     if ((inode->alias->flags & _ENTRY_FLAG_REMOTECHANGED)==0) {
 
-	if (inode->link.type==INODE_LINK_TYPE_SYMLINK) {
+	if (inode->link.type==DATA_LINK_TYPE_SYMLINK) {
 	    char *target=inode->link.link.ptr;
 
 	    reply_VFS_data(f_request, target, strlen(target));
@@ -399,7 +396,7 @@ void _fs_sftp_readlink(struct service_context_s *context, struct fuse_request_s 
 
     }
 
-    if (send_sftp_readlink_ctx(interface, &sftp_r)==0) {
+    if (send_sftp_readlink_ctx(interface, &sftp_r)>0) {
 	struct timespec timeout;
 
 	get_sftp_request_timeout_ctx(interface, &timeout);
@@ -413,7 +410,7 @@ void _fs_sftp_readlink(struct service_context_s *context, struct fuse_request_s 
 		int result=0;
 
 		if (read_ssh_string(names->buff, names->size, &tmp)>0) {
-		    char target[tmp.len+1];
+		        char target[tmp.len+1];
 
 		    memcpy(target, tmp.ptr, tmp.len);
 		    target[tmp.len]='\0';
@@ -462,6 +459,7 @@ void _fs_sftp_readlink(struct service_context_s *context, struct fuse_request_s 
 
 void _fs_sftp_symlink(struct service_context_s *context, struct fuse_request_s *f_request, struct entry_s *entry, struct pathinfo_s *pathinfo, const char *target)
 {
+    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
     struct service_context_s *rootcontext=get_root_context(context);
     struct context_interface_s *interface=&context->interface;
     struct sftp_request_s sftp_r;
@@ -484,7 +482,7 @@ void _fs_sftp_symlink(struct service_context_s *context, struct fuse_request_s *
 
     }
 
-    if (send_sftp_symlink_ctx(interface, &sftp_r)==0) {
+    if (send_sftp_symlink_ctx(interface, &sftp_r)>0) {
 	struct timespec timeout;
 
 	get_sftp_request_timeout_ctx(interface, &timeout);
@@ -515,7 +513,7 @@ void _fs_sftp_symlink(struct service_context_s *context, struct fuse_request_s *
 
     out:
 
-    queue_inode_2forget(context->workspace, entry->inode->st.st_ino, 0, 0);
+    queue_inode_2forget(workspace, entry->inode->st.st_ino, 0, 0);
     reply_VFS_error(f_request, error);
 
 }

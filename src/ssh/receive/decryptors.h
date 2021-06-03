@@ -17,8 +17,8 @@
 
 */
 
-#ifndef FS_WORKSPACE_SSH_RECEIVE_DECRYPTORS_H
-#define FS_WORKSPACE_SSH_RECEIVE_DECRYPTORS_H
+#ifndef _SSH_RECEIVE_DECRYPTORS_H
+#define _SSH_RECEIVE_DECRYPTORS_H
 
 struct ssh_decryptor_s *get_decryptor_container(struct list_element_s *list);
 struct ssh_decryptor_s *get_decryptor_unlock(struct ssh_receive_s *r, unsigned int *error);

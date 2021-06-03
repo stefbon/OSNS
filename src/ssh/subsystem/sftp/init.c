@@ -89,6 +89,8 @@ int send_sftp_init(struct sftp_subsystem_s *sftp)
     unsigned int pos=0;
     unsigned int error=0;
 
+    logoutput("send_sftp_init");
+
     /* SSH_FXP_VERSION message */
 
     store_uint32(&data[pos], len-4);

@@ -78,7 +78,7 @@ typedef void (* init_cb)(struct fs_connection_s *conn, unsigned int fd);
 struct io_socket_s {
     unsigned char				type;
     struct socket_ops_s				*sops;
-    struct bevent_s				bevent;
+    struct bevent_s				*bevent;
     union {
 	struct sockaddr_un 			local;
 	struct sockaddr_in			inet;
@@ -88,15 +88,15 @@ struct io_socket_s {
 
 struct socket_ops_s {
     unsigned char				type;
-    int						(* accept)(unsigned int fd, struct sockaddr *addr, unsigned int *len);
-    int						(* bind)(unsigned int fd, struct sockaddr *addr, int *len, int sock);
-    int						(* close)(unsigned int fd);
-    int						(* connect)(unsigned int fd, struct sockaddr *addr, int *len);
-    int						(* getpeername)(unsigned int fd, struct sockaddr *addr, unsigned int *len);
-    int						(* getsockname)(unsigned int fd, struct sockaddr *addr, unsigned int *len);
-    int						(* getsockopt)(unsigned int fd, int level, int optname, char *optval, unsigned int *optlen);
-    int						(* setsockopt)(unsigned int fd, int level, int optname, char *optval, unsigned int optlen);
-    int						(* listen)(unsigned int fd, int len);
+    int						(* accept)(int fd, struct sockaddr *addr, unsigned int *len);
+    int						(* bind)(int fd, struct sockaddr *addr, int *len, int sock);
+    int						(* close)(struct io_socket_s *s);
+    int						(* connect)(struct io_socket_s *s, struct sockaddr *addr, int *len);
+    int						(* getpeername)(int fd, struct sockaddr *addr, unsigned int *len);
+    int						(* getsockname)(int fd, struct sockaddr *addr, unsigned int *len);
+    int						(* getsockopt)(int fd, int level, int optname, char *optval, unsigned int *optlen);
+    int						(* setsockopt)(int fd, int level, int optname, char *optval, unsigned int optlen);
+    int						(* listen)(int fd, int len);
     int						(* socket)(int af, int type, int protocol);
     int						(* recv)(struct io_socket_s *s, char *buffer, unsigned int size, unsigned int flags);
     int						(* send)(struct io_socket_s *s, char *buffer, unsigned int size, unsigned int flags);
@@ -106,13 +106,13 @@ struct socket_ops_s {
 
 struct io_fuse_s {
     struct fuse_ops_s				*fops;
-    struct bevent_s				bevent;
+    struct bevent_s				*bevent;
 };
 
 struct fuse_ops_s {
     unsigned char				type;
     int						(* open)(char *path, unsigned int flags);
-    int						(* close)(unsigned int fd);
+    int						(* close)(struct io_fuse_s *s);
     ssize_t					(* writev)(struct io_fuse_s *s, struct iovec *iov, int count);
     int						(* read)(struct io_fuse_s *s, void *buffer, size_t size);
 };
@@ -120,7 +120,7 @@ struct fuse_ops_s {
 struct io_std_s {
     unsigned char				type;
     struct std_ops_s				*sops;
-    struct bevent_s				bevent;
+    struct bevent_s				*bevent;
 };
 
 struct std_ops_s {
@@ -203,8 +203,8 @@ int compare_network_connection(struct fs_connection_s *a, struct fs_connection_s
 
 int get_connection_info(struct fs_connection_s *a, const char *what);
 
-char *get_connection_ipv4(struct fs_connection_s *a, unsigned int fd, unsigned char what, struct generic_error_s *error);
-char *get_connection_ipv6(struct fs_connection_s *a, unsigned int fd, unsigned char what, struct generic_error_s *error);
-char *get_connection_hostname(struct fs_connection_s *a, unsigned int fd, unsigned char what, struct generic_error_s *error);
+char *get_connection_ipv4(struct fs_connection_s *a, int fd, unsigned char what, struct generic_error_s *error);
+char *get_connection_ipv6(struct fs_connection_s *a, int fd, unsigned char what, struct generic_error_s *error);
+char *get_connection_hostname(struct fs_connection_s *a, int fd, unsigned char what, struct generic_error_s *error);
 
 #endif

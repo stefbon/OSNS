@@ -17,12 +17,12 @@
 
 */
 
-#ifndef _COMMON_UTILS_BEVENTSIGNAL_H
-#define _COMMON_UTILS_BEVENTSIGNAL_H
+#ifndef _LIB_EVENTLOOP_BEVENTSIGNAL_H
+#define _LIB_EVENTLOOP_BEVENTSIGNAL_H
 
 /* Prototypes */
 
-int enable_beventloop_signal(struct beventloop_s *loop, void (* cb) (struct beventloop_s *loop, void *data, struct signalfd_siginfo *fdsi), void *data, unsigned int *error);
-unsigned char get_beventloop_signal(struct beventloop_s *loop);
+int enable_beventloop_signal(struct beventloop_s *loop, void (* cb) (struct beventloop_s *loop, unsigned int signo, pid_t pid, int fd));
+void disable_beventloop_signal(struct beventloop_s *loop);
 
 #endif

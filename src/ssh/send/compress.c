@@ -58,19 +58,19 @@ void add_compress_ops(struct compress_ops_s *ops)
 
 struct compress_ops_s *get_next_compress_ops(struct compress_ops_s *ops)
 {
-    if (ops) {
-	struct list_element_s *next=ops->list.n;
+    struct list_element_s *list=NULL;
 
-	return (next) ? get_compress_ops_container(next) : NULL;
+    if (ops) {
+
+	list=get_next_element(&ops->list);
 
     } else {
-	struct list_element_s *head=list_compress_ops.head;
 
-	return (head) ? get_compress_ops_container(head) : NULL;
+	list=get_list_head(&list_compress_ops, 0);
 
     }
 
-    return NULL;
+    return (list) ? get_compress_ops_container(list) : NULL;
 }
 
 
@@ -94,4 +94,9 @@ int build_compress_list_c2s(struct ssh_connection_s *c, struct algo_list_s *alis
 
     return start;
 
+}
+
+void init_compress_once()
+{
+    init_list_header(&list_compress_ops, SIMPLE_LIST_TYPE_EMPTY, 0);
 }

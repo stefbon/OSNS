@@ -17,130 +17,99 @@
 
 */
 
-#ifndef _COMMON_UTILS_BEVENTLOOP_H
-#define _COMMON_UTILS_BEVENTLOOP_H
+#ifndef _LIB_EVENTLOOP_BEVENTLOOP_H
+#define _LIB_EVENTLOOP_BEVENTLOOP_H
 
-#include <sys/epoll.h>
-#include <sys/signalfd.h>
-#include <sys/timerfd.h>
-
+#include <glib.h>
 #include "list.h"
 
-#define MAX_EPOLL_NREVENTS 			32
-#define MAX_EPOLL_NRFDS				32
-
-#define BEVENTLOOP_OK				0
-#define BEVENTLOOP_EXIT				-1
-
-#define BEVENTLOOP_STATUS_NOTSET		0
-#define BEVENTLOOP_STATUS_SETUP			1
-#define BEVENTLOOP_STATUS_UP			2
-#define BEVENTLOOP_STATUS_DOWN			3
-
-#define BEVENTLOOP_FLAG_TIMER			1
-#define BEVENTLOOP_FLAG_SIGNAL			2
-#define BEVENTLOOP_FLAG_MAIN			4
-#define BEVENTLOOP_FLAG_EPOLL			8
-#define BEVENTLOOP_FLAG_ALLOC			16
-
-#define TIMERENTRY_STATUS_NOTSET		0
-#define TIMERENTRY_STATUS_ACTIVE		1
-#define TIMERENTRY_STATUS_INACTIVE		2
-#define TIMERENTRY_STATUS_BUSY			3
-
-#define BEVENT_FLAG_ALLOCATED			1
-#define BEVENT_FLAG_EVENTLOOP			2
-#define BEVENT_FLAG_LIST			4
-#define BEVENT_FLAG_TIMER			8
-#define BEVENT_FLAG_SIGNAL			16
-
-#define BEVENT_NAME_LEN				32
-
-#define TIMERID_TYPE_PTR			1
-#define TIMERID_TYPE_UNIQUE			2
-
-#define BEVENT_CODE_IN				EPOLLIN
-#define BEVENT_CODE_OUT				EPOLLOUT
-#define BEVENT_CODE_ERR				EPOLLERR
-#define BEVENT_CODE_HUP				EPOLLHUP
-#define BEVENT_CODE_RDHUP			EPOLLRDHUP
-#define BEVENT_CODE_PRI				EPOLLPRI
-
-typedef int (*bevent_cb)(int fd, void *data, uint32_t eventcode);
-
-struct timerid_s {
-    void					*context;
-    union {
-	void					*ptr;
-	uint64_t				unique;
-    } id;
-    unsigned char 				type;
-};
-
-struct timerentry_s {
-    struct timespec 				expire;
-    unsigned char 				status;
-    unsigned long 				ctr;
-    void 					(*eventcall) (struct timerid_s *id, struct timespec *now);
-    struct timerid_s				id;
+struct event_s {
     struct beventloop_s 			*loop;
-    struct list_element_s			list;
-};
-
-struct beventloop_s;
-
-struct timerlist_s {
-    struct list_header_s			header;
-    pthread_mutex_t 				mutex;
-    pthread_t					threadid;
-    int						fd;
-    void					(* run_expired)(struct beventloop_s *loop);
+    union _event_type_u {
+	gushort					glib_revents;
+    } events;
 };
 
 /* struct to identify the fd when eventloop signals activity on that fd */
 
+#define BEVENT_FLAG_FD				1
+#define BEVENT_FLAG_TIMEOUT			2
+#define BEVENT_FLAG_EVENTLOOP			4
+
 struct bevent_s {
-    int 					fd;
-    void 					*data;
-    unsigned char 				flags;
-    uint32_t					code;
-    bevent_cb 					cb;
-    char 					name[BEVENT_NAME_LEN];
-    struct list_element_s			list;
+    union _loop_type_s {
+	struct _bevent_glib_s {
+	    GSource				source;
+	    GPollFD				pollfd;
+	} glib;
+    } ltype;
+    unsigned int				flags;
     struct beventloop_s 			*loop;
+    union _bevent_type_s {
+	struct _bevent_fd_s {
+	    void 				(* cb)(int fd, void *ptr, struct event_s *event);
+	} fd;
+	struct _bevent_timeout_s {
+	    void				(* cb)(unsigned int id, void *ptr);
+	} timeout;
+    } btype;
+    void					*ptr;
+    void					(* close)(struct bevent_s *b);
 };
 
 /* eventloop */
 
+#define BEVENTLOOP_FLAG_ALLOC			1 << 0
+#define BEVENTLOOP_FLAG_MAIN			1 << 1
+#define BEVENTLOOP_FLAG_INIT			1 << 2
+#define BEVENTLOOP_FLAG_SIGNAL			1 << 3
+#define BEVENTLOOP_FLAG_RUNNING			1 << 4
+
+#define BEVENTLOOP_FLAG_GLIB			1 << 12
+
 struct beventloop_s {
-    unsigned char 				status;
     unsigned int				flags;
-    struct list_header_s			bevents;
-    struct timerlist_s				timers;
-    void 					(* cb_signal) (struct beventloop_s *loop, void *data, struct signalfd_siginfo *fdsi);
-    int						(* add_bevent)(struct beventloop_s *loop, struct bevent_s *bevent, uint32_t eventcode);
-    void					(* remove_bevent)(struct bevent_s *bevent);
-    void					(* modify_bevent)(struct bevent_s *bevent, uint32_t event);
-    union {
-	int 					epoll_fd;
+    union _loop_used_s {
+	struct _loop_glib_s {
+	    GMainLoop				*loop;
+	    GSourceFuncs			funcs;
+	} glib;
     } type;
+    pthread_mutex_t				mutex;
+    pthread_cond_t				cond;
+    struct list_header_s			timers;
+    uint32_t (* event_is_error)(struct event_s *event);
+    uint32_t (* event_is_close)(struct event_s *event);
+    uint32_t (* event_is_data)(struct event_s *event);
+    uint32_t (* event_is_buffer)(struct event_s *event);
 };
 
 /* Prototypes */
 
-struct beventloop_s *create_beventloop();
+struct bevent_s *create_fd_bevent(struct beventloop_s *eloop, void (* cb)(int fd, void *ptr, struct event_s *event), void *ptr);
+int add_bevent_beventloop(struct bevent_s *bevent);
+
+void set_bevent_unix_fd(struct bevent_s *bevent, int fd);
+int get_bevent_unix_fd(struct bevent_s *bevent);
+
+void set_bevent_watch(struct bevent_s *bevent, const char *what);
+void remove_bevent(struct bevent_s *bevent);
+
+unsigned int create_timer_eventloop(struct beventloop_s *eloop, struct timespec *timeout, void (* cb)(unsigned int id, void *ptr), void *ptr);
+
 int init_beventloop(struct beventloop_s *b);
 int start_beventloop(struct beventloop_s *b);
 void stop_beventloop(struct beventloop_s *b);
 void clear_beventloop(struct beventloop_s *b);
+void free_beventloop(struct beventloop_s **p_b);
 
 struct beventloop_s *get_mainloop();
 
-uint32_t map_epollevent_to_bevent(uint32_t e_event);
-uint32_t map_bevent_to_epollevent(uint32_t code);
+uint32_t signal_is_error(struct event_s *event);
+uint32_t signal_is_close(struct event_s *event);
+uint32_t signal_is_data(struct event_s *event);
+uint32_t signal_is_buffer(struct event_s *event);
 
-uint32_t signal_is_error(uint32_t event);
-uint32_t signal_is_hangup(uint32_t event);
-uint32_t signal_is_dataavail(uint32_t event);
+unsigned int printf_event_uint(struct event_s *event);
 
 #endif

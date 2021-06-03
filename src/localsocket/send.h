@@ -1,5 +1,5 @@
 /*
-  2017, 2018 Stef Bon <stefbon@gmail.com>
+  2010, 2011, 2012, 2013, 2014, 2015 Stef Bon <stefbon@gmail.com>
 
   This program is free software; you can redistribute it and/or
   modify it under the terms of the GNU General Public License
@@ -17,11 +17,15 @@
 
 */
 
-#ifndef FS_WORKSPACE_DISCOVER_FSTREE_H
-#define FS_WORKSPACE_DISCOVER_FSTREE_H
+#ifndef _LOCALSOCKET_SEND_H
+#define _LOCALSOCKET_SEND_H
 
-// Prototypes
+#include "osns_socket.h"
 
-void browse_services_fstree(char *p);
+/* prototypes */
+
+int send_osns_packet(struct osns_localsocket_s *localsocket, char *b, unsigned int size, unsigned int *error);
+int send_osns_msg_init(struct osns_localsocket_s *localsocket, unsigned int major, unsigned int minor);
+int send_osns_msg_notsupported(struct osns_localsocket_s *localsocket, uint32_t id);
 
 #endif

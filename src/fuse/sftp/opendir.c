@@ -119,7 +119,7 @@ static unsigned int send_check_target_symlink_valid(struct create_entry_s *ce, s
     sftp_r.call.readlink.len=pathinfo->len;
     sftp_r.status=SFTP_REQUEST_STATUS_WAITING;
 
-    if (send_sftp_readlink_ctx(interface, &sftp_r)==0) {
+    if (send_sftp_readlink_ctx(interface, &sftp_r)>0) {
 	struct timespec timeout;
 
 	get_sftp_request_timeout_ctx(interface, &timeout);
@@ -202,8 +202,8 @@ static unsigned int send_check_target_symlink_valid(struct create_entry_s *ce, s
 	}
 
     }
-    logoutput("send_check_target_symlink_valid: result %i:%s", result, strerror(result));
 
+    logoutput("send_check_target_symlink_valid: result %i:%s", result, strerror(result));
     return result;
 }
 
@@ -217,11 +217,12 @@ static int _cb_check(struct create_entry_s *ce)
     if (S_ISLNK(ce->cache.st.st_mode)) {
 	struct fuse_opendir_s *opendir=ce->tree.opendir;
 	struct service_context_s *context=ce->context;
+	struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
 	struct directory_s *directory=(* ce->get_directory)(ce);
 	struct pathinfo_s pathinfo=PATHINFO_INIT;
-	unsigned int pathlen=get_pathmax(context->workspace);
-	char path[pathlen + 1];
-	struct fuse_path_s fpath;
+	unsigned int pathlen=get_pathmax(workspace);
+	char buffer[sizeof(struct fuse_path_s) + pathlen + 1];
+	struct fuse_path_s *fpath=(struct fuse_path_s *) buffer;
 	struct service_fs_s *fs=NULL;
 	unsigned int error=0;
 	char *target=NULL;
@@ -229,10 +230,10 @@ static int _cb_check(struct create_entry_s *ce)
 	/* check symlink */
 	logoutput("_cb_check: %.*s", ce->name->len, ce->name->name);
 
-	init_fuse_path(&fpath, path, pathlen);
-	pathinfo.len=add_name_path(&fpath, ce->name);
-	pathinfo.len+=(* directory->pathcache->get_path)(directory, &fpath);
-	pathinfo.path=fpath.pathstart;
+	init_fuse_path(fpath, pathlen + 1);
+	append_name_fpath(fpath, ce->name);
+	get_service_context_path(context, directory, fpath);
+	pathinfo.path=get_pathinfo_fpath(fpath, &pathinfo.len);
 
 	error=send_check_target_symlink_valid(ce, &pathinfo, &target);
 
@@ -240,7 +241,7 @@ static int _cb_check(struct create_entry_s *ce)
 
 	    if (target) {
 
-		ce->cache.link.type=INODE_LINK_TYPE_SYMLINK;
+		ce->cache.link.type=DATA_LINK_TYPE_SYMLINK;
 		ce->cache.link.link.ptr=target;
 
 	    }
@@ -286,9 +287,9 @@ static void _cb_created(struct entry_s *entry, struct create_entry_s *ce)
 
 	/* symlink is cached */
 
-	if (ce->cache.link.type==INODE_LINK_TYPE_SYMLINK) {
+	if (ce->cache.link.type==DATA_LINK_TYPE_SYMLINK) {
 
-	    inode->link.type=INODE_LINK_TYPE_SYMLINK;
+	    inode->link.type=DATA_LINK_TYPE_SYMLINK;
 	    inode->link.link.ptr=ce->cache.link.link.ptr;
 
 	    ce->cache.link.link.ptr=NULL;
@@ -302,6 +303,7 @@ static void _cb_created(struct entry_s *entry, struct create_entry_s *ce)
     memcpy(&directory->inode->st.st_mtim, &directory->synctime, sizeof(struct timespec));
     check_create_inodecache(inode, ce->cache_size, buffer->pos - ce->cache_size, INODECACHE_FLAG_READDIR);
     inode->flags |= INODE_FLAG_CACHED;
+    set_entry_ops(entry);
 
 }
 
@@ -341,9 +343,9 @@ static void _cb_found(struct entry_s *entry, struct create_entry_s *ce)
 
 	/* symlink is cached */
 
-	if (ce->cache.link.type==INODE_LINK_TYPE_SYMLINK) {
+	if (ce->cache.link.type==DATA_LINK_TYPE_SYMLINK) {
 
-	    if (inode->link.type==INODE_LINK_TYPE_SYMLINK) {
+	    if (inode->link.type==DATA_LINK_TYPE_SYMLINK) {
 
 		if (strcmp(inode->link.link.ptr, ce->cache.link.link.ptr) !=0) {
 
@@ -362,7 +364,7 @@ static void _cb_found(struct entry_s *entry, struct create_entry_s *ce)
 
 	    } else if (inode->link.type==0) {
 
-		inode->link.type=INODE_LINK_TYPE_SYMLINK;
+		inode->link.type=DATA_LINK_TYPE_SYMLINK;
 		inode->link.link.ptr=ce->cache.link.link.ptr;
 		ce->cache.link.link.ptr=NULL;
 		ce->cache.link.type=0;
@@ -375,8 +377,12 @@ static void _cb_found(struct entry_s *entry, struct create_entry_s *ce)
 
 	}
 
-    }
+    } else if (S_ISDIR(inode->st.st_mode)) {
+	struct getpath_s *getpath=directory->getpath;
 
+	if (getpath==NULL) set_directory_pathcache(context, directory, NULL);
+
+    }
 }
 
 static void _cb_error(struct entry_s *parent, struct name_s *xname, struct create_entry_s *ce, unsigned int error)
@@ -409,7 +415,7 @@ static int _sftp_get_readdir_names(struct fuse_opendir_s *opendir, unsigned int 
     sftp_r.call.readdir.len=opendir->handle.name.len;
     sftp_r.status=SFTP_REQUEST_STATUS_WAITING;
 
-    if (send_sftp_readdir_ctx(interface, &sftp_r)==0) {
+    if (send_sftp_readdir_ctx(interface, &sftp_r)>0) {
 	struct timespec timeout;
 
 	get_sftp_request_timeout_ctx(interface, &timeout);
@@ -434,13 +440,13 @@ static int _sftp_get_readdir_names(struct fuse_opendir_s *opendir, unsigned int 
 
 		if (status->linux_error==ENODATA) {
 
-		    set_flag_fuse_opendir(opendir, _FUSE_OPENDIR_FLAG_READDIR_FINISH);
+		    // set_flag_fuse_opendir(opendir, _FUSE_OPENDIR_FLAG_READDIR_FINISH);
 		    *error=0;
 		    result=0;
 
 		} else {
 
-		    set_flag_fuse_opendir(opendir, _FUSE_OPENDIR_FLAG_READDIR_ERROR);
+		    // set_flag_fuse_opendir(opendir, _FUSE_OPENDIR_FLAG_READDIR_ERROR);
 		    *error=status->linux_error;
 		    result=-1;
 
@@ -448,7 +454,7 @@ static int _sftp_get_readdir_names(struct fuse_opendir_s *opendir, unsigned int 
 
 	    } else {
 
-		set_flag_fuse_opendir(opendir, _FUSE_OPENDIR_FLAG_READDIR_ERROR);
+		// set_flag_fuse_opendir(opendir, _FUSE_OPENDIR_FLAG_READDIR_ERROR);
 		*error=EPROTO;
 		result=-1;
 
@@ -475,8 +481,21 @@ static void get_sftp_readdir_thread(void *ptr)
     struct inode_s *inode=NULL;
     struct create_entry_s ce;
     unsigned int error=0;
+    unsigned char dofree=0;
 
     logoutput("get_sftp_readdir_thread");
+
+    pthread_mutex_lock(opendir->mutex);
+
+    if (opendir->flags & _FUSE_OPENDIR_FLAG_THREAD) {
+
+	pthread_mutex_unlock(opendir->mutex);
+	return;
+
+    }
+
+    opendir->flags |= _FUSE_OPENDIR_FLAG_THREAD;
+    pthread_mutex_unlock(opendir->mutex);
 
     init_create_entry(&ce, NULL, NULL, NULL, opendir, context, NULL, NULL);
 
@@ -522,7 +541,7 @@ static void get_sftp_readdir_thread(void *ptr)
 
 		/* no more names from server */
 
-		set_flag_fuse_opendir(opendir, _FUSE_OPENDIR_FLAG_READDIR_FINISH);
+		finish_get_fuse_direntry(opendir);
 		break;
 
 	    }
@@ -577,7 +596,7 @@ static void get_sftp_readdir_thread(void *ptr)
 
 	    next:
 
-	    if (ce.cache.link.type==INODE_LINK_TYPE_SYMLINK) {
+	    if (ce.cache.link.type==DATA_LINK_TYPE_SYMLINK) {
 
 		free(ce.cache.link.link.ptr);
 		ce.cache.link.link.ptr=NULL;
@@ -589,7 +608,18 @@ static void get_sftp_readdir_thread(void *ptr)
 
 	/* all names read: check the "eof" boolean */
 
-	if (buffer->eof==1) set_flag_fuse_opendir(opendir, _FUSE_OPENDIR_FLAG_READDIR_FINISH);
+	if (buffer->eof) finish_get_fuse_direntry(opendir);
+
+    }
+
+    pthread_mutex_lock(opendir->mutex);
+    opendir->flags &= ~_FUSE_OPENDIR_FLAG_THREAD;
+    if (opendir->flags & _FUSE_OPENDIR_FLAG_RELEASE) dofree=1;
+    pthread_mutex_unlock(opendir->mutex);
+
+    if (dofree) {
+
+	free(opendir);
 
     }
 
@@ -637,7 +667,7 @@ void _fs_sftp_opendir(struct fuse_opendir_s *opendir, struct fuse_request_s *f_r
 	    opendir->readdirplus=_fs_common_virtual_readdirplus;
 	    opendir->fsyncdir=_fs_common_virtual_fsyncdir;
 	    opendir->releasedir=_fs_common_virtual_releasedir;
-	    opendir->get_fuse_direntry=get_fuse_direntry_virtual;
+	    set_get_fuse_direntry_common(opendir);
 	    _fs_common_virtual_opendir(opendir, f_request, flags);
 	    return;
 
@@ -665,7 +695,7 @@ void _fs_sftp_opendir(struct fuse_opendir_s *opendir, struct fuse_request_s *f_r
 
     }
 
-    if (send_sftp_opendir_ctx(interface, &sftp_r)==0) {
+    if (send_sftp_opendir_ctx(interface, &sftp_r)>0) {
 	struct timespec timeout;
 
 	/* it's possible to let this threat do things here since
@@ -765,6 +795,7 @@ void _fs_sftp_fsyncdir(struct fuse_opendir_s *opendir, struct fuse_request_s *r,
 void _fs_sftp_releasedir(struct fuse_opendir_s *opendir, struct fuse_request_s *f_request)
 {
     struct service_context_s *context=opendir->context;
+    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
     struct context_interface_s *interface=&context->interface;
     struct sftp_request_s sftp_r;
     unsigned int error=EIO;
@@ -791,7 +822,7 @@ void _fs_sftp_releasedir(struct fuse_opendir_s *opendir, struct fuse_request_s *
 
     }
 
-    if (send_sftp_close_ctx(interface, &sftp_r)==0) {
+    if (send_sftp_close_ctx(interface, &sftp_r)>0) {
 	struct timespec timeout;
 
 	get_sftp_request_timeout_ctx(interface, &timeout);
@@ -859,12 +890,12 @@ void _fs_sftp_releasedir(struct fuse_opendir_s *opendir, struct fuse_request_s *
 		    entry=(struct entry_s *)((char *) list - offsetof(struct entry_s, list));
 
 		    inode=entry->inode;
-		    if (check_entry_special(inode)==0) goto next;
+		    if (check_entry_special(inode)) goto next;
 
 		    if (inode->stim.tv_sec < directory->synctime.tv_sec || (inode->stim.tv_sec == directory->synctime.tv_sec && inode->stim.tv_nsec < directory->synctime.tv_nsec)) {
 
 			logoutput("_fs_sftp_releasedir: remove inode %li", inode->st.st_ino);
-			queue_inode_2forget(context->workspace, inode->st.st_ino, FORGET_INODE_FLAG_DELETED, 0);
+			queue_inode_2forget(workspace, inode->st.st_ino, FORGET_INODE_FLAG_DELETED, 0);
 
 		    }
 
@@ -994,7 +1025,7 @@ static int _sftp_get_readdir_names_root(struct fuse_opendir_s *opendir, struct c
 
     clear_fuse_buffer(&opendir->data.buffer);
 
-    if (send_sftp_readdir_ctx(interface, &sftp_r)==0) {
+    if (send_sftp_readdir_ctx(interface, &sftp_r)>0) {
 	struct timespec timeout;
 
 	get_sftp_request_timeout_ctx(interface, &timeout);

@@ -17,8 +17,8 @@
 
 */
 
-#ifndef OSNS_LIB_MOUNTINFO_MOUNTINFO_H
-#define OSNS_LIB_MOUNTINFO_MOUNTINFO_H
+#ifndef LIB_MOUNTINFO_MOUNTINFO_H
+#define LIB_MOUNTINFO_MOUNTINFO_H
 
 #include "list.h"
 
@@ -35,8 +35,8 @@
 #define MOUNTENTRY_FLAG_PROCESSED	32
 
 struct mountentry_s {
-    unsigned long 			unique;
-    unsigned long 			generation;
+    uint64_t 				found;
+    uint64_t 				generation;
     char 				*mountpoint;
     char 				*rootpath;
     char 				*fs;
@@ -45,23 +45,20 @@ struct mountentry_s {
     int 				minor;
     int 				major;
     unsigned char 			flags;
-    struct list_element_s		list;
-    void 				*index;
-    void 				*data;
+    struct list_element_s		list_m;
+    struct list_element_s		list_d;
+    unsigned int			mountid;
+    unsigned int			parentid;
+    struct mountentry_s			*parent;
 };
 
 /* prototypes */
 
-unsigned long get_uniquectr();
 void increase_generation_id();
-unsigned long generation_id();
+uint64_t generation_id();
 
 int compare_mount_entries(struct mountentry_s *a, struct mountentry_s *b);
 void check_mounted_by_autofs(struct mountentry_s *mountentry);
 
-struct mountentry_s *get_rootmount();
-void set_rootmount(struct mountentry_s *mountentry);
-
-struct mountentry_s *get_containing_mountentry(struct list_element_s *list);
 
 #endif

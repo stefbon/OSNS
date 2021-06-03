@@ -65,78 +65,91 @@
 #define ACCEPTED_MOUNT_TYPE_SOURCE				1
 #define ACCEPTED_MOUNT_TYPE_FS					2
 
+#define _ADD_MOUNTINFO_FLAG_INCLUDE_FS				1
+#define _ADD_MOUNTINFO_FLAG_EXCLUDE_FS				2
+#define _ADD_MOUNTINFO_FLAG_INCLUDE_SOURCE			4
+#define _ADD_MOUNTINFO_FLAG_EXCLUDE_SOURCE			8
+
 struct accepted_mounts_s {
+    unsigned char		flags;
     struct list_element_s	list;
     unsigned char		type;
     unsigned int		size;
     char			buffer[];
 };
 
-static struct bevent_s bevent;
+static struct bevent_s *bevent=NULL;
 static struct list_header_s accepted_mounts=INIT_LIST_HEADER;
+static unsigned char default_ignore_flag=0;
 
-static int update_mountinfo(unsigned long generation, struct mountentry_s *(*next_me)(void **index, unsigned long generation, unsigned char type), void *data)
+static int update_mountinfo(uint64_t generation, struct mountentry_s *(*next_me)(struct mountentry_s *me, uint64_t generation, unsigned char type), void *data, unsigned char flags)
 {
-    struct mountentry_s *entry=NULL;
-    struct workspace_mount_s *workspace=NULL;
-    void *index2=NULL;
+    struct mountentry_s *me=NULL;
     unsigned int error=0;
 
     logoutput("update_mountinfo: generation %li", generation);
 
-    entry=next_me(&index2, generation, MOUNTLIST_ADDED);
-    if (entry->fs==NULL || entry->source==NULL || entry->mountpoint==NULL) goto next;
+    me=next_me(me, generation, MOUNTLIST_ADDED);
 
-    while (entry) {
-	void *index2=NULL;
-	unsigned int hash=0;
-	struct osns_user_s *user=NULL;
-	struct simple_lock_s rlock;
+    while (me) {
+	struct workspace_mount_s *workspace=NULL;
 
-	init_rlock_users_hash(&rlock);
-	lock_users_hash(&rlock);
+	if (me->fs==NULL || me->source==NULL || me->mountpoint==NULL) goto next1;
 
-	user=get_next_osns_user(&index2, &hash);
+	lock_workspaces();
 
-	while (user) {
-	    struct list_element_s *list=NULL;
+	workspace=get_next_workspace_mount(NULL);
 
-	    list=get_list_head(&user->header, 0);
+	while (workspace) {
 
-	    while (list) {
+	    if (strcmp(me->mountpoint, workspace->mountpoint.path)==0) {
 
-		workspace=(struct workspace_mount_s *)(((char *)list) - offsetof(struct workspace_mount_s, list));
+		if (workspace->inodes.rootinode.st.st_dev==0) workspace->inodes.rootinode.st.st_dev=makedev(me->major, me->minor);
+		break;
 
-		if (strcmp(entry->mountpoint, workspace->mountpoint.path)==0) {
+	    }
 
-		    if (workspace->inodes.rootinode.st.st_dev==0) workspace->inodes.rootinode.st.st_dev=makedev(entry->major, entry->minor);
-		    break;
+	    workspace=get_next_workspace_mount(workspace);
+
+	}
+
+	if (workspace) {
+
+	    (* workspace->mountevent)(workspace, WORKSPACE_MOUNT_EVENT_MOUNT);
+
+	} else {
+
+    	    if (flags & MOUNTMONITOR_FLAG_INIT) {
+
+		if (strcmp(me->source, "network@osns.net")==0) {
+
+		    /* this will trigger the mount monitor, which will call this function ... interesting .. */
+
+		    logoutput("update_mountinfo: umount %s", me->mountpoint);
+		    umount2(me->mountpoint, MNT_DETACH);
 
 		}
 
-		list=get_next_element(list);
-		workspace=NULL;
-
-	    }
-
-	    if (workspace) break;
-	    user=get_next_osns_user(&index2, &hash);
-
-	}
-
-	if (workspace && workspace->syncdate.tv_sec==0) {
-
-	    if (workspace->type==WORKSPACE_TYPE_NETWORK) {
-
-		logoutput("update_mountinfo: found network workspace on %s", workspace->mountpoint.path);
-		get_net_services(&workspace->syncdate, install_net_services_cb, (void *) workspace);
-
 	    }
 
 	}
 
-	next:
-	entry=next_me(&index2, generation, MOUNTLIST_ADDED);
+	unlock_workspaces();
+
+	next1:
+	me=next_me(me, generation, MOUNTLIST_ADDED);
+
+    }
+
+    logoutput("update_mountinfo: look at removed mounts");
+
+    me=next_me(NULL, generation, MOUNTLIST_REMOVED);
+
+    while (me) {
+
+	logoutput("update_mountinfo: removed %s:%s at %s", me->source, me->fs, me->mountpoint);
+	next2:
+	me=next_me(me, generation, MOUNTLIST_REMOVED);
 
     }
 
@@ -147,17 +160,30 @@ static int update_mountinfo(unsigned long generation, struct mountentry_s *(*nex
 static unsigned char ignore_mountinfo (char *source, char *fs, char *path, void *data)
 {
     struct list_element_s *list=get_list_head(&accepted_mounts, 0);
+    int result=-1;
+
+    if (default_ignore_flag==0) default_ignore_flag = ADD_MOUNTINFO_FLAG_INCLUDE;
 
     while (list) {
 	struct accepted_mounts_s *mount=(struct accepted_mounts_s *)((char *) list - offsetof(struct accepted_mounts_s, list));
 
 	if (mount->type==ACCEPTED_MOUNT_TYPE_SOURCE) {
 
-	    if (strlen(source)==mount->size && memcmp(source, mount->buffer, mount->size)==0) return 0;
+	    if (strlen(source)==mount->size && memcmp(source, mount->buffer, mount->size)==0) {
+
+		result =  (mount->flags & ADD_MOUNTINFO_FLAG_INCLUDE) ? 0 : 1;
+		break;
+
+	    }
 
 	} else if (mount->type==ACCEPTED_MOUNT_TYPE_FS) {
 
-	    if (strlen(fs)==mount->size && memcmp(fs, mount->buffer, mount->size)==0) return 0;
+	    if (strlen(fs)==mount->size && memcmp(fs, mount->buffer, mount->size)==0) {
+
+		result = (mount->flags & ADD_MOUNTINFO_FLAG_INCLUDE) ? 0 : 1;
+		break;
+
+	    }
 
 	}
 
@@ -165,80 +191,115 @@ static unsigned char ignore_mountinfo (char *source, char *fs, char *path, void 
 
     }
 
-    return 1;
+    if (result==-1) result=(default_ignore_flag & ADD_MOUNTINFO_FLAG_INCLUDE) ? 0 : 1;
+
+    // logoutput("ignore_mountinfo: source %s fs %s path %s result %i", source, fs, path, result);
+
+    return result;
 }
 
-void add_mountinfo_source(char *source)
+static void add_mountinfo_common(char *data, unsigned char type, unsigned char flags)
 {
     unsigned int len=0;
     struct accepted_mounts_s *mount=NULL;
+    unsigned char tmp=0;
 
-    if (source==NULL) return;
+    if (data==NULL || flags==0) return;
+    if ((flags & ADD_MOUNTINFO_FLAG_INCLUDE) && (flags & ADD_MOUNTINFO_FLAG_EXCLUDE)) {
 
-    len=strlen(source);
+	logoutput_warning("add_mountinfo_common: both exclude and include flags defined: cannot define both..ignoring");
+	return;
+
+    } else if ((flags & ADD_MOUNTINFO_FLAG_INCLUDE)==0 && (flags & ADD_MOUNTINFO_FLAG_EXCLUDE)==0) {
+
+	logoutput_warning("add_mountinfo_common: one exclude and include flag has to be defined..ignoring");
+	return;
+
+    }
+
+    if (flags & ADD_MOUNTINFO_FLAG_INCLUDE) {
+
+	if (default_ignore_flag & ADD_MOUNTINFO_FLAG_INCLUDE) {
+
+	    logoutput_warning("add_mountinfo_common: cannot use include and exclude flags at the same time..ignoring");
+	    return;
+
+	}
+
+	tmp=ADD_MOUNTINFO_FLAG_EXCLUDE;
+
+    } else if (flags & ADD_MOUNTINFO_FLAG_EXCLUDE) {
+
+	if (default_ignore_flag & ADD_MOUNTINFO_FLAG_EXCLUDE) {
+
+	    logoutput_warning("add_mountinfo_common: cannot use include and exclude flags at the same time..ignoring");
+	    return;
+
+	}
+
+	tmp=ADD_MOUNTINFO_FLAG_INCLUDE;
+
+    }
+
+    len=strlen(data);
     mount=malloc(sizeof(struct accepted_mounts_s) + len);
 
     if (mount) {
 
-	mount->type=ACCEPTED_MOUNT_TYPE_SOURCE;
+	mount->type=type;
+	mount->flags=flags;
 	mount->size=len;
-	memcpy(mount->buffer, source, len);
+	memcpy(mount->buffer, data, len);
 	add_list_element_last(&accepted_mounts, &mount->list);
+
+	default_ignore_flag |= tmp;
+
+	logoutput("add_mountinfo_common: add value %s as %s", (type==ACCEPTED_MOUNT_TYPE_SOURCE) ? "source" : "fs", data, (flags & ADD_MOUNTINFO_FLAG_EXCLUDE) ? "exclude" : "include");
 
     }
 
 }
 
-void add_mountinfo_fs(char *fs)
+void add_mountinfo_source(char *source, unsigned char flags)
 {
-    unsigned int len=0;
-    struct accepted_mounts_s *mount=NULL;
-
-    if (fs==NULL) return;
-
-    len=strlen(fs);
-    mount=malloc(sizeof(struct accepted_mounts_s) + len);
-
-    if (mount) {
-
-	mount->type=ACCEPTED_MOUNT_TYPE_FS;
-	mount->size=len;
-	memcpy(mount->buffer, fs, len);
-	add_list_element_last(&accepted_mounts, &mount->list);
-
-    }
-
+    add_mountinfo_common(source, ACCEPTED_MOUNT_TYPE_SOURCE, flags);
 }
 
-int add_mountinfo_watch(struct beventloop_s *loop, unsigned int *error)
+void add_mountinfo_fs(char *fs, unsigned char flags)
 {
-    init_bevent(&bevent);
+    add_mountinfo_common(fs, ACCEPTED_MOUNT_TYPE_FS, flags);
+}
+
+int add_mountinfo_watch(struct beventloop_s *loop)
+{
+
     if (! loop) loop=get_mainloop();
+    bevent=open_mountmonitor();
 
-    if (open_mountmonitor(&bevent, error)==0) {
+    if (bevent) {
 
 	set_updatefunc_mountmonitor(update_mountinfo);
 	set_ignorefunc_mountmonitor(ignore_mountinfo);
 	set_threadsqueue_mountmonitor(NULL);
 
-	if (add_to_beventloop(bevent.fd, EPOLLPRI, bevent.cb, NULL, &bevent, loop)) {
+	if (add_bevent_beventloop(bevent)==0) {
 
-    	    logoutput_info("add_mountinfo_watch: mountinfo fd %i added to eventloop", bevent.fd);
+    	    logoutput_info("add_mountinfo_watch: mountinfo fd %i added to eventloop", get_bevent_unix_fd(bevent));
 
 	    /* read the mountinfo to initialize */
-	    (* bevent.cb)(0, NULL, 0);
+
+	    (* bevent->btype.fd.cb)(0, NULL, NULL);
 	    return 0;
 
 	} else {
 
-	    logoutput_info("add_mountinfo_watch: unable to add mountinfo fd %i to eventloop", bevent.fd);
-	    *error=EIO;
+	    logoutput_warning("add_mountinfo_watch: unable to add mountinfo fd %i to eventloop", get_bevent_unix_fd(bevent));
 
 	}
 
     } else {
 
-	logoutput_info("add_mountinfo_watch: unable to open mountmonitor");
+	logoutput_warning("add_mountinfo_watch: unable to open mountmonitor");
 
     }
 
@@ -248,17 +309,25 @@ int add_mountinfo_watch(struct beventloop_s *loop, unsigned int *error)
 
 void remove_mountinfo_watch()
 {
-    struct list_element_s *list=NULL;
 
-    remove_bevent_from_beventloop(&bevent);
-    close_mountmonitor();
+    if (bevent) {
+	struct list_element_s *list=NULL;
 
-    while ((list=get_list_head(&accepted_mounts, SIMPLE_LIST_FLAG_REMOVE))) {
-	struct accepted_mounts_s *mount=(struct accepted_mounts_s *)((char *) list - offsetof(struct accepted_mounts_s, list));
+	remove_bevent(bevent);
+	close_mountmonitor();
 
-	free(mount);
+	while ((list=get_list_head(&accepted_mounts, SIMPLE_LIST_FLAG_REMOVE))) {
+	    struct accepted_mounts_s *mount=(struct accepted_mounts_s *)((char *) list - offsetof(struct accepted_mounts_s, list));
+
+	    free(mount);
+
+	}
 
     }
 
 }
 
+void init_mountinfo_once()
+{
+    init_list_header(&accepted_mounts, SIMPLE_LIST_TYPE_EMPTY, 0);
+}

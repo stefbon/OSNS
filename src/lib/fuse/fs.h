@@ -31,10 +31,14 @@
 #define FS_SERVICE_FLAG_NONDIR					8
 
 #define _FUSE_OPENDIR_FLAG_NONEMPTY				1 << 0
+#define _FUSE_OPENDIR_FLAG_VIRTUAL				1 << 1
 
-#define _FUSE_OPENDIR_FLAG_READDIR_FINISH			1 << 1
-#define _FUSE_OPENDIR_FLAG_READDIR_INCOMPLETE			1 << 2
-#define _FUSE_OPENDIR_FLAG_READDIR_ERROR			1 << 3
+#define _FUSE_OPENDIR_FLAG_READDIR_FINISH			1 << 10
+#define _FUSE_OPENDIR_FLAG_READDIR_INCOMPLETE			1 << 11
+#define _FUSE_OPENDIR_FLAG_READDIR_ERROR			1 << 12
+#define _FUSE_OPENDIR_FLAG_QUEUE_READY				1 << 13
+#define _FUSE_OPENDIR_FLAG_THREAD				1 << 14
+#define _FUSE_OPENDIR_FLAG_RELEASE				1 << 15
 
 #define _FUSE_OPENDIR_FLAG_HIDE_SPECIALFILES			1 << 20
 #define _FUSE_OPENDIR_FLAG_HIDE_DOTFILES			1 << 21
@@ -42,82 +46,88 @@
 #define _FUSE_OPENDIR_FLAG_IGNORE_XDEV_SYMLINKS			1 << 23
 
 struct fuse_openfile_s {
-    struct service_context_s 			*context;
-    struct inode_s				*inode;
-    unsigned char				flock;
-    unsigned int				error;
+    struct service_context_s 					*context;
+    struct inode_s						*inode;
+    unsigned char						flock;
+    unsigned int						error;
     union {
-	uint64_t				fd;
-	void					*ptr;
+	uint64_t						fd;
+	void							*ptr;
 	struct {
-	    unsigned int			len;
-	    char				*name;
+	    unsigned int					len;
+	    char						*name;
 	} name;
     } handle;
 };
 
 struct fuse_buffer_s {
-    char					*data;
-    char					*pos;
-    int						left;
-    unsigned int				size;
-    signed char					eof;
-    unsigned int				count;
+    char							*data;
+    char							*pos;
+    int								left;
+    unsigned int						size;
+    signed char							eof;
+    unsigned int						count;
 };
 
 struct fuse_direntry_s {
-    struct list_element_s			list;
-    struct entry_s				*entry;
+    struct list_element_s					list;
+    struct entry_s						*entry;
 };
 
 struct fuse_opendir_s {
-    uint32_t					flags;
-    struct service_context_s 			*context;
-    struct inode_s				*inode;
-    ino_t					ino;
-    unsigned int 				error;
-    unsigned int				count_created;
-    unsigned int				count_found;
-    void 					(* readdir) (struct fuse_opendir_s *opendir, struct fuse_request_s *request, size_t size, off_t offset);
-    void 					(* readdirplus) (struct fuse_opendir_s *opendir, struct fuse_request_s *request, size_t size, off_t offset);
-    void 					(* releasedir) (struct fuse_opendir_s *opendir, struct fuse_request_s *request);
-    void 					(* fsyncdir) (struct fuse_opendir_s *opendir, struct fuse_request_s *request, unsigned char datasync);
-    signed char					(* hidefile)(struct fuse_opendir_s *opendir, struct entry_s *entry);
-    struct entry_s 				*(* get_fuse_direntry)(struct fuse_opendir_s *opendir, struct fuse_request_s *request);
-    int 					(* add_direntry_buffer)(void *ptr, struct direntry_buffer_s *buffer, struct name_s *xname, struct stat *st);
-    void					(* clear)(struct fuse_opendir_s *opendir);
-    struct list_header_s			entries;
-    struct list_header_s			symlinks;
-    pthread_mutex_t				*mutex;
-    pthread_cond_t				*cond;
-    unsigned char				threads;
+    uint32_t							flags;
+    struct service_context_s 					*context;
+    struct inode_s						*inode;
+    ino_t							ino;
+    unsigned int 						error;
+    unsigned int						count_created;
+    unsigned int						count_found;
+    void 							(* readdir) (struct fuse_opendir_s *opendir, struct fuse_request_s *request, size_t size, off_t offset);
+    void 							(* readdirplus) (struct fuse_opendir_s *opendir, struct fuse_request_s *request, size_t size, off_t offset);
+    void 							(* releasedir) (struct fuse_opendir_s *opendir, struct fuse_request_s *request);
+    void 							(* fsyncdir) (struct fuse_opendir_s *opendir, struct fuse_request_s *request, unsigned char datasync);
+    signed char							(* hidefile)(struct fuse_opendir_s *opendir, struct entry_s *entry);
+    struct entry_s 						*(* get_fuse_direntry)(struct fuse_opendir_s *opendir, struct list_header_s *h, struct fuse_request_s *request);
+    int 							(* add_direntry_buffer)(void *ptr, struct direntry_buffer_s *buffer, struct name_s *xname, struct stat *st);
+    void							(* clear)(struct fuse_opendir_s *opendir);
+    struct list_header_s					entries;
+    struct list_header_s					symlinks;
+    pthread_mutex_t						*mutex;
+    pthread_cond_t						*cond;
+    unsigned char						threads;
     union {
-	uint64_t				fd;
-	void					*ptr;
+	uint64_t						fd;
+	void							*ptr;
 	struct {
-	    unsigned int			len;
-	    char				*name;
+	    unsigned int					len;
+	    char						*name;
 	} name;
     } handle;
     union {
-	uint64_t				nr;
-	void					*ptr;
-	struct fuse_buffer_s			buffer;
+	uint64_t						nr;
+	void							*ptr;
+	struct fuse_buffer_s					buffer;
     } data;
+};
+
+/* fuse path relative to the root of a service context */
+
+struct fuse_path_s {
+    struct service_context_s 					*context;
+    char							*pathstart;
+    unsigned int						len;
+    char							path[];
+};
+
+struct entry_ops_s {
+    unsigned int 						(* get_pathlen)(struct service_context_s *c, struct entry_s *entry);
+    void							(* append_path)(struct service_context_s *c, struct entry_s *entry, struct fuse_path_s *fp);
 };
 
 /* union of fs calls. types:
     - dir
     - nondir
-
-    better:
-    - dir
-    - file
-    - symlink
-    ??
-
-    TODO?
-    */
+*/
 
 struct fuse_fs_s {
 
@@ -125,7 +135,7 @@ struct fuse_fs_s {
 
     int (*lock_datalink)(struct inode_s *inode);
     int (*unlock_datalink)(struct inode_s *inode);
-    void (*get_inode_link)(struct inode_s *inode, struct inode_link_s **link);
+    void (* get_data_link)(struct inode_s *inode, struct data_link_s **link);
 
     void (*forget) (struct inode_s *inode);
 
@@ -174,7 +184,7 @@ struct fuse_fs_s {
 	    void (*readdirplus) (struct fuse_opendir_s *opendir, struct fuse_request_s *request, size_t size, off_t offset);
 	    void (*releasedir) (struct fuse_opendir_s *opendir, struct fuse_request_s *request);
 	    void (*fsyncdir) (struct fuse_opendir_s *opendir, struct fuse_request_s *request, unsigned char datasync);
-	    struct entry_s *(* get_fuse_direntry)(struct fuse_opendir_s *opendir, struct fuse_request_s *request);
+	    struct entry_s *(* get_fuse_direntry)(struct fuse_opendir_s *o, struct list_header_s *h, struct fuse_request_s *r);
 
 	} dir;
 
@@ -197,7 +207,7 @@ unsigned char fuse_request_interrupted(struct fuse_request_s *request);
 int fs_lock_datalink(struct inode_s *inode);
 int fs_unlock_datalink(struct inode_s *inode);
 
-void fs_get_inode_link(struct inode_s *inode, struct inode_link_s **link);
+void fs_get_data_link(struct inode_s *inode, struct data_link_s **p_link);
 
 void fuse_fs_forget(struct fuse_request_s *request);
 void fuse_fs_forget_multi(struct fuse_request_s *request);
@@ -243,6 +253,15 @@ void clear_fuse_buffer(struct fuse_buffer_s *buffer);
 
 void queue_fuse_direntry(struct fuse_opendir_s *opendir, struct entry_s *entry);
 void queue_fuse_direntry_symlinks(struct fuse_opendir_s *opendir, struct entry_s *entry);
+
+void queue_fuse_direntries_virtual(struct fuse_opendir_s *opendir);
+
+struct entry_s *get_fuse_direntry_common(struct fuse_opendir_s *opendir, struct list_header_s *header, struct fuse_request_s *request);
+struct entry_s *_fs_service_get_fuse_direntry(struct fuse_opendir_s *opendir, struct fuse_request_s *request);
+struct entry_s *_fs_service_get_fuse_symlinks(struct fuse_opendir_s *opendir, struct fuse_request_s *request);
+
 void set_flag_fuse_opendir(struct fuse_opendir_s *opendir, uint32_t flag);
+void set_get_fuse_direntry_common(struct fuse_opendir_s *opendir);
+void finish_get_fuse_direntry(struct fuse_opendir_s *opendir);
 
 #endif

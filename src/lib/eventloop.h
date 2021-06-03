@@ -21,8 +21,6 @@
 #define _LIB_EVENTLOOP_H
 
 #include "eventloop/beventloop.h"
-#include "eventloop/bevent.h"
 #include "eventloop/beventsignal.h"
-#include "eventloop/beventtimer.h"
 
 #endif

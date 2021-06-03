@@ -507,7 +507,7 @@ void terminate_workerthreads(void *ptr, unsigned int timeout)
 
     finish:
 
-    if (queue->joblist.head) {
+    if (queue->joblist.count>0) {
 	struct threadjob_s *job=get_next_job(queue);
 
 	while(job) {

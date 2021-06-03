@@ -65,6 +65,7 @@ static int _connect_interface_ssh_session(uid_t uid, struct context_interface_s 
     char *target=NULL;
     unsigned int port=0;
     int fd=-1;
+    char *ip=NULL;
 
     if (host==NULL || service==NULL) {
  
@@ -95,7 +96,10 @@ static int _connect_interface_ssh_session(uid_t uid, struct context_interface_s 
 
     }
 
-    fd=connect_ssh_session_client(session, target, port);
+    ip = (host->ip.family==IP_ADDRESS_FAMILY_IPv4) ? host->ip.ip.v4 : host->ip.ip.v6;
+    if (ip==NULL || strlen(ip)==0) ip=target;
+
+    fd=connect_ssh_session_client(session, ip, port);
 
     out:
     return fd;
@@ -121,20 +125,26 @@ static int _signal_ssh2ctx(struct ssh_session_s *session, const char *what, stru
     return (* interface->signal_context)(interface, what, option);
 }
 
-static int add_connection_eventloop(struct ssh_session_s *session, struct ssh_connection_s *conn, unsigned int fd, int (* cb)(int fd, void *ptr, uint32_t events), void *ptr)
+static int add_connection_eventloop(struct ssh_session_s *session, struct ssh_connection_s *conn, unsigned int fd, void (* cb)(int fd, void *ptr, struct event_s *event), void *ptr)
 {
     struct context_interface_s *interface=(struct context_interface_s *)((char *) session - offsetof(struct context_interface_s, buffer));
     struct service_context_s *context=get_service_context(interface);
-    struct workspace_mount_s *workspace=context->workspace;
+    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
     struct beventloop_s *loop=NULL;
-    struct bevent_s *bevent=&conn->connection.io.socket.bevent;
+    struct bevent_s *bevent=NULL;
 
-    context=get_workspace_context(workspace);
+    context=get_root_context_workspace(workspace);
     loop=context->interface.backend.fuse.loop;
 
-    if (add_to_beventloop(fd, BEVENT_CODE_IN, cb, ptr, bevent, loop)) {
+    bevent=create_fd_bevent(loop, cb, ptr);
+    if (bevent==NULL) return -1;
+    set_bevent_unix_fd(bevent, fd);
+    set_bevent_watch(bevent, "incoming data");
+
+    if (add_bevent_beventloop(bevent)==0) {
 
 	logoutput("add_connection_eventloop: fd %i added to eventloop", fd);
+	conn->connection.io.socket.bevent=bevent;
 	return 0;
 
     }
@@ -238,7 +248,7 @@ static int _start_interface_ssh_channel(struct context_interface_s *interface, i
 
     logoutput("_start_interface_ssh_channel: send start %s", channel->name);
 
-    if (send_channel_start_command_message(channel, 1, &seq)==0) {
+    if (send_channel_start_command_message(channel, 1, &seq)>0) {
 	struct ssh_payload_s *payload=NULL;
 	struct timespec expire;
 	unsigned int error=0;
@@ -368,7 +378,7 @@ static int _init_interface_buffer_ssh_session(struct context_interface_s *interf
 {
     struct ssh_session_s *session=NULL;
     struct service_context_s *context=get_service_context(interface);
-    struct workspace_mount_s *workspace=context->workspace;
+    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
     struct osns_user_s *user=workspace->user;
     struct interface_ops_s *ops=ilist->ops;
 
@@ -412,10 +422,14 @@ static int _init_interface_buffer_ssh_channel(struct context_interface_s *interf
     struct ssh_channel_s *channel=NULL;
     struct ssh_session_s *session=NULL;
     struct service_context_s *context=get_service_context(interface);
-    struct workspace_mount_s *workspace=context->workspace;
+    struct service_context_s *pctx=NULL;
+    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
     struct osns_user_s *user=workspace->user;
-    struct context_interface_s *parent=(context->parent) ? (&context->parent->interface) : NULL;
+    struct context_interface_s *parent=NULL;
     struct interface_ops_s *ops=ilist->ops;
+
+    pctx=get_parent_context(context);
+    if (pctx) parent=&pctx->interface;
 
     if (interface->size < (* ops->get_buffer_size)(ilist)) {
 

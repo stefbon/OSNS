@@ -60,17 +60,8 @@ void add_encrypt_ops(struct encrypt_ops_s *ops)
 
 struct encrypt_ops_s *get_next_encrypt_ops(struct encrypt_ops_s *ops)
 {
-    if (ops) {
-	struct list_element_s *next=ops->list.n;
-	return (next) ? get_encrypt_ops_container(next) : NULL;
-
-    } else {
-	struct list_element_s *head=list_encrypt_ops.head;
-	return (head) ? get_encrypt_ops_container(head) : NULL;
-
-    }
-
-    return NULL;
+    struct list_element_s *list=(ops) ? get_next_element(&ops->list) : get_list_head(&list_encrypt_ops, 0);
+    return (list) ? get_encrypt_ops_container(list) : NULL;
 }
 
 void reset_encrypt(struct ssh_connection_s *connection, struct algo_list_s *algo_cipher, struct algo_list_s *algo_hmac)
@@ -156,4 +147,9 @@ unsigned int build_hmac_list_c2s(struct ssh_connection_s *c, struct algo_list_s 
 
     return start;
 
+}
+
+void init_encrypt_once()
+{
+    init_list_header(&list_encrypt_ops, SIMPLE_LIST_TYPE_EMPTY, 0);
 }

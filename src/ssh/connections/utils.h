@@ -35,5 +35,6 @@ void decrease_refcount_ssh_connection(struct ssh_connection_s *connection);
 
 struct ssh_session_s *get_ssh_connection_session(struct ssh_connection_s *connection);
 struct ssh_connections_s *get_ssh_connection_connections(struct ssh_connection_s *connection);
+struct fs_connection_s *get_session_fs_connection(struct ssh_session_s *s);
 
 #endif

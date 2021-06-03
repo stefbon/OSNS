@@ -59,11 +59,23 @@ static struct dops_s dummy_dops;
 static struct dops_s default_dops;
 static struct dops_s removed_dops;
 
+void set_inode_directory_dummy(struct inode_s *inode)
+{
+    if (inode && inode->link.type==0) {
+
+	inode->link.type=DATA_LINK_TYPE_DIRECTORY;
+	inode->link.link.ptr=&dummy_directory;
+
+    }
+
+}
+
 /* DUMMY DIRECTORY OPS */
 
-static void _init_directory(struct directory_s *directory)
+static void _init_directory(struct directory_s *d)
 {
-    directory->dops=&default_dops;
+    d->dops=&default_dops;
+    set_directory_pathcache_x(d);
 }
 
 static struct directory_s *get_directory_dummy(struct inode_s *inode)
@@ -72,7 +84,7 @@ static struct directory_s *get_directory_dummy(struct inode_s *inode)
 
     if (directory) {
 
-	inode->link.type=INODE_LINK_TYPE_DIRECTORY;
+	inode->link.type=DATA_LINK_TYPE_DIRECTORY;
 	inode->link.link.ptr=(void *) directory;
 
     } else {
@@ -111,11 +123,6 @@ static struct directory_s *remove_directory_common(struct inode_s *inode, unsign
     return directory;
 }
 
-static void get_inode_link_common(struct directory_s *directory, struct inode_s *inode, struct inode_link_s **link)
-{
-    *link=&directory->link;
-}
-
 static struct dops_s default_dops = {
     .get_directory		= get_directory_common,
     .remove_directory		= remove_directory_common,
@@ -145,6 +152,8 @@ struct directory_s *get_directory(struct inode_s *inode)
 {
     struct simple_lock_s wlock;
     struct directory_s *directory=&dummy_directory;
+
+    logoutput("get_directory: ino %li", inode->st.st_ino);
 
     init_simple_writelock(&directory->locking, &wlock);
 
@@ -313,8 +322,8 @@ void init_directory_calls()
 
     dummy_directory.dops=&dummy_dops;
 
-    /* make inode_link point to directory self */
-    dummy_directory.link.type=INODE_LINK_TYPE_DIRECTORY;
+    /* make data_link point to directory self */
+    dummy_directory.link.type=DATA_LINK_TYPE_DIRECTORY;
     dummy_directory.link.link.ptr=&dummy_directory;
 }
 
@@ -331,8 +340,12 @@ static struct entry_s *_cb_create_entry(struct name_s *name)
 }
 static struct inode_s *_cb_create_inode()
 {
-    return create_inode();
+    struct inode_s *inode=create_inode();
+
+    set_inode_directory_dummy(inode);
+    return inode;
 }
+
 static struct entry_s *_cb_insert_entry(struct directory_s *directory, struct entry_s *entry, unsigned int flags, unsigned int *error)
 {
     return insert_entry(directory, entry, error, flags);
@@ -343,7 +356,8 @@ static struct entry_s *_cb_insert_entry_batch(struct directory_s *directory, str
 }
 static void _cb_adjust_pathmax_default(struct create_entry_s *ce)
 {
-    adjust_pathmax(ce->context->workspace, ce->pathlen);
+    struct workspace_mount_s *workspace=get_workspace_mount_ctx(ce->context);
+    adjust_pathmax(workspace, ce->pathlen);
 }
 static void _cb_context_created(struct create_entry_s *ce, struct entry_s *entry)
 {
@@ -379,9 +393,9 @@ static void _cb_created_default(struct entry_s *entry, struct create_entry_s *ce
 {
     struct service_context_s *context=ce->context;
     struct inode_s *inode=entry->inode;
-    struct directory_s *directory=get_directory_entry(entry);
+    struct directory_s *directory=get_directory(inode);
 
-    inode->nlookup=1;
+    inode->nlookup=0; /*20210401: changed from 1 to 0: setting of this should be done in the context */
     inode->st.st_nlink=1;
     get_current_time(&inode->stim); 							/* sync time */
 
@@ -400,9 +414,12 @@ static void _cb_created_default(struct entry_s *entry, struct create_entry_s *ce
 
 	inode->st.st_nlink++;
 	if (directory && directory->inode) directory->inode->st.st_nlink++;
-	set_directory_dump(inode, get_dummy_directory());
+	// set_directory_dump(inode, get_dummy_directory());
 
     }
+
+    set_entry_ops(entry);
+    use_virtual_fs(inode);
 
 }
 
@@ -666,22 +683,9 @@ static void _clear_directory(struct context_interface_s *i, struct directory_s *
 void clear_directory_recursive(struct context_interface_s *i, struct directory_s *directory)
 {
     struct service_context_s *context=get_service_context(i);
-    struct workspace_mount_s *workspace=context->workspace;
+    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
     char path[workspace->pathmax];
 
     memset(path, 0, workspace->pathmax);
     _clear_directory(i, directory, path, 0, 0);
-}
-
-int get_inode_link_directory(struct inode_s *inode, struct inode_link_s *link)
-{
-    struct directory_s *directory=get_directory(inode);
-    memcpy(link, &directory->link, sizeof(struct inode_link_s));
-    return 0;
-}
-
-void set_inode_link_directory(struct inode_s *inode, struct inode_link_s *link)
-{
-    struct directory_s *directory=get_directory(inode);
-    memcpy(&directory->link, link, sizeof(struct inode_link_s));
 }

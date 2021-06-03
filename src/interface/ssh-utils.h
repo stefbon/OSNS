@@ -22,5 +22,6 @@
 /* prototypes */
 
 void translate_ssh_channel_name(struct ssh_channel_s *channel, char *name);
+struct fs_connection_s *get_fs_connection_ssh_interface(struct context_interface_s *i);
 
 #endif

@@ -143,6 +143,51 @@ void set_sftp_interface_prefix(struct context_interface_s *interface, char *name
 
 	}
 
+	interface->backend.sftp.name=strdup(name);
+
     }
 
+}
+
+int issubdir_prefix_sftp_client(struct context_interface_s *interface, char *path, unsigned int len_p)
+{
+    char *prefix=NULL;
+    unsigned int len=0;
+
+    logoutput("issubdir_prefix_sftp_client: test path %.*s for type %i", len_p, path, interface->backend.sftp.prefix.type);
+
+    if (interface->backend.sftp.prefix.type==INTERFACE_BACKEND_SFTP_PREFIX_HOME) {
+
+	if (interface->backend.sftp.prefix.path) {
+
+	    prefix=interface->backend.sftp.prefix.path;
+	    len=interface->backend.sftp.prefix.len;
+
+	} else {
+	    char *buffer=(* interface->get_interface_buffer)(interface);
+	    struct sftp_client_s *sftp=(struct sftp_client_s *) buffer;
+	    struct sftp_usermapping_s *um=&sftp->usermapping;
+	    struct getent_fields_s *ru=&um->remote_user;
+
+	    prefix=ru->type.user.home;
+	    len=strlen(prefix);
+
+	}
+
+    } else if (interface->backend.sftp.prefix.type==INTERFACE_BACKEND_SFTP_PREFIX_CUSTOM) {
+
+	prefix=interface->backend.sftp.prefix.path;
+	len=interface->backend.sftp.prefix.len;
+
+    } else {
+
+	prefix="/";
+	len=1;
+
+    }
+
+    logoutput("issubdir_prefix_sftp_client: compare prefix %.*s and path %.*s", len, prefix, len_p, path);
+
+    if (len_p>len && strncmp(path, prefix, len)==0 && path[len]=='/') return 0;
+    return -1;
 }

@@ -17,9 +17,9 @@
 
 */
 
-#ifndef FS_WORKSPACE_SSH_RECEIVE_READ_SOCKET_H
-#define FS_WORKSPACE_SSH_RECEIVE_READ_SOCKET_H
+#ifndef _SSH_RECEIVE_READ_SOCKET_H
+#define _SSH_RECEIVE_READ_SOCKET_H
 
-int read_ssh_connection_signal(int fd, void *ptr, uint32_t events);
+void read_ssh_connection_signal(int fd, void *ptr, struct event_s *event);
 
 #endif

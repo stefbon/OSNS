@@ -55,7 +55,7 @@ void msg_not_supported(struct ssh_connection_s *connection, struct ssh_payload_s
     logoutput("msg_not_supported: received %i", payload->type);
     free_payload(&payload);
 
-    if (send_unimplemented_message(connection, seq)==0) {
+    if (send_unimplemented_message(connection, seq)>0) {
 
 	logoutput("msg_not_supported: send MSG_UNIMPLEMENTED for seq %i", seq);
 
@@ -219,9 +219,13 @@ void free_ssh_connection_receive(struct ssh_connection_s *connection)
 
 void init_ssh_receive_once()
 {
+    init_decrypt_once();
+    init_decryptors_once();
+    init_decompress_once();
+    init_decompressors_once();
+
     init_decrypt_generic();
     init_decrypt_chacha20_poly1305_openssh_com();
     init_decompress_none();
-    init_decryptors_once();
-    init_decompressors_once();
+
 }

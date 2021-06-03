@@ -1,5 +1,5 @@
 /*
-  2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017 Stef Bon <stefbon@gmail.com>
+  2017 Stef Bon <stefbon@gmail.com>
 
   This program is free software; you can redistribute it and/or
   modify it under the terms of the GNU General Public License
@@ -13,15 +13,14 @@
 
   You should have received a copy of the GNU General Public License
   along with this program; if not, write to the Free Software
-  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
 
-#ifndef _LIB_FUSE_CONTEXT_FS_ROOT_H
-#define _LIB_FUSE_CONTEXT_FS_ROOT_H
+#ifndef _LIB_NETWORK_DNS_H
+#define _LIB_NETWORK_DNS_H
 
-/* Prototypes */
+/* prototypes */
 
-void use_service_root_fs(struct inode_s *inode);
+char *lookupname_dns(char *ip);
 
 #endif

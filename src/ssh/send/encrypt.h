@@ -29,4 +29,6 @@ void reset_encrypt(struct ssh_connection_s *c, struct algo_list_s *algo_cipher, 
 unsigned int build_cipher_list_c2s(struct ssh_connection_s *c, struct algo_list_s *alist, unsigned int start);
 unsigned int build_hmac_list_c2s(struct ssh_connection_s *c, struct algo_list_s *alist, unsigned int start);
 
+void init_encrypt_once();
+
 #endif

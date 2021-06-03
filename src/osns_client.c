@@ -59,9 +59,10 @@
 #include "mountinfo.h"
 
 #include "network.h"
-#include "discover.h"
+#include "discover/discover.h"
 
 #include "fuse/network.h"
+#include "fuse/workspace-fs.h"
 
 #include "interface/fuse.h"
 #include "interface/sftp.h"
@@ -147,16 +148,11 @@ static void _disconnect_workspace(struct context_interface_s *interface)
     unsigned int error=0;
     struct directory_s *root_directory=NULL;
     struct list_element_s *list=NULL;
-    struct service_context_s *context=NULL;
 
     logoutput_info("_disconnect_workspace");
 
-    workspace=root->workspace;
+    workspace=get_workspace_mount_ctx(root);
     if (! workspace) return;
-
-    pthread_mutex_lock(&workspace->mutex);
-    workspace->status=WORKSPACE_STATUS_UNMOUNTING;
-    pthread_mutex_unlock(&workspace->mutex);
 
     (* interface->signal_interface)(interface, "command:disconnect:", NULL);
     (* interface->signal_interface)(interface, "command:close:", NULL);
@@ -182,8 +178,8 @@ static void _disconnect_workspace(struct context_interface_s *interface)
     list=get_list_tail(&workspace->contexes, SIMPLE_LIST_FLAG_REMOVE);
 
     while (list) {
+	struct service_context_s *context=(struct service_context_s *)((char *) list - offsetof(struct service_context_s, wlist));
 
-	context=get_container_context(list);
 	logoutput_info("_disconnect_workspace: disconnect service %s context", context->name);
 
 	(* context->interface.signal_interface)(&context->interface, "command:disconnect:", NULL);
@@ -345,6 +341,11 @@ struct service_context_s *create_mount_context(struct osns_user_s *user, char **
     unsigned int count=build_interface_ops_list(NULL, NULL, 0);
     struct interface_list_s ailist[count];
     struct interface_list_s *ilist=NULL;
+    struct context_interface_s *interface=NULL;
+    struct service_address_s service;
+    int fd=-1;
+    char source[64];
+    char name[32];
 
     /* build the list with available interface ops
 	important here are of course the ops to setup a ssh server context and a sftp server context (=ssh channel) */
@@ -357,20 +358,11 @@ struct service_context_s *create_mount_context(struct osns_user_s *user, char **
 
     }
 
-    count=build_interface_ops_list(NULL, ailist, 0);
+    count=build_interface_ops_list(NULL, ailist, count);
 
-    /* look for the interface ops for a ssh session */
+    /* look for a fuse interface */
 
-    for (unsigned int i=0; i<(sizeof(ailist)/sizeof(ailist[0])); i++) {
-
-	if (ailist[i].type==_INTERFACE_TYPE_FUSE) {
-
-	    ilist=&ailist[i];
-	    break;
-
-	}
-
-    }
+    ilist=get_interface_list(ailist, count, _INTERFACE_TYPE_FUSE);
 
     if (ilist==NULL) {
 
@@ -405,71 +397,69 @@ struct service_context_s *create_mount_context(struct osns_user_s *user, char **
 
     context=create_service_context(workspace, NULL, ilist, SERVICE_CTX_TYPE_WORKSPACE, NULL);
 
-    if (context) {
-	struct context_interface_s *interface=&context->interface;
-	struct service_address_s service;
-	struct inode_link_s link;
-	int fd=-1;
-	char source[64];
-	char name[32];
+    if (context==NULL) {
 
-	snprintf(source, 64, "fuse.network");
-	snprintf(name, 32, "network");
+	logoutput("create_mount_context: failed to create mount context");
+	goto error;
 
-	interface->signal_context=signal_fuse2ctx;
-	register_fuse_functions(interface);
-	use_virtual_fs(context, &workspace->inodes.rootinode);
-	set_directory_dump(&workspace->inodes.rootinode, get_dummy_directory());
+    }
 
-	/* connect to the fuse interface: mount */
-	/* target address of interface is a local mountpoint */
+    set_context_filesystem_workspace(context);
+    snprintf(source, 64, "network@osns.net");
+    snprintf(name, 32, "network");
 
-	service.type=_SERVICE_TYPE_FUSE;
-	service.target.fuse.source=source;
-	service.target.fuse.mountpoint=workspace->mountpoint.path;
-	service.target.fuse.name=name;
+    interface=&context->interface;
+    interface->signal_context=signal_fuse2ctx;
+    register_fuse_functions(interface);
+    set_directory_dump(&workspace->inodes.rootinode, get_dummy_directory());
 
-	logoutput("create_mount_context: connect");
+    /* connect to the fuse interface: mount */
+    /* target address of interface is a local mountpoint */
 
-	fd=(* context->interface.connect)(user->pwd.pw_uid, interface, NULL, &service);
+    service.type=_SERVICE_TYPE_FUSE;
+    service.target.fuse.source=source;
+    service.target.fuse.mountpoint=workspace->mountpoint.path;
+    service.target.fuse.name=name;
 
-	if (fd==-1) {
+    logoutput("create_mount_context: connect");
 
-	    logoutput("create_mount_context: failed to mount %s", workspace->mountpoint.path);
-	    goto error;
+    fd=(* context->interface.connect)(user->pwd.pw_uid, interface, NULL, &service);
 
-	}
+    if (fd==-1) {
 
-	logoutput("create_mount_context: starting FUSE mountpoint using fd %i", fd);
+	logoutput("create_mount_context: failed to mount %s", workspace->mountpoint.path);
+	goto error;
 
-	if ((* context->interface.start)(&context->interface, fd, NULL)==0) {
-	    struct simple_lock_s wlock;
-	    struct inode_s *inode=&workspace->inodes.rootinode;
-	    struct directory_s *d=get_directory(inode);
+    }
 
-	    (* user->add)(user, &workspace->list);
-	    logoutput("create_mount_context: FUSE mountpoint %s mounted", workspace->mountpoint.path);
+    logoutput("create_mount_context: starting FUSE mountpoint using fd %i", fd);
 
-	    if (wlock_directory(d, &wlock)==0) {
-		struct inode_link_s link;
+    if ((* context->interface.start)(interface, fd, NULL)==0) {
+	struct inode_s *inode=&workspace->inodes.rootinode;
+	struct simple_lock_s wlock;
+	struct directory_s *d=get_directory(inode);
 
-		link.type=INODE_LINK_TYPE_CONTEXT;
-		link.link.ptr=(void *) context;
-		set_inode_link_directory(inode, &link);
-		unlock_directory(d, &wlock);
+	(* user->add)(user, &workspace->list);
+	logoutput("create_mount_context: FUSE mountpoint %s mounted", workspace->mountpoint.path);
 
-	    }
+	if (wlock_directory(d, &wlock)==0) {
 
-	    return context;
+	    d->link.type=DATA_LINK_TYPE_CONTEXT;
+	    d->link.link.ptr=(void *) context;
+	    unlock_directory(d, &wlock);
+
+	    use_service_fs(context, inode);
+	    set_entry_ops(inode->alias);
 
 	}
 
-	logoutput("create_mount_context: failed to start %s", workspace->mountpoint.path);
-	close(fd);
+	populate_network_workspace_mount(workspace);
+	return context;
 
     } else {
 
-	logoutput("create_mount_context: failed to create mount context");
+	logoutput("create_mount_context: failed to start FUSE at %s", workspace->mountpoint.path);
+	close(fd);
 
     }
 
@@ -493,8 +483,8 @@ static void terminate_user_workspaces(struct osns_user_s *user)
     while (list) {
 	struct service_context_s *context=NULL;
 
-	workspace=get_container_workspace(list);
-	context=get_workspace_context(workspace);
+	workspace=(struct workspace_mount_s *)((char *) list - offsetof(struct workspace_mount_s, list));
+	context=get_root_context_workspace(workspace);
 
 	_disconnect_workspace(&context->interface);
 
@@ -636,7 +626,7 @@ static void add_osns_user_session(uid_t uid)
 
 }
 
-static void change_usersessions(uid_t uid, signed char change, void *ptr)
+static void change_usersessions(uid_t uid, int change, void *ptr)
 {
     struct osns_user_s *user=NULL;
     struct simple_lock_s wlock;
@@ -721,20 +711,15 @@ static int filter_user_login(uid_t uid, void *ptr)
 }
 
 
-static void workspace_signal_handler(struct beventloop_s *bloop, void *data, struct signalfd_siginfo *fdsi)
+static void workspace_signal_handler(struct beventloop_s *loop, unsigned int signo, pid_t pid, int fd)
 {
-    unsigned int signo=fdsi->ssi_signo;
 
     logoutput("workspace_signal_handler: received %i", signo);
 
     if ( signo==SIGHUP || signo==SIGINT || signo==SIGTERM ) {
 
 	logoutput("workspace_signal_handler: got signal (%i): terminating", signo);
-	bloop->status=BEVENTLOOP_STATUS_DOWN;
-
-	/*
-	    TODO: send a signal to all available io contexes to stop waiting
-	*/
+	stop_beventloop(loop);
 
     } else if ( signo==SIGIO ) {
 
@@ -746,8 +731,8 @@ static void workspace_signal_handler(struct beventloop_s *bloop, void *data, str
 	    is this really the case?
 	    then the fuse fs is the owner!?
 
-	    note 	fdsi->ssi_pid
-			fdsi->ssi_fd
+	    note 	pid
+			fd
 	*/
 
     } else if ( signo==SIGPIPE ) {
@@ -853,7 +838,7 @@ int main(int argc, char *argv[])
 {
     int res=0;
     unsigned int error=0;
-    struct bevent_s *bevent=NULL;
+    struct bevent_s *users_bevent=NULL;
     struct fs_connection_s socket;
     char *pidfile=NULL;
 
@@ -898,15 +883,38 @@ int main(int argc, char *argv[])
 
     switch_logging_backend("syslog");
 
+    logoutput_info("MAIN: initializing interfaces");
+
+    init_interfaces();
     init_fusesocket_interface();
     init_sftp_client_interface();
     init_ssh_session_interface();
 
-    init_hashtable_fusesocket();
-    init_directory_calls();
-    init_special_fs();
+    logoutput_info("MAIN: initializing hashtable fuse socket");
 
-    if (init_discover_group(&error)==-1) {
+    init_hashtable_fusesocket();
+
+    logoutput_info("MAIN: initializing directory calls");
+
+    init_dentry_once();
+    init_directory_calls();
+    init_workspaces_once();
+
+    logoutput_info("MAIN: initializing various fuse fs's");
+
+    init_virtual_fs();
+    init_special_fs();
+    init_service_fs();
+    init_browse_fs();
+
+    /* Initialize and start default threads
+	NOTE: important to start these after initializing the signal handler, if not doing this this way any signal will make the program crash */
+
+    init_workerthreads(NULL);
+    set_max_numberthreads(NULL, 6); /* depends on the number of users and connected workspaces, 6 is a reasonable amount for this moment */
+    start_default_workerthreads(NULL);
+
+    if (init_discover_group(NULL, NULL)==-1) {
 
 	logoutput_error("MAIN: error, cannot initialize discover group, error: %i (%s).", error, strerror(error));
 	goto post;
@@ -917,8 +925,6 @@ int main(int argc, char *argv[])
 
     }
 
-    set_discover_net_cb(install_net_services_cb);
-
     if (initialize_osns_users(&error)==-1) {
 
 	logoutput_error("MAIN: error, cannot initialize fuse users hash table, error: %i (%s).", error, strerror(error));
@@ -926,49 +932,42 @@ int main(int argc, char *argv[])
 
     }
 
-    // init_backuphash();
-
     if (init_beventloop(NULL)==-1) {
 
-        logoutput_error("MAIN: error creating eventloop, error: %i (%s).", error, strerror(error));
+        logoutput_error("MAIN: error creating eventloop");
         goto post;
 
     } else {
 
-	logoutput_info("MAIN: creating eventloop");
+	logoutput_info("MAIN: main eventloop created");
 
     }
 
-    if (enable_beventloop_signal(NULL, workspace_signal_handler, NULL, &error)==-1) {
+    if (enable_beventloop_signal(NULL, workspace_signal_handler)==-1) {
 
-	logoutput_error("MAIN: error adding signal handler to eventloop: %i (%s).", error, strerror(error));
+	logoutput_error("MAIN: error adding signal handler to eventloop.");
         goto out;
 
     } else {
 
-	logoutput_info("MAIN: adding signal handler");
+	logoutput_info("MAIN: signal handler added to main eventloop");
 
     }
 
-    if (add_mountinfo_watch(NULL, &error)==-1) {
+    init_mountinfo_once();
 
-        logoutput_error("MAIN: unable to open mountmonitor, error=%i (%s)", error, strerror(error));
+    add_mountinfo_source("network@osns.net", ADD_MOUNTINFO_FLAG_INCLUDE);
+
+    if (add_mountinfo_watch(NULL)==-1) {
+
+        logoutput_error("MAIN: unable to open mountmonitor");
         goto out;
 
     } else {
 
-	logoutput_info("MAIN: open mountmonitor");
+	logoutput_info("MAIN: mountmonitor open");
 
     }
-
-    add_mountinfo_source("network@osns.org");
-
-    /* Initialize and start default threads
-	NOTE: important to start these after initializing the signal handler, if not doing this this way any signal will make the program crash */
-
-    init_workerthreads(NULL);
-    set_max_numberthreads(NULL, 6); /* depends on the number of users and connected workspaces, 6 is a reasonable amount for this moment */
-    start_default_workerthreads(NULL);
 
     if (init_fschangenotify(NULL, &error)==-1) {
 
@@ -999,13 +998,7 @@ int main(int argc, char *argv[])
 
     }
 
-    if (fs_options.network.flags & _OPTIONS_NETWORK_DISCOVER_METHOD_FILE) {
-
-	browse_services_staticfile(&fs_options.network.discover_static_file);
-
-    }
-
-    browse_services_avahi();
+    discover_services();
 
     res=create_user_monitor(change_usersessions, NULL, filter_user_login);
 
@@ -1016,9 +1009,15 @@ int main(int argc, char *argv[])
 
     } else {
 
-	if (add_to_beventloop(res, BEVENT_CODE_IN, read_user_monitor_event, NULL, NULL, NULL)) {
+	users_bevent=create_fd_bevent(NULL, read_user_monitor_event, NULL);
+	if (users_bevent==NULL) goto out;
 
-	    logoutput("MAIN: added usermonitor %i to eventloop", res);
+	set_bevent_unix_fd(users_bevent, res);
+	set_bevent_watch(users_bevent, "incoming data");
+
+	if (add_bevent_beventloop(users_bevent)==0) {
+
+	    logoutput("MAIN: added usermonitor fd %i to eventloop", res);
 
 	} else {
 
@@ -1029,7 +1028,6 @@ int main(int argc, char *argv[])
     }
 
     read_user_monitor_event(0, NULL, 0);
-
     res=start_beventloop(NULL);
 
     out:
@@ -1037,6 +1035,7 @@ int main(int argc, char *argv[])
     remove_mountinfo_watch();
 
     logoutput_info("MAIN: close sessions monitor");
+    remove_bevent(users_bevent);
     close_user_monitor();
     end_osns_user_sessions(NULL);
 

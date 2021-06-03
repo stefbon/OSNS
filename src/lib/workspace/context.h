@@ -26,29 +26,126 @@
 
 #define SERVICE_CTX_TYPE_DUMMY			0
 #define SERVICE_CTX_TYPE_WORKSPACE		1
-#define SERVICE_CTX_TYPE_FILESYSTEM		2
-#define SERVICE_CTX_TYPE_CONNECTION		3
-#define SERVICE_CTX_TYPE_SOCKET			4
+#define SERVICE_CTX_TYPE_NETWORK		2
+#define SERVICE_CTX_TYPE_BROWSE			3
+#define SERVICE_CTX_TYPE_FILESYSTEM		4
 
-#define SERVICE_CTX_FLAG_ALLOC			1
+#define SERVICE_CTX_FLAG_ALLOC			( 1 << 0 )
+#define SERVICE_CTX_FLAG_LOCKED			( 1 << 1 )
+#define SERVICE_CTX_FLAG_TOBEDELETED		( 1 << 2 )
+#define SERVICE_CTX_FLAG_WLIST			( 1 << 3 )
+#define SERVICE_CTX_FLAG_CLIST			( 1 << 4 )
+
+#define SERVICE_CTX_FLAG_SFTP			( 1 << 10 )
+#define SERVICE_CTX_FLAG_SMB			( 1 << 11 )
+#define SERVICE_CTX_FLAG_NFS			( 1 << 12 )
+#define SERVICE_CTX_FLAG_WEBDAV			( 1 << 13 )
+#define SERVICE_CTX_FLAG_GIT			( 1 << 14 )
+
+/* backends like:
+    - Internet Cloud Storage like Microsoft One Drive, Google Drive ... */
+
+#define SERVICE_CTX_FLAG_ICS			( 1 << 15 )
+
+#define SERVICE_CTX_FLAGS_REMOTEBACKEND		( SERVICE_CTX_FLAG_SFTP | SERVICE_CTX_FLAG_SMB | SERVICE_CTX_FLAG_NFS | SERVICE_CTX_FLAG_WEBDAV | SERVICE_CTX_FLAG_GIT | SERVICE_CTX_FLAG_ICS )
+
+#define SERVICE_BROWSE_TYPE_NETWORK		1
+#define SERVICE_BROWSE_TYPE_NETGROUP		2
+#define SERVICE_BROWSE_TYPE_NETHOST		3
+#define SERVICE_BROWSE_TYPE_NETSOCKET		4
+
+#define SERVICE_OP_TYPE_LOOKUP			0
+#define SERVICE_OP_TYPE_LOOKUP_EXISTING		1
+#define SERVICE_OP_TYPE_LOOKUP_NEW		2
+
+#define SERVICE_OP_TYPE_GETATTR			3
+#define SERVICE_OP_TYPE_SETATTR			4
+#define SERVICE_OP_TYPE_READLINK		5
+
+#define SERVICE_OP_TYPE_MKDIR			6
+#define SERVICE_OP_TYPE_MKNOD			7
+#define SERVICE_OP_TYPE_SYMLINK			8
+#define SERVICE_OP_TYPE_CREATE			9
+
+#define SERVICE_OP_TYPE_UNLINK			10
+#define SERVICE_OP_TYPE_RMDIR			11
+
+#define SERVICE_OP_TYPE_RENAME			12
+
+#define SERVICE_OP_TYPE_OPEN			13
+#define SERVICE_OP_TYPE_READ			14
+#define SERVICE_OP_TYPE_WRITE			15
+#define SERVICE_OP_TYPE_FLUSH			16
+#define SERVICE_OP_TYPE_FSYNC			17
+#define SERVICE_OP_TYPE_RELEASE			18
+#define SERVICE_OP_TYPE_FGETATTR		19
+#define SERVICE_OP_TYPE_FSETATTR		20
+
+#define SERVICE_OP_TYPE_GETLOCK			21
+#define SERVICE_OP_TYPE_SETLOCK			22
+#define SERVICE_OP_TYPE_SETLOCKW		23
+#define SERVICE_OP_TYPE_FLOCK			24
+
+#define SERVICE_OP_TYPE_OPENDIR			25
+#define SERVICE_OP_TYPE_READDIR			26
+#define SERVICE_OP_TYPE_READDIRPLUS		27
+#define SERVICE_OP_TYPE_RELEASEDIR		28
+#define SERVICE_OP_TYPE_FSYNCDIR		29
+
+#define SERVICE_OP_TYPE_GETXATTR		30
+#define SERVICE_OP_TYPE_SETXATTR		31
+#define SERVICE_OP_TYPE_LISTXATTR		32
+#define SERVICE_OP_TYPE_REMOVEXATTR		33
+
+#define SERVICE_OP_TYPE_STATFS			34
+
+/*
+    TODO:
+    - git
+    - Google Drive
+    - Microsoft One Drive
+    - Amazon
+    - Nextcloud
+    - backup
+
+*/
 
 struct service_context_s {
     unsigned char				type;
-    unsigned char				flags;
+    uint32_t					flags;
     char					name[32];
-    struct workspace_mount_s			*workspace;
-    struct service_context_s			*parent;
-    unsigned int				fscount;
-    unsigned int				serviceid;
-    pthread_mutex_t				mutex;
     union {
+	struct workspace_context_s {
+	    struct service_fs_s				*fs; 		/* the fs used for the workspace/root: networkfs or devicefs */
+	    pthread_mutex_t				*mutex;
+	    pthread_cond_t				*cond;
+	    struct list_header_s			header;
+	} workspace;
+	struct network_context_s {
+	    struct service_fs_s				*fs; 		/* the fs used for this service: pseudo, sftp, webdav, smb ... */
+	    struct list_element_s			clist;		/* the list of the parent: part of a tree */
+	    struct list_header_s			header;		/* has children */
+	    struct timespec				refresh;
+	    pthread_t					threadid;
+	} network;
+	struct browse_context_s {
+	    struct service_fs_s				*fs; 		/* the fs used for browsing the network map */
+	    struct list_element_s			clist;		/* the list of the parent: part of a tree */
+	    unsigned int				type;		/* type: network, netgroup or nethost or netsocket */
+	    uint32_t					unique;		/* unique id of the related resource record */
+	    struct list_header_s			header;		/* has children */
+	    struct timespec				refresh;	/* time of latest refresh: to keep cache and contexes in sync */
+	    pthread_t					threadid;
+	} browse;
 	struct filesystem_context_s {
 	    struct service_fs_s				*fs; 		/* the fs used for this service: pseudo, sftp, webdav, smb ... */
+	    struct list_element_s			clist;		/* the list of the parent: part of a tree */
 	    struct inode_s 				*inode; 	/* the inode the service is attached to */
+	    pthread_mutex_t				mutex;		/* mutex to protect pathcache */
 	    struct list_header_s			pathcaches;
 	} filesystem;
     } service;
-    struct list_element_s			list;
+    struct list_element_s			wlist;
     struct context_interface_s			interface;
 };
 
@@ -61,6 +158,9 @@ struct service_fs_s {
     void (*setattr) (struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, struct pathinfo_s *pathinfo, struct stat *st, unsigned int set);
 
     void (*readlink) (struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, struct pathinfo_s *pathinfo);
+
+    int (* access) (struct service_context_s *context, struct fuse_request_s *request, unsigned char what);
+    unsigned int (* get_name)(struct service_context_s *context, char *buffer, unsigned int len);
 
     void (*mkdir) (struct service_context_s *context, struct fuse_request_s *request, struct entry_s *entry, struct pathinfo_s *pathinfo, struct stat *st);
     void (*mknod) (struct service_context_s *context, struct fuse_request_s *request, struct entry_s *entry, struct pathinfo_s *pathinfo, struct stat *st);
@@ -107,17 +207,10 @@ struct service_fs_s {
 /* prototypes */
 
 struct service_context_s *get_service_context(struct context_interface_s *interface);
-struct service_context_s *get_next_service_context(struct workspace_mount_s *workspace, struct service_context_s *context);
-struct context_interface_s *get_next_context_interface(struct context_interface_s *reference, struct context_interface_s *interface);
-
-struct service_context_s *create_service_context(struct workspace_mount_s *workspace, struct service_context_s *parent, struct interface_list_s *ilist, unsigned char type, struct service_context_s *primary);
-void free_service_context(struct service_context_s *context);
-
-void *get_root_ptr_context(struct service_context_s *context);
-struct service_context_s *get_root_context(struct service_context_s *context);
 struct osns_user_s *get_user_context(struct service_context_s *context);
 
-struct service_context_s *get_container_context(struct list_element_s *list);
-struct service_context_s *get_workspace_context(struct workspace_mount_s *workspace);
+#include "ctx-init.h"
+#include "ctx-lock.h"
+#include "ctx-next.h"
 
 #endif

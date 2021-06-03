@@ -85,7 +85,7 @@ void _fs_sftp_open(struct fuse_openfile_s *openfile, struct fuse_request_s *f_re
 
     }
 
-    if (send_sftp_open_ctx(interface, &sftp_r)==0) {
+    if (send_sftp_open_ctx(interface, &sftp_r)>0) {
 	struct timespec timeout;
 
 	get_sftp_request_timeout_ctx(interface, &timeout);
@@ -189,7 +189,7 @@ void _fs_sftp_create(struct fuse_openfile_s *openfile, struct fuse_request_s *f_
 
     }
 
-    if (send_sftp_create_ctx(interface, &sftp_r)==0) {
+    if (send_sftp_create_ctx(interface, &sftp_r)>0) {
 	struct timespec timeout;
 
 	get_sftp_request_timeout_ctx(interface, &timeout);
@@ -271,7 +271,7 @@ void _fs_sftp_read(struct fuse_openfile_s *openfile, struct fuse_request_s *f_re
 
     /* ignore flags and lockowner */
 
-    if (send_sftp_read_ctx(interface, &sftp_r)==0) {
+    if (send_sftp_read_ctx(interface, &sftp_r)>0) {
 	struct timespec timeout;
 
 	get_sftp_request_timeout_ctx(interface, &timeout);
@@ -348,7 +348,7 @@ void _fs_sftp_write(struct fuse_openfile_s *openfile, struct fuse_request_s *f_r
 
     }
 
-    if (send_sftp_write_ctx(interface, &sftp_r)==0) {
+    if (send_sftp_write_ctx(interface, &sftp_r)>0) {
 	struct timespec timeout;
 
 	get_sftp_request_timeout_ctx(interface, &timeout);
@@ -419,7 +419,7 @@ void _fs_sftp_fsync(struct fuse_openfile_s *openfile, struct fuse_request_s *f_r
 
     /* TODO: add f_request */
 
-    if (send_sftp_fsync_ctx(interface, &sftp_r, &error)==0) {
+    if (send_sftp_fsync_ctx(interface, &sftp_r, &error)>0) {
 	struct timespec timeout;
 
 	get_sftp_request_timeout_ctx(interface, &timeout);
@@ -506,7 +506,7 @@ void _fs_sftp_release(struct fuse_openfile_s *openfile, struct fuse_request_s *f
 	- unlock when lock set (flock)
     */
 
-    if (send_sftp_close_ctx(interface, &sftp_r)==0) {
+    if (send_sftp_close_ctx(interface, &sftp_r)>0) {
 	struct timespec timeout;
 
 	get_sftp_request_timeout_ctx(interface, &timeout);

@@ -49,8 +49,15 @@
 #define NAMEINDEX_ROOT4						71639296		/* 92 ^ 4 */
 #define NAMEINDEX_ROOT5						6590815232		/* 92 ^ 5 */
 
+extern void use_virtual_fs(struct inode_s *inode);
 static struct list_header_s cacheheader=INIT_LIST_HEADER;
 static pthread_mutex_t cachemutex=PTHREAD_MUTEX_INITIALIZER;
+
+void init_data_link(struct data_link_s *link)
+{
+    memset(link, 0, sizeof(struct data_link_s));
+    link->type=0;
+}
 
 void calculate_nameindex(struct name_s *name)
 {
@@ -78,7 +85,9 @@ void init_entry(struct entry_s *entry)
     entry->name.len=0;
     entry->name.index=0;
     init_list_element(&entry->list, NULL);
+    init_data_link(&entry->link);
     entry->flags=0;
+    entry->ops=NULL;
 }
 
 /*
@@ -338,10 +347,11 @@ void init_inode(struct inode_s *inode)
     inode->stim.tv_sec=0;
     inode->stim.tv_nsec=0;
 
-    inode->link.type=0;
-    inode->link.link.ptr=NULL;
+    /* data link */
+    init_data_link(&inode->link);
 
     inode->cache=NULL;
+    inode->fs=NULL;
 
 }
 
@@ -418,4 +428,9 @@ void log_inode_information(struct inode_s *inode, uint64_t what)
     if (what & INODE_INFORMATION_ATIM) logoutput("log_inode_information: atim %li.%li", inode->st.st_atim.tv_sec, inode->st.st_atim.tv_nsec);
     if (what & INODE_INFORMATION_STIM) logoutput("log_inode_information: stim %li.%li", inode->stim.tv_sec, inode->stim.tv_nsec);
 
+}
+
+void init_dentry_once()
+{
+    init_list_header(&cacheheader, SIMPLE_LIST_TYPE_EMPTY, 0);
 }

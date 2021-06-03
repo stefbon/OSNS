@@ -81,6 +81,7 @@ AS_IF([test "x$with_ssh_server" = "xyes"], [
 PKG_CHECK_MODULES([SYSTEMD], [libsystemd], [AC_DEFINE([HAVE_LIBSYSTEMD], [1], [Define libsystemd is available])], AC_MSG_ERROR([Error: libsystemd not found.]))
 PKG_CHECK_MODULES([AVAHI_CORE], [avahi-core], [AC_DEFINE([HAVE_AVAHI_CORE], [1], [Define Avahi core is available])], AC_MSG_ERROR([Error: avahi core not found.]))
 PKG_CHECK_MODULES([AVAHI_CLIENT], [avahi-client], [AC_DEFINE([HAVE_AVAHI_CLIENT], [1], [Define Avahi client is available])], AC_MSG_ERROR([Error: avahi client not found.]))
+PKG_CHECK_MODULES([AVAHI_GLIB], [avahi-glib], [AC_DEFINE([HAVE_AVAHI_GLIB], [1], [Define Avahi glib is available])], AC_MSG_ERROR([Error: avahi glib not found.]))
 
 PKG_CHECK_MODULES(UDT, [ udt ], [AC_DEFINE([HAVE_UDT], [1], [Define if libudt is available])], AC_MSG_WARN([libudt not found. not able to add a udp channel for data transfer]))
 

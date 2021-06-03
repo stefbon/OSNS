@@ -54,8 +54,9 @@
 #include "fuse.h"
 
 #include "interface/sftp-prefix.h"
-#include "fuse/network.h"
-#include "fuse/sftp-fs.h"
+#include "network.h"
+#include "sftp-fs.h"
+#include "sftp.h"
 
 #define _SFTP_NETWORK_NAME			"SFTP_Network"
 #define _SFTP_HOME_MAP				"home"
@@ -157,232 +158,138 @@ static int get_service_info_prefix(struct ctx_option_s *option, char **prefix, c
     return 0;
 }
 
-static int add_sftp_context(struct service_context_s *parent_context, struct inode_s *inode, char *name, char *prefix, char *uri, struct interface_list_s *ilist)
+static struct service_context_s *create_sftp_client_context(struct service_context_s *sshctx, struct interface_list_s *ilist)
 {
-    struct workspace_mount_s *workspace=parent_context->workspace;
-    struct service_context_s *context=NULL;
-    struct context_interface_s *interface=NULL;
-    struct service_address_s service;
-    int fd=-1;
-    unsigned int error=0;
+    struct workspace_mount_s *workspace=get_workspace_mount_ctx(sshctx);
+    struct service_context_s *ctx=NULL;
 
-    context=create_service_context(workspace, parent_context, ilist, SERVICE_CTX_TYPE_FILESYSTEM, NULL);
-    if (context==NULL) {
+    logoutput("create_sftp_client_context: create sftp context for filesystem");
 
-	logoutput("add_sftp_context: error allocating context");
-	return -1;
+    ctx=create_service_context(workspace, sshctx, ilist, SERVICE_CTX_TYPE_FILESYSTEM, NULL);
 
-    }
+    if (ctx) {
 
-    memset(&service, 0, sizeof(struct service_address_s));
-    service.type=_SERVICE_TYPE_SFTP_CLIENT;
-    service.target.sftp.name=name;
-    service.target.sftp.uri=uri;
+	ctx->service.filesystem.inode=NULL;
+	ctx->flags |= (sshctx->flags & SERVICE_CTX_FLAGS_REMOTEBACKEND);
+	ctx->interface.signal_context=signal_sftp2ctx;
 
-    context->service.filesystem.inode=inode;
-    set_context_filesystem_sftp(context, 0);
-    interface=&context->interface;
-    interface->signal_context=signal_sftp2ctx;
-
-    logoutput("add_sftp_context: connect");
-
-    fd=(* interface->connect)(workspace->user->pwd.pw_uid, interface, NULL, &service);
-
-    if (fd==-1) {
-
-	logoutput("add_sftp_context: error connecting sftp");
-	return -1;
+	set_context_filesystem_sftp(ctx, 0);
+	set_name_service_context(ctx);
 
     }
 
-    logoutput("add_sftp_context: start");
-
-    if ((* interface->start)(interface, fd, NULL)==0) {
-	struct simple_lock_s wlock3;
-	struct directory_s *directory=get_directory(inode);
-
-	if (wlock_directory(directory, &wlock3)==0) {
-	    struct inode_link_s link;
-
-	    use_service_root_fs(inode);
-	    link.type=INODE_LINK_TYPE_CONTEXT;
-	    link.link.ptr= (void *) context;
-	    set_inode_link_directory(inode, &link);
-	    inode->nlookup=1;
-	    logoutput("add_sftp_context: added sftp context %s", name);
-	    unlock_directory(directory, &wlock3);
-
-	}
-
-    } else {
-
-	logoutput("add_sftp_context: unable to start sftp");
-	use_virtual_fs(NULL, inode); /* entry may exist, but has not connection */
-	return -1;
-
-    }
-
-    set_sftp_interface_prefix(interface, name, prefix);
-
-    if (fs_options.network.share_icon & (_OPTIONS_NETWORK_ICON_OVERRULE)) {
-	struct simple_lock_s wlock4;
-	struct directory_s *directory=get_directory(inode);
-
-	/* create a desktp entry only if it does not exist on the server/share */
-
-	if (wlock_directory(directory, &wlock4)==0) {
-
-	    create_desktopentry_file("/etc/fs-workspace/desktopentry.sharedmap", inode->alias, workspace);
-	    unlock_directory(directory, &wlock4);
-
-	}
-
-    }
-
-    return 0;
+    return ctx;
 
 }
 
+static struct service_context_s *create_start_sftp_client_context(struct service_context_s *sshctx, struct sftp_service_s *service, struct interface_list_s *ilist)
+{
+    struct workspace_mount_s *workspace=get_workspace_mount_ctx(sshctx);
+    struct service_context_s *context=NULL;
+    struct context_interface_s *interface=NULL;
+    struct service_address_s address;
+    int fd=-1;
+    unsigned int error=0;
+    struct simple_lock_s wlock;
+    struct directory_s *directory=NULL;
+
+    logoutput("create_start_sftp_client_context: create sftp client context %s", service->fullname);
+
+    context=create_sftp_client_context(sshctx, ilist);
+    if (context==NULL) {
+
+	logoutput("create_start_sftp_client_context: error allocating context");
+	return NULL;
+
+    }
+
+    memset(&address, 0, sizeof(struct service_address_s));
+    address.type=_SERVICE_TYPE_SFTP_CLIENT;
+    address.target.sftp.name=service->name;
+    address.target.sftp.uri=service->uri;
+    interface=&context->interface;
+
+    fd=(* interface->connect)(workspace->user->pwd.pw_uid, interface, NULL, &address);
+
+    if (fd==-1) {
+
+	logoutput("create_start_sftp_client_context: error connecting");
+	goto error;
+
+    } else {
+
+	logoutput("create_start_sftp_client_context: sftp client connected");
+
+    }
+
+    if ((* interface->start)(interface, fd, NULL)==0) {
+
+	logoutput("create_start_sftp_client_context: sftp client started");
+
+    } else {
+
+	logoutput("create_start_sftp_client_context: unable to start sftp client");
+	goto error;
+
+    }
+
+    set_sftp_interface_prefix(interface, service->name, service->prefix);
+    return context;
+
+    error:
+
+    if (context) {
+
+	free_service_context(context);
+	context=NULL;
+
+    }
+
+    return NULL;
+
+}
 
 /* add a sftp shared map */
 
-void add_shared_map_sftp(struct service_context_s *parent_context, struct inode_s *inode, char *service, struct interface_list_s *ailist, unsigned int count)
+struct service_context_s *add_shared_map_sftp(struct service_context_s *context, struct sftp_service_s *service, void *ptr)
 {
-    struct workspace_mount_s *workspace=parent_context->workspace;
-    struct context_interface_s *interface=&parent_context->interface;
-    struct entry_s *parent=inode->alias;
-    struct entry_s *entry=NULL;
-    struct directory_s *directory=NULL;
-    struct name_s xname;
+    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
+    struct context_interface_s *interface=&context->interface;
+    struct discover_service_s *discover=(struct discover_service_s *) ptr;
     unsigned int error=0;
-    unsigned int len=0;
     struct ctx_option_s option;
-    unsigned char done=0;
     struct interface_list_s *ilist=NULL;
-    char name[64];
+    struct service_context_s *sftpctx=NULL;
 
-    memset(name, 0, 64);
-    if (strlen(service) <= strlen("ssh-channel:sftp:")) return;
-    strcpy(name, &service[strlen("ssh-channel:sftp:")]);
-    len=strlen(name);
-
-    ilist=get_interface_ops(ailist, count, _INTERFACE_TYPE_SFTP);
+    ilist=get_interface_list(discover->ailist, discover->count, _INTERFACE_TYPE_SFTP);
     if (ilist==NULL) {
 
 	logoutput_warning("add_shared_map_sftp: sftp interface not found");
-	return;
+	return NULL;
 
     }
 
-    logoutput("add_shared_map_sftp: service %s name %s", service, name);
+    logoutput("add_shared_map_sftp: service %s", service->fullname);
 
-    /* get rid of nasty/unwanted characters in name: note the name will be used a name for an entry in the filesystem */
+    /* get details about this service like prefix and possibly the socket like :
 
-    replace_cntrl_char(name, len, REPLACE_CNTRL_FLAG_TEXT);
-    if (skip_heading_spaces(name, len)>0) len=strlen(name);
-    if (skip_trailing_spaces(name, len, SKIPSPACE_FLAG_REPLACEBYZERO)>0) len=strlen(name);
+	/home/public|socket://run/fileserver/sock|
+	(direct-streamlocal)
 
-    /* what name to use for home directory */
+	or
 
-    if (strcmp(name, "home")==0 && (fs_options.sftp.flags & _OPTIONS_SFTP_FLAG_HOME_USE_REMOTENAME)) {
+	/home/sbon|
+	(default sftp subsystem)
 
-	/* get the remote username from the ssh server */
+	or
 
-	init_ctx_option(&option, _CTX_OPTION_TYPE_BUFFER);
-	if ((* interface->signal_interface)(interface, "info:username:", &option)>=0) {
+	/home/joe|ssh://192.168.1.8:2222|
+	(direct-tcpip)
 
-	    if (option.type==_CTX_OPTION_TYPE_BUFFER && option.value.buffer.ptr && option.value.buffer.len>0) {
-		unsigned int size=option.value.buffer.len;
-		char user[size + 1];
-		struct simple_lock_s wlock1;
+    */
 
-		memcpy(user, option.value.buffer.ptr, size);
-		user[size]='\0';
-
-		logoutput("add_shared_map_sftp: replacing home by remote username %s", user);
-
-		replace_cntrl_char(user, size, REPLACE_CNTRL_FLAG_TEXT);
-		if (skip_heading_spaces(user, size)>0) size=strlen(user);
-		if (skip_trailing_spaces(user, size, SKIPSPACE_FLAG_REPLACEBYZERO)>0) size=strlen(user);
-
-		xname.name=user;
-		xname.len=strlen(user);
-		calculate_nameindex(&xname);
-		directory=get_directory(inode);
-
-		if (wlock_directory(directory, &wlock1)==0) {
-
-		    entry=create_network_map_entry(parent_context, directory, &xname, &error);
-
-		    if (entry) {
-
-			logoutput("add_shared_map_sftp: created shared map %s", user);
-			parent=entry;
-
-		    } else {
-
-			logoutput("add_shared_map_sftp: failed to create map %s, error %i (%s)", user, error, strerror(error));
-
-		    }
-
-		    unlock_directory(directory, &wlock1);
-
-		}
-
-	    }
-
-	    (* option.free)(&option);
-
-	}
-
-    }
-
-    /* if no entry created (=home directory) do it now */
-
-    if (entry==NULL) {
-	struct simple_lock_s wlock2;
-
-	xname.name=name;
-	xname.len=len;
-	calculate_nameindex(&xname);
-	directory=get_directory(parent->inode);
-
-	if (wlock_directory(directory, &wlock2)==0) {
-
-	    directory=get_directory(parent->inode);
-	    entry=create_network_map_entry(parent_context, directory, &xname, &error);
-	    if (entry) logoutput("add_shared_map_sftp: created shared map %s", name);
-	    unlock_directory(directory, &wlock2);
-
-	}
-
-    }
-
-    /* entry created and no error (no EEXIST!) */
-
-    if (entry==NULL || error>0) {
-
-	/* TODO: when entry already exists (error==EEXIST) continue */
-
-	if (entry && error==EEXIST) {
-
-	    logoutput("add_shared_map_sftp: directory %s does already exist", name);
-	    error=0;
-
-	} else {
-
-	    if (error==0) error=EIO;
-	    logoutput("add_shared_map_sftp: error %i creating directory %s (%s)", error, name, strerror(error));
-
-	}
-
-	goto out;
-
-    }
-
-    inode=entry->inode;
     init_ctx_option(&option, _CTX_OPTION_TYPE_PCHAR);
-    option.value.name=service;
+    option.value.name=service->fullname;
 
     if ((* interface->signal_interface)(interface, "info:service:", &option)>=0 &&
 	option.type==_CTX_OPTION_TYPE_BUFFER && option.value.buffer.ptr && option.value.buffer.len>0) {
@@ -391,22 +298,6 @@ void add_shared_map_sftp(struct service_context_s *parent_context, struct inode_
 	    char *prefix=NULL;
 	    char *uri=NULL;
 
-	    /* buffer looks like:
-
-		/home/public|socket://run/fileserver/sock|
-		(direct-streamlocal)
-
-		or
-
-		/home/sbon|
-		(default sftp subsystem)
-
-		or
-
-		/home/joe|ssh://192.168.1.8:2222|
-		(direct-tcpip)
-	    */
-
 	    if (get_service_info_prefix(&option, &prefix, &uri)==-1) {
 
 		(* option.free)(&option);
@@ -414,14 +305,20 @@ void add_shared_map_sftp(struct service_context_s *parent_context, struct inode_
 
 	    }
 
-	    if (add_sftp_context(parent_context, inode, name, prefix, uri, ilist)==0) {
+	    service->uri=uri;
+	    service->prefix=prefix;
 
-		logoutput("add_shared_map_sftp: sftp context added");
-		done=1;
+	    sftpctx=create_start_sftp_client_context(context, service, ilist);
+
+	    if (sftpctx) {
+
+		logoutput("add_shared_map_sftp: sftp client context added for %s (prefix=%s, uri=%s)", service->fullname, (service->prefix ? service->prefix : "NULL"), (service->uri ? service->uri : "NULL"));
 
 	    } else {
 
-		logoutput("add_shared_map_sftp: failed to add sftp context");
+		logoutput("add_shared_map_sftp: failed to add sftp client context");
+		(* option.free)(&option);
+		goto error;
 
 	    }
 
@@ -431,36 +328,27 @@ void add_shared_map_sftp(struct service_context_s *parent_context, struct inode_
 
     }
 
-    if (done==0) {
+    if (sftpctx==NULL) {
 
-	if (add_sftp_context(parent_context, inode, name, NULL, NULL, ilist)==0) {
+	sftpctx=create_start_sftp_client_context(context, service, ilist);
 
-	    logoutput("add_shared_map_sftp: sftp context added");
+	if (sftpctx) {
+
+	    logoutput("add_shared_map_sftp: sftp client context added for %s (no prefix, no uri)", service->fullname);
 
 	} else {
 
-	    logoutput("add_shared_map_sftp: failed to add sftp context");
+	    logoutput("add_shared_map_sftp: failed to add sftp client context");
 
 	}
 
     }
 
-    /* when dealing with backup start backup service */
-
-    // if (strcmp(name, "backup")==0) {
-
-	// start_backup_service(context);
-
-    // } else if (strcmp(name, "backupscript")==0) {
-
-	// start_backupscript_service(context);
-
-    // }
-
     out:
-    return;
+    return sftpctx;
 
     error:
     logoutput("add_shared_map_sftp: error");
+    return NULL;
 
 }

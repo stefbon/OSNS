@@ -54,39 +54,39 @@
 /*
     ZERO unix socket ops */
 
-static int socket_zero_accept(unsigned int fd, struct sockaddr *addr, unsigned int *len)
+static int socket_zero_accept(int fd, struct sockaddr *addr, unsigned int *len)
 {
     return -1;
 }
-static int socket_zero_bind(unsigned int fd, struct sockaddr *addr, int *len, int sock)
+static int socket_zero_bind(int fd, struct sockaddr *addr, int *len, int sock)
 {
     return -1;
 }
-static int socket_zero_close(unsigned int fd)
+static int socket_zero_close(struct io_socket_s *s)
 {
     return -1;
 }
-static int socket_zero_connect(unsigned int fd, struct sockaddr *addr, int *len)
+static int socket_zero_connect(struct io_socket_s *s, struct sockaddr *addr, int *len)
 {
     return -1;
 }
-static int socket_zero_getpeername(unsigned int fd, struct sockaddr *addr, unsigned int *len)
+static int socket_zero_getpeername(int fd, struct sockaddr *addr, unsigned int *len)
 {
     return -1;
 }
-static int socket_zero_getsockname(unsigned int fd, struct sockaddr *addr, unsigned int *len)
+static int socket_zero_getsockname(int fd, struct sockaddr *addr, unsigned int *len)
 {
     return -1;
 }
-static int socket_zero_getsockopt(unsigned int fd, int level, int n, char *v, unsigned int *l)
+static int socket_zero_getsockopt(int fd, int level, int n, char *v, unsigned int *l)
 {
     return -1;
 }
-static int socket_zero_setsockopt(unsigned int fd, int level, int n, char *v, unsigned int l)
+static int socket_zero_setsockopt(int fd, int level, int n, char *v, unsigned int l)
 {
     return -1;
 }
-static int socket_zero_listen(unsigned int fd, int blog)
+static int socket_zero_listen(int fd, int blog)
 {
     return -1;
 }
@@ -135,39 +135,48 @@ void set_io_socket_ops_zero(struct io_socket_s *s)
 /*
     DEFAULT unix socket ops	*/
 
-static int socket_default_accept(unsigned int fd, struct sockaddr *addr, unsigned int *len)
+static int socket_default_accept(int fd, struct sockaddr *addr, unsigned int *len)
 {
     return accept(fd, addr, len);
 }
-static int socket_default_bind(unsigned int fd, struct sockaddr *addr, int *len, int sock)
+static int socket_default_bind(int fd, struct sockaddr *addr, int *len, int sock)
 {
     return bind(fd, addr, *len);
 }
-static int socket_default_close(unsigned int fd)
+static int socket_default_close(struct io_socket_s *s)
 {
-    return close(fd);
+    struct bevent_s *bevent=s->bevent;
+    if (bevent) (* bevent->close)(bevent);
+    return 0;
 }
-static int socket_default_connect(unsigned int fd, struct sockaddr *addr, int *len)
+static int socket_default_connect(struct io_socket_s *s, struct sockaddr *addr, int *len)
 {
-    return connect(fd, addr, *len);
+
+    if (s->bevent) {
+	int fd=get_bevent_unix_fd(s->bevent);
+	return connect(fd, addr, *len);
+
+    }
+
+    return -1;
 }
-static int socket_default_getpeername(unsigned int fd, struct sockaddr *addr, unsigned int *len)
+static int socket_default_getpeername(int fd, struct sockaddr *addr, unsigned int *len)
 {
     return getpeername(fd, addr, len);
 }
-static int socket_default_getsockname(unsigned int fd, struct sockaddr *addr, unsigned int *len)
+static int socket_default_getsockname(int fd, struct sockaddr *addr, unsigned int *len)
 {
     return getsockname(fd, addr, len);
 }
-static int socket_default_getsockopt(unsigned int fd, int level, int n, char *v, unsigned int *l)
+static int socket_default_getsockopt(int fd, int level, int n, char *v, unsigned int *l)
 {
     return getsockopt(fd, level, n, v, l);
 }
-static int socket_default_listen(unsigned int fd, int len)
+static int socket_default_listen(int fd, int len)
 {
     return listen(fd, len);
 }
-static int socket_default_setsockopt(unsigned int fd, int level, int n, char *v, unsigned int l)
+static int socket_default_setsockopt(int fd, int level, int n, char *v, unsigned int l)
 {
     return setsockopt(fd, level, n, v, l);
 }
@@ -177,11 +186,15 @@ static int socket_default_socket(int af, int type, int protocol)
 }
 static int socket_default_recv(struct io_socket_s *s, char *buffer, unsigned int size, unsigned int flags)
 {
-    return recv(s->bevent.fd, buffer, size, flags);
+    struct bevent_s *bevent=s->bevent;
+    int fd=get_bevent_unix_fd(bevent);
+    return recv(fd, buffer, size, flags);
 }
 static int socket_default_send(struct io_socket_s *s, char *buffer, unsigned int size, unsigned int flags)
 {
-    return send(s->bevent.fd, buffer, size, flags);
+    struct bevent_s *bevent=s->bevent;
+    int fd=get_bevent_unix_fd(bevent);
+    return send(fd, buffer, size, flags);
 }
 static int socket_default_start()
 {
@@ -284,12 +297,16 @@ static int std_default_close(struct io_std_s *s)
 
 static int std_default_read(struct io_std_s *s, char *buffer, unsigned int size)
 {
-    return read(s->bevent.fd, buffer, size);
+    struct bevent_s *bevent=s->bevent;
+    int fd=get_bevent_unix_fd(bevent);
+    return read(fd, buffer, size);
 }
 
 static int std_default_write(struct io_std_s *s, char *data, unsigned int size)
 {
-    return write(s->bevent.fd, data, size);
+    struct bevent_s *bevent=s->bevent;
+    int fd=get_bevent_unix_fd(bevent);
+    return write(fd, data, size);
 }
 
 struct std_ops_s default_std_ops = {
@@ -345,7 +362,7 @@ static int zero_fuse_open(char *path, unsigned int flags)
 {
     return -1;
 }
-static int zero_fuse_close(unsigned int fd)
+static int zero_fuse_close(struct io_fuse_s *s)
 {
     return -1;
 }
@@ -376,17 +393,23 @@ static int default_fuse_open(char *path, unsigned int flags)
 {
     return open(path, flags);
 }
-static int default_fuse_close(unsigned int fd)
+static int default_fuse_close(struct io_fuse_s *s)
 {
-    return close(fd);
+    struct bevent_s *bevent=s->bevent;
+    (* bevent->close)(bevent);
+    return 0;
 }
 static ssize_t default_fuse_writev(struct io_fuse_s *s, struct iovec *iov, int count)
 {
-    return writev(s->bevent.fd, iov, count);
+    struct bevent_s *bevent=s->bevent;
+    int fd=get_bevent_unix_fd(bevent);
+    return writev(fd, iov, count);
 }
 static int default_fuse_read(struct io_fuse_s *s, void *buffer, size_t size)
 {
-    return read(s->bevent.fd, buffer, size);
+    struct bevent_s *bevent=s->bevent;
+    int fd=get_bevent_unix_fd(bevent);
+    return read(fd, buffer, size);
 }
 static struct fuse_ops_s default_fuse_ops = {
     .type				=	FUSE_OPS_TYPE_DEFAULT,
@@ -481,17 +504,17 @@ void init_connection(struct fs_connection_s *c, unsigned char type, unsigned cha
 
     if (type == FS_CONNECTION_TYPE_FUSE) {
 
-	init_bevent(&c->io.fuse.bevent);
+	c->io.fuse.bevent=NULL;
 	set_io_fuse_ops_default(&c->io.fuse);
 
     } else if (type==FS_CONNECTION_TYPE_STD) {
 
-	init_bevent(&c->io.std.bevent);
+	c->io.std.bevent=NULL;
 	set_io_std_ops_default(&c->io.std);
 
     } else {
 
-	init_bevent(&c->io.socket.bevent);
+	c->io.socket.bevent=NULL;
 	set_io_socket_ops_default(&c->io.socket);
 
     }
@@ -549,18 +572,26 @@ void free_connection(struct fs_connection_s *c)
 
 }
 
-static int accept_local_connection(int sfd, void *data, uint32_t events)
+static void accept_local_connection(int sfd, void *ptr, struct event_s *event)
 {
-    struct fs_connection_s *s_conn=(struct fs_connection_s *) data;
+    struct fs_connection_s *s_conn=(struct fs_connection_s *) ptr;
     struct socket_ops_s *sops=s_conn->io.socket.sops;
     struct fs_connection_s *c_conn=NULL;
+    struct bevent_s *bevent=s_conn->io.socket.bevent;
     struct sockaddr_un local;
     struct ucred cred;
     socklen_t s_len=0;
     int fd=-1;
 
+    if (signal_is_error(event) || signal_is_close(event)) {
+
+	logoutput("accept_local_connection: signal is error and/or close");
+	goto disconnect;
+
+    }
+
     s_len=sizeof(struct sockaddr_un);
-    fd=(* sops->accept)(s_conn->io.socket.bevent.fd, (struct sockaddr *) &local, &s_len);
+    fd=(* sops->accept)(sfd, (struct sockaddr *) &local, &s_len);
 
     if (fd==-1) {
 
@@ -596,22 +627,22 @@ static int accept_local_connection(int sfd, void *data, uint32_t events)
     pthread_mutex_unlock(&s_conn->ops.server.mutex);
 
     (* c_conn->ops.client.init)(c_conn, fd);
-    return 0;
+    return;
 
     disconnect:
 
     if (fd>0) close(fd);
     if (c_conn) free(c_conn);
-    return -1;
+    return;
 
 }
 
-static int accept_network_connection(int sfd, void *data, uint32_t events)
+static void accept_network_connection(int sfd, void *ptr, struct event_s *event)
 {
-    struct fs_connection_s *s_conn=(struct fs_connection_s *) data;
+    struct fs_connection_s *s_conn=(struct fs_connection_s *) ptr;
     struct socket_ops_s *sops=s_conn->io.socket.sops;
     struct fs_connection_s *c_conn=NULL;
-    struct sockaddr saddr, *ptr=NULL;
+    struct sockaddr saddr, *sockptr=NULL;
     struct host_address_s host;
     socklen_t slen=0;
     int fd=-1;
@@ -619,15 +650,29 @@ static int accept_network_connection(int sfd, void *data, uint32_t events)
     char *hostname=NULL;
     struct generic_error_s error=GENERIC_ERROR_INIT;
 
+    if (signal_is_error(event) || signal_is_close(event)) {
+
+	logoutput("accept_network_connection: signal is error and/or close");
+	goto disconnect;
+
+    }
+
     logoutput("accept_network_connection: new socket fd = %i", sfd);
 
     domain=(get_connection_info(s_conn, "ipv6")==0) ? AF_INET6 : AF_INET;
     slen=(domain==AF_INET6) ? sizeof(struct sockaddr_in6) : sizeof(struct sockaddr_in);
-    fd=(* sops->accept)(s_conn->io.socket.bevent.fd, &saddr, &slen);
+
+    if (s_conn->io.socket.bevent) {
+	struct bevent_s *bevent=s_conn->io.socket.bevent;
+
+	fd=(* sops->accept)(get_bevent_unix_fd(bevent), &saddr, &slen);
+
+    }
+
     if (fd==-1) goto disconnect;
 
     init_host_address(&host);
-    hostname=get_connection_hostname(s_conn, (unsigned int) fd, 1, &error);
+    hostname=get_connection_hostname(s_conn, fd, 1, &error);
 
     if (hostname) {
 	unsigned int len=strlen(hostname);
@@ -643,7 +688,7 @@ static int accept_network_connection(int sfd, void *data, uint32_t events)
     }
 
     if (domain==AF_INET6) {
-	char *ip=get_connection_ipv6(s_conn, (unsigned int) fd, 1, &error);
+	char *ip=get_connection_ipv6(s_conn, fd, 1, &error);
 
 	if (ip) {
 	    unsigned int len=strlen(ip);
@@ -659,7 +704,7 @@ static int accept_network_connection(int sfd, void *data, uint32_t events)
 	}
 
     } else {
-	char *ip=get_connection_ipv4(s_conn, (unsigned int) fd, 1, &error);
+	char *ip=get_connection_ipv4(s_conn, fd, 1, &error);
 
 	if (ip) {
 	    unsigned int len=strlen(ip);
@@ -681,8 +726,8 @@ static int accept_network_connection(int sfd, void *data, uint32_t events)
     c_conn=(* s_conn->ops.server.accept.network)(&host, s_conn);
     if (! c_conn) goto disconnect;
 
-    ptr= ((domain==AF_INET6) ? (struct sockaddr *)&c_conn->io.socket.sockaddr.inet6 : (struct sockaddr *)&c_conn->io.socket.sockaddr.inet);
-    memmove(ptr, &saddr, slen);
+    sockptr= ((domain==AF_INET6) ? (struct sockaddr *)&c_conn->io.socket.sockaddr.inet6 : (struct sockaddr *)&c_conn->io.socket.sockaddr.inet);
+    memmove(sockptr, &saddr, slen);
 
     c_conn->ops.client.server=s_conn;
     c_conn->io.socket.sops=sops; /* use the same server socket ops */
@@ -692,24 +737,25 @@ static int accept_network_connection(int sfd, void *data, uint32_t events)
     pthread_mutex_unlock(&s_conn->ops.server.mutex);
 
     (* c_conn->ops.client.init)(c_conn, fd);
-    return 0;
+    return;
 
     disconnect:
 
     if (fd>0) close(fd);
     if (c_conn) free(c_conn);
-    return -1;
+    return;
 
 }
 
 int connect_socket(struct fs_connection_s *conn, const struct sockaddr *addr, int *len)
 {
-    return (* conn->io.socket.sops->connect)(conn->io.socket.bevent.fd, (struct sockaddr *) addr, len);
+    struct bevent_s *bevent=conn->io.socket.bevent;
+    return (* conn->io.socket.sops->connect)(&conn->io.socket, (struct sockaddr *) addr, len);
 }
 
 int close_socket(struct fs_connection_s *conn)
 {
-    return (* conn->io.socket.sops->close)(conn->io.socket.bevent.fd);
+    return (* conn->io.socket.sops->close)(&conn->io.socket);
 }
 
 int create_local_serversocket(char *path, struct fs_connection_s *conn, struct beventloop_s *loop, struct fs_connection_s *(* accept_cb)(uid_t uid, gid_t gid, pid_t pid, struct fs_connection_s *s_conn), struct generic_error_s *error)
@@ -757,7 +803,7 @@ int create_local_serversocket(char *path, struct fs_connection_s *conn, struct b
     if ((* sops->bind)(fd, (struct sockaddr *) &conn->io.socket.sockaddr.local, &len, 0)==-1) {
 
         set_generic_error_system(error, errno, __PRETTY_FUNCTION__);
-	(* sops->close)(fd);
+	close(fd);
         goto out;
 
     }
@@ -767,21 +813,28 @@ int create_local_serversocket(char *path, struct fs_connection_s *conn, struct b
     if ((* sops->listen)(fd, LISTEN_BACKLOG)==-1 ) {
 
         set_generic_error_system(error, errno, __PRETTY_FUNCTION__);
-	(* sops->close)(fd);
+	close(fd);
 
     } else {
+	struct bevent_s *bevent=create_fd_bevent(loop, accept_local_connection, (void *) conn);
 
-	if (add_to_beventloop(fd, EPOLLIN, accept_local_connection, (void *) conn, &conn->io.socket.bevent, loop)) {
+	if (bevent==NULL) goto out;
+
+	set_bevent_unix_fd(bevent, fd);
+	set_bevent_watch(bevent, "incoming data");
+
+	if (add_bevent_beventloop(bevent)==0) {
 
     	    logoutput("create_server_socket: socket fd %i added to eventloop", fd);
 	    result=fd;
 	    conn->ops.server.accept.local=accept_cb;
+	    conn->io.socket.bevent=bevent;
 
 	} else {
 
     	    logoutput("create_server_socket: error adding socket fd %i to eventloop.", fd);
 	    set_generic_error_system(error, EIO, __PRETTY_FUNCTION__);
-	    (* sops->close)(fd);
+	    close(fd);
 
 	}
 
@@ -890,7 +943,7 @@ int create_network_serversocket(char *address, unsigned int port, struct fs_conn
     if ((* sops->bind)(fd, saddr, &len, 0)==-1) {
 
         set_generic_error_system(error, errno, __PRETTY_FUNCTION__);
-	(* sops->close)(fd);
+	close(fd);
         goto out;
 
     }
@@ -900,21 +953,28 @@ int create_network_serversocket(char *address, unsigned int port, struct fs_conn
     if ((* sops->listen)(fd, LISTEN_BACKLOG)==-1 ) {
 
         set_generic_error_system(error, errno, __PRETTY_FUNCTION__);
-	(* sops->close)(fd);
+	close(fd);
 
     } else {
+	struct bevent_s *bevent=create_fd_bevent(loop, accept_network_connection, (void *) conn);
 
-	if (add_to_beventloop(fd, EPOLLIN, accept_network_connection, (void *) conn, &conn->io.socket.bevent, loop)) {
+	if (bevent==NULL) goto out;
+
+	set_bevent_unix_fd(bevent, fd);
+	set_bevent_watch(bevent, "incoming data");
+
+	if (add_bevent_beventloop(bevent)==0) {
 
     	    logoutput("create_network_serversocket: socket fd %i added to eventloop", fd);
 	    result=fd;
 	    conn->ops.server.accept.network=accept_cb;
+	    conn->io.socket.bevent=bevent;
 
 	} else {
 
     	    logoutput("create_network_serversocket: error adding socket fd %i to eventloop.", fd);
 	    set_generic_error_system(error, EIO, __PRETTY_FUNCTION__);
-	    (* sops->close)(fd);
+	    close(fd);
 
 	}
 
@@ -1184,7 +1244,7 @@ int get_connection_info(struct fs_connection_s *a, const char *what)
     - what = 0 -> local
     - what = 1 -> remote */
 
-char *get_connection_ipv4(struct fs_connection_s *conn, unsigned int fd, unsigned char what, struct generic_error_s *error)
+char *get_connection_ipv4(struct fs_connection_s *conn, int fd, unsigned char what, struct generic_error_s *error)
 {
     struct socket_ops_s *sops=conn->io.socket.sops;
     struct sockaddr_in addr;
@@ -1192,7 +1252,7 @@ char *get_connection_ipv4(struct fs_connection_s *conn, unsigned int fd, unsigne
     char *ipv4=NULL;
     char buffer[INET_ADDRSTRLEN + 1];
 
-    if (fd==0) {
+    if (fd<0) {
 
 	set_generic_error_system(error, EINVAL, __PRETTY_FUNCTION__);
 	return NULL;
@@ -1236,7 +1296,7 @@ char *get_connection_ipv4(struct fs_connection_s *conn, unsigned int fd, unsigne
     - what = 0 -> local
     - what = 1 -> remote */
 
-char *get_connection_ipv6(struct fs_connection_s *conn, unsigned int fd, unsigned char what, struct generic_error_s *error)
+char *get_connection_ipv6(struct fs_connection_s *conn, int fd, unsigned char what, struct generic_error_s *error)
 {
     struct socket_ops_s *sops=conn->io.socket.sops;
     struct sockaddr_in6 addr;
@@ -1244,7 +1304,7 @@ char *get_connection_ipv6(struct fs_connection_s *conn, unsigned int fd, unsigne
     char *ipv6=NULL;
     char buffer[INET6_ADDRSTRLEN + 1];
 
-    if (fd==0) {
+    if (fd<0) {
 
 	set_generic_error_system(error, EINVAL, __PRETTY_FUNCTION__);
 	return NULL;
@@ -1289,7 +1349,7 @@ char *get_connection_ipv6(struct fs_connection_s *conn, unsigned int fd, unsigne
     - what = 1 -> remote
 */
 
-char *get_connection_hostname(struct fs_connection_s *conn, unsigned int fd, unsigned char what, struct generic_error_s *error)
+char *get_connection_hostname(struct fs_connection_s *conn, int fd, unsigned char what, struct generic_error_s *error)
 {
     struct socket_ops_s *sops=conn->io.socket.sops;
     struct sockaddr addr;
@@ -1298,7 +1358,7 @@ char *get_connection_hostname(struct fs_connection_s *conn, unsigned int fd, uns
     char tmp[NI_MAXHOST];
     unsigned int count = 0;
 
-    if (fd==0) {
+    if (fd<0) {
 
 	set_generic_error_system(error, EINVAL, __PRETTY_FUNCTION__);
 	return NULL;
@@ -1329,57 +1389,6 @@ char *get_connection_hostname(struct fs_connection_s *conn, unsigned int fd, uns
 
     }
 
-    gethostname:
-
-    memset(tmp, '\0', NI_MAXHOST);
-    result=getnameinfo(&addr, len, tmp, NI_MAXHOST, NULL, 0, 0); /*NI_NAMEREQD*/
-    count++;
-
-    if (result==0) {
-	char *hostname=NULL;
-
-	hostname=strdup(tmp);
-	if (hostname==NULL) set_generic_error_system(error, ENOMEM, __PRETTY_FUNCTION__);
-	return hostname;
-
-    } else {
-
-	logoutput("get_connection_hostname: error %i:%s", result, gai_strerror(result));
-
-	switch (result) {
-
-	case EAI_MEMORY:
-
-	    set_generic_error_system(error, ENOMEM, __PRETTY_FUNCTION__);
-	    break;
-
-	case EAI_NONAME:
-
-	    set_generic_error_system(error, ENOENT, __PRETTY_FUNCTION__);
-	    break;
-
-	case EAI_SYSTEM:
-
-	    set_generic_error_system(error, errno, __PRETTY_FUNCTION__);
-	    break;
-
-	case EAI_OVERFLOW:
-
-	    set_generic_error_system(error, ENAMETOOLONG, __PRETTY_FUNCTION__);
-	    break;
-
-	case EAI_AGAIN:
-
-	    if (count<10) goto gethostname;
-
-	default:
-
-	    set_generic_error_system(error, EIO, __PRETTY_FUNCTION__);
-
-	}
-
-    }
-
-    return NULL;
+    return get_socket_addr_hostname(&addr, len, error);
 
 }

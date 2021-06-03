@@ -22,5 +22,6 @@
 
 #include "network/utils.h"
 #include "network/connection.h"
+#include "network/dns.h"
 
 #endif

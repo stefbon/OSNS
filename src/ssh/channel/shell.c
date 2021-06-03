@@ -71,7 +71,7 @@ int start_remote_shell(struct ssh_channel_s *channel, unsigned int *error)
 
     logoutput("start_remote_shell");
 
-    if (send_channel_start_command_message(channel, 1, &seq)==0) {
+    if (send_channel_start_command_message(channel, 1, &seq)>0) {
 	struct timespec expire;
 	struct ssh_payload_s *payload=NULL;
 

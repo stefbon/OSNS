@@ -46,7 +46,7 @@ struct create_entry_s {
     unsigned int			cache_size;
     struct _cache_s {
 	struct stat			st;
-	struct inode_link_s 		link;
+	struct data_link_s 		link;
 	struct fuse_buffer_s		*buffer;
     } cache;
     unsigned int			flags;
@@ -70,9 +70,6 @@ uint64_t get_directory_count(struct directory_s *d);
 
 void init_directory_calls();
 struct directory_s *get_dummy_directory();
-
-int get_inode_link_directory(struct inode_s *inode, struct inode_link_s *link);
-void set_inode_link_directory(struct inode_s *inode, struct inode_link_s *link);
 
 void init_create_entry(struct create_entry_s *ce, struct name_s *n, struct entry_s *p, struct directory_s *d, struct fuse_opendir_s *fo, struct service_context_s *c, struct stat *st, void *ptr);
 struct entry_s *create_entry_extended(struct create_entry_s *ce);

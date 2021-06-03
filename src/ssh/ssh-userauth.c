@@ -261,8 +261,9 @@ static int start_ssh_userauth_client(struct ssh_session_s *session, struct ssh_c
 
 	if (populate_list_public_keys(&pkeys, PK_IDENTITY_SOURCE_OPENSSH_LOCAL, "host")==0) goto finish;
 
-	fd=connection->connection.io.socket.bevent.fd;
-	if (fd>0) {
+	if (connection->connection.io.socket.bevent) fd=get_bevent_unix_fd(connection->connection.io.socket.bevent);
+
+	if (fd>=0) {
 	    char *hostname=get_connection_hostname(&connection->connection, fd, 0, &error);
 
 	    if (hostname) {

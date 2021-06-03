@@ -78,9 +78,11 @@ signed char compare_ssh_connection(struct ssh_connection_s *connection, char *ad
 unsigned int get_status_ssh_connection(struct ssh_connection_s *connection)
 {
     int error=0;
-    unsigned int fd=connection->connection.io.socket.bevent.fd;
+    int fd=-1;
 
-    if (fd>0) {
+    if (connection->connection.io.socket.bevent) fd=get_bevent_unix_fd(connection->connection.io.socket.bevent);
+
+    if (fd>=0) {
 	socklen_t len=sizeof(int);
 	struct socket_ops_s *sops=connection->connection.io.socket.sops;
 
@@ -182,4 +184,10 @@ struct ssh_connections_s *get_ssh_connection_connections(struct ssh_connection_s
 {
     struct list_header_s *h=connection->list.h;
     return ((h) ? (struct ssh_connections_s *)(((char *) h) - offsetof(struct ssh_connections_s, header)) : NULL);
+}
+
+struct fs_connection_s *get_session_fs_connection(struct ssh_session_s *s)
+{
+    struct ssh_connection_s *conn=s->connections.main;
+    return (conn) ? &conn->connection : NULL;
 }

@@ -65,9 +65,21 @@ static void start_read_localsocket_buffer(struct osns_localsocket_s *localsocket
 static void disconnect_osns_localsocket(struct osns_localsocket_s *localsocket)
 {
     struct socket_ops_s *sops=localsocket->connection.io.socket.sops;
-    remove_bevent_from_beventloop(&localsocket->connection.io.socket.bevent);
-    (* sops->close)(localsocket->connection.io.socket.bevent.fd);
-    localsocket->connection.io.socket.bevent.fd=-1;
+
+    if (localsocket->connection.io.socket.bevent) {
+	int fd = get_bevent_unix_fd(localsocket->connection.io.socket.bevent);
+
+	if (fd>=0) {
+
+	    close(fd);
+	    set_bevent_unix_fd(localsocket->connection.io.socket.bevent, -1);
+
+	}
+
+	remove_bevent(localsocket->connection.io.socket.bevent);
+
+    }
+
 }
 
 static void process_osns_packet(struct osns_localsocket_s *localsocket, struct osns_packet_s *packet)
@@ -295,38 +307,42 @@ static int read_localsocket(struct osns_localsocket_s *localsocket, int fd)
 
 }
 
-static int event_localsocket_cb(int fd, void *data, uint32_t eventcode)
+static void event_localsocket_cb(int fd, void *ptr, struct event_s *event)
 {
-    struct osns_localsocket_s *localsocket=(struct osns_localsocket_s *) data;
-    int result=0;
+    struct osns_localsocket_s *localsocket=(struct osns_localsocket_s *) ptr;
 
-    if (eventcode & (BEVENT_CODE_ERR | BEVENT_CODE_HUP)) {
+    if (signal_is_error(event) || signal_is_close(event)) {
 
 	/* TODO */
 
-    } else if (eventcode & BEVENT_CODE_IN) {
+    } else if (signal_is_data(event)) {
 
-	result=read_localsocket(localsocket, fd);
+	int result=read_localsocket(localsocket, fd);
 
     }
-
-    return result;
 
 }
 
 static void init_connection_localsocket(struct fs_connection_s *c, unsigned int fd)
 {
     struct fs_connection_s *s=c->ops.client.server;
-    struct bevent_s *bevent=&s->io.socket.bevent;
     struct osns_localsocket_s *localsocket = (struct osns_localsocket_s *)((char *) c - offsetof(struct osns_localsocket_s, connection));
+    struct bevent_s *bevent=create_fd_bevent(NULL, event_localsocket_cb, (void *) localsocket);
 
-    if (add_to_beventloop(fd, BEVENT_CODE_IN, event_localsocket_cb, (void *) localsocket, &c->io.socket.bevent, bevent->loop)) {
+    if (bevent==NULL) return;
+
+    set_bevent_unix_fd(bevent, (int) fd);
+    set_bevent_watch(bevent, "incoming data");
+
+    if (add_bevent_beventloop(bevent)==0) {
 
 	logoutput("init_connection_localsocket: added connection fd %i to eventloop", fd);
+	s->io.socket.bevent=bevent;
 
     } else {
 
 	logoutput("init_connection_localsocket: failed to add connection fd %i to eventloop", fd);
+	if (bevent) remove_bevent(bevent);
 
     }
 

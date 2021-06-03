@@ -22,7 +22,11 @@
 void init_special_fs();
 void free_special_fs();
 
-void create_desktopentry_file(char *path, struct entry_s *parent, struct workspace_mount_s *workspace);
+void create_network_desktopentry_file(struct entry_s *parent, struct workspace_mount_s *workspace);
+void create_netgroup_desktopentry_file(struct entry_s *parent, struct workspace_mount_s *workspace);
+void create_netserver_desktopentry_file(struct entry_s *parent, struct workspace_mount_s *workspace);
+void create_netshare_desktopentry_file(struct entry_s *parent, struct workspace_mount_s *workspace);
+
 int check_entry_special(struct inode_s *inode);
 
 #endif

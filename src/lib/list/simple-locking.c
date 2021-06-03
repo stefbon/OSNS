@@ -97,6 +97,11 @@ static int _simple_upgrade_nonelock(struct simple_lock_s *rlock)
     return 0;
 }
 
+static int _simple_downgrade_nonelock(struct simple_lock_s *rlock)
+{
+    return 0;
+}
+
 static int _simple_prenonelock(struct simple_lock_s *rlock)
 {
     return 0;
@@ -250,6 +255,8 @@ static int _simple_upgrade_readlock(struct simple_lock_s *rlock)
 {
     struct simple_locking_s *locking=rlock->locking;
 
+    if (rlock->type != SIMPLE_LOCK_TYPE_READ) return 0;
+
     pthread_mutex_lock(&locking->mutex);
 
     /* prevent two readers to upgrade at the same time */
@@ -273,12 +280,14 @@ static int _simple_upgrade_readlock(struct simple_lock_s *rlock)
 
     /* add as first in writers list, otherwise a deadlock is possible */
     add_list_element_first(&locking->writelocks, &rlock->list);
+    rlock->flags |= SIMPLE_LOCK_FLAG_LIST;
     locking->writers++;
 
     rlock->type=SIMPLE_LOCK_TYPE_WRITE;
     rlock->lock=_simple_writelock;
     rlock->unlock=_simple_writeunlock;
     rlock->upgrade=_simple_upgrade_writelock;
+    rlock->downgrade=
     rlock->prelock=_simple_prewritelock;
     rlock->flags |= SIMPLE_LOCK_FLAG_UPGRADED;
 
@@ -289,6 +298,45 @@ static int _simple_upgrade_readlock(struct simple_lock_s *rlock)
     rlock->flags |= SIMPLE_LOCK_FLAG_EFFECTIVE;
     pthread_mutex_unlock(&locking->mutex);
 
+    return 0;
+
+}
+
+static int _simple_prereadlock(struct simple_lock_s *rlock);
+
+static int _simple_downgrade_readlock(struct simple_lock_s *rlock)
+{
+    struct simple_locking_s *locking=rlock->locking;
+
+    if ((rlock->flags & SIMPLE_LOCK_FLAG_UPGRADED)==0 || (rlock->type != SIMPLE_LOCK_TYPE_WRITE)) return 0;
+
+    pthread_mutex_lock(&locking->mutex);
+
+    locking->flags &= ~SIMPLE_LOCKING_FLAG_UPGRADE;
+
+    if (rlock->flags & SIMPLE_LOCK_FLAG_LIST) {
+
+	remove_list_element(&rlock->list);
+	locking->writers--;
+
+    }
+
+    /* add as first in writers list, otherwise a deadlock is possible */
+    add_list_element_first(&locking->readlocks, &rlock->list);
+    rlock->flags |= SIMPLE_LOCK_FLAG_LIST;
+    locking->readers++;
+
+    rlock->type=SIMPLE_LOCK_TYPE_READ;
+    rlock->lock=_simple_readlock;
+    rlock->unlock=_simple_readunlock;
+    rlock->upgrade=_simple_upgrade_readlock;
+    rlock->prelock=_simple_prereadlock;
+    rlock->flags &= ~SIMPLE_LOCK_FLAG_UPGRADED;
+
+    pthread_cond_broadcast(&locking->cond);
+
+    rlock->flags |= SIMPLE_LOCK_FLAG_EFFECTIVE;
+    pthread_mutex_unlock(&locking->mutex);
     return 0;
 
 }
@@ -341,6 +389,7 @@ void init_simple_readlock(struct simple_locking_s *locking, struct simple_lock_s
     rlock->lock=_simple_readlock;
     rlock->unlock=_simple_readunlock;
     rlock->upgrade=_simple_upgrade_readlock;
+    rlock->downgrade=_simple_downgrade_readlock;
     rlock->prelock=_simple_prereadlock;
 }
 void init_simple_writelock(struct simple_locking_s *locking, struct simple_lock_s *wlock)
@@ -353,29 +402,31 @@ void init_simple_writelock(struct simple_locking_s *locking, struct simple_lock_
     wlock->lock=_simple_writelock;
     wlock->unlock=_simple_writeunlock;
     wlock->upgrade=_simple_upgrade_writelock;
+    wlock->downgrade=_simple_upgrade_writelock;
     wlock->prelock=_simple_prewritelock;
 }
 
 int simple_lock(struct simple_lock_s *lock)
 {
-    // logoutput("simple_lock");
     return (* lock->lock)(lock);
 }
 
 int simple_unlock(struct simple_lock_s *lock)
 {
-    // logoutput("simple_unlock");
     return (* lock->unlock)(lock);
 }
 
 int simple_prelock(struct simple_lock_s *lock)
 {
-    // logoutput("simple_prelock");
     return (* lock->prelock)(lock);
 }
 
 int simple_upgradelock(struct simple_lock_s *lock)
 {
-    // logoutput("simple_upgradelock");
     return (* lock->upgrade)(lock);
+}
+
+int simple_downgradelock(struct simple_lock_s *lock)
+{
+    return (* lock->downgrade)(lock);
 }

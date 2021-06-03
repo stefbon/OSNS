@@ -70,7 +70,7 @@ int start_channel(struct ssh_channel_s *channel, unsigned int *error)
 
     logoutput("start_channel: send channel open message");
 
-    if (send_channel_open_message(channel, &seq)==0) {
+    if (send_channel_open_message(channel, &seq)>0) {
 	struct timespec expire;
 	struct ssh_payload_s *payload=NULL;
 

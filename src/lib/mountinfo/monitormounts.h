@@ -17,13 +17,18 @@
 
 */
 
-#ifndef ONSN_LIB_MOUNTINFO_MONITORMOUNTS_H
-#define OSNS_LIB_MOUNTINFO_MONITORMOUNTS_H
+#ifndef LIB_MOUNTINFO_MONITORMOUNTS_H
+#define LIB_MOUNTINFO_MONITORMOUNTS_H
 
-int add_mountinfo_watch(struct beventloop_s *loop, unsigned int *error);
+#define ADD_MOUNTINFO_FLAG_EXCLUDE			1
+#define ADD_MOUNTINFO_FLAG_INCLUDE			2
+
+int add_mountinfo_watch(struct beventloop_s *loop);
 void remove_mountinfo_watch();
 
-void add_mountinfo_fs(char *fs);
-void add_mountinfo_source(char *source);
+void add_mountinfo_fs(char *fs, unsigned char flag);
+void add_mountinfo_source(char *source, unsigned char flags);
+
+void init_mountinfo_once();
 
 #endif

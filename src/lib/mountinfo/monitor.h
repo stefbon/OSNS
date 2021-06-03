@@ -17,15 +17,17 @@
 
 */
 
-#ifndef OSNS_LIB_MOUNTINFO_MONITOR_H
-#define OSNS_LIB_MOUNTINFO_MONITOR_H
+#ifndef LIB_MOUNTINFO_MONITOR_H
+#define LIB_MOUNTINFO_MONITOR_H
 
 #include "list.h"
 
-typedef int (* update_cb_t) (unsigned long generation, struct mountentry_s *(*next) (void **index, unsigned long generation, unsigned char type), void *data);
+#define MOUNTMONITOR_FLAG_INIT				1
+
+typedef int (* update_cb_t) (uint64_t generation, struct mountentry_s *(*next) (struct mountentry_s *me, uint64_t generation, unsigned char type), void *data, unsigned char flags);
 typedef unsigned char (* ignore_cb_t) (char *source, char *fs, char *path, void *data);
 
-int open_mountmonitor(struct bevent_s *bevent, unsigned int *error);
+struct bevent_s *open_mountmonitor();
 void close_mountmonitor();
 
 void set_updatefunc_mountmonitor(update_cb_t cb);
@@ -33,7 +35,7 @@ void set_ignorefunc_mountmonitor(ignore_cb_t cb);
 void set_threadsqueue_mountmonitor(void *ptr);
 void set_userdata_mountmonitor(void *data);
 
-struct mountentry_s *get_next_mountentry(void **index, unsigned long generation, unsigned char type);
+struct mountentry_s *get_next_mountentry(struct mountentry_s *m, uint64_t generation, unsigned char type);
 
 int lock_mountlist_read(struct simple_lock_s *lock);
 int lock_mountlist_write(struct simple_lock_s *lock);

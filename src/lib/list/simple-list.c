@@ -28,351 +28,276 @@
 #include <pthread.h>
 #include "simple-list.h"
 
-#undef LOGGING
 #include "log.h"
 
-void set_element_ops_default_tail(struct element_ops_s *ops);
-void set_element_ops_default(struct element_ops_s *ops);
-void set_element_ops_default_head(struct element_ops_s *ops);
-void set_element_ops_one(struct element_ops_s *ops);
+static void set_header_ops_empty(struct list_header_s *h);
+static void set_header_ops_one(struct list_header_s *h);
+static void set_header_ops_default(struct list_header_s *h);
 
-static void delete_dummy(struct list_element_s *e)
+static void init_list_lock(struct list_lock_s *l)
+{
+    l->value=0;
+    l->threadidw=0;
+    l->threadidpw=0;
+}
+
+static void delete_nothing(struct list_element_s *e)
 {
 }
-static void insert_common_dummy(struct list_element_s *a, struct list_element_s *b)
+
+struct list_element_s *get_element_system(struct list_element_s *e)
 {
+    return NULL;
 }
+
+struct list_element_s *get_element_default(struct list_element_s *e)
+{
+    return e;
+}
+
+static struct list_element_s *_get_next_element(struct list_element_s *e)
+{
+    struct list_element_s *next=e->n;
+    return (* next->ops.get_element)(next);
+}
+
+static struct list_element_s *_get_prev_element(struct list_element_s *e)
+{
+    struct list_element_s *prev=e->p;
+    return (* prev->ops.get_element)(prev);
+}
+
+struct list_element_s *get_next_element(struct list_element_s *e)
+{
+    return (e) ? _get_next_element(e) : NULL;
+}
+
+struct list_element_s *get_prev_element(struct list_element_s *e)
+{
+    return (e) ? _get_prev_element(e) : NULL;
+}
+
+static void _delete_element_common(struct list_header_s *h, struct list_element_s *e)
+{
+    struct list_element_s *n=e->n;
+    struct list_element_s *p=e->p;
+
+    n->p=p;
+    p->n=n;
+    init_list_element(e, NULL);
+
+}
+
+/* DEFAULT - DELETE */
+
+static void delete_element_default(struct list_header_s *h, struct list_element_s *e)
+{
+    _delete_element_common(h, e);
+    h->count--;
+
+    if (h->count==1) {
+
+	set_header_ops_one(h);
+
+    } else if (h->count==0) {
+
+	set_header_ops_empty(h);
+
+    }
+
+}
+
+/* DEFAULT - INSERT AFTER */
+
+static void insert_element_after_default(struct list_header_s *h, struct list_element_s *p, struct list_element_s *e)
+{
+    struct list_element_s *n=p->n;
+
+    logoutput_debug("insert_element_after_default");
+
+    init_list_element(e, h);
+
+    /* insert after p (and before n) */
+
+    n->p=e;
+    p->n=e;
+    e->p=p;
+    e->n=n;
+
+    h->count++;
+}
+
+/* DEFAULT - INSERT BEFORE */
+
+static void insert_element_before_default(struct list_header_s *h, struct list_element_s *n, struct list_element_s *e)
+{
+    struct list_element_s *p=n->p;
+
+    logoutput_debug("insert_element_before_default");
+
+    init_list_element(e, h);
+
+    /* insert before n (and before p) */
+
+    p->n=e;
+    n->p=e;
+    e->n=n;
+    e->p=p;
+
+    h->count++;
+}
+
+/* HEADER ops for empty list */
+
+static void delete_empty_header(struct list_header_s *h, struct list_element_s *e)
+{
+    /* does nothing since list is empty */
+}
+
+static void insert_common_empty_header(struct list_header_s *h, struct list_element_s *a, struct list_element_s *e)
+{
+    struct list_element_s *prev=&h->head;
+
+    insert_element_after_default(h, prev, e);
+
+    /* set header ops to ones suitable for a list with one element */
+
+    set_header_ops_one(h);
+
+}
+
+/* NOTE: not static since used in initializer in header file (INIT_LIST_HEADER) */
+
+struct header_ops_s empty_header_ops = {
+    .insert_after				= insert_common_empty_header,
+    .insert_before				= insert_common_empty_header,
+    .delete					= delete_empty_header,
+};
+
+static void set_header_ops_empty(struct list_header_s *h)
+{
+    h->ops = &empty_header_ops;
+}
+
+/* HEADER ops for a list with one element */
+
+static void delete_element_one(struct list_header_s *h, struct list_element_s *e)
+{
+
+    _delete_element_common(h, e);
+    h->count--;
+    init_list_element(e, NULL);
+    set_header_ops_empty(h);
+}
+
+static void insert_after_element_one(struct list_header_s *h, struct list_element_s *a, struct list_element_s *e)
+{
+
+    insert_element_after_default(h, a, e);
+
+    /* set header ops to ones suitable for a list with one element */
+
+    set_header_ops_default(h);
+
+}
+
+static void insert_before_element_one(struct list_header_s *h, struct list_element_s *b, struct list_element_s *e)
+{
+
+    insert_element_before_default(h, b, e);
+
+    /* set header ops to ones suitable for a list with one element */
+
+    set_header_ops_default(h);
+
+}
+
+static struct header_ops_s one_list_ops = {
+    .insert_after				= insert_after_element_one,
+    .insert_before				= insert_before_element_one,
+    .delete					= delete_element_one,
+};
+
+static void set_header_ops_one(struct list_header_s *h)
+{
+    h->ops = &one_list_ops;
+}
+
+/* HEADER ops for a list with more than one element */
+
+static struct header_ops_s default_header_ops = {
+    .delete				= delete_element_default,
+    .insert_after			= insert_element_after_default,
+    .insert_before			= insert_element_before_default,
+};
+
+static void set_header_ops_default(struct list_header_s *h)
+{
+    h->ops = &default_header_ops;
+}
+
+/* users functions */
+
 void init_list_element(struct list_element_s *e, struct list_header_s *h)
 {
     e->h=h;
     e->n=NULL;
     e->p=NULL;
-    e->count=0;
-    e->ops.delete=delete_dummy;
-    e->ops.insert_after=insert_common_dummy;
-    e->ops.insert_before=insert_common_dummy;
+    e->ops.get_element=get_element_default;
+    init_list_lock(&e->lock);
 }
-
-/* OPS for an element DEFAULT */
-
-/* DEFAULT - INSERT BETWEEN */
-
-static void insert_element_after_default(struct list_element_s *p, struct list_element_s *e)
-{
-    struct list_header_s *h=(p->h) ? p->h : e->h;
-
-    init_list_element(e, h);
-
-    p->n->p=e;
-    p->n=e;
-    e->p=p;
-    e->n=p->n;
-
-    set_element_ops_default(&e->ops);
-    h->count++;
-}
-
-/* DEFAULT - INSERT after TAIL */
-
-static void insert_element_after_tail_default(struct list_element_s *p, struct list_element_s *e)
-{
-    struct list_header_s *h=(p->h) ? p->h : e->h;
-
-    init_list_element(e, h);
-
-    p->n=e;
-    e->p=p;
-
-    set_element_ops_default(&p->ops); /* p is not the tail anymore */
-    set_element_ops_default_tail(&e->ops); /* e is the tail */
-
-    h->tail=e;
-    h->count++;
-}
-
-static void insert_element_before_default(struct list_element_s *n, struct list_element_s *e)
-{
-    struct list_header_s *h=(n->h) ? n->h : e->h;
-    struct list_element_s *p=n->p;
-
-    init_list_element(e, h);
-
-    p->n=e;
-    n->p=e;
-    e->n=n;
-    e->p=p;
-
-    set_element_ops_default(&e->ops);
-
-    h->count++;
-}
-
-/* DEFAULT - INSERT before HEAD */
-
-static void insert_element_before_head_default(struct list_element_s *n, struct list_element_s *e)
-{
-    struct list_header_s *h=(n->h) ? n->h : e->h;
-
-    init_list_element(e, h);
-
-    n->p=e;
-    e->n=n;
-
-    set_element_ops_default(&n->ops); /* n is not the head anymore */
-    set_element_ops_default_head(&e->ops); /* e is the head */
-
-    h->head=e;
-    h->count++;
-}
-
-/* DEFAULT - DELETE between */
-
-static void delete_element_default(struct list_element_s *e)
-{
-    struct list_header_s *h=e->h;
-    struct list_element_s *p=e->p;
-    struct list_element_s *n=e->n;
-
-    n->p=p;
-    p->n=n;
-
-    init_list_element(e, NULL);
-    h->count--;
-
-}
-
-static void delete_element_head(struct list_element_s *e)
-{
-    struct list_header_s *h=e->h;
-    struct list_element_s *n=e->n; /* next */
-
-    /* head shifts to right */
-
-    h->head=n;
-    n->p=NULL;
-
-    /* new head has now different ops */
-
-    h->count--;
-
-    if (h->count==1) {
-
-	init_list_header(h, SIMPLE_LIST_TYPE_ONE, n);
-	set_element_ops_one(&n->ops);
-
-    } else {
-
-	set_element_ops_default_head(&n->ops);
-
-    }
-
-    init_list_element(e, NULL);
-}
-
-static void delete_element_tail(struct list_element_s *e)
-{
-    struct list_header_s *h=e->h;
-    struct list_element_s *p=e->p; /* prev */
-
-    /* head shifts to left */
-
-    h->tail=p;
-    p->n=NULL;
-
-    /* new tail has now different ops */
-
-    h->count--;
-    if (h->count==1) {
-
-	init_list_header(h, SIMPLE_LIST_TYPE_ONE, p);
-	set_element_ops_one(&p->ops);
-
-    } else {
-
-	set_element_ops_default_tail(&p->ops);
-
-    }
-
-    init_list_element(e, NULL);
-}
-
-void set_element_ops_default(struct element_ops_s *ops)
-{
-    ops->delete=delete_element_default;
-    ops->insert_before=insert_element_before_default;
-    ops->insert_after=insert_element_after_default;
-}
-
-void set_element_ops_default_head(struct element_ops_s *ops)
-{
-    ops->delete=delete_element_head;
-    ops->insert_before=insert_element_before_head_default;
-    ops->insert_after=insert_element_after_default;
-}
-
-void set_element_ops_default_tail(struct element_ops_s *ops)
-{
-    ops->delete=delete_element_tail;
-    ops->insert_before=insert_element_before_default;
-    ops->insert_after=insert_element_after_tail_default;
-}
-
-/* OPS for an element ONE */
-
-/* ONE */
-
-static void delete_element_one(struct list_element_s *e)
-{
-    struct list_header_s *h=e->h;
-
-    h->head=NULL;
-    h->tail=NULL;
-
-    init_list_element(e, NULL);
-    h->count--;
-    init_list_header(h, SIMPLE_LIST_TYPE_EMPTY, NULL);
-}
-
-static void insert_element_before_head_one(struct list_element_s *n, struct list_element_s *e)
-{
-    struct list_header_s *h=(n->h) ? n->h : e->h;
-
-    init_list_element(e, h);
-
-    n->p=e;
-    e->n=n;
-
-    set_element_ops_default_head(&e->ops);
-    set_element_ops_default_tail(&n->ops);
-
-    h->head=e;
-    h->count++;
-    init_list_header(h, SIMPLE_LIST_TYPE_DEFAULT, NULL);
-}
-
-static void insert_element_after_tail_one(struct list_element_s *p, struct list_element_s *e)
-{
-    struct list_header_s *h=(p->h) ? p->h : e->h;
-
-    init_list_element(e, h);
-
-    p->n=e;
-    e->p=p;
-
-    set_element_ops_default_head(&p->ops);
-    set_element_ops_default_tail(&e->ops);
-
-    h->tail=e;
-    h->count++;
-    init_list_header(h, SIMPLE_LIST_TYPE_DEFAULT, NULL);
-}
-
-void set_element_ops_one(struct element_ops_s *ops)
-{
-    ops->delete=delete_element_one;
-    ops->insert_before=insert_element_before_head_one;
-    ops->insert_after=insert_element_after_tail_one;
-}
-
-/* header OPS for an EMPTY list */
-
-static void insert_element_common_empty(struct list_element_s *a, struct list_element_s *e)
-{
-    /* insert after in an empty list: a must be empty
-	not a is not defined but is a default parameter */
-
-    struct list_header_s *h=e->h;
-
-    init_list_element(e, h);
-    /* start with the ONE ops */
-    init_list_header(h, SIMPLE_LIST_TYPE_ONE, e);/* well it's not empty anymore */
-};
-static void delete_empty(struct list_element_s *e)
-{
-    /* delete in an empty list: not possible*/
-};
-
-void set_element_ops_empty(struct element_ops_s *ops)
-{
-    ops->delete=delete_empty;
-    ops->insert_before=insert_element_common_empty;
-    ops->insert_after=insert_element_common_empty;
-}
-
-struct header_ops_s empty_header_ops = {
-    .delete				= delete_empty,
-    .insert_after			= insert_element_common_empty,
-    .insert_before			= insert_element_common_empty,
-};
-
-/* OPS for a NON EMPTY list */
-
-static void insert_after_default(struct list_element_s *a, struct list_element_s *e)
-{
-    (* a->ops.insert_after)(a, e);
-};
-static void insert_before_default(struct list_element_s *b, struct list_element_s *e)
-{
-    (* b->ops.insert_before)(b, e);
-};
-static void delete_default(struct list_element_s *e)
-{
-    (* e->ops.delete)(e);
-};
-
-struct header_ops_s default_header_ops = {
-    .delete				= delete_default,
-    .insert_after			= insert_after_default,
-    .insert_before			= insert_before_default,
-};
 
 void add_list_element_last(struct list_header_s *h, struct list_element_s *e)
 {
+    struct list_element_s *tail=&h->tail;
     init_list_element(e, h);
-    (* h->ops->insert_after)(h->tail, e);
+    (* h->ops->insert_before)(h, tail, e);
 }
 void add_list_element_first(struct list_header_s *h, struct list_element_s *e)
 {
+    struct list_element_s *head=&h->head;
     init_list_element(e, h);
-    (* h->ops->insert_before)(h->head, e);
+    (* h->ops->insert_after)(h, head, e);
 }
 void add_list_element_after(struct list_header_s *h, struct list_element_s *p, struct list_element_s *e)
 {
     init_list_element(e, h);
-    (* h->ops->insert_after)(p, e);
+    (* h->ops->insert_after)(h, p, e);
 }
 void add_list_element_before(struct list_header_s *h, struct list_element_s *n, struct list_element_s *e)
 {
     init_list_element(e, h);
-    (* h->ops->insert_before)(n, e);
+    (* h->ops->insert_before)(h, n, e);
 }
 void remove_list_element(struct list_element_s *e)
 {
     struct list_header_s *h=NULL;
 
     h=(e) ? e->h : NULL;
-    if (h && h->ops) (* h->ops->delete)(e);
+    if (h && h->ops) (* h->ops->delete)(h, e);
 }
 struct list_element_s *get_list_head(struct list_header_s *h, unsigned char flags)
 {
-    struct list_element_s *e=h->head;
-    if (e && (flags & SIMPLE_LIST_FLAG_REMOVE)) (* h->ops->delete)(e);
+    struct list_element_s *head=&h->head;
+    struct list_element_s *e=_get_next_element(head); /* this also works when list is empty: next is tail, and get_next evaluates the get_element call which gives NULL for tail and head */
+    if (e && (flags & SIMPLE_LIST_FLAG_REMOVE)) (* h->ops->delete)(h, e);
     return e;
 }
 struct list_element_s *get_list_tail(struct list_header_s *h, unsigned char flags)
 {
-    struct list_element_s *e=h->tail;
-    if (e && (flags & SIMPLE_LIST_FLAG_REMOVE)) (* h->ops->delete)(e);
+    struct list_element_s *tail=&h->tail;
+    struct list_element_s *e=_get_prev_element(tail);
+    if (e && (flags & SIMPLE_LIST_FLAG_REMOVE)) (* h->ops->delete)(h, e);
     return e;
 }
 struct list_element_s *search_list_element_forw(struct list_header_s *h, int (* condition)(struct list_element_s *list, void *ptr), void *ptr)
 {
-    struct list_element_s *e=h->head;
+    struct list_element_s *e=get_list_head(h, 0);
 
     while (e) {
 
 	if (condition(e, ptr)==0) break;
-	e=e->n;
+	e=_get_next_element(e);
 
     }
 
@@ -381,12 +306,12 @@ struct list_element_s *search_list_element_forw(struct list_header_s *h, int (* 
 
 struct list_element_s *search_list_element_back(struct list_header_s *h, int (* condition)(struct list_element_s *list, void *ptr), void *ptr)
 {
-    struct list_element_s *e=h->tail;
+    struct list_element_s *e=get_list_tail(h, 0);
 
-    while(e) {
+    while (e) {
 
 	if (condition(e, ptr)==0) break;
-	e=e->p;
+	e=_get_prev_element(e);
 
     }
 
@@ -395,58 +320,57 @@ struct list_element_s *search_list_element_back(struct list_header_s *h, int (* 
 
 void init_list_header(struct list_header_s *h, unsigned char type, struct list_element_s *e)
 {
+    struct list_element_s *head=NULL;
+    struct list_element_s *tail=NULL;
+
     if (h==NULL) {
 
 	logoutput_warning("init_list_header: header empty");
 	return;
 
+    } else if (h->flags & SIMPLE_LIST_FLAG_INIT) {
+
+	logoutput_warning("init_list_header: header already initialized");
+	return;
+
     }
 
-    h->name=NULL;
-    h->lock=0;
+    head=&h->head;
+    tail=&h->tail;
+    init_list_element(head, h);
+    init_list_element(tail, h);
+
+    head->n=tail;
+    tail->p=head;
+    head->ops.get_element=get_element_system;
+    tail->ops.get_element=get_element_system;
+
+    init_list_lock(&h->lock);
     h->readers=0;
+    h->count=0;
+    h->flags|=SIMPLE_LIST_FLAG_INIT;
 
-    if (type==SIMPLE_LIST_TYPE_EMPTY) {
+    set_header_ops_empty(h);
 
-	h->count=0;
-	h->head=NULL;
-	h->tail=NULL;
-	h->ops=&empty_header_ops;
-
-    } else if (type==SIMPLE_LIST_TYPE_ONE) {
-
-	h->count=1;
-	h->head=e;
-	h->tail=e;
-	h->ops=&default_header_ops;
-
-	set_element_ops_one(&e->ops);
-
-    } else if (type==SIMPLE_LIST_TYPE_DEFAULT) {
+    if (type==SIMPLE_LIST_TYPE_ONE) {
 
 	if (e) {
 
-	    if (e==h->head) {
+	    add_list_element_first(h, e);
 
-		set_element_ops_default_head(&e->ops);
+	} else {
 
-	    } else if (e==h->tail) {
-
-		set_element_ops_default_tail(&e->ops);
-
-	    } else {
-
-		set_element_ops_default(&e->ops);
-
-	    }
+	    logoutput_warning("init_list_header: init for a list with one element but this element is not defined");
 
 	}
 
-	h->ops=&default_header_ops;
+    } else if (type==SIMPLE_LIST_TYPE_DEFAULT) {
 
-    } else {
+	set_header_ops_default(h);
 
-	logoutput("init_list_header: type %i not reckognized", type);
+    } else if (type!=SIMPLE_LIST_TYPE_EMPTY) {
+
+	logoutput_warning("init_list_header: type %i not reckognized", type);
 
     }
 
@@ -455,60 +379,50 @@ void init_list_header(struct list_header_s *h, unsigned char type, struct list_e
 signed char list_element_is_first(struct list_element_s *e)
 {
     struct list_header_s *h=e->h;
-    return (h->head==e) ? 0 : -1;
+    return (e->p==&h->head) ? 0 : -1;
 }
 
 signed char list_element_is_last(struct list_element_s *e)
 {
     struct list_header_s *h=e->h;
-    return (h->tail==e) ? 0 : -1;
-}
-
-struct list_element_s *get_next_element(struct list_element_s *e)
-{
-    return (e) ? e->n : NULL;
-}
-
-struct list_element_s *get_prev_element(struct list_element_s *e)
-{
-    return (e) ? e->p : NULL;
+    return (e==&h->tail) ? 0 : -1;
 }
 
 void write_lock_list_header(struct list_header_s *header, pthread_mutex_t *mutex, pthread_cond_t *cond)
 {
-    unsigned char block=(SIMPLE_LIST_LOCK_WRITE | SIMPLE_LIST_LOCK_PREWRITE | SIMPLE_LIST_LOCK_READ);
+    unsigned char block=(SIMPLE_LIST_LOCK_WRITE | SIMPLE_LIST_LOCK_PREWRITE);
     unsigned char lock=0;
 
     pthread_mutex_lock(mutex);
 
-    if ((header->lock & SIMPLE_LIST_LOCK_PREWRITE)==0) {
+    if ((header->lock.value & SIMPLE_LIST_LOCK_PREWRITE)==0) {
 
-	header->lock |= SIMPLE_LIST_LOCK_PREWRITE;
-	lock|=SIMPLE_LIST_LOCK_PREWRITE;
-	block-=SIMPLE_LIST_LOCK_PREWRITE; /* do not block ourselves */
+	header->lock.value |= SIMPLE_LIST_LOCK_PREWRITE;
+	lock |= SIMPLE_LIST_LOCK_PREWRITE;
+	block &= ~SIMPLE_LIST_LOCK_PREWRITE; /* do not block ourselves */
 
     }
 
-    while (header->lock & block) {
+    while ((header->lock.value & block) || header->lock.value > (SIMPLE_LIST_LOCK_WRITE | SIMPLE_LIST_LOCK_PREWRITE)) {
 
 	pthread_cond_wait(cond, mutex);
 
-	if ((header->lock & block)==0) {
+	if ((header->lock.value & block)==0 && header->lock.value <= (SIMPLE_LIST_LOCK_WRITE | SIMPLE_LIST_LOCK_PREWRITE)) {
 
 	    break;
 
-	} else if ((block & SIMPLE_LIST_LOCK_PREWRITE) && (header->lock & SIMPLE_LIST_LOCK_PREWRITE)==0) {
+	} else if ((block & SIMPLE_LIST_LOCK_PREWRITE) && (header->lock.value & SIMPLE_LIST_LOCK_PREWRITE)==0) {
 
-	    header->lock |= SIMPLE_LIST_LOCK_PREWRITE;
-	    lock|=SIMPLE_LIST_LOCK_PREWRITE;
-	    block-=SIMPLE_LIST_LOCK_PREWRITE; /* do not block ourselves */
+	    header->lock.value |= SIMPLE_LIST_LOCK_PREWRITE;
+	    lock |= SIMPLE_LIST_LOCK_PREWRITE;
+	    block &= ~SIMPLE_LIST_LOCK_PREWRITE; /* do not block ourselves */
 
 	}
 
     }
 
-    header->lock |= SIMPLE_LIST_LOCK_WRITE;
-    header->lock -= lock; /* remove the pre lock if any */
+    header->lock.value |= SIMPLE_LIST_LOCK_WRITE;
+    header->lock.value &= ~lock; /* remove the pre lock if any */
     pthread_cond_broadcast(cond);
     pthread_mutex_unlock(mutex);
 
@@ -517,7 +431,7 @@ void write_lock_list_header(struct list_header_s *header, pthread_mutex_t *mutex
 void write_unlock_list_header(struct list_header_s *header, pthread_mutex_t *mutex, pthread_cond_t *cond)
 {
     pthread_mutex_lock(mutex);
-    header->lock &= ~SIMPLE_LIST_LOCK_WRITE;
+    header->lock.value &= ~SIMPLE_LIST_LOCK_WRITE;
     pthread_cond_broadcast(cond);
     pthread_mutex_unlock(mutex);
 }
@@ -525,20 +439,17 @@ void write_unlock_list_header(struct list_header_s *header, pthread_mutex_t *mut
 void read_lock_list_header(struct list_header_s *header, pthread_mutex_t *mutex, pthread_cond_t *cond)
 {
     unsigned char block=(SIMPLE_LIST_LOCK_WRITE | SIMPLE_LIST_LOCK_PREWRITE);
-    unsigned char lock=0;
 
     pthread_mutex_lock(mutex);
-    while (header->lock & block) pthread_cond_wait(cond, mutex);
-    header->lock|=SIMPLE_LIST_LOCK_READ;
-    header->readers++;
+    while (header->lock.value & block) pthread_cond_wait(cond, mutex);
+    header->lock.value+=SIMPLE_LIST_LOCK_READ;
     pthread_mutex_unlock(mutex);
 }
 
 void read_unlock_list_header(struct list_header_s *header, pthread_mutex_t *mutex, pthread_cond_t *cond)
 {
     pthread_mutex_lock(mutex);
-    header->readers--;
-    if (header->readers==0) header->lock-=SIMPLE_LIST_LOCK_READ;
+    if (header->lock.value>=SIMPLE_LIST_LOCK_READ) header->lock.value-=SIMPLE_LIST_LOCK_READ;
     pthread_cond_broadcast(cond);
     pthread_mutex_unlock(mutex);
 }

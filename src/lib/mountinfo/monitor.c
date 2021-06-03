@@ -32,9 +32,8 @@
 
 #include <sys/stat.h>
 #include <sys/param.h>
+#include <sys/sysmacros.h>
 #include <fcntl.h>
-#include <pthread.h>
-#include <mntent.h>
 
 #include <glib.h>
 
@@ -53,65 +52,37 @@
 #define MOUNTINFO_FILE "/proc/self/mountinfo"
 
 struct mountinfo_monitor_s {
-    int 					(*update) (unsigned long generation_id, struct mountentry_s *(*next) (void **index, unsigned long g, unsigned char type), void *data);
+    int 					(*update) (uint64_t generation_id, struct mountentry_s *(*next) (struct mountentry_s *m, uint64_t g, unsigned char type), void *data, unsigned char flags);
     unsigned char 				(*ignore) (char *source, char *fs, char *path, void *data);
     struct bevent_s 				*bevent;
     pthread_mutex_t				mutex;
     pthread_t					threadid;
     unsigned char				changed;
-    char					*buffer;
-    unsigned int				size;
     void 					*threadsqueue;
     void					*data;
     unsigned int				flags;
     struct simple_locking_s 			locking;
 };
 
-/* private structs for internal use only */
-
-struct mountinfo_s {
-    int 					mountid;
-    int 					parentid;
-    unsigned char 				added;
-    struct list_element_s			list;
-    struct mountentry_s 			*mountentry;
-};
-
-/* struct when reading the mountinfo file:
-    mountinfo is a list of the lines as read from mountinfo
-    mountentry is the same list but then sorted
-*/
-
-struct mountinfo_list_s {
-    struct list_header_s			mountinfo;
-    struct list_header_s			mountentry;
-};
-
 /* added, removed and keep mount entries */
 
 static struct list_header_s removed_mounts;
-static struct list_header_s current_mounts;
-static struct mountinfo_monitor_s mount_monitor;
-static int process_mountinfo_event(int fd, void *data, uint32_t events);
+static struct list_header_s current_mounts_m;
+static struct list_header_s current_mounts_d;
+static struct mountinfo_monitor_s monitor;
+static void process_mountinfo_event(int fd, void *data, struct event_s *event);
 
-struct mountinfo_s *get_containing_mountinfo(struct list_element_s *list)
+void free_mountentry(struct mountentry_s *me)
 {
-    if (! list) return NULL;
-    return (struct mountinfo_s *) ( ((char *) list) - offsetof(struct mountinfo_s, list));
-}
 
-void free_mountentry(void *data)
-{
-    struct mountentry_s *mountentry=(struct mountentry_s *) data;
+    if (me) {
 
-    if (mountentry) {
-
-	if (mountentry->mountpoint) free(mountentry->mountpoint);
-	if (mountentry->fs) free(mountentry->fs);
-	if (mountentry->source) free(mountentry->source);
-	if (mountentry->options) free(mountentry->options);
-	if (mountentry->rootpath) free(mountentry->rootpath);
-	free(mountentry);
+	if (me->mountpoint) free(me->mountpoint);
+	if (me->fs) free(me->fs);
+	if (me->source) free(me->source);
+	if (me->options) free(me->options);
+	if (me->rootpath) free(me->rootpath);
+	free(me);
 
     }
 
@@ -119,13 +90,13 @@ void free_mountentry(void *data)
 
 int lock_mountlist_read(struct simple_lock_s *lock)
 {
-    init_simple_readlock(&mount_monitor.locking, lock);
+    init_simple_readlock(&monitor.locking, lock);
     return simple_lock(lock);
 }
 
 int lock_mountlist_write(struct simple_lock_s *lock)
 {
-    init_simple_writelock(&mount_monitor.locking, lock);
+    init_simple_writelock(&monitor.locking, lock);
     return simple_lock(lock);
 }
 
@@ -141,220 +112,209 @@ static unsigned char dummy_ignore(char *source, char *fs, char *path, void *data
     return 0;
 }
 
-static int dummy_update(unsigned long generation, struct mountentry_s *(*next) (void **index, unsigned long generation, unsigned char type), void *data)
+static int dummy_update(uint64_t generation, struct mountentry_s *(*next) (struct mountentry_s *me, uint64_t generation, unsigned char type), void *data, unsigned char flags)
 {
     return 1;
 }
 
-int open_mountmonitor(struct bevent_s *bevent, unsigned int *error)
+struct bevent_s *open_mountmonitor()
 {
+    int fd=-1;
+    struct bevent_s *bevent=NULL;
 
-    if (! bevent) {
+    init_simple_locking(&monitor.locking);
 
-	*error=EINVAL;
-	return -1;
-
-    }
-
-    init_simple_locking(&mount_monitor.locking);
-    init_list_header(&current_mounts, SIMPLE_LIST_TYPE_EMPTY, NULL);
+    /* current_mounts_m: list of mounts with same order as provided by the kernel (==mountinfo) */
+    init_list_header(&current_mounts_m, SIMPLE_LIST_TYPE_EMPTY, NULL);
+    /* current_mounts_d: list of mounts ordered to the major:minor value */
+    init_list_header(&current_mounts_d, SIMPLE_LIST_TYPE_EMPTY, NULL);
     init_list_header(&removed_mounts, SIMPLE_LIST_TYPE_EMPTY, NULL);
 
-    mount_monitor.update=dummy_update;
-    mount_monitor.ignore=dummy_ignore;
-    mount_monitor.bevent=bevent;
-    pthread_mutex_init(&mount_monitor.mutex, NULL);
-    mount_monitor.changed=0;
-    mount_monitor.threadid=0;
-    mount_monitor.data=NULL;
-    mount_monitor.buffer=NULL;
-    mount_monitor.size=4096;
-    mount_monitor.threadsqueue=NULL;
-    mount_monitor.flags=0;
+    monitor.update=dummy_update;
+    monitor.ignore=dummy_ignore;
+    monitor.bevent=NULL;
+    pthread_mutex_init(&monitor.mutex, NULL);
+    monitor.changed=0;
+    monitor.threadid=0;
+    monitor.data=NULL;
+    monitor.threadsqueue=NULL;
+    monitor.flags=0;
 
-    bevent->fd=open(MOUNTINFO_FILE, O_RDONLY);
+    fd=open(MOUNTINFO_FILE, O_RDONLY);
 
-    if (bevent->fd==-1) {
+    if (fd==-1) {
 
     	logoutput_error("open_mountmonitor: unable to open file %s", MOUNTINFO_FILE);
-    	*error=errno;
 	goto error;
 
     }
 
-    logoutput("open_mountmonitor: fd %i", bevent->fd);
-    bevent->cb=process_mountinfo_event;
-    return 0;
+    bevent=create_fd_bevent(NULL, process_mountinfo_event, NULL);
+    if (bevent==NULL) goto error;
+
+    set_bevent_unix_fd(bevent, fd);
+    set_bevent_watch(bevent, "urgent data");
+    monitor.bevent=bevent;
+
+    logoutput("open_mountmonitor: fd %i", fd);
+    return bevent;
 
     error:
 
-    if (bevent->fd>0) {
-
-	close(bevent->fd);
-	bevent->fd=0;
-
-    }
-
-    return -1;
-
+    if (bevent) remove_bevent(bevent);
+    if (fd>0) close(fd);
+    return NULL;
 }
 
 void set_updatefunc_mountmonitor(update_cb_t cb)
 {
-    if (cb) mount_monitor.update=cb;
+    if (cb) monitor.update=cb;
 }
 
 void set_ignorefunc_mountmonitor(ignore_cb_t cb)
 {
-    if (cb) mount_monitor.ignore=cb;
+    if (cb) monitor.ignore=cb;
 }
 
 void set_threadsqueue_mountmonitor(void *ptr)
 {
-    if (ptr) mount_monitor.threadsqueue=ptr;
+    if (ptr) monitor.threadsqueue=ptr;
 }
 
 void set_userdata_mountmonitor(void *data)
 {
-    if (data) mount_monitor.data=data;
+    if (data) monitor.data=data;
 }
 
 void close_mountmonitor()
 {
-    if (mount_monitor.bevent) {
 
-	if (mount_monitor.bevent->fd>0) {
+    if (monitor.bevent) {
 
-	    close(mount_monitor.bevent->fd);
- 	    mount_monitor.bevent->fd=0;
+	int fd=get_bevent_unix_fd(monitor.bevent);
+	if (fd>=0) {
+
+	    close(fd);
+	    set_bevent_unix_fd(monitor.bevent, -1);
 
 	}
 
-    }
-
-    if (mount_monitor.buffer) {
-
-	free(mount_monitor.buffer);
-	mount_monitor.buffer=NULL;
+	monitor.bevent=NULL;
 
     }
 
-    clear_simple_locking(&mount_monitor.locking);
+    clear_simple_locking(&monitor.locking);
 
 }
 
 /* walk through the current mounts to get the added */
 
-struct mountentry_s *get_next_mountentry_added(void **pindex, unsigned long generation)
+struct mountentry_s *get_next_mountentry_added(struct mountentry_s *me, uint64_t generation)
 {
-    void *index=*pindex;
-    struct mountentry_s *entry=NULL;
+    struct list_element_s *list=NULL;
 
-    if (index) {
+    if (me) {
 
-	entry=(struct mountentry_s *) index;
-	entry=get_containing_mountentry(get_next_element(&entry->list));
+	list=&me->list_m;
+	list=get_next_element(list);
+	me=NULL;
 
     } else {
 
-	entry=get_containing_mountentry(current_mounts.head);
+	list=get_list_head(&current_mounts_m, 0);
 
     }
 
-    /* only take those with newer generation */
+    while (list) {
 
-    while (entry) {
+	me=(struct mountentry_s *) ((char *) list - offsetof(struct mountentry_s, list_m));
 
-	if (entry->generation>=generation) break;
-	entry=get_containing_mountentry(get_next_element(&entry->list));
+	logoutput("get_next_mountentry_added: mount %s:%s at %s (generation=%li found=%li)", me->source, me->fs, me->mountpoint, (unsigned long) me->generation, (unsigned long) me->found);
+
+	if (me->generation==generation && me->found==generation) break;
+	list=get_next_element(list);
+	me=NULL;
 
     }
 
-    index=(void *) entry;
-    *pindex=index;
-
-    return entry;
+    return me;
 
 }
 
 static void add_mount_removed(struct mountentry_s *mountentry)
 {
-    add_list_element_last(&removed_mounts, &mountentry->list);
+    add_list_element_last(&removed_mounts, &mountentry->list_d);
 }
 
 static void clear_removed_mounts()
 {
     struct list_element_s *list=get_list_head(&removed_mounts, SIMPLE_LIST_FLAG_REMOVE);
 
+    logoutput("clear_removed_mounts");
+
     while (list) {
 
-	struct mountentry_s *entry=get_containing_mountentry(list);
-	free_mountentry(entry);
+	struct mountentry_s *me=(struct mountentry_s *) ((char *) list - offsetof(struct mountentry_s, list_d));
+	free_mountentry(me);
 	list=get_list_head(&removed_mounts, SIMPLE_LIST_FLAG_REMOVE);
 
     }
 
 }
 
-struct mountentry_s *get_next_mountentry_removed(void **pindex)
+struct mountentry_s *get_next_mountentry_removed(struct mountentry_s *me)
 {
-    struct mountentry_s *entry=NULL;
-    void *index=*pindex;
+    struct list_element_s *list=NULL;
+    struct list_element_s *next=NULL;
 
-    if (index) {
+    if (me) {
 
-	entry=(struct mountentry_s *) index;
-	entry=get_containing_mountentry(get_next_element(&entry->list));
+	list=&me->list_m;
+	next=get_next_element(list);
+	me=NULL;
 
     } else {
 
-	entry=get_containing_mountentry(removed_mounts.head);
+	next=get_list_head(&removed_mounts, 0);
 
     }
 
-    index=(void *) entry;
-    *pindex=index;
-
-    return entry;
+    return (next) ? (struct mountentry_s *) ((char *) next - offsetof(struct mountentry_s, list_m)) : NULL;
 }
 
-struct mountentry_s *get_next_mountentry_current(void **pindex)
+struct mountentry_s *get_next_mountentry_current(struct mountentry_s *me)
 {
-    struct mountentry_s *entry=NULL;
-    void *index=*pindex;
+    struct list_element_s *list=NULL;
+    struct list_element_s *next=NULL;
 
-    if (index) {
+    if (me) {
 
-	entry=(struct mountentry_s *) index;
-	entry=get_containing_mountentry(get_next_element(&entry->list));
+	list=&me->list_m; 
+	next=get_next_element(list);
 
     } else {
 
-	entry=get_containing_mountentry(current_mounts.head);
+	next=get_list_head(&current_mounts_m, 0);
 
     }
 
-    index=(void *) entry;
-    *pindex=index;
-
-    return entry;
-
+    return (next) ? (struct mountentry_s *) ((char *) next - offsetof(struct mountentry_s, list_m)) : NULL;
 }
 
-struct mountentry_s *get_next_mountentry(void **index, unsigned long generation, unsigned char type)
+struct mountentry_s *get_next_mountentry(struct mountentry_s *me, uint64_t generation, unsigned char type)
 {
 
     if (type==MOUNTLIST_CURRENT) {
 
-	return get_next_mountentry_current(index);
+	return get_next_mountentry_current(me);
 
     } else if (type==MOUNTLIST_ADDED) {
 
-	return get_next_mountentry_added(index, generation);
+	return get_next_mountentry_added(me, generation);
 
     } else if (type==MOUNTLIST_REMOVED) {
 
-	return get_next_mountentry_removed(index);
+	return get_next_mountentry_removed(me);
 
     }
 
@@ -364,7 +324,7 @@ struct mountentry_s *get_next_mountentry(void **index, unsigned long generation,
 
 /* read one line from mountinfo */
 
-static void read_mountinfo_values(char *buffer, unsigned int size, struct mountinfo_list_s *list)
+static struct mountentry_s *read_mountinfo_values(char *buffer, unsigned int size, uint64_t generation)
 {
     int mountid=0;
     int parentid=0;
@@ -377,8 +337,7 @@ static void read_mountinfo_values(char *buffer, unsigned int size, struct mounti
     char *fs=NULL;
     char *sep=NULL;
     char *pos=NULL;
-    struct mountentry_s *mountentry=NULL;
-    struct mountinfo_s *mountinfo=NULL;
+    struct mountentry_s *me=NULL;
     unsigned int left=size;
     int error=0;
     char tmp[256];
@@ -392,6 +351,8 @@ static void read_mountinfo_values(char *buffer, unsigned int size, struct mounti
 	goto dofree;
 
     }
+
+    /* determine the pos in the buffer by creating the first part self using snprintf */
 
     len=snprintf(tmp, 256, "%i %i %i:%i", mountid, parentid, major, minor);
     pos+=len;
@@ -475,8 +436,7 @@ static void read_mountinfo_values(char *buffer, unsigned int size, struct mounti
     }
 
     if (! source) goto dofree;
-    if ((*mount_monitor.ignore) (source, fs, mountpoint, mount_monitor.data)==1) goto dofree;
-
+    if ((*monitor.ignore) (source, fs, mountpoint, monitor.data)==1) goto dofree;
     left-=(unsigned int) (sep-pos);
 
     /* options */
@@ -507,103 +467,44 @@ static void read_mountinfo_values(char *buffer, unsigned int size, struct mounti
 
     /* get a new mountinfo */
 
-    logoutput("read_mountinfo_values: found %s at %s with %s", source, mountpoint, fs);
+    logoutput("read_mountinfo_values: found %s:%s at %s major:minor %i:%i", source, fs, mountpoint, major, minor);
 
-    mountinfo=malloc(sizeof(struct mountinfo_s));
-    mountentry=malloc(sizeof(struct mountentry_s));
+    me=malloc(sizeof(struct mountentry_s));
+    if (me==NULL) goto dofree;
 
-    if ( ! mountinfo || ! mountentry) goto dofree;
+    me->found=generation;
+    me->generation=generation;
+    me->mountpoint=mountpoint;
+    me->rootpath=root;
+    me->fs=fs;
+    me->source=source;
+    me->options=options;
+    me->major=major;
+    me->minor=minor;
+    me->flags=0;
 
-    mountinfo->mountid=mountid;
-    mountinfo->parentid=parentid;
-    mountinfo->added=0;
-    init_list_element(&mountinfo->list, NULL);
+    init_list_element(&me->list_m, NULL);
+    init_list_element(&me->list_d, NULL);
 
-    add_list_element_last(&list->mountinfo, &mountinfo->list);
-
-    mountentry->unique=0;
-    mountentry->generation=0;
-    mountentry->flags=0;
-    mountentry->mountpoint=mountpoint;
-    mountentry->rootpath=root;
-    mountentry->fs=fs;
-    mountentry->options=options;
-    mountentry->source=source;
-    init_list_element(&mountentry->list, NULL);
-
-    mountinfo->mountentry=mountentry;
-    mountentry->index=(void *) mountinfo;
-
-    mountentry->major=major;
-    mountentry->minor=minor;
-    mountentry->data=NULL;
+    me->mountid=mountid;
+    me->parentid=parentid;
+    me->parent=NULL;
 
     if (strcmp(fs, "autofs")==0) {
 
         if (strstr(options, "indirect")) {
 
-	    mountentry->flags|=MOUNTENTRY_FLAG_AUTOFS_INDIRECT;
+	    me->flags|=MOUNTENTRY_FLAG_AUTOFS_INDIRECT;
 
 	} else {
 
-	    mountentry->flags|=MOUNTENTRY_FLAG_AUTOFS_DIRECT;
+	    me->flags|=MOUNTENTRY_FLAG_AUTOFS_DIRECT;
 
 	}
 
     }
 
-    if (list->mountentry.head==NULL) {
-
-	list->mountentry.head=&mountentry->list;
-	list->mountentry.tail=&mountentry->list;
-
-    } else {
-	struct mountentry_s *prev=get_containing_mountentry(list->mountentry.tail);
-	int diff=0;
-
-	/* walk back starting at the last and compare */
-
-        while(1) {
-
-            diff=compare_mount_entries(prev, mountentry);
-
-    	    if (diff>0) {
-
-		struct list_element_s *p=get_prev_element(&prev->list);
-
-        	if (p) {
-
-            	    prev=get_containing_mountentry(p);
-
-                } else {
-
-                    /* there is no prev: at the first */
-		    break;
-
-                }
-
-            } else {
-
-                /* not bigger */
-                break;
-
-            }
-
-        }
-
-        if ( diff>0 ) {
-
-	    add_list_element_first(&list->mountentry, &mountentry->list);
-
-        } else {
-
-	    add_list_element_after(&list->mountentry, &prev->list, &mountentry->list);
-
-        }
-
-    }
-
-    return;
+    return me;
 
     dofree:
 
@@ -612,109 +513,155 @@ static void read_mountinfo_values(char *buffer, unsigned int size, struct mounti
     if (fs) free(fs);
     if (source) free(source);
     if (options) free(options);
-    if (mountinfo) free(mountinfo);
-    if (mountentry) free(mountentry);
+    if (me) free(me);
+    return NULL;
 
 }
 
-static int get_mountlist(struct mountinfo_list_s *list)
+static int add_mountentry_sorted_d(struct list_header_s *header, struct mountentry_s *me)
 {
-    char *pos=NULL;
-    char *sep=NULL;
-    int error=0;
-    int bytesread=0;
+    int diff=-1;
+    struct list_element_s *walk=get_list_tail(header, 0);
+    dev_t dev=makedev(me->major, me->minor);
+    uint64_t cnt=0;
 
-    if (! mount_monitor.bevent) {
+    /* walk back starting at the last and compare */
 
-	return -EIO;
+    while (walk) {
+    	struct mountentry_s *prev=(struct mountentry_s *)((char *) walk - offsetof(struct mountentry_s, list_d));
+	dev_t devprev=makedev(prev->major, prev->minor);
 
-    } else if (mount_monitor.bevent->fd<=0) {
+	cnt++;
+	if (cnt > (3 * header->count / 2)) {
 
-	return -EIO;
+	    logoutput("read_mountinfo_values: loop detected..");
+	    break;
+
+	}
+
+	/* look for the mounentry which major:minor is less (or equal) to get a sorted list */
+
+	if (devprev <= dev) {
+
+	    if (devprev==dev) {
+
+		prev->generation=me->generation; /* prev also found this batch */
+		diff=0;
+
+	    } else {
+
+		diff=1;
+
+	    }
+
+	    break;
+
+	}
+
+	walk=get_prev_element(walk);
 
     }
 
-    if ( ! mount_monitor.buffer) {
+    if (diff==-1 || diff==1) {
 
-	mount_monitor.buffer=malloc(mount_monitor.size);
-	if (! mount_monitor.buffer) return -ENOMEM;
+	if (walk) {
 
-    }
-
-    readmountinfo:
-
-    memset(mount_monitor.buffer, '\0', mount_monitor.size);
-    bytesread=pread(mount_monitor.bevent->fd, mount_monitor.buffer, mount_monitor.size, 0);
-
-    if (bytesread<0) {
-
-	/* error */
-
-	logoutput_error("get_mountlist: error %i reading mountinfo", errno);
-	return -errno;
-
-    } else if (bytesread>=mount_monitor.size) {
-
-	/* buffer is too small */
-
-	mount_monitor.size+=2048;
-	mount_monitor.buffer=realloc(mount_monitor.buffer, mount_monitor.size);
-
-	if (mount_monitor.buffer) {
-
-	    goto readmountinfo;
+	    add_list_element_after(header, walk, &me->list_d);
 
 	} else {
 
-	    return -ENOMEM;
+	    add_list_element_first(header, &me->list_d);
 
 	}
 
     }
 
-    pos=mount_monitor.buffer;
+    return diff;
 
-    while (pos<mount_monitor.buffer+bytesread) {
+}
 
-	sep=memchr(pos, 10, bytesread - (unsigned int)(pos - mount_monitor.buffer));
+static int get_mountlist(uint64_t generation, unsigned int init)
+{
+    int error=0;
+    FILE *fp=NULL;
+    unsigned int size= 2 * PATH_MAX; /* theoretically big enough ?? */
+    char buffer[size];
+    int ctr_added=0;
 
-	if (! sep) {
+    logoutput("get_mountlist");
 
-	    break;
+    fp=fopen(MOUNTINFO_FILE, "r");
 
-	} else if ((unsigned int)(sep-pos)<15) {
+    if (fp==NULL) {
 
-	    /* 15 is the bare minimum for a valid line containing mountinfo */
-	    error=EIO;
-	    break;
-
-	}
-
-	*sep='\0';
-	read_mountinfo_values(pos, (unsigned int)(sep-pos), list);
-	pos=sep+1;
+	logoutput("get_mountlist: error opening %s", MOUNTINFO_FILE);
+	error=errno;
+	goto out;
 
     }
 
+    memset(buffer, 0, size);
+
+    while (fgets(buffer, size - 1, fp)) {
+
+	size_t len=0;
+	char *sep=NULL;
+	struct mountentry_s *me=NULL;
+
+	sep=memchr(buffer, '\n', size);
+	if (sep) *sep='\0';
+	len=strnlen(buffer, size);
+
+	me=read_mountinfo_values(buffer, len, generation);
+
+	if (me) {
+	    int diff=0;
+
+	    diff=add_mountentry_sorted_d(&current_mounts_d, me);
+
+	    if (init) {
+
+		/* add always to current mounts */
+
+		add_list_element_last(&current_mounts_m, &me->list_m);
+		ctr_added++;
+
+	    } else {
+
+		if (diff==-1 || diff==1) {
+
+		    add_list_element_last(&current_mounts_m, &me->list_m);
+		    ctr_added++;
+
+		} else {
+
+		    free_mountentry(me);
+
+		}
+
+	    }
+
+	}
+
+	memset(buffer, 0, size);
+
+    }
+
+    fclose(fp);
     out:
-
-    return (error>0) ? -1 : 0;
+    return (error>0) ? -error : ctr_added;
 
 }
 
 void handle_change_mounttable(unsigned char init)
 {
-    struct mountinfo_list_s new_list;
-    struct mountinfo_s *mountinfo=NULL;
-    unsigned long generation=0;
+    uint64_t generation=0;
     unsigned int error=0;
-    unsigned int count_added=0;
+    int ctr_added=0;
     struct simple_lock_s wlock;
+    struct list_element_s *list=NULL;
 
     logoutput("handle_change_mounttable");
-
-    init_list_header(&new_list.mountinfo, SIMPLE_LIST_TYPE_EMPTY, NULL);
-    init_list_header(&new_list.mountentry, SIMPLE_LIST_TYPE_EMPTY, NULL);
 
     lock_mountlist_write(&wlock);
 
@@ -723,155 +670,65 @@ void handle_change_mounttable(unsigned char init)
 
     /* get a new list and compare */
 
-    if (get_mountlist(&new_list)==0) {
-	struct list_element_s *list_c=NULL;
-	struct list_element_s *list_n=NULL;
-	struct mountentry_s *entry_c=NULL;
-	struct mountentry_s *entry_n=NULL;
-	int diff=0;
+    ctr_added=get_mountlist(generation, init);
+    if (ctr_added<0) {
 
-	list_c=get_list_head(&current_mounts, 0);
-	list_n=get_list_head(&new_list.mountentry, 0);
-
-        entry_c=get_containing_mountentry(list_c);
-        entry_n=get_containing_mountentry(list_n);
-
-        while (entry_c && entry_n) {
-
-            if (entry_n) {
-
-		if (entry_c) {
-
-            	    diff=compare_mount_entries(entry_c, entry_n);
-
-        	} else {
-
-            	    diff=1;
-
-		}
-
-            } else {
-
-		if (entry_c) {
-
-            	    diff=-1;
-
-        	} else {
-
-		    /* no more entries on both lists */
-
-            	    break;
-
-        	}
-
-	    }
-
-            if (diff==0) {
-		struct list_element_s *next=get_next_element(list_n);
-		struct mountinfo_s *mountinfo=(struct mountinfo_s *) entry_n->index;
-
-		/* the same, step on both lists */
-
-		free_mountentry((void *) entry_n);
-
-		mountinfo->mountentry=entry_c;
-		mountinfo->added=0;
-
-		list_c=get_next_element(list_c);
-		list_n=next;
-
-            } else if ( diff<0 ) {
-		struct list_element_s *next=get_next_element(list_c);
-
-                /* current is smaller: move to removed list */
-
-		entry_c->index=NULL;
-		remove_list_element(list_c);
-                add_list_element_last(&removed_mounts, list_c);
-
-                list_c=next;
-
-            } else { /* diff>0 */
-		struct list_element_s *next=get_next_element(list_n);
-
-                /* new is "smaller" then current : added */
-
-		remove_list_element(list_n);
-		init_list_element(list_n, NULL);
-
-		if (list_c) {
-
-		    add_list_element_before(&current_mounts, list_c, list_n);
-
-		} else {
-
-		    add_list_element_last(&current_mounts, list_n);
-
-		}
-
-		entry_n->unique=get_uniquectr();
-		entry_n->generation=generation;
-
-		mountinfo=(struct mountinfo_s *) entry_n->index;
-		mountinfo->added=1;
-
-		list_n=next;
-
-            }
-
-        }
+	error=abs(ctr_added);
+	logoutput("handle_change_mounttable: error %i getting list of mounts (%s)", error, strerror(error));
+	goto unlock;
 
     }
 
-    /* set the parents: only required for the new ones
-    test it's mounted by autofs
-    and set the unique ctr */
+    /* look for "old" mountentries: removed */
 
-    mountinfo=get_containing_mountinfo(new_list.mountinfo.head);
+    logoutput("handle_change_mounttable: comparing current and new mounts");
 
-    while (mountinfo) {
+    list=get_list_head(&current_mounts_d, 0);
 
-	if (mountinfo->mountentry) {
-	    struct mountentry_s *entry=mountinfo->mountentry;
+    while (list) {
+	struct mountentry_s *me=(struct mountentry_s *)((char *) list - offsetof(struct mountentry_s, list_d));
 
-	    if (entry->generation==generation) {
+	if (me->generation<generation) {
 
-		logoutput("handle_change_mounttable: added %s", entry->mountpoint);
-		check_mounted_by_autofs(entry);
-		count_added++;
+	    /* this mountentry is not found this batch */
 
-	    }
-
-	    entry->index=NULL;
-
-	}
-
-	new_list.mountinfo.head=get_next_element(&mountinfo->list);
-	free(mountinfo);
-
-	if (new_list.mountinfo.head) {
-
-	    mountinfo=get_containing_mountinfo(new_list.mountinfo.head);
+	    remove_list_element(list);
+    	    add_list_element_last(&removed_mounts, list);
 
 	} else {
 
-	    break;
+	    check_mounted_by_autofs(me);
 
 	}
 
+        list=get_next_element(list);
+
     }
 
-    if (init==0 && (count_added>0 || removed_mounts.count>0)) {
+    if (ctr_added>0 || removed_mounts.count>0) {
+	unsigned char flags=0;
+
+	if (init) {
+
+	    flags |= MOUNTMONITOR_FLAG_INIT;
+
+	}
 
 	logoutput("handle_change_mounttable: run the cb");
 
-	if ((*mount_monitor.update) (generation, get_next_mountentry, mount_monitor.data)==1) {
+	if ((*monitor.update) (generation, get_next_mountentry, monitor.data, flags)==1) {
+
+	    logoutput("handle_change_mounttable: clear removed mounts");
 
 	    clear_removed_mounts();
 
 	}
 
     }
+
+    logoutput("handle_change_mounttable: unlock");
+
+    unlock:
 
     unlock_mountlist(&wlock);
 
@@ -882,41 +739,42 @@ static void thread_process_mountinfo(void *ptr)
 
     logoutput("thread_process_mountinfo");
 
-    pthread_mutex_lock(&mount_monitor.mutex);
+    pthread_mutex_lock(&monitor.mutex);
 
     process:
 
-    mount_monitor.changed=0;
-    mount_monitor.threadid=pthread_self();
-    pthread_mutex_unlock(&mount_monitor.mutex);
+    monitor.changed=0;
+    monitor.threadid=pthread_self();
+    pthread_mutex_unlock(&monitor.mutex);
 
-    handle_change_mounttable(! (mount_monitor.flags & MOUNT_MONITOR_FLAG_INIT));
+    handle_change_mounttable(! (monitor.flags & MOUNT_MONITOR_FLAG_INIT));
 
-    pthread_mutex_lock(&mount_monitor.mutex);
-    if (mount_monitor.changed==1) goto process;
-    mount_monitor.threadid=0;
-    pthread_mutex_unlock(&mount_monitor.mutex);
+    pthread_mutex_lock(&monitor.mutex);
+    if (monitor.changed==1) goto process;
+    monitor.threadid=0;
+    pthread_mutex_unlock(&monitor.mutex);
 
 }
 
 /* process an event the mountinfo */
 
-static int process_mountinfo_event(int fd, void *data, uint32_t events)
+static void process_mountinfo_event(int fd, void *data, struct event_s *events)
 {
 
     logoutput("process_mountinfo_event");
 
-    pthread_mutex_lock(&mount_monitor.mutex);
+    pthread_mutex_lock(&monitor.mutex);
 
-    if (mount_monitor.threadid>0) {
+    if (monitor.threadid>0) {
 
 	/* there is already a thread processing */
-	mount_monitor.changed=1;
+	monitor.changed=1;
+	logoutput("process_mountinfo_event: mount monitor is already active: signal this");
 
-    } else if ((mount_monitor.flags & MOUNT_MONITOR_FLAG_INIT)==0) {
+    } else if (events==NULL) {
 
 	handle_change_mounttable(1);
-	mount_monitor.flags|=MOUNT_MONITOR_FLAG_INIT;
+	monitor.flags|=MOUNT_MONITOR_FLAG_INIT;
 
     } else {
 
@@ -926,10 +784,6 @@ static int process_mountinfo_event(int fd, void *data, uint32_t events)
 
     }
 
-    pthread_mutex_unlock(&mount_monitor.mutex);
-
-    out:
-
-    return 0;
+    pthread_mutex_unlock(&monitor.mutex);
 
 }

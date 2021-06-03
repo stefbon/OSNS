@@ -485,7 +485,7 @@ int key_exchange(struct ssh_connection_s *connection)
 
     /* send newkeys to server */
 
-    if (send_newkeys_message(connection)==0) {
+    if (send_newkeys_message(connection)>0) {
 
 	logoutput("key_exchange: newkeys send");
 
@@ -528,7 +528,10 @@ int key_exchange(struct ssh_connection_s *connection)
 
 void init_keyex_once()
 {
-    init_keyex_ecdh();
+
+    init_list_header(&list_keyex_ops, SIMPLE_LIST_TYPE_EMPTY, 0);
+
+    // init_keyex_ecdh();
     init_keyex_dh();
     add_keyex_ops(&dhnone_ops);
 }

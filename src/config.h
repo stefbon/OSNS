@@ -7,6 +7,9 @@
 /* Define Avahi core is available */
 #define HAVE_AVAHI_CORE 1
 
+/* Define Avahi glib is available */
+#define HAVE_AVAHI_GLIB 1
+
 /* Define to 1 if your system has a working `chown' function. */
 #define HAVE_CHOWN 1
 
@@ -207,7 +210,7 @@
 #define VERSION "1.0a1"
 
 /* Define to build OSNS SSH Server */
-#define WITH_OSNS_SFTP_SUBSYSTEM 1
+/* #undef WITH_OSNS_SFTP_SUBSYSTEM */
 
 /* Define for Solaris 2.5.1 so the uint32_t typedef from <sys/synch.h>,
    <pthread.h>, or <semaphore.h> is not used. If the typedef were allowed, the

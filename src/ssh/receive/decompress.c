@@ -58,19 +58,19 @@ void add_decompress_ops(struct decompress_ops_s *ops)
 
 struct decompress_ops_s *get_next_decompress_ops(struct decompress_ops_s *ops)
 {
-    if (ops) {
-	struct list_element_s *next=ops->list.n;
+    struct list_element_s *list=NULL;
 
-	return (next) ? get_decompress_ops_container(next) : NULL;
+    if (ops) {
+
+	list=get_next_element(&ops->list);
 
     } else {
-	struct list_element_s *head=list_decompress_ops.head;
 
-	return (head) ? get_decompress_ops_container(head) : NULL;
+	list=get_list_head(&list_decompress_ops, 0);
 
     }
 
-    return NULL;
+    return (list) ? get_decompress_ops_container(list) : NULL;;
 }
 
 
@@ -103,4 +103,9 @@ unsigned int build_compress_list_s2c(struct ssh_connection_s *connection, struct
 
     return start;
 
+}
+
+void init_decompress_once()
+{
+    init_list_header(&list_decompress_ops, SIMPLE_LIST_TYPE_EMPTY, 0);
 }

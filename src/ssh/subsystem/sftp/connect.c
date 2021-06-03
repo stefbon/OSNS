@@ -65,7 +65,7 @@ static int get_fd_incoming_data(struct sftp_connection_s *connection)
 
 	/* STDIN is used for incoming data (nobrainer) */
 
-	fd=fsc->io.std.bevent.fd;
+	fd=get_bevent_unix_fd(fsc->io.std.bevent);
 
     }
 
@@ -84,7 +84,7 @@ static int open_std_connection(struct sftp_connection_s *connection)
     io_std=&fsc->io.std;
     sops=io_std->sops;
 
-    io_std->bevent.fd=(* sops->open)(io_std, 0);
+    set_bevent_unix_fd(io_std->bevent, (* sops->open)(io_std, 0));
 
     /* STDOUT */
 
@@ -92,7 +92,7 @@ static int open_std_connection(struct sftp_connection_s *connection)
     io_std=&fsc->io.std;
     sops=io_std->sops;
 
-    io_std->bevent.fd=(* sops->open)(io_std, 0);
+    set_bevent_unix_fd(io_std->bevent, (* sops->open)(io_std, 0));
 
     /* STDERR */
 
@@ -100,7 +100,7 @@ static int open_std_connection(struct sftp_connection_s *connection)
     io_std=&fsc->io.std;
     sops=io_std->sops;
 
-    io_std->bevent.fd=(* sops->open)(io_std, 0);
+    set_bevent_unix_fd(io_std->bevent, (* sops->open)(io_std, 0));
 
     return 0;
 }
@@ -147,7 +147,7 @@ static int read_std_connection(struct sftp_connection_s *connection, char *buffe
 
 static int write_std_connection(struct sftp_connection_s *connection, char *data, unsigned int size)
 {
-    struct fs_connection_s *fsc=&connection->type.std.stdin;
+    struct fs_connection_s *fsc=&connection->type.std.stdout;
     struct io_std_s *io_std=&fsc->io.std;
     struct std_ops_s *sops=io_std->sops;
 
@@ -208,20 +208,20 @@ int connect_sftp_connection(struct sftp_connection_s *connection)
 
 int add_sftp_connection_eventloop(struct sftp_connection_s *connection)
 {
-    int result=0;
+    int result=-1;
 
     if (connection->flags & SFTP_CONNECTION_FLAG_STD) {
 	struct fs_connection_s *fsc=&connection->type.std.stdin;
-	struct bevent_s *bevent=&fsc->io.std.bevent;
+	struct bevent_s *bevent=fsc->io.std.bevent;
 
-	if (add_to_beventloop(bevent->fd, BEVENT_CODE_IN, read_sftp_connection_signal, (void *) connection, bevent, NULL)) {
+	if (add_bevent_beventloop(bevent)==0) {
 
-	    logoutput_info("add_sftp_connection_eventloop: added %i to eventloop", bevent->fd);
+	    logoutput_info("add_sftp_connection_eventloop: added %i to eventloop", get_bevent_unix_fd(bevent));
+	    result=0;
 
 	} else {
 
-	    logoutput_warning("add_sftp_connection_eventloop: failed to add %i to eventloop", bevent->fd);
-	    result=-1;
+	    logoutput_warning("add_sftp_connection_eventloop: failed to add %i to eventloop", get_bevent_unix_fd(bevent));
 
 	}
 
@@ -236,9 +236,14 @@ void remove_sftp_connection_eventloop(struct sftp_connection_s *connection)
 
     if (connection->flags & SFTP_CONNECTION_FLAG_STD) {
 	struct fs_connection_s *fsc=&connection->type.std.stdin;
-	struct bevent_s *bevent=&fsc->io.socket.bevent;
+	struct bevent_s *bevent=fsc->io.socket.bevent;
 
-	remove_bevent_from_beventloop(bevent);
+	if (bevent) {
+
+	    remove_bevent(bevent);
+	    fsc->io.socket.bevent=NULL;
+
+	}
 
     }
 

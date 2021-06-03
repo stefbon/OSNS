@@ -55,6 +55,36 @@
 
 extern const char *dotdotname;
 extern const char *dotname;
+static struct list_header_s workspaces=INIT_LIST_HEADER;
+static pthread_mutex_t workspaces_mutex=PTHREAD_MUTEX_INITIALIZER;
+
+int lock_workspaces()
+{
+    return pthread_mutex_lock(&workspaces_mutex);
+}
+
+int unlock_workspaces()
+{
+    return pthread_mutex_unlock(&workspaces_mutex);
+}
+
+struct workspace_mount_s *get_next_workspace_mount(struct workspace_mount_s *w)
+{
+    struct list_element_s *list=NULL;
+
+    if (w) {
+
+	list=&w->list_g;
+	list=get_next_element(list);
+
+    } else {
+
+	list=get_list_head(&workspaces, 0);
+
+    }
+
+    return ((list) ? (struct workspace_mount_s *) ((char *) list - offsetof(struct workspace_mount_s, list_g)) : NULL);
+}
 
 struct inode_2delete_s {
     ino_t				ino;
@@ -83,35 +113,13 @@ void clear_workspace_mount(struct workspace_mount_s *workspace)
     logoutput("clear_workspace_mount: mountpoint %s", workspace->mountpoint.path);
 
     if (directory) {
-	struct service_context_s *context=get_workspace_context(workspace);
+	struct service_context_s *context=get_root_context_workspace(workspace);
 
 	clear_directory_recursive(&context->interface, directory);
 	free_directory(directory);
 
     }
 
-}
-
-
-static void _add_service_context(struct workspace_mount_s *workspace, struct list_element_s *l)
-{
-    pthread_mutex_lock(&workspace->mutex);
-    add_list_element_last(&workspace->contexes, l);
-    pthread_mutex_unlock(&workspace->mutex);
-}
-
-static void _remove_service_context(struct list_element_s *l)
-{
-    struct list_header_s *h=l->h;
-
-    if (h) {
-	struct workspace_mount_s *workspace=(struct workspace_mount_s *)((char *) h - offsetof(struct workspace_mount_s, contexes));
-
-	pthread_mutex_lock(&workspace->mutex);
-	remove_list_element(l);
-	pthread_mutex_unlock(&workspace->mutex);
-
-    }
 }
 
 static void init_workspace_inodes(struct workspace_mount_s *workspace)
@@ -186,10 +194,26 @@ static void free_workspace_inodes(struct workspace_mount_s *workspace)
 
 void free_workspace_mount(struct workspace_mount_s *workspace)
 {
+    remove_list_element(&workspace->list_g);
     free_workspace_inodes(workspace);
     free_path_pathinfo(&workspace->mountpoint);
     pthread_mutex_destroy(&workspace->mutex);
     free(workspace);
+}
+
+static void mountevent_dummy(struct workspace_mount_s *workspace, unsigned char event)
+{
+
+    if (event==WORKSPACE_MOUNT_EVENT_MOUNT || event==WORKSPACE_MOUNT_EVENT_UMOUNT) {
+
+	logoutput_info("mountevent_dummy: workspace %.*s %smounted", workspace->mountpoint.len, workspace->mountpoint.path, (event==WORKSPACE_MOUNT_EVENT_UMOUNT) ? "u" : "");
+
+    } else {
+
+	logoutput_warning("mountevent_dummy: received unknown mount event code %i", event);
+
+    }
+
 }
 
 int init_workspace_mount(struct workspace_mount_s *workspace, unsigned int *error)
@@ -211,14 +235,15 @@ int init_workspace_mount(struct workspace_mount_s *workspace, unsigned int *erro
 
     init_list_header(&workspace->contexes, SIMPLE_LIST_TYPE_EMPTY, NULL);
     init_list_element(&workspace->list, NULL);
-    workspace->add_context=_add_service_context;
-    workspace->remove_context=_remove_service_context;
+    init_list_element(&workspace->list_g, NULL);
+    workspace->mountevent=mountevent_dummy;
     workspace->free=free_workspace_mount;
 
     pthread_mutex_init(&workspace->mutex, NULL);
     workspace->pathmax=512;
 
     init_workspace_inodes(workspace);
+    add_list_element_last(&workspaces, &workspace->list_g);
 
     return 0;
 
@@ -234,7 +259,7 @@ static void notify_VFS_inode_delete(struct workspace_mount_s *workspace, struct 
     struct list_element_s *list=get_list_head(&workspace->contexes, 0);
 
     if (list) {
-	struct service_context_s *context=(struct service_context_s *)(((char *)list) - offsetof(struct service_context_s, list));
+	struct service_context_s *context=(struct service_context_s *)(((char *)list) - offsetof(struct service_context_s, wlist));
 	struct entry_s *entry=inode->alias;
 	struct name_s name={NULL, 0, 0};
 	ino_t pino=0;
@@ -359,7 +384,7 @@ void add_inode_context(struct service_context_s *context, struct inode_s *inode)
 {
     struct entry_s *parent=get_parent_entry(inode->alias);
     struct inode_s *pinode=parent->inode;
-    struct workspace_mount_s *workspace=context->workspace;
+    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
 
     add_inode_workspace_hashtable(workspace, inode);
     (* pinode->fs->type.dir.use_fs)(context, inode);
@@ -396,7 +421,7 @@ static void inode_2delete_thread(void *ptr)
 
     if (inode) {
         struct entry_s *entry=inode->alias;
-        struct directory_s *directory=(entry) ? get_directory_entry(entry) : NULL;
+        struct directory_s *directory=get_upper_directory_entry(entry);
 
         if (i2d->flags & FORGET_INODE_FLAG_FORGET) {
 
@@ -442,22 +467,32 @@ static void inode_2delete_thread(void *ptr)
 
         if (inode->nlookup==0) {
 
-            logoutput("inode_2delete_thread: remove inode ino %lli name %s", i2d->ino, (entry) ? entry->name.name : "-UNKNOWN-");
-	    remove_inode_workspace_hashtable(workspace, inode);
+	    if (check_service_path_fs(inode)) {
 
-            /* call the inode specific forget which will also release the attached data */
+		/* only delete here when on a service related fs: like inodes on a sftp shared directory */
 
-            (* inode->fs->forget)(inode);
+        	logoutput("inode_2delete_thread: remove inode ino %lli name %s", i2d->ino, (entry) ? entry->name.name : "-UNKNOWN-");
+		remove_inode_workspace_hashtable(workspace, inode);
 
-	    if (entry) {
+        	/* call the inode specific forget which will also release the attached data */
 
-            	entry->inode=NULL;
-            	inode->alias=NULL;
-            	destroy_entry(entry);
+        	(* inode->fs->forget)(inode);
+
+		if (entry) {
+
+            	    entry->inode=NULL;
+            	    inode->alias=NULL;
+            	    destroy_entry(entry);
+
+		}
+
+        	free_inode(inode);
+
+	    } else {
+
+		logoutput("inode_2delete_thread: inode ino %lli name %s nlookup zero", i2d->ino, (entry) ? entry->name.name : "-UNKNOWN-");
 
 	    }
-
-            free_inode(inode);
 
         }
 
@@ -496,4 +531,9 @@ void queue_inode_2forget(struct workspace_mount_s *workspace, ino_t ino, unsigne
 
     }
 
+}
+
+void init_workspaces_once()
+{
+    init_list_header(&workspaces, SIMPLE_LIST_TYPE_EMPTY, 0);
 }

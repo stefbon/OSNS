@@ -69,7 +69,7 @@ int send_userauth_none_request(struct ssh_connection_s *connection, struct ssh_s
     /* send with the client username since the username used to connect is not known here
 	this username will follow after pubkey when the different pubkeys/user are offered */
 
-    if (send_userauth_none_message(connection, &auth->c_username, service, &seq)==0) {
+    if (send_userauth_none_message(connection, &auth->c_username, service, &seq)>0) {
 	struct ssh_payload_s *payload=NULL;
 
 	payload=receive_message_common(connection, select_userauth_reply, NULL, NULL);

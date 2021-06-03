@@ -303,13 +303,13 @@ struct notifywatch_s *lookup_watch(struct pathinfo_s *pathinfo)
     struct list_element_s *list=NULL;
 
     pthread_mutex_lock(&list_watches.mutex);
-    list=list_watches.header.head;
+    list=get_list_head(&list_watches.header, 0);
 
     while (list) {
 
 	watch=get_container_watch(list);
 	if (strcmp(pathinfo->path, watch->pathinfo.path)==0) break;
-	list=list->n;
+	list=get_next_element(list);
 	watch=NULL;
 
     }
@@ -460,7 +460,7 @@ void remove_list_watches()
 
     pthread_mutex_lock(&list_watches.mutex);
 
-    list=list_watches.header.head;
+    list=get_list_head(&list_watches.header, SIMPLE_LIST_FLAG_REMOVE);
 
     while (list) {
 
@@ -476,7 +476,7 @@ void remove_list_watches()
 	free_path_pathinfo(&watch->pathinfo);
 	free(watch);
 
-	list=list_watches.header.head;
+	list=get_list_head(&list_watches.header, SIMPLE_LIST_FLAG_REMOVE);
 
     }
 

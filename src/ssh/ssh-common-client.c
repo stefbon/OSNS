@@ -105,11 +105,16 @@ unsigned int get_ssh_session_buffer_size()
 
 int init_ssh_session_client(struct ssh_session_s *session, uid_t uid, void *ctx)
 {
+    logoutput("_init_ssh_session: init user uid %i", (unsigned int) uid);
 
     if (init_ssh_backend()==-1) goto error;
 
+    logoutput("_init_ssh_session: A");
+
     init_ssh_session(session, uid, ctx);
+    logoutput("_init_ssh_session: B");
     init_ssh_session_signals_client(&session->context);
+    logoutput("_init_ssh_session: C");
 
     if (init_ssh_identity_client(session, uid)==-1) {
 

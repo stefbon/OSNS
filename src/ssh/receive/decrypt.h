@@ -17,8 +17,8 @@
 
 */
 
-#ifndef FS_WORKSPACE_SSH_RECEIVE_DECRYPT_H
-#define FS_WORKSPACE_SSH_RECEIVE_DECRYPT_H
+#ifndef _SSH_RECEIVE_DECRYPT_H
+#define _SSH_RECEIVE_DECRYPT_H
 
 struct decrypt_ops_s *get_decrypt_ops_container(struct list_element_s *list);
 void add_decrypt_ops(struct decrypt_ops_s *ops);
@@ -28,5 +28,7 @@ void reset_decrypt(struct ssh_connection_s *connection, struct algo_list_s *algo
 
 unsigned int build_cipher_list_s2c(struct ssh_connection_s *connection, struct algo_list_s *alist, unsigned int start);
 unsigned int build_hmac_list_s2c(struct ssh_connection_s *connection, struct algo_list_s *alist, unsigned int start);
+
+void init_decrypt_once();
 
 #endif

@@ -303,7 +303,7 @@ unsigned int read_private_pwlist(struct ssh_connection_s *connection, struct pw_
 
     credhostname:
 
-    fd=connection->connection.io.socket.bevent.fd;
+    fd=get_bevent_unix_fd(connection->connection.io.socket.bevent);
     if (fd>0) hostname=get_connection_hostname(&connection->connection, fd, 1, NULL);
 
     if (hostname) {
@@ -391,7 +391,7 @@ unsigned int read_private_pwlist(struct ssh_connection_s *connection, struct pw_
 
     credipv4:
 
-    fd=connection->connection.io.socket.bevent.fd;
+    fd=get_bevent_unix_fd(connection->connection.io.socket.bevent);
     if (fd>0) ipv4=get_connection_ipv4(&connection->connection, fd, 1, NULL);
 
     if (ipv4) {

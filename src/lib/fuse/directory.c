@@ -44,7 +44,6 @@
 #include "directory.h"
 
 extern struct directory_s *get_dummy_directory();
-extern void fs_get_inode_link(struct inode_s *inode, struct inode_link_s **link);
 
 /* callbacks for the skiplist
     compare two elements to determine the right order */
@@ -107,7 +106,7 @@ static char *get_logname(struct list_element_s *l)
     return entry->name.name;
 }
 
-struct directory_s *get_directory_entry(struct entry_s *entry)
+struct directory_s *get_upper_directory_entry(struct entry_s *entry)
 {
     struct list_header_s *h=entry->list.h;
 
@@ -122,7 +121,7 @@ struct directory_s *get_directory_entry(struct entry_s *entry)
 
 struct entry_s *get_parent_entry(struct entry_s *entry)
 {
-    struct directory_s *directory=get_directory_entry(entry);
+    struct directory_s *directory=get_upper_directory_entry(entry);
     struct inode_s *inode=(directory) ? directory->inode : NULL;
     return ((inode) ? inode->alias : NULL);
 }
@@ -206,7 +205,7 @@ int init_directory(struct directory_s *directory, unsigned char maxlanes)
     directory->dops=NULL;
     directory->link.type=0;
     directory->link.link.ptr=NULL;
-    set_directory_pathcache(directory, "default", NULL, NULL);
+    set_directory_getpath(directory);
 
     if (directory->size>0) {
 	struct sl_skiplist_s *sl=(struct sl_skiplist_s *) directory->buffer;
@@ -229,7 +228,7 @@ struct directory_s *get_directory_dump(struct inode_s *inode)
 
 void set_directory_dump(struct inode_s *inode, struct directory_s *d)
 {
-    inode->link.type=INODE_LINK_TYPE_DIRECTORY;
+    inode->link.type=DATA_LINK_TYPE_DIRECTORY;
     inode->link.link.ptr=(void *) d;
 }
 

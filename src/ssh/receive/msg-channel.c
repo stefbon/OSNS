@@ -139,7 +139,7 @@ static void receive_msg_channel_open(struct ssh_connection_s *connection, struct
 
     }
 
-    if (send_channel_open_confirmation(channel, NULL, &seq)==0) {
+    if (send_channel_open_confirmation(channel, NULL, &seq)>0) {
 
 	logoutput("receive_msg_channel_open: send open confirmation (%s %i:%i)", channel->name, channel->local_channel, channel->remote_channel);
 	result=0;
@@ -157,7 +157,7 @@ static void receive_msg_channel_open(struct ssh_connection_s *connection, struct
 
 	if (type.len>0) {
 
-	    if (send_channel_open_failure(connection, senderchannel, SSH_OPEN_UNKNOWN_CHANNEL_TYPE, &seq)==0) {
+	    if (send_channel_open_failure(connection, senderchannel, SSH_OPEN_UNKNOWN_CHANNEL_TYPE, &seq)>0) {
 
 		logoutput("receive_msg_open: send a channel open failure message");
 
@@ -508,7 +508,7 @@ static void receive_msg_channel_close(struct ssh_connection_s *connection, struc
     if (payload) free_payload(&payload);
 }
 
-static void receive_msg_channel_request(struct ssh_connection_s *connection, struct ssh_payload_s *payload)
+static void receive_msg_channel_request_s(struct ssh_connection_s *connection, struct ssh_payload_s *payload)
 {
 
     if (payload->len>10) {
@@ -529,8 +529,6 @@ static void receive_msg_channel_request(struct ssh_connection_s *connection, str
 
 	    /* make sure the relevant data is at start of buffer */
 
-	    // logoutput_base64encoded("receive_msg_channel_data", &payload->buffer[pos], len);
-
 	    memmove(payload->buffer, &payload->buffer[pos], len);
 	    memset(&payload->buffer[len], 0, payload->len - len);
 
@@ -541,6 +539,44 @@ static void receive_msg_channel_request(struct ssh_connection_s *connection, str
 	    channeltable_readlock(table, &rlock);
 	    channel=lookup_session_channel_for_data(table, local_channel, &payload);
 	    channeltable_unlock(table, &rlock);
+
+	} else {
+	    int fd=-1;
+
+	    if (connection->connection.io.socket.bevent) fd=get_bevent_unix_fd(connection->connection.io.socket.bevent);
+
+	    logoutput("receive_msg_channel_request_s: ssh fd %i received invalid message local channel %i", fd, local_channel);
+
+	}
+
+    }
+
+    free_payload(&payload);
+}
+
+static void receive_msg_channel_request_c(struct ssh_connection_s *connection, struct ssh_payload_s *payload)
+{
+
+    if (payload->len>10) {
+	unsigned int local_channel=0;
+	unsigned int len=0;
+	unsigned int pos=1;
+	int fd=-1;
+
+	local_channel=get_uint32(&payload->buffer[pos]);
+	pos+=4;
+	len=get_uint32(&payload->buffer[pos]);
+	pos+=4;
+
+	if (connection->connection.io.socket.bevent) fd=get_bevent_unix_fd(connection->connection.io.socket.bevent);
+
+	if (len + pos <= payload->len) {
+
+	    logoutput("receive_msg_channel_request_c: ssh fd %i received request %.*s local channel %i", fd, len, &payload->buffer[pos], local_channel);
+
+	} else {
+
+	    logoutput("receive_msg_channel_request_c: ssh fd %i received invalid message local channel %i", fd, local_channel);
 
 	}
 
@@ -601,12 +637,13 @@ void register_channel_cb(struct ssh_connection_s *c, unsigned char enable)
 
 	    /* requests like start a shell, exec, subsystem, window-change, signal */
 
-	    register_msg_cb(c, SSH_MSG_CHANNEL_REQUEST, receive_msg_channel_request);
+	    register_msg_cb(c, SSH_MSG_CHANNEL_REQUEST, receive_msg_channel_request_s);
 
 	} else {
 
 	    register_msg_cb(c, SSH_MSG_CHANNEL_OPEN_CONFIRMATION, receive_msg_channel_open_confirmation);
 	    register_msg_cb(c, SSH_MSG_CHANNEL_OPEN_FAILURE, receive_msg_channel_open_failure);
+	    register_msg_cb(c, SSH_MSG_CHANNEL_REQUEST, receive_msg_channel_request_c);
 
 	}
 

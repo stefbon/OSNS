@@ -245,7 +245,7 @@ void close_user_monitor()
     monitor=NULL;
 }
 
-int read_user_monitor_event(int fd, void *data, uint32_t event)
+void read_user_monitor_event(int fd, void *data, struct event_s *event)
 {
     struct _login_uids_s new = {.uid=NULL, .len=0};
     int result=0;
@@ -291,6 +291,8 @@ int read_user_monitor_event(int fd, void *data, uint32_t event)
     if (monitor_flags & _MONITOR_FLAG_CHANGED) goto process;
     monitor_flags &= ~_MONITOR_FLAG_THREAD;
     pthread_mutex_unlock(&monitor_mutex);
+
+    logoutput("read_user_monitor_event: finish");
 
     return 0;
 

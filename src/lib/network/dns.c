@@ -17,12 +17,36 @@
 
 */
 
-#ifndef FS_WORKSPACE_DISCOVER_AVAHI_H
-#define FS_WORKSPACE_DISCOVER_AVAHI_H
+#define _GNU_SOURCE
+#define _XOPEN_SOURCE 500
 
-// Prototypes
+#include <stdio.h>
+#include <stdlib.h>
+#include <stddef.h>
+#include <stdbool.h>
+#include <string.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <err.h>
+#include <sys/time.h>
+#include <ctype.h>
+#include <inttypes.h>
 
-void browse_services_avahi();
-void stop_browse_avahi();
+#include <sys/param.h>
+#include <sys/types.h>
 
-#endif
+#include "log.h"
+#include "utils.h"
+
+#include <gio/gio.h>
+
+char *lookupname_dns(char *ip)
+{
+    GInetAddress *a=g_inet_address_new_from_string((const gchar *) ip);
+    GResolver *resolver=g_resolver_get_default();
+    gchar *name=g_resolver_lookup_by_address(resolver, a, NULL, NULL);
+
+    return (char *) name;
+}
+

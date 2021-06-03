@@ -55,7 +55,7 @@
     and queue it
 */
 
-static int read_ssh_connection_socket(struct ssh_connection_s *connection, int fd, uint32_t events)
+static int read_ssh_connection_socket(struct ssh_connection_s *connection, int fd, struct event_s *event)
 {
     struct socket_ops_s *sops=connection->connection.io.socket.sops;
     struct ssh_receive_s *receive=&connection->receive;
@@ -147,29 +147,27 @@ static int read_ssh_connection_socket(struct ssh_connection_s *connection, int f
 
 }
 
-int read_ssh_connection_signal(int fd, void *ptr, uint32_t events)
+void read_ssh_connection_signal(int fd, void *ptr, struct event_s *event)
 {
     struct ssh_connection_s *connection=(struct ssh_connection_s *) ptr;
-    int result=0;
 
-    if (signal_is_error(events) || signal_is_hangup(events)) {
+    if (signal_is_error(event) || signal_is_close(event)) {
 
 	/* the remote side disconnected */
 
-        logoutput("read_ssh_connection_signal: event %i causes connection break", events);
+        logoutput("read_ssh_connection_signal: connection break (fd=%i)", fd);
         connection->flags |= SSH_CONNECTION_FLAG_TROUBLE;
 	start_thread_ssh_connection_problem(connection);
 
-    } else if (signal_is_dataavail(events)) {
+    } else if (signal_is_data(event)) {
 
-	result=read_ssh_connection_socket(connection, fd, events);
+	logoutput("read_ssh_connection_signal: data is available (fd=%i)", fd);
+	int result=read_ssh_connection_socket(connection, fd, event);
 
     } else {
 
-	logoutput_warning("read_ssh_connection_signal: event %i not reckognized", events);
+	logoutput_warning("read_ssh_connection_signal: event not reckognized (fd=%i) value events %i", fd, printf_event_uint(event));
 
     }
-
-    return result;
 
 }

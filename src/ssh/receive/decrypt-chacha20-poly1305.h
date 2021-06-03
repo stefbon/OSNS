@@ -17,8 +17,8 @@
 
 */
 
-#ifndef FS_WORKSPACE_SSH_RECEIVE_DECRYPT_CHACHA20_POLY1305_H
-#define FS_WORKSPACE_SSH_RECEIVE_DECRYPT_CHACHA20_POLY1305_H
+#ifndef _SSH_RECEIVE_DECRYPT_CHACHA20_POLY1305_H
+#define _SSH_RECEIVE_DECRYPT_CHACHA20_POLY1305_H
 
 void init_decrypt_chacha20_poly1305_openssh_com();
 void set_decrypt_chacha20_poly1305_openssh_com(struct ssh_decrypt_s *decrypt);

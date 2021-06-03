@@ -57,6 +57,7 @@
 
 #include "network.h"
 #include "sftp.h"
+#include "workspace-fs.h"
 
 #define _SFTP_NETWORK_NAME			"SFTP_Network"
 #define _SFTP_HOME_MAP				"home"
@@ -283,54 +284,41 @@ static int signal_context_ssh(struct context_interface_s *interface, const char 
     return (unsigned int) option->type;
 }
 
-/* connect to ssh server
-    at inode of virtual map */
-
-static struct service_context_s *connect_ssh_server(struct workspace_mount_s *workspace, struct host_address_s *host, struct service_address_s *service, struct inode_s *inode, struct interface_list_s *ilist)
+struct service_context_s *create_ssh_server_service_context(struct service_context_s *networkctx, struct interface_list_s *ilist, uint32_t unique)
 {
     struct service_context_s *context=NULL;
-    struct context_interface_s *interface=NULL;
-    int fd=-1;
+    struct workspace_mount_s *workspace=get_workspace_mount_ctx(networkctx);
 
-    context=create_service_context(workspace, get_workspace_context(workspace), ilist, SERVICE_CTX_TYPE_CONNECTION, NULL);
-    if (context==NULL) return NULL;
-    interface=&context->interface;
+    logoutput("create_ssh_server_service_context: (unique %i)", unique);
 
-    logoutput("connect_ssh_server: connect");
+    /* no parent yet */
 
-    fd=(* interface->connect)(workspace->user->pwd.pw_uid, interface, host, service);
-    if (fd<0) {
+    context=create_service_context(workspace, NULL, ilist, SERVICE_CTX_TYPE_BROWSE, NULL);
 
-	logoutput("connect_ssh_server: failed to connect");
-	goto error;
+    if (context) {
 
-    }
+	context->service.browse.type=SERVICE_BROWSE_TYPE_NETHOST;
+	context->service.browse.unique=unique;
+	context->flags |= (networkctx->flags & SERVICE_CTX_FLAGS_REMOTEBACKEND);
+	context->interface.signal_context=signal_context_ssh;
 
-    logoutput("connect_ssh_server: start");
-
-    if ((* interface->start)(interface, fd, NULL)==0) {
-
-	logoutput("connect_ssh_server: started ssh connection");
-	return context;
+	set_context_filesystem_workspace(context);
+	set_name_service_context(context);
 
     }
 
-    error:
-
-    remove_list_element(&context->list);
-    free_service_context(context);
-    return NULL;
+    return context;
 
 }
 
-static void get_remote_supported_services(struct service_context_s *context, struct inode_s *inode, struct interface_list_s *ailist, unsigned int count)
+unsigned int get_remote_services_ssh_server(struct service_context_s *context, unsigned int (* cb)(struct service_context_s *context, char *name, void *ptr), void *ptr)
 {
     struct context_interface_s *interface=&context->interface;
     struct ctx_option_s option;
     int size=0;
-    unsigned int cntr=0;
+    unsigned int count=0;
 
-    logoutput_info("get_remote_supported_services");
+    logoutput_info("get_remote_services_ssh_server");
 
     /* get a list with services supported by the ssh server */
 
@@ -344,353 +332,44 @@ static void get_remote_supported_services(struct service_context_s *context, str
 	char list[option.value.buffer.len + 2];
 	char *sep=NULL;
 	char *service=NULL;
-	unsigned int left=0;
+
+	/* make sure the comma seperated list is started by a comma and ends with one like:
+
+	    ,firstname,secondname,thirdname,fourthname,
+	    so walking and searching through this list is much easier */
 
 	memcpy(list, option.value.buffer.ptr, option.value.buffer.len);
 	list[option.value.buffer.len]=',';
 	list[option.value.buffer.len+1]='\0';
 	service=list;
-	left=strlen(list);
+	logoutput("get_remote_services_ssh_server: received %s", list);
 
 	findservice:
 
-	sep=memchr(service, ',', left);
+	sep=memchr(service, ',', strlen(service));
 
 	if (sep) {
 
 	    *sep='\0';
 	    logoutput("get_remote_supported_services: found %s", service);
 
-	    if (strncmp(service, "ssh-channel:", 12)==0) {
-		unsigned int pos=12;
-
-		if (strncmp(&service[pos], "sftp:", 5)==0) {
-
-		    pos+=5;
-		    add_shared_map_sftp(context, inode, service, ailist, count);
-		    cntr++;
-
-		}
-
-	    }
+	    if ((* cb)(context, service, ptr)) count++;
 
 	    *sep=',';
-	    left-=(sep - service);
 	    service=sep+1;
 	    goto findservice;
 
 	}
 
-    }
+	logoutput("get_remote_services_ssh_server: ready");
 
-    trydefault:
+    } else {
 
-    if (cntr==0) {
-
-	logoutput("get_remote_supported_services: no services found, try the default (home)");
-	add_shared_map_sftp(context, inode, _SFTP_DEFAULT_SERVICE, ailist, count);
+	logoutput("get_remote_services_ssh_server: nothing received");
 
     }
 
     (* option.free)(&option);
-
-}
-
-static int test_buffer_ip(char *hostname)
-{
-    if (check_family_ip_address(hostname, "ipv4")==1) return 0;
-    if (check_family_ip_address(hostname, "ipv6")==1) return 0;
-    return -1;
-}
-
-static struct entry_s *install_virtualnetwork_map(struct service_context_s *context, struct entry_s *parent, char *name, const char *what)
-{
-    struct entry_s *entry=NULL;
-    unsigned int error=0;
-    struct directory_s *directory01=get_directory(parent->inode);
-    struct simple_lock_s wlock01;
-
-    if (wlock_directory(directory01, &wlock01)==0) {
-	struct name_s xname;
-	struct directory_s *directory02=NULL;
-	struct simple_lock_s wlock02;
-	struct inode_s *inode=NULL;
-
-	xname.name=name;
-	xname.len=strlen(name);
-	calculate_nameindex(&xname);
-
-	entry=find_entry_batch(directory01, &xname, &error);
-
-	/* only install if not exists */
-
-	if (entry==NULL) {
-
-	    error=0;
-	    entry=create_network_map_entry(context, directory01, &xname, &error);
-
-	    if (entry) {
-
-		logoutput_info("install_virtualnetwork_map: created map %s", name);
-
-	    } else {
-
-		logoutput_warning("install_virtualnetwork_map: unable to create map %s", name);
-		unlock_directory(directory01, &wlock01);
-		goto out;
-
-	    }
-
-	} else {
-
-	    logoutput_info("install_virtualnetwork_map: map %s already exists", name);
-	    unlock_directory(directory01, &wlock01);
-	    goto out;
-
-	}
-
-	inode=entry->inode;
-	directory02=get_directory(inode);
-
-	if (wlock_directory(directory02, &wlock02)==0) {
-
-	    inode->nlookup=1;
-
-	    if (strcmp(what, "network")==0) {
-
-		if (fs_options.network.network_icon & (_OPTIONS_NETWORK_ICON_SHOW | _OPTIONS_NETWORK_ICON_OVERRULE))
-		    create_desktopentry_file("/etc/fs-workspace/desktopentry.network", entry, context->workspace);
-
-	    } else if (strcmp(what, "domain")==0) {
-
-		if (fs_options.network.domain_icon & (_OPTIONS_NETWORK_ICON_SHOW | _OPTIONS_NETWORK_ICON_OVERRULE))
-		    create_desktopentry_file("/etc/fs-workspace/desktopentry.netgroup", entry, context->workspace);
-
-	    } else if (strcmp(what, "server")==0) {
-		struct inode_link_s link;
-
-		/* attach the server context to the inode representing the ssh server */
-
-		link.type=INODE_LINK_TYPE_DATA;
-		link.link.ptr=(void *) context;
-		set_inode_link_directory(inode, &link);
-
-		if (fs_options.network.server_icon & (_OPTIONS_NETWORK_ICON_SHOW | _OPTIONS_NETWORK_ICON_OVERRULE))
-		    create_desktopentry_file("/etc/fs-workspace/desktopentry.netserver", entry, context->workspace);
-
-	    }
-
-	    unlock_directory(directory02, &wlock02);
-
-	}
-
-	unlock_directory(directory01, &wlock01);
-
-    }
-
-    out:
-    return entry;
-
-}
-
-/*
-    connect to ssh server and use the sftp subsystem to browse
-    - connect to the server and the home directory
-    - create a "server" entry with the name of the address
-    - rename this "server" entry to a more human readable name (unique??)
-    - add this entry to the SSH network map
-    note the directory of parent is already excl locked
-*/
-
-int install_ssh_server_context(struct workspace_mount_s *workspace, struct entry_s *parent, struct host_address_s *host, struct service_address_s *service, unsigned int *error)
-{
-    struct service_context_s *context=get_workspace_context(workspace);
-    struct context_interface_s *interface=NULL;
-    int result=-1;
-    struct host_address_s tmp;
-    struct interface_list_s *ilist=NULL;
-    struct ctx_option_s option;
-    char *domain=NULL;
-    unsigned int count=build_interface_ops_list(&context->interface, NULL, 0);
-    struct interface_list_s ailist[count + 1];
-
-    logoutput("install_ssh_server_context");
-
-    /* build the list with available interface ops
-	important here are of course the ops to setup a ssh server context and a sftp server context (=ssh channel) */
-
-    for (unsigned int i=0; i<count+1; i++) {
-
-	ailist[i].type=-1;
-	ailist[i].name=NULL;
-	ailist[i].ops=NULL;
-
-    }
-
-    count=build_interface_ops_list(&context->interface, ailist, 0);
-
-    /* look for the interface ops for a ssh session */
-
-    ilist=get_interface_ops(ailist, count+1, _INTERFACE_TYPE_SSH_SESSION);
-
-    if (ilist==NULL) {
-
-	*error=EINVAL;
-	return -1;
-
-    }
-
-    context=connect_ssh_server(workspace, host, service, NULL, ilist);
-    if (! context) return -1;
-    interface=&context->interface;
-
-    if ((fs_options.sftp.flags & _OPTIONS_SFTP_FLAG_SHOW_NETWORKNAME) && fs_options.sftp.network_name) {
-
-	struct entry_s *entry=install_virtualnetwork_map(context, parent, fs_options.sftp.network_name, "network");
-	if (entry) parent=entry;
-
-    }
-
-    init_host_address(&tmp);
-
-    /* get full name including domain */
-
-    init_ctx_option(&option, _CTX_OPTION_TYPE_BUFFER);
-
-    if ((* interface->signal_interface)(interface, "info:servername:", &option)>=0) {
-
-	if (option.type==_CTX_OPTION_TYPE_BUFFER && option.value.buffer.ptr && option.value.buffer.len>0) {
-
-	    if ((option.flags & _CTX_OPTION_FLAG_ERROR)==0) {
-
-		if (option.value.buffer.len < sizeof(tmp.hostname)) {
-
-		    memcpy(tmp.hostname, option.value.buffer.ptr, option.value.buffer.len);
-
-		} else {
-
-		    /* hostname too long */
-
-		    logoutput("install_ssh_server_context: servername from server too long (%i) ignoring", option.value.buffer.len);
-
-		}
-
-	    } else {
-
-		logoutput("install_ssh_server_context: received error %.*s", option.value.buffer.len, option.value.buffer.ptr);
-
-	    }
-
-	}
-
-    }
-
-    (* option.free)(&option);
-
-    if (strlen(tmp.hostname)==0) {
-
-	init_ctx_option(&option, _CTX_OPTION_TYPE_BUFFER);
-
-	if ((* interface->signal_interface)(interface, "info:fqdn:", &option)>=0) {
-
-	    if (option.type==_CTX_OPTION_TYPE_BUFFER && option.value.buffer.ptr && option.value.buffer.len>0) {
-
-		if ((option.flags & _CTX_OPTION_FLAG_ERROR)==0) {
-
-		    if (option.value.buffer.len < sizeof(tmp.hostname)) {
-
-			memcpy(tmp.hostname, option.value.buffer.ptr, option.value.buffer.len);
-
-		    } else {
-
-			/* hostname too long */
-
-			logoutput("install_ssh_server_context: hostname from server too long (%i) ignoring", option.value.buffer.len);
-
-		    }
-
-		}
-
-	    } else {
-
-		logoutput("install_ssh_server_context: received error %.*s", option.value.buffer.len, option.value.buffer.ptr);
-
-	    }
-
-	}
-
-    }
-
-    (* option.free)(&option);
-
-    /* if still not found try hostname from parameters */
-
-    if (strlen(tmp.hostname)==0) {
-
-	if (host->flags & HOST_ADDRESS_FLAG_HOSTNAME) {
-
-	    memcpy(tmp.hostname, host->hostname, sizeof(host->hostname));
-	    tmp.flags = HOST_ADDRESS_FLAG_HOSTNAME;
-
-	}
-
-    }
-
-    if (strlen(tmp.hostname)>0 && test_buffer_ip(tmp.hostname)==-1) {
-	char *sep=NULL;
-
-	tmp.flags |= HOST_ADDRESS_FLAG_HOSTNAME;
-
-	/* get rid of nasty characters */
-
-	replace_cntrl_char(tmp.hostname, strlen(tmp.hostname), REPLACE_CNTRL_FLAG_TEXT);
-	skip_trailing_spaces(tmp.hostname, strlen(tmp.hostname), SKIPSPACE_FLAG_REPLACEBYZERO);
-
-	/* look for the second name (seperated with a dot) */
-
-	sep=strchr(tmp.hostname, '.');
-
-	if (sep) {
-
-	    *sep='\0';
-	    domain=sep+1;
-	    logoutput("install_ssh_server_context: found domain %s", domain);
-
-	}
-
-    }
-
-    logoutput("install_ssh_server_context: found servername %s", tmp.hostname);
-
-    if ((fs_options.sftp.flags & _OPTIONS_SFTP_FLAG_SHOW_DOMAINNAME) && domain) {
-
-	struct entry_s *entry=install_virtualnetwork_map(context, parent, domain, "domain");
-	if (entry) parent=entry;
-
-    }
-
-    logoutput("install_ssh_server_context: install server map %s", tmp.hostname);
-
-    /* install the server map */
-
-    if (strlen(tmp.hostname)>0) {
-
-	struct entry_s *entry=install_virtualnetwork_map(context, parent, tmp.hostname, "server");
-	if (entry) {
-
-	    /* create sftp shared directories in server map */
-
-	    get_remote_supported_services(context, entry->inode, ailist, count+1);
-	    result=0;
-
-	}
-
-    }
-
-    out:
-    return result;
-
-    error:
-    return -1;
+    return count;
 
 }

@@ -17,8 +17,8 @@
 
 */
 
-#ifndef FS_WORKSPACE_SSH_RECEIVE_DECRYPT_GENERIC_H
-#define FS_WORKSPACE_SSH_RECEIVE_DECRYPT_GENERIC_H
+#ifndef _SSH_RECEIVE_DECRYPT_GENERIC_H
+#define _SSH_RECEIVE_DECRYPT_GENERIC_H
 
 void init_decrypt_generic();
 void set_decrypt_generic(struct ssh_decrypt_s *decrypt);

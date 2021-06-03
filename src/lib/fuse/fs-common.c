@@ -67,37 +67,33 @@ const struct name_s dotdotxname={"..", 2, 0};
 
 extern struct fs_options_s fs_options;
 
-/*
-    check an user has access to a path
-    do this by changing the fs uid/gid to those of the user,
-    and test access using the access call
-    note that this is not encouraged by the manpage of access (man 2 access)
-    cause it leaves a security hole
-*/
-
-int check_access_path(uid_t uid, gid_t gid, struct pathinfo_s *target, unsigned int *error)
+struct service_fs_s *get_service_context_fs(struct service_context_s *c)
 {
-    uid_t uid_keep=setfsuid(uid);
-    gid_t gid_keep=setfsgid(gid);
-    struct stat st;
-    int accessok=-1;
+    struct service_fs_s *fs=NULL;
 
-    logoutput_info("check access path: %s", target->path);
+    switch (c->type) {
 
-    if (stat(target->path, &st)==0 && S_ISDIR(st.st_mode) && access(target->path, R_OK | X_OK)==0) {
+	case SERVICE_CTX_TYPE_FILESYSTEM:
 
-	accessok=0;
+	    logoutput("get_service_context_fs: found filesystem ctx");
+	    fs=c->service.filesystem.fs;
+	    break;
 
-    } else {
+	case SERVICE_CTX_TYPE_BROWSE:
 
-	*error=errno;
+	    logoutput("get_service_context_fs: found browse ctx");
+	    fs=c->service.browse.fs;
+	    break;
+
+	case SERVICE_CTX_TYPE_WORKSPACE:
+
+	    logoutput("get_service_context_fs: found workspace ctx");
+	    fs=c->service.workspace.fs;
+	    break;
 
     }
 
-    uid_keep=setfsuid(uid_keep);
-    gid_keep=setfsgid(gid_keep);
-
-    return accessok;
+    return fs;
 
 }
 
@@ -232,7 +228,7 @@ void _fs_common_virtual_lookup(struct service_context_s *context, struct fuse_re
 
     if (entry) {
 	struct inode_s *inode=entry->inode;
-	struct inode_link_s *link=NULL;
+	struct data_link_s *link=NULL;
 
 	/* it's possible that the entry represents the root of a service
 	    in that case do a lookup of the '.' on the root of the service using the service specific fs calls
@@ -242,9 +238,9 @@ void _fs_common_virtual_lookup(struct service_context_s *context, struct fuse_re
 
 	logoutput("_fs_common_virtual_lookup: found entry %.*s ino %li nlookup %i", entry->name.len, entry->name.name, inode->st.st_ino, inode->nlookup);
 	inode->nlookup++;
-	fs_get_inode_link(inode, &link);
+	fs_get_data_link(inode, &link);
 
-	if (link->type==INODE_LINK_TYPE_CONTEXT) {
+	if (link->type==DATA_LINK_TYPE_CONTEXT) {
 	    struct service_context_s *service_context=(struct service_context_s *) link->link.ptr;
 	    struct pathinfo_s pathinfo=PATHINFO_INIT;
 	    unsigned int pathlen=0;
@@ -331,13 +327,7 @@ void _fs_common_virtual_opendir(struct fuse_opendir_s *opendir, struct fuse_requ
     logoutput("_fs_common_virtual_opendir: ino %li", opendir->inode->st.st_ino);
     directory=get_directory(opendir->inode);
 
-    if (directory && get_directory_count(directory)>0) {
-	struct sl_skiplist_s *sl=(struct sl_skiplist_s *) directory->buffer;
-
-	opendir->flags |= _FUSE_OPENDIR_FLAG_NONEMPTY;
-	opendir->handle.ptr = (void *) sl->header.head;
-
-    }
+    if (directory && get_directory_count(directory)>0) opendir->flags |= _FUSE_OPENDIR_FLAG_NONEMPTY;
 
     open_out.fh=(uint64_t) opendir;
     open_out.open_flags=0;
@@ -346,16 +336,21 @@ void _fs_common_virtual_opendir(struct fuse_opendir_s *opendir, struct fuse_requ
     opendir->flags |= (_FUSE_OPENDIR_FLAG_IGNORE_XDEV_SYMLINKS | _FUSE_OPENDIR_FLAG_IGNORE_BROKEN_SYMLINKS) ; /* sane flags */
     if (fs_options.sftp.hideflags & _OPTIONS_SFTP_HIDE_FLAG_DOTFILE) opendir->flags |= _FUSE_OPENDIR_FLAG_HIDE_DOTFILES;
 
+    queue_fuse_direntries_virtual(opendir);
+    finish_get_fuse_direntry(opendir);
+
 }
 
-struct entry_s *get_fuse_direntry_virtual(struct fuse_opendir_s *opendir, struct fuse_request_s *request)
+struct entry_s *get_fuse_direntry_virtual(struct fuse_opendir_s *opendir, struct list_header_s *h, struct fuse_request_s *request)
 {
     struct entry_s *entry=NULL;
+    struct directory_s *directory=get_directory(opendir->inode);
     struct list_element_s *list=(struct list_element_s *) opendir->handle.ptr;
 
     while (list) {
 
 	entry=(struct entry_s *) ((char *) list - offsetof(struct entry_s, list));
+	memcpy(&entry->inode->stim, &directory->synctime, sizeof (struct timespec));
 
 	if ((* opendir->hidefile)(opendir, entry)==1) {
 
@@ -377,6 +372,7 @@ struct entry_s *get_fuse_direntry_virtual(struct fuse_opendir_s *opendir, struct
 static void _fs_common_virtual_readdir_common(struct fuse_opendir_s *opendir, struct fuse_request_s *request, size_t size, off_t offset, unsigned char plus)
 {
     struct service_context_s *context=opendir->context;
+    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
     struct directory_s *directory=NULL;
     struct name_s *xname=NULL;
     struct inode_s *inode=NULL;
@@ -385,8 +381,13 @@ static void _fs_common_virtual_readdir_common(struct fuse_opendir_s *opendir, st
     struct direntry_buffer_s direntries;
     unsigned int error=0;
     struct simple_lock_s rlock;
+    uint64_t ino2keep=0;
+
+    logoutput("_fs_common_virtual_readdir_common: size %i off %i", (unsigned int) size, (unsigned int) offset);
+    directory=get_directory(opendir->inode);
 
     if (opendir->flags & _FUSE_OPENDIR_FLAG_READDIR_FINISH) {
+
 	char dummy='\0';
 
 	logoutput("_fs_common_virtual_readdir_common: finish");
@@ -394,9 +395,6 @@ static void _fs_common_virtual_readdir_common(struct fuse_opendir_s *opendir, st
 	return;
 
     }
-
-    logoutput("_fs_common_virtual_readdir_common: size %i off %i", (unsigned int) size, (unsigned int) offset);
-    directory=get_directory(opendir->inode);
 
     if (rlock_directory(directory, &rlock)==-1) {
 
@@ -432,7 +430,8 @@ static void _fs_common_virtual_readdir_common(struct fuse_opendir_s *opendir, st
 
     	    /* the . entry */
 
-	    xname=&dotxname;
+	    xname=(struct name_s *) &dotxname;
+	    ino2keep=0;
 
     	} else if (direntries.offset==1) {
     	    struct directory_s *directory=NULL;
@@ -441,15 +440,16 @@ static void _fs_common_virtual_readdir_common(struct fuse_opendir_s *opendir, st
 
 	    /* the .. entry */
 
-	    directory=get_directory_entry(inode->alias);
+	    directory=get_directory(inode);
 	    if (directory) inode=directory->inode;
-	    xname=&dotdotxname;
+	    xname=(struct name_s *) &dotdotxname;
+	    ino2keep=0;
 
     	} else {
 
 	    if (opendir->ino>0) {
 
-		inode=lookup_workspace_inode(context->workspace, opendir->ino);
+		inode=lookup_workspace_inode(workspace, opendir->ino);
 		opendir->ino=0;
 		if (inode) entry=inode->alias;
 
@@ -459,36 +459,35 @@ static void _fs_common_virtual_readdir_common(struct fuse_opendir_s *opendir, st
 
 	    if (entry==NULL) {
 
-		if ((entry=(* opendir->get_fuse_direntry)(opendir, request))==NULL) {
-
-		    set_flag_fuse_opendir(opendir, _FUSE_OPENDIR_FLAG_READDIR_FINISH);
-		    break;
-
-		}
-
+		if ((entry=_fs_service_get_fuse_direntry(opendir, request))==NULL) break;
 		inode=entry->inode;
+		memcpy(&inode->stim, &directory->synctime, sizeof (struct timespec));
 
 	    }
 
 	    xname=&entry->name;
+	    ino2keep=inode->st.st_ino;
 
 	}
-
-	logoutput("_fs_common_virtual_readdir_common: add %.*s", xname->len, xname->name);
 
 	/* add entry to the buffer to send to VFS: does it fit, if no keep the ino for adding later next batch */
 
 	if ((* opendir->add_direntry_buffer)(request->ptr, &direntries, xname, &inode->st)==-1) {
 
-	    opendir->ino=inode->st.st_ino; /* keep it for the next batch */
+	    logoutput("_fs_common_virtual_readdir_common: %.*s does not fit in buffer", xname->len, xname->name);
+
+	    opendir->ino=ino2keep; /* keep it for the next batch */
 	    break;
 
 	}
+
+	logoutput("_fs_common_virtual_readdir_common: add %.*s", xname->len, xname->name);
 
     }
 
     unlock_directory(directory, &rlock);
     reply_VFS_data(request, direntries.data, (size_t) (direntries.pos - direntries.data));
+    if (opendir->flags & _FUSE_OPENDIR_FLAG_QUEUE_READY) opendir->flags |= _FUSE_OPENDIR_FLAG_READDIR_FINISH;
 
 }
 
@@ -516,7 +515,7 @@ void _fs_common_virtual_fsyncdir(struct fuse_opendir_s *opendir, struct fuse_req
 
 struct entry_s *_fs_common_create_entry(struct workspace_mount_s *workspace, struct entry_s *parent, struct name_s *xname, struct stat *st, unsigned int size, unsigned int flags, unsigned int *error)
 {
-    struct service_context_s *context=get_workspace_context(workspace);
+    struct service_context_s *context=get_root_context_workspace(workspace);
     struct create_entry_s ce;
     unsigned int dummy=0;
 
@@ -529,7 +528,7 @@ struct entry_s *_fs_common_create_entry(struct workspace_mount_s *workspace, str
 
 struct entry_s *_fs_common_create_entry_unlocked(struct workspace_mount_s *workspace, struct directory_s *directory, struct name_s *xname, struct stat *st, unsigned int size, unsigned int flags, unsigned int *error)
 {
-    struct service_context_s *context=get_workspace_context(workspace);
+    struct service_context_s *context=get_root_context_workspace(workspace);
     struct create_entry_s ce;
     unsigned int dummy=0;
 
@@ -543,6 +542,7 @@ struct entry_s *_fs_common_create_entry_unlocked(struct workspace_mount_s *works
 void _fs_common_statfs(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, uint64_t blocks, uint64_t bfree, uint64_t bavail, uint32_t bsize)
 {
     struct fuse_statfs_out statfs_out;
+    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
 
     /*
 	howto determine these values ??
@@ -556,7 +556,7 @@ void _fs_common_statfs(struct service_context_s *context, struct fuse_request_s 
     statfs_out.st.bavail=bavail;
     statfs_out.st.bsize=bsize;
 
-    statfs_out.st.files=(uint64_t) context->workspace->inodes.nrinodes;
+    statfs_out.st.files=(uint64_t) workspace->inodes.nrinodes;
     statfs_out.st.ffree=(uint64_t) (UINT32_T_MAX - statfs_out.st.files);
 
     statfs_out.st.namelen=255; /* a sane default */
@@ -572,8 +572,9 @@ void _fs_common_statfs(struct service_context_s *context, struct fuse_request_s 
 
 int symlink_generic_validate(struct service_context_s *context, char *target)
 {
+    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
     unsigned int len=strlen(target);
-    struct pathinfo_s *mountpoint=&context->workspace->mountpoint;
+    struct pathinfo_s *mountpoint=&workspace->mountpoint;
 
     if (len>mountpoint->len) {
 
@@ -582,20 +583,21 @@ int symlink_generic_validate(struct service_context_s *context, char *target)
 	    struct directory_s *directory=get_directory(context->service.filesystem.inode);
 
 	    if (directory) {
+		struct pathinfo_s pathinfo=PATHINFO_INIT;
 		char *pos=&target[mountpoint->len];
-		unsigned int pathlen=get_pathmax(context->workspace);
-		char path[pathlen + 1];
-		struct fuse_path_s fpath;
+		unsigned int pathlen=get_pathmax(workspace);
+		char buffer[sizeof(struct fuse_path_s) + pathlen + 1];
+		struct fuse_path_s *fpath=(struct fuse_path_s *) buffer;
 		unsigned int len_s=0;
 
 		/* get the path of the directory representing this context (relative to the mountpoint) */
 
-		init_fuse_path(&fpath, path, pathlen);
-		len_s+=(* directory->pathcache->get_path)(directory, &fpath);
+		init_fuse_path(fpath, pathlen);
+		len_s+=get_path_root(directory, fpath);
 
 		if (len > mountpoint->len + len_s) {
 
-		    if (strncmp(pos, fpath.pathstart, len_s)==0 && target[mountpoint->len + len_s]=='/') {
+		    if (strncmp(pos, fpath->pathstart, len_s)==0 && target[mountpoint->len + len_s]=='/') {
 
 			/* absolute symlink is pointing to object in this context */
 
@@ -612,5 +614,30 @@ int symlink_generic_validate(struct service_context_s *context, char *target)
     }
 
     return 0;
+
+}
+
+void use_service_fs(struct service_context_s *context, struct inode_s *inode)
+{
+
+    logoutput("use_service_fs: context %s ino %li", context->name, inode->st.st_ino);
+
+    if (context->type==SERVICE_CTX_TYPE_WORKSPACE) {
+
+	use_browse_fs(inode);
+
+    } else if (context->type==SERVICE_CTX_TYPE_BROWSE) {
+
+	use_browse_fs(inode);
+
+    } else if (context->type==SERVICE_CTX_TYPE_FILESYSTEM) {
+
+	use_service_path_fs(inode);
+
+    } else {
+
+	use_virtual_fs(inode);
+
+    }
 
 }

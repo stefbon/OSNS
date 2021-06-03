@@ -27,47 +27,53 @@
 #define SIMPLE_LIST_TYPE_ONE			3
 
 #define SIMPLE_LIST_FLAG_REMOVE			1
+#define SIMPLE_LIST_FLAG_INIT			2
 
-#define SIMPLE_LIST_LOCK_READ			1
-#define SIMPLE_LIST_LOCK_PREWRITE		2
-#define SIMPLE_LIST_LOCK_WRITE			4
+#define SIMPLE_LIST_LOCK_PREWRITE		1
+#define SIMPLE_LIST_LOCK_WRITE			2
+#define SIMPLE_LIST_LOCK_READ			4
 
 struct list_element_s;
 struct list_header_s;
 
 struct element_ops_s {
-    void 			(* delete)(struct list_element_s *e);
-    void			(* insert_after)(struct list_element_s *a, struct list_element_s *e);
-    void			(* insert_before)(struct list_element_s *b, struct list_element_s *e);
+    struct list_element_s	*(* get_element)(struct list_element_s *e);
 };
 
+extern struct list_element_s *get_element_default(struct list_element_s *e);
+
 struct header_ops_s {
-    void			(* insert_after)(struct list_element_s *a, struct list_element_s *e);
-    void			(* insert_before)(struct list_element_s *b, struct list_element_s *e);
-    void 			(* delete)(struct list_element_s *element);
+    void			(* insert_after)(struct list_header_s *h, struct list_element_s *a, struct list_element_s *e);
+    void			(* insert_before)(struct list_header_s *h, struct list_element_s *b, struct list_element_s *e);
+    void 			(* delete)(struct list_header_s *h, struct list_element_s *e);
+};
+
+struct list_lock_s {
+    unsigned int		value;
+    pthread_t			threadidw;
+    pthread_t			threadidpw;
 };
 
 struct list_element_s {
     struct list_header_s	*h;
     struct list_element_s 	*n;
     struct list_element_s 	*p;
-    unsigned int		count;
     struct element_ops_s	ops;
+    struct list_lock_s		lock;
 };
 
 struct list_header_s {
+    unsigned int		flags;
     uint64_t			count;
-    unsigned char		lock;
+    struct list_lock_s		lock;
     unsigned int		readers;
-    struct list_element_s 	*head;
-    struct list_element_s 	*tail;
+    struct list_element_s 	head;
+    struct list_element_s 	tail;
     struct header_ops_s		*ops;
-    char			*name;
 };
 
-extern struct header_ops_s empty_header_ops;
-
-#define				INIT_LIST_HEADER		{ 0, 0, 0, NULL, NULL, &empty_header_ops, NULL }
+#define				INIT_LIST_ELEMENT		{.h=NULL, .n=NULL, .p=NULL, .ops.get_element=get_element_default, .lock.value=0, .lock.threadidw=0, .lock.threadidpw=0}
+#define				INIT_LIST_HEADER		{.flags=0, .count=0, .lock.value=0, .lock.threadidw=0, .lock.threadidpw=0, .readers=0, .head=INIT_LIST_ELEMENT, .tail=INIT_LIST_ELEMENT, .ops=NULL}
 
 void init_list_element(struct list_element_s *e, struct list_header_s *h);
 void init_list_header(struct list_header_s *h, unsigned char type, struct list_element_s *e);

@@ -17,8 +17,8 @@
 
 */
 
-#ifndef _SSH_DATATYPES_H
-#define _SSH_DATATYPES_H
+#ifndef _LIB_DATATYPES_H
+#define _LIB_DATATYPES_H
 
 #include "datatypes/ssh-uint.h"
 #include "datatypes/ssh-string.h"

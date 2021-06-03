@@ -108,9 +108,9 @@ static void parse_network_services_option_cb(char *name, void *ptr)
 {
     struct network_options_s *network=(struct network_options_s *) ptr;
 
-    if (strcmp(name, "ssh")==0) {
+    if (strcmp(name, "sftp")==0) {
 
-	network->services |= _OPTIONS_NETWORK_ENABLE_SSH;
+	network->services |= _OPTIONS_NETWORK_ENABLE_SFTP;
 
     } else if (strcmp(name, "smb")==0) {
 
@@ -1021,7 +1021,7 @@ int parse_arguments(int argc, char *argv[], unsigned int *error)
 
 	/* defaults */
 
-	fs_options.network.services |= (_OPTIONS_NETWORK_ENABLE_SSH | _OPTIONS_NETWORK_ENABLE_SMB);
+	fs_options.network.services |= (_OPTIONS_NETWORK_ENABLE_SFTP | _OPTIONS_NETWORK_ENABLE_SMB);
 
     }
 

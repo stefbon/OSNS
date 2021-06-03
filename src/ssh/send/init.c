@@ -111,6 +111,9 @@ void free_ssh_connection_send(struct ssh_connection_s *connection)
 
 void init_ssh_send_once()
 {
+    init_encrypt_once();
+    init_compress_once();
+
     init_encryptors_once();
     init_compressors_once();
 

@@ -56,6 +56,7 @@
 
 void _fs_sftp_unlink(struct service_context_s *context, struct fuse_request_s *f_request, struct entry_s **pentry, struct pathinfo_s *pathinfo)
 {
+    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
     struct context_interface_s *interface=&context->interface;
     struct sftp_request_s sftp_r;
     unsigned int error=EIO;
@@ -81,7 +82,7 @@ void _fs_sftp_unlink(struct service_context_s *context, struct fuse_request_s *f
 
     }
 
-    if (send_sftp_remove_ctx(interface, &sftp_r)==0) {
+    if (send_sftp_remove_ctx(interface, &sftp_r)>0) {
 	struct timespec timeout;
 
 	get_sftp_request_timeout_ctx(interface, &timeout);
@@ -97,7 +98,7 @@ void _fs_sftp_unlink(struct service_context_s *context, struct fuse_request_s *f
 		    struct entry_s *entry=*pentry;
 		    struct inode_s *inode=entry->inode;
 
-		    queue_inode_2forget(context->workspace, inode->st.st_ino, 0, 0);
+		    queue_inode_2forget(workspace, inode->st.st_ino, 0, 0);
 		    *pentry=NULL;
 
 		    reply_VFS_error(f_request, 0);
@@ -126,6 +127,7 @@ void _fs_sftp_unlink(struct service_context_s *context, struct fuse_request_s *f
 
 void _fs_sftp_rmdir(struct service_context_s *context, struct fuse_request_s *f_request, struct entry_s **pentry, struct pathinfo_s *pathinfo)
 {
+    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
     struct context_interface_s *interface=&context->interface;
     struct sftp_request_s sftp_r;
     unsigned int error=EIO;
@@ -149,7 +151,7 @@ void _fs_sftp_rmdir(struct service_context_s *context, struct fuse_request_s *f_
 
     }
 
-    if (send_sftp_rmdir_ctx(interface, &sftp_r)==0) {
+    if (send_sftp_rmdir_ctx(interface, &sftp_r)>0) {
 	struct timespec timeout;
 
 	get_sftp_request_timeout_ctx(interface, &timeout);
@@ -163,7 +165,7 @@ void _fs_sftp_rmdir(struct service_context_s *context, struct fuse_request_s *f_
 		    struct entry_s *entry=*pentry;
 		    struct inode_s *inode=entry->inode;
 
-		    queue_inode_2forget(context->workspace, inode->st.st_ino, 0, 0);
+		    queue_inode_2forget(workspace, inode->st.st_ino, 0, 0);
 		    *pentry=NULL;
 
 		    reply_VFS_error(f_request, 0);

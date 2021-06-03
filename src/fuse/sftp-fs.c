@@ -47,6 +47,7 @@
 #include "workspace.h"
 #include "fuse.h"
 
+#include "sftp/access.h"
 #include "sftp/getattr.h"
 #include "sftp/lookup.h"
 #include "sftp/lock.h"
@@ -59,6 +60,43 @@
 #include "sftp/statfs.h"
 #include "sftp/xattr.h"
 
+static unsigned int _fs_sftp_get_name(struct service_context_s *context, char *buffer, unsigned int len)
+{
+    struct context_interface_s *interface=&context->interface;
+    char *name=NULL;
+    unsigned int size=0;
+
+    if (interface->backend.sftp.prefix.type==INTERFACE_BACKEND_SFTP_PREFIX_HOME) {
+
+	name=(char *) "home";
+
+    } else if (interface->backend.sftp.prefix.type==INTERFACE_BACKEND_SFTP_PREFIX_ROOT) {
+
+	name=(char *) "root";
+
+    } else {
+
+	name=interface->backend.sftp.name;
+
+    }
+
+    if (name) {
+
+	size=strlen(name);
+
+	if (buffer) {
+
+	    if (size<len) len=size;
+	    memcpy(buffer, name, len);
+
+	}
+
+    }
+
+    return size;
+
+}
+
 /* generic sftp fs */
 
 static struct service_fs_s sftp_fs = {
@@ -68,6 +106,9 @@ static struct service_fs_s sftp_fs = {
 
     .getattr			= _fs_sftp_getattr,
     .setattr			= _fs_sftp_setattr,
+
+    .access			= _fs_sftp_access,
+    .get_name			= _fs_sftp_get_name,
 
     .mkdir			= _fs_sftp_mkdir,
     .mknod			= _fs_sftp_mknod,
@@ -116,6 +157,7 @@ static struct service_fs_s sftp_fs_disconnected = {
     .getattr			= _fs_sftp_getattr_disconnected,
     .setattr			= _fs_sftp_setattr_disconnected,
 
+    .access			= _fs_sftp_access,
     .mkdir			= _fs_sftp_mkdir_disconnected,
     .mknod			= _fs_sftp_mknod_disconnected,
     .symlink			= _fs_sftp_symlink_disconnected,

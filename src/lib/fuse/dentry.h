@@ -34,13 +34,13 @@
 #define _INODE_DIRECTORY_SIZE					4096
 #define _DEFAULT_BLOCKSIZE					4096
 
-#define INODE_LINK_TYPE_CONTEXT					1
-#define INODE_LINK_TYPE_ID					2
-#define INODE_LINK_TYPE_SPECIAL_ENTRY				3
-#define INODE_LINK_TYPE_SYMLINK					4
-#define INODE_LINK_TYPE_DATA					5
-#define INODE_LINK_TYPE_DIRECTORY				6
-#define INODE_LINK_TYPE_CACHE					7
+#define DATA_LINK_TYPE_CONTEXT					1
+#define DATA_LINK_TYPE_ID					2
+#define DATA_LINK_TYPE_SPECIAL_ENTRY				3
+#define DATA_LINK_TYPE_SYMLINK					4
+#define DATA_LINK_TYPE_DATA					5
+#define DATA_LINK_TYPE_DIRECTORY				6
+#define DATA_LINK_TYPE_CACHE					7
 
 #define INODE_FLAG_HASHED					1
 #define INODE_FLAG_CACHED					2
@@ -66,7 +66,7 @@ union datalink_u {
     uint64_t				id;
 };
 
-struct inode_link_s {
+struct data_link_s {
     unsigned char			type;
     union datalink_u			link;
 };
@@ -79,7 +79,7 @@ struct inode_s {
     struct stat				st;
     struct timespec			stim;
     struct fuse_fs_s			*fs;
-    struct inode_link_s			link;
+    struct data_link_s			link;
     struct inodecache_s			*cache;
 };
 
@@ -93,6 +93,8 @@ struct entry_s {
     struct name_s			name;
     struct inode_s 			*inode;
     struct list_element_s		list;
+    struct data_link_s			link;
+    struct entry_ops_s			*ops;
     unsigned char			flags;
     char				buffer[];
 };
@@ -129,5 +131,7 @@ void get_inode_stat(struct inode_s *inode, struct stat *st);
 #define INODE_INFORMATION_FS_COUNT					(1 << 12)
 
 void log_inode_information(struct inode_s *inode, uint64_t what);
+
+void init_dentry_once();
 
 #endif

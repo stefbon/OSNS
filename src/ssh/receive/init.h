@@ -17,8 +17,8 @@
 
 */
 
-#ifndef FS_WORKSPACE_SSH_RECEIVE_INIT_H
-#define FS_WORKSPACE_SSH_RECEIVE_INIT_H
+#ifndef _SSH_RECEIVE_INIT_H
+#define _SSH_RECEIVE_INIT_H
 
 void msg_not_supported(struct ssh_connection_s *c, struct ssh_payload_s *payload);
 void register_msg_cb(struct ssh_connection_s *c, unsigned char type, receive_msg_cb_t cb);

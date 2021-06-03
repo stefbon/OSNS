@@ -20,8 +20,7 @@
 #ifndef _LIB_DISCOVER_H
 #define _LIB_DISCOVER_H
 
-#include "discover/discover.h"
-#include "discover/discover-avahi.h"
-#include "discover/discover-staticfile.h"
+#include "discover/avahi.h"
+#include "discover/staticfile.h"
 
 #endif

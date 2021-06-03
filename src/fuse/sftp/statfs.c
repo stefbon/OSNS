@@ -62,6 +62,7 @@ static struct statfs fallback_statfs;
 
 static void _fs_sftp_statfs_unsupp(struct service_context_s *context, struct fuse_request_s *f_request, struct pathinfo_s *pathinfo)
 {
+    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
     struct fuse_statfs_out statfs_out;
 
     memset(&statfs_out, 0, sizeof(struct fuse_statfs_out));
@@ -73,7 +74,7 @@ static void _fs_sftp_statfs_unsupp(struct service_context_s *context, struct fus
 
     statfs_out.st.frsize=fallback_statfs.f_bsize;
 
-    statfs_out.st.files=(uint64_t) context->workspace->inodes.nrinodes;
+    statfs_out.st.files=(uint64_t) workspace->inodes.nrinodes;
     statfs_out.st.ffree=(uint64_t) (UINT32_T_MAX - statfs_out.st.files);
 
     statfs_out.st.namelen=255;
@@ -87,6 +88,7 @@ static void _fs_sftp_statfs_unsupp(struct service_context_s *context, struct fus
 
 void _fs_sftp_statfs(struct service_context_s *context, struct fuse_request_s *f_request, struct pathinfo_s *pathinfo)
 {
+    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
     struct context_interface_s *interface=&context->interface;
     unsigned int error=EIO;
     unsigned int pathlen=(* interface->backend.sftp.get_complete_pathlen)(interface, pathinfo->len);
@@ -110,7 +112,7 @@ void _fs_sftp_statfs(struct service_context_s *context, struct fuse_request_s *f
 
     }
 
-    if (send_sftp_statvfs_ctx(interface, &sftp_r, &error)==0) {
+    if (send_sftp_statvfs_ctx(interface, &sftp_r, &error)>0) {
 	struct timespec timeout;
 
 	get_sftp_request_timeout_ctx(interface, &timeout);
@@ -157,7 +159,7 @@ void _fs_sftp_statfs(struct service_context_s *context, struct fuse_request_s *f
 		statfs_out.st.bavail=get_uint64(pos);
 		pos+=8;
 
-		statfs_out.st.files=(uint64_t) context->workspace->inodes.nrinodes;
+		statfs_out.st.files=(uint64_t) workspace->inodes.nrinodes;
 		pos+=8;
 
 		statfs_out.st.ffree=(uint64_t) (UINT32_T_MAX - statfs_out.st.files);

@@ -69,21 +69,21 @@ struct special_path_s {
 
 static void _fs_special_forget(struct inode_s *inode)
 {
-    struct inode_link_s *link=NULL;
+    struct data_link_s *link=NULL;
 
     logoutput("_fs_special_forget");
 
-    fs_get_inode_link(inode, &link);
+    fs_get_data_link(inode, &link);
 
-    if (link->type==INODE_LINK_TYPE_SPECIAL_ENTRY) {
+    if (link->type==DATA_LINK_TYPE_SPECIAL_ENTRY) {
 	struct special_path_s *s=(struct special_path_s *) link->link.ptr;
 
 	if (s) free(s);
+	link->type=0;
+	link->link.ptr=NULL;
 
     }
 
-    link->type=0;
-    link->link.ptr=NULL;
 
 }
 
@@ -119,10 +119,10 @@ static void _fs_special_open(struct fuse_openfile_s *openfile, struct fuse_reque
     unsigned int error=EIO;
     struct inode_s *inode=openfile->inode;
     int fd=0;
-    struct inode_link_s *link=NULL;
+    struct data_link_s *link=NULL;
     struct special_path_s *s=NULL;
 
-    fs_get_inode_link(inode, &link);
+    fs_get_data_link(inode, &link);
     s=(struct special_path_s *) link->link.ptr;
 
     fd=open((char *) s->path, flags);
@@ -204,6 +204,7 @@ void _fs_special_fgetattr(struct fuse_openfile_s *openfile, struct fuse_request_
 static void _fs_special_statfs(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode)
 {
     struct fuse_statfs_out statfs_out;
+    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
 
     memset(&statfs_out, 0, sizeof(struct fuse_statfs_out));
 
@@ -212,7 +213,7 @@ static void _fs_special_statfs(struct service_context_s *context, struct fuse_re
     statfs_out.st.bavail=statfs_keep.f_bavail;
     statfs_out.st.bsize=statfs_keep.f_bsize;
 
-    statfs_out.st.files=(uint64_t) context->workspace->inodes.nrinodes;
+    statfs_out.st.files=(uint64_t) workspace->inodes.nrinodes;
     statfs_out.st.ffree=(uint64_t) (UINT32_T_MAX - statfs_out.st.files);
 
     statfs_out.st.namelen=255;
@@ -257,48 +258,77 @@ void set_fs_special(struct inode_s *inode)
     if (! S_ISDIR(inode->st.st_mode)) inode->fs=&fs;
 }
 
-void create_desktopentry_file(char *path, struct entry_s *parent, struct workspace_mount_s *workspace)
+static void create_desktopentry_file(char *path, struct entry_s *parent, struct workspace_mount_s *workspace)
 {
     struct stat st;
-    unsigned int len=strlen(path);
+    struct directory_s *directory=get_directory(parent->inode);
+    struct simple_lock_s wlock;
 
-    logoutput("create_desktopentry_file: %i path %.*s", len, len, path);
+    if (lstat(path, &st)==-1 || ! S_ISREG(st.st_mode)) return;
 
-    if (lstat(path, &st)==0 && S_ISREG(st.st_mode)) {
+    if (wlock_directory(directory, &wlock)==0) {
+	struct entry_s *entry=NULL;
 	struct name_s xname;
 	unsigned int error=0;
-	struct directory_s *directory=get_directory(parent->inode);
 
 	xname.name=desktopentryname;
 	xname.len=strlen(xname.name);
 	calculate_nameindex(&xname);
 
-	logoutput("create_desktopentry_file: name %s", xname.name);
+	entry=find_entry_batch(directory, &xname, &error);
 
-	struct entry_s *entry=_fs_common_create_entry_unlocked(workspace, directory, &xname, &st, 0, 0, &error);
+	/* only install if not exists */
 
-	if (entry) {
-	    unsigned int size=sizeof(struct special_path_s) + strlen(path) + 1;  /* inlcuding terminating zero */
-	    struct special_path_s *s=malloc(size);
+	if (entry==NULL) {
 
-	    if (s) {
-		struct inode_s *inode=entry->inode;
+	    logoutput("create_desktopentry_file: %s in %s (file=%s)", xname.name, parent->name.name, path);
 
-		memset(s, 0, size);
+	    error=0;
+	    entry=_fs_common_create_entry_unlocked(workspace, directory, &xname, &st, 0, 0, &error);
 
-		inode->fs=&fs;
-		s->ino=inode->st.st_ino;
-		strcpy(s->path, path);
-		s->size=strlen(path);
-		inode->link.link.ptr=(void *)s;
-		inode->link.type=INODE_LINK_TYPE_SPECIAL_ENTRY;
+	    if (entry) {
+		unsigned int size=sizeof(struct special_path_s) + strlen(path) + 1;  /* inlcuding terminating zero */
+		struct special_path_s *s=malloc(size);
+
+		if (s) {
+		    struct inode_s *inode=entry->inode;
+
+		    memset(s, 0, size);
+
+		    inode->fs=&fs;
+		    s->ino=inode->st.st_ino;
+		    strcpy(s->path, path);
+		    s->size=strlen(path);
+		    inode->link.link.ptr=(void *)s;
+		    inode->link.type=DATA_LINK_TYPE_SPECIAL_ENTRY;
+
+		}
 
 	    }
 
 	}
 
+	unlock_directory(directory, &wlock);
+
     }
 
+}
+
+void create_network_desktopentry_file(struct entry_s *parent, struct workspace_mount_s *workspace)
+{
+    create_desktopentry_file("/etc/fs-workspace/desktopentry.network", parent, workspace);
+}
+void create_netgroup_desktopentry_file(struct entry_s *parent, struct workspace_mount_s *workspace)
+{
+    create_desktopentry_file("/etc/fs-workspace/desktopentry.netgroup", parent, workspace);
+}
+void create_netserver_desktopentry_file(struct entry_s *parent, struct workspace_mount_s *workspace)
+{
+    create_desktopentry_file("/etc/fs-workspace/desktopentry.netserver", parent, workspace);
+}
+void create_netshare_desktopentry_file(struct entry_s *parent, struct workspace_mount_s *workspace)
+{
+    create_desktopentry_file("/etc/fs-workspace/desktopentry.sharedmap", parent, workspace);
 }
 
 int check_entry_special(struct inode_s *inode)

@@ -72,8 +72,7 @@ int write_socket(struct ssh_connection_s *connection, struct ssh_packet_s *packe
 
     pos+=written;
     left-=written;
-
     if (left>0) goto writesocket;
 
-    return 0;
+    return (int)(pos - packet->buffer);
 }

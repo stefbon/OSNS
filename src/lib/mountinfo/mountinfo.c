@@ -44,24 +44,9 @@
 #include "utils.h"
 #include "log.h"
 
-static struct mountentry_s *rootmount=NULL;
-static unsigned long uniquectr=1;
-static pthread_mutex_t ctr_mutex=PTHREAD_MUTEX_INITIALIZER;
-static unsigned long generation=0;
+static uint64_t generation=0;
 
-unsigned long get_uniquectr()
-{
-    unsigned long result=0;
-
-    pthread_mutex_lock(&ctr_mutex);
-    result=uniquectr;
-    uniquectr++;
-    pthread_mutex_unlock(&ctr_mutex);
-
-    return result;
-}
-
-unsigned long generation_id()
+uint64_t generation_id()
 {
     return generation;
 }
@@ -111,20 +96,4 @@ void check_mounted_by_autofs(struct mountentry_s *mountentry)
 
     // }
 
-}
-
-void set_rootmount(struct mountentry_s *mountentry)
-{
-    rootmount=mountentry;
-}
-
-struct mountentry_s *get_rootmount()
-{
-    return rootmount;
-}
-
-struct mountentry_s *get_containing_mountentry(struct list_element_s *list)
-{
-    if (! list) return NULL;
-    return (struct mountentry_s *) ( ((char *) list) - offsetof(struct mountentry_s, list));
 }

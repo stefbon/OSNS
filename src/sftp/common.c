@@ -191,7 +191,7 @@ int start_init_sftp_client(struct sftp_client_s *sftp)
 
     /* start the sftp init negotiation */
 
-    if ((* sftp->send_ops->init)(sftp, &sftp_r)==0) {
+    if ((* sftp->send_ops->init)(sftp, &sftp_r)>0) {
 	struct timespec timeout;
 	unsigned int error=0;
 	struct sftp_signal_s *signal=&sftp->signal;

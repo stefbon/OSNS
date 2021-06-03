@@ -22,5 +22,6 @@
 /* prototypes */
 
 void set_sftp_interface_prefix(struct context_interface_s *interface, char *name, char *prefix);
+int issubdir_prefix_sftp_client(struct context_interface_s *interface, char *path, unsigned int l);
 
 #endif

@@ -17,8 +17,8 @@
 
 */
 
-#ifndef OSNS_LIB_MOUNTINFO_HASH_H
-#define OSNS_LIB_MOUNTINFO_HASH_H
+#ifndef LIB_MOUNTINFO_HASH_H
+#define LIB_MOUNTINFO_HASH_H
 
 int init_mountinfo_hash();
 void free_mountinfo_hash();

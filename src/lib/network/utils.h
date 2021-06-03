@@ -13,7 +13,6 @@
 
   You should have received a copy of the GNU General Public License
   along with this program; if not, write to the Free Software
-  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
 
@@ -23,6 +22,16 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+
+#include "error.h"
+
+#define _NETWORK_PORT_TCP			1
+#define _NETWORK_PORT_UDP			2
+
+struct network_port_s {
+    unsigned int				nr;
+    unsigned char				type;
+};
 
 #define HOST_HOSTNAME_FQDN_MAX_LENGTH		253
 #define HOST_HOSTNAME_MAX_LENGTH		63
@@ -63,5 +72,12 @@ void get_host_address(struct host_address_s *a, char **hostname, char **ipv4, ch
 void init_host_address(struct host_address_s *a);
 
 unsigned char socket_network_connection_error(unsigned int error);
+char *get_socket_addr_hostname(struct sockaddr *addr, unsigned int len, struct generic_error_s *error);
+
+#define GETHOSTNAME_FLAG_IGNORE_IPv4			1
+#define GETHOSTNAME_FLAG_IGNORE_IPv6			2
+#define GETHOSTNAME_FLAG_IGNORE_IP			( GETHOSTNAME_FLAG_IGNORE_IPv4 | GETHOSTNAME_FLAG_IGNORE_IPv6 )
+
+char *gethostnamefromspec(struct host_address_s *address, unsigned int flags);
 
 #endif

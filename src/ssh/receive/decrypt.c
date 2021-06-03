@@ -58,19 +58,19 @@ void add_decrypt_ops(struct decrypt_ops_s *d_ops)
 
 struct decrypt_ops_s *get_next_decrypt_ops(struct decrypt_ops_s *ops)
 {
-    if (ops) {
-	struct list_element_s *next=ops->list.n;
+    struct list_element_s *list=NULL;
 
-	return (next) ? get_decrypt_ops_container(next) : NULL;
+    if (ops) {
+
+	list=get_next_element(&ops->list);
 
     } else {
-	struct list_element_s *head=list_decrypt_ops.head;
 
-	return (head) ? get_decrypt_ops_container(head) : NULL;
+	list=get_list_head(&list_decrypt_ops, 0);
 
     }
 
-    return NULL;
+    return (list) ? get_decrypt_ops_container(list) : NULL;
 }
 
 
@@ -146,4 +146,9 @@ unsigned int build_hmac_list_s2c(struct ssh_connection_s *connection, struct alg
 
     return start;
 
+}
+
+void init_decrypt_once()
+{
+    init_list_header(&list_decrypt_ops, SIMPLE_LIST_TYPE_EMPTY, 0);
 }

@@ -103,7 +103,7 @@ void *create_fuse_interface();
 void init_fusesocket(char *ptr, void *ctx, size_t size, unsigned char flags);
 int connect_fusesocket(char *ptr, uid_t uid, char *source, char *mountpoint, char *name, unsigned int *error);
 unsigned int get_fuse_buffer_size();
-int read_fusesocket_event(int fd, void *ptr, uint32_t events);
+void read_fusesocket_event(int fd, void *ptr, struct event_s *event);
 
 void init_hashtable_fusesocket();
 

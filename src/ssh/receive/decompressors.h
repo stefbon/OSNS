@@ -17,8 +17,8 @@
 
 */
 
-#ifndef FS_WORKSPACE_SSH_RECEIVE_DECOMPRESSORS_H
-#define FS_WORKSPACE_SSH_RECEIVE_DECOMPRESSORS_H
+#ifndef _SSH_RECEIVE_DECOMPRESSORS_H
+#define _SSH_RECEIVE_DECOMPRESSORS_H
 
 struct ssh_decompressor_s *get_decompressor_container(struct list_element_s *list);
 struct ssh_decompressor_s *get_decompressor(struct ssh_receive_s *r, unsigned int *error);

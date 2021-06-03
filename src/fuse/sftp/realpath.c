@@ -63,7 +63,7 @@ char *get_realpath_sftp(struct context_interface_s *interface, unsigned char *ta
     sftp_r.call.realpath.len=strlen((const char *)target);
     sftp_r.status=SFTP_REQUEST_STATUS_WAITING;
 
-    if (send_sftp_realpath_ctx(interface, &sftp_r)==0) {
+    if (send_sftp_realpath_ctx(interface, &sftp_r)>0) {
 	struct timespec timeout;
 
 	get_sftp_request_timeout_ctx(interface, &timeout);

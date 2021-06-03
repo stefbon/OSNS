@@ -2,22 +2,24 @@ bin_PROGRAMS = osns_client
 sbin_PROGRAMS =
 
 extra_CFLAGS = -fasynchronous-unwind-tables -fexceptions -fstack-clash-protection
+debug_CFLAGS = -ggdb -Og
 
-osns_client_CFLAGS = $(CFLAGS) $(GLIB_CFLAGS) $(LIBGCRYPT_CFLAGS) $(SYSTEMD_CFLAGS) $(AVAHI_CORE_CFLAGS) $(AVAHI_CLIENT_CFLAGS) -ggdb -Og  -D_FILE_OFFSET_BITS=64 -lz -lpthread -fPIC -lm -I . -I ./ssh -I ./lib -Wall -Wno-unused-but-set-variable -Wno-uninitialized -Wno-unused-variable -Wno-unused-label -Wno-unused-function
-osns_client_CPPFLAGS = $(CXXFLAGS) $(GLIB_CFLAGS) $(LIBGCRYPT_CFLAGS) $(SYSTEMD_CFLAGS)  $(AVAHI_CORE_CFLAGS) $(AVAHI_CLIENT_CFLAGS) -ggdb -Og -D_FILE_OFFSET_BITS=64 -lz -lpthread -fPIC -lm -I . -I ./ssh -I ./lib -Wall -Wno-unused-but-set-variable -Wno-uninitialized -Wno-unused-variable -Wno-unused-label -Wno-unused-function
-osns_client_LDADD = $(GLIB_LIBS) $(LIBGCRYPT_LIBS) $(SYSTEMD_LIBS) $(AVAHI_CORE_LIBS) $(AVAHI_CLIENT_LIBS) $(LDFLAGS)
+osns_client_CFLAGS = $(CFLAGS) $(GLIB_CFLAGS) $(LIBGCRYPT_CFLAGS) $(SYSTEMD_CFLAGS) $(AVAHI_CORE_CFLAGS) $(AVAHI_CLIENT_CFLAGS) $(AVAHI_GLIB_CFLAGS) $(debug_CFLAGS) -D_FILE_OFFSET_BITS=64 -lz -lpthread -fPIC -lm -I . -I ./ssh -I ./lib -Wall -Wno-unused-but-set-variable -Wno-uninitialized -Wno-unused-variable -Wno-unused-label -Wno-unused-function
+osns_client_CPPFLAGS = $(CXXFLAGS) $(GLIB_CFLAGS) $(LIBGCRYPT_CFLAGS) $(SYSTEMD_CFLAGS)  $(AVAHI_CORE_CFLAGS) $(AVAHI_CLIENT_CFLAGS) $(AVAHI_GLIB_CFLAGS) $(debug_CFLAGS) -D_FILE_OFFSET_BITS=64 -lz -lpthread -fPIC -lm -I . -I ./ssh -I ./lib -Wall -Wno-unused-but-set-variable -Wno-uninitialized -Wno-unused-variable -Wno-unused-label -Wno-unused-function
+osns_client_LDADD = $(GLIB_LIBS) $(LIBGCRYPT_LIBS) $(SYSTEMD_LIBS) $(AVAHI_CORE_LIBS) $(AVAHI_CLIENT_LIBS) $(AVAHI_GLIB_LIBS) $(LDFLAGS)
 
-osns_client_SOURCES =  	lib/fuse/directory.c lib/fuse/dentry.c lib/fuse/utils.c \
+osns_client_SOURCES =  	lib/fuse/directory.c lib/fuse/dentry.c lib/fuse/dentry-ops.c lib/fuse/utils.c \
 			lib/fuse/fuse-interface.c lib/fuse/fs.c \
 			lib/fuse/fs-common.c lib/fuse/fs-virtual.c lib/fuse/fs-special.c \
-			lib/fuse/context-fs-common.c lib/fuse/context-fs-root.c lib/fuse/context-fs.c \
+			lib/fuse/fs-service-browse.c lib/fuse/fs-service-path.c \
 			lib/sl/skiplist.c lib/sl/skiplist-delete.c lib/sl/skiplist-find.c lib/sl/skiplist-insert.c lib/sl/skiplist-utils.c lib/sl/skiplist-lock.c \
 			lib/threads/workerthreads.c \
-			lib/discover/discover.c lib/discover/discover-staticfile.c lib/discover/discover-avahi.c \
+			discover/discover.c lib/discover/staticfile.c lib/discover/avahi.c \
 			lib/error/error-handling.c \
-			lib/network/connection.c lib/network/utils.c \
-			lib/eventloop/beventloop.c lib/eventloop/beventsignal.c lib/eventloop/beventtimer.c lib/eventloop/bevent.c \
-			lib/workspace/workspaces.c lib/workspace/utils.c lib/workspace/session.c lib/workspace/context.c \
+			lib/network/connection.c lib/network/dns.c lib/network/utils.c \
+			lib/eventloop/beventloop.c lib/eventloop/beventsignal.c \
+			lib/workspace/workspaces.c lib/workspace/utils.c lib/workspace/session.c \
+			lib/workspace/context.c lib/workspace/ctx-init.c lib/workspace/ctx-lock.c lib/workspace/ctx-next.c \
 			lib/workspace/path-caching.c \
 			lib/workspace/address.c \
 			lib/interface/workspace.c \
@@ -33,7 +35,10 @@ osns_client_SOURCES =  	lib/fuse/directory.c lib/fuse/dentry.c lib/fuse/utils.c 
 			lib/datatypes/ssh-string.c lib/datatypes/ssh-uint.c \
 			lib/datatypes/ssh-namelist.c lib/datatypes/ssh-payload.c lib/datatypes/ssh-mpint.c lib/datatypes/ssh-msg-buffer.c \
 			lib/users/check.c lib/users/local.c lib/users/monitor.c \
-			fuse/sftp.c fuse/sftp-fs.c fuse/network.c fuse/ssh.c \
+			fuse/network.c fuse/ssh.c fuse/sftp.c \
+			fuse/workspace-fs.c fuse/workspace/access.c fuse/workspace/getattr.c fuse/workspace/lookup.c fuse/workspace/opendir.c fuse/workspace/statfs.c fuse/workspace/xattr.c \
+			fuse/sftp-fs.c \
+			fuse/sftp/access.c \
 			fuse/sftp/inode-stat.c \
 			fuse/sftp/getattr.c fuse/sftp/lock.c fuse/sftp/lookup.c fuse/sftp/mk.c fuse/sftp/open.c fuse/sftp/opendir.c \
 			fuse/sftp/realpath.c fuse/sftp/rm.c fuse/sftp/setattr.c fuse/sftp/statfs.c  fuse/sftp/symlink.c fuse/sftp/xattr.c \

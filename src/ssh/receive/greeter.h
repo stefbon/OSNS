@@ -17,8 +17,8 @@
 
 */
 
-#ifndef FS_WORKSPACE_SSH_RECEIVE_GREETER_H
-#define FS_WORKSPACE_SSH_RECEIVE_GREETER_H
+#ifndef _SSH_RECEIVE_GREETER_H
+#define _SSH_RECEIVE_GREETER_H
 
 int read_server_greeter(struct ssh_connection_s *c);
 

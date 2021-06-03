@@ -57,6 +57,7 @@
 
 void _fs_sftp_mkdir(struct service_context_s *context, struct fuse_request_s *f_request, struct entry_s *entry, struct pathinfo_s *pathinfo, struct stat *st)
 {
+    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
     struct service_context_s *rootcontext=get_root_context(context);
     struct context_interface_s *interface=&context->interface;
     struct inode_s *inode=entry->inode;
@@ -89,7 +90,7 @@ void _fs_sftp_mkdir(struct service_context_s *context, struct fuse_request_s *f_
 
     }
 
-    if (send_sftp_mkdir_ctx(interface, &sftp_r)==0) {
+    if (send_sftp_mkdir_ctx(interface, &sftp_r)>0) {
 	struct timespec timeout;
 
 	get_sftp_request_timeout_ctx(interface, &timeout);
@@ -107,7 +108,7 @@ void _fs_sftp_mkdir(struct service_context_s *context, struct fuse_request_s *f_
 		    get_current_time(&inode->stim);
 		    add_inode_context(context, inode);
 		    _fs_common_cached_lookup(context, f_request, inode);
-		    adjust_pathmax(context->workspace, pathinfo->len);
+		    adjust_pathmax(workspace, pathinfo->len);
 		    set_directory_dump(inode, get_dummy_directory());
 		    return;
 
@@ -130,7 +131,7 @@ void _fs_sftp_mkdir(struct service_context_s *context, struct fuse_request_s *f_
 
     }
 
-    queue_inode_2forget(context->workspace, inode->st.st_ino, 0, 0);
+    queue_inode_2forget(workspace, inode->st.st_ino, 0, 0);
 
     out:
 

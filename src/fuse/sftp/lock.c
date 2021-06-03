@@ -80,7 +80,7 @@ static void _fs_sftp_flock_lock(struct fuse_openfile_s *openfile, struct fuse_re
 
     }
 
-    if (send_sftp_block_ctx(interface, &sftp_r)==0) {
+    if (send_sftp_block_ctx(interface, &sftp_r)>0) {
 	struct timespec timeout;
 
 	get_sftp_request_timeout_ctx(interface, &timeout);
@@ -148,7 +148,7 @@ static void _fs_sftp_flock_unlock(struct fuse_openfile_s *openfile, struct fuse_
 
     }
 
-    if (send_sftp_unblock_ctx(interface, &sftp_r)==0) {
+    if (send_sftp_unblock_ctx(interface, &sftp_r)>0) {
 	struct timespec timeout;
 
 	get_sftp_request_timeout_ctx(interface, &timeout);

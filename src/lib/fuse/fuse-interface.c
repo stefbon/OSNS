@@ -49,7 +49,7 @@
 #include "workspace-interface.h"
 #include "workspace.h"
 #include "fuse.h"
-#include "fuse-interface.h"
+#include "threads.h"
 
 #define FUSE_HASHTABLE_SIZE				128
 static struct list_header_s				hashtable[FUSE_HASHTABLE_SIZE];
@@ -466,14 +466,9 @@ static void close_fusesocket(struct fusesocket_s *fusesocket)
 
     if ((fusesocket->flags & FUSE_FLAG_DISCONNECT)==0) {
 	struct fs_connection_s *conn=&fusesocket->connection;
+	struct fuse_ops_s *fops=conn->io.fuse.fops;
 
-	if (conn->io.fuse.bevent.fd>0) {
-	    struct fuse_ops_s *fops=conn->io.fuse.fops;
-
-	    (* fops->close)(conn->io.fuse.bevent.fd);
-	    conn->io.fuse.bevent.fd=0;
-
-	}
+	(* fops->close)(&conn->io.fuse);
 
 	fusesocket->flags |= FUSE_FLAG_DISCONNECT;
 	pthread_cond_broadcast(&fusesocket->cond);
@@ -528,7 +523,7 @@ static void read_fusesocket_buffer(void *ptr)
 
     while (fusesocket->flags & (FUSE_FLAG_WAITING1 | FUSE_FLAG_RECEIVE)) {
 
-	logoutput("read_fusesocket_buffer: wait1");
+	logoutput_debug("read_fusesocket_buffer: wait1 read %i", fusesocket->read);
 
 	int result=pthread_cond_wait(&fusesocket->cond, &fusesocket->mutex);
 
@@ -560,7 +555,7 @@ static void read_fusesocket_buffer(void *ptr)
 
     while (fusesocket->read < packetsize) {
 
-	logoutput("read_fusesocket_buffer: wait2 read %i packetsize %i", fusesocket->read, packetsize);
+	logoutput_debug("read_fusesocket_buffer: wait2 read %i packetsize %i", fusesocket->read, packetsize);
 
 	fusesocket->flags |= FUSE_FLAG_WAITING2;
 	int result=pthread_cond_wait(&fusesocket->cond, &fusesocket->mutex);
@@ -623,12 +618,11 @@ static void read_fusesocket_buffer(void *ptr)
 
 	pthread_mutex_unlock(&fusesocket->mutex);
 
-	// logoutput("read_fusesocket_buffer: opcode %i", request->opcode);
+	logoutput("read_fusesocket_buffer: opcode %i", request->opcode);
 
 	_add_datahash(&request->list, request->unique);
 	(* fusesocket->fuse_cb[request->opcode])(request);
 	_remove_datahash(&request->list, request->unique);
-
 	free(request);
 
     } else {
@@ -664,7 +658,7 @@ static void start_read_fusesocket_buffer(struct fusesocket_s *fusesocket)
     work_workerthread(NULL, 0, read_fusesocket_buffer, (void *) fusesocket, NULL);
 }
 
-int read_fusesocket_event(int fd, void *ptr, uint32_t events)
+void read_fusesocket_event(int fd, void *ptr, struct event_s *event)
 {
     struct fusesocket_s *fusesocket=(struct fusesocket_s *) ptr;
     struct fs_connection_s *conn=&fusesocket->connection;
@@ -672,23 +666,14 @@ int read_fusesocket_event(int fd, void *ptr, uint32_t events)
     int len=0;
     unsigned int error=0;
 
-    if ((events & BEVENT_CODE_IN)==0) {
-
-	if (events & (BEVENT_CODE_ERR | BEVENT_CODE_HUP)) {
+    if (signal_is_error(event) || signal_is_close(event)) {
 
 	    /* the remote side (==kernel/VFS) disconnected */
 
-    	    logoutput( "read_fuse_event: event %i causes disconnect", events);
+    	    logoutput( "read_fuse_event: event causes disconnect");
 	    goto disconnect;
 
-	}
-
-	logoutput( "read_fuse_event: unknown event %i", events);
-	return 0;
-
     }
-
-    // logoutput("read_fuse_event: event %i", events);
 
     pthread_mutex_lock(&fusesocket->mutex);
 
@@ -715,7 +700,7 @@ int read_fusesocket_event(int fd, void *ptr, uint32_t events)
 
 	} else if (error==EAGAIN || error==EWOULDBLOCK) {
 
-	    return 0;
+	    return;
 
 	} else if (error==EINTR) {
 
@@ -748,13 +733,13 @@ int read_fusesocket_event(int fd, void *ptr, uint32_t events)
 
     }
 
-    return 0;
+    return;
 
     disconnect:
 
     (* fusesocket->context.signal_fuse2ctx)(fusesocket, "command:disconnect", NULL);
     close_fusesocket(fusesocket);
-    return -1;
+    return;
 
 }
 
@@ -1078,7 +1063,7 @@ int connect_fusesocket(char *ptr, uid_t uid, char *source, char *mountpoint, cha
 
     error:
 
-    if (fd>0) (* fops->close)(fd);
+    if (fd>0) (* fops->close)(&fusesocket->connection.io.fuse);
     return -1;
 
 }
@@ -1093,17 +1078,12 @@ void init_hashtable_fusesocket()
 
     pthread_mutex_lock(&hashmutex);
 
-    logoutput("init_hashtable_fusesocket: D1");
-
     if (hashinit==0) {
 
 	for (unsigned int i=0; i<FUSE_HASHTABLE_SIZE; i++) init_list_header(&hashtable[i], SIMPLE_LIST_TYPE_EMPTY, NULL);
-	logoutput("init_fusesocket: D2");
 	hashinit=1;
 
     }
-
-    logoutput("init_hashtable_fusesocket: D3");
 
     pthread_mutex_unlock(&hashmutex);
 

@@ -54,7 +54,7 @@ void process_ssh_packet_nodecompress(struct ssh_connection_s *connection, struct
     struct ssh_payload_s *payload=NULL;
     unsigned int len = packet->len - 1 - packet->padding;
 
-    logoutput("process_ssh_packet_nodecompress: type %i", packet->buffer[5]);
+    logoutput_debug("process_ssh_packet_nodecompress: type %i", packet->buffer[5]);
 
     payload=malloc(sizeof(struct ssh_payload_s) + len);
 
@@ -198,7 +198,7 @@ static void read_ssh_buffer_packet(void *ptr)
 
 	    pthread_mutex_lock(&receive->mutex);
 
-	    logoutput("read_ssh_buffer_packet: tid %i packet size %i, received %i", gettid(), packet.size, receive->read);
+	    logoutput_debug("read_ssh_buffer_packet: tid %i packet size %i, received %i", gettid(), packet.size, receive->read);
 
 	    while (receive->read < packet.size) {
 
@@ -236,7 +236,7 @@ static void read_ssh_buffer_packet(void *ptr)
 
 		/* stil data in buffer */
 
-		logoutput("read_ssh_buffer_packet: tid %i still %i bytes in buffer", gettid(), receive->read);
+		logoutput_debug("read_ssh_buffer_packet: tid %i still %i bytes in buffer", gettid(), receive->read);
 
 		memmove(receive->buffer, (char *) (receive->buffer + packet.size), receive->read);
 

@@ -22,14 +22,19 @@
 
 #include "fuse/dentry.h"
 #include "fuse/directory.h"
+
 #include "fuse/fuse-interface.h"
-#include "fuse/utils.h"
 #include "fuse/fs.h"
+#include "fuse/dentry-ops.h"
+
 #include "fuse/fs-common.h"
+
+#include "fuse/fs-service-browse.h"
+#include "fuse/fs-service-path.h"
+
 #include "fuse/fs-special.h"
 #include "fuse/fs-virtual.h"
-#include "fuse/context-fs-common.h"
-#include "fuse/context-fs-root.h"
-#include "fuse/context-fs.h"
+
+#include "fuse/utils.h"
 
 #endif

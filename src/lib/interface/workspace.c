@@ -39,7 +39,6 @@
 #include "workspace.h"
 
 extern struct context_interface_s *get_next_context_interface(struct context_interface_s *reference, struct context_interface_s *interface);
-
 static struct list_header_s interface_ops_list=INIT_LIST_HEADER;
 
 static void _free_option_alloc(struct ctx_option_s *option)
@@ -120,6 +119,7 @@ void reset_context_interface(struct context_interface_s *interface)
 
 void add_interface_ops(struct interface_ops_s *ops)
 {
+    
     add_list_element_last(&interface_ops_list, &ops->list);
 }
 
@@ -148,7 +148,7 @@ unsigned int build_interface_ops_list(struct context_interface_s *interface, str
     return start;
 }
 
-struct interface_list_s *get_interface_ops(struct interface_list_s *ailist, unsigned int count, int type)
+struct interface_list_s *get_interface_list(struct interface_list_s *ailist, unsigned int count, int type)
 {
 
     for (unsigned int i=0; i<count; i++) {
@@ -158,4 +158,9 @@ struct interface_list_s *get_interface_ops(struct interface_list_s *ailist, unsi
     }
 
     return NULL;
+}
+
+void init_interfaces()
+{
+    init_list_header(&interface_ops_list, SIMPLE_LIST_TYPE_EMPTY, NULL);
 }

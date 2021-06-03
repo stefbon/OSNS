@@ -20,7 +20,7 @@
 #define INOTIFY_EVENT_SIZE (sizeof(struct inotify_event))
 #define INOTIFY_BUFF_LEN (1024 * (INOTIFY_EVENT_SIZE + 16))
 
-static struct bevent_s bevent_inotify;
+static struct bevent_s *bevent_inotify;
 static struct simple_hash_s group_watches_inotify;
 
 struct inotify_watch_s {
@@ -220,6 +220,7 @@ int set_watch_backend_inotify(struct notifywatch_s *watch, uint32_t mask)
     }
 
     if (mask>0) {
+	int fd=get_bevent_unix_fd(bevent_inotify);
 
 	logoutput_info("set_watch_backend_inotify: call inotify_add_watch on path %s and mask %i", watch->pathinfo.path, mask);
 
@@ -235,13 +236,12 @@ int set_watch_backend_inotify(struct notifywatch_s *watch, uint32_t mask)
 
 #endif
 
-	wd=inotify_add_watch(bevent_inotify.fd, watch->pathinfo.path, mask);
+	wd=inotify_add_watch(fd, watch->pathinfo.path, mask);
 
-	if ( wd==-1 ) {
+	if (wd==-1) {
 
 	    error=errno;
-
-    	    logoutput_error("set_watch_backend_inotify: setting inotify watch on %s (fd=%i)gives error: %i (%s)", watch->pathinfo.path, bevent_inotify.fd, error, strerror(error));
+    	    logoutput_error("set_watch_backend_inotify: setting inotify watch on %s (fd=%i)gives error: %i (%s)", watch->pathinfo.path, fd, error, strerror(error));
 
 	} else {
 	    struct inotify_watch_s *inotify_watch=NULL;
@@ -301,10 +301,11 @@ void remove_watch_backend_inotify(struct notifywatch_s *watch)
 	}
 
 	if (i_watch) {
+	    int fd=get_bevent_unix_fd(bevent_inotify);
 	    int res;
 
 	    remove_watch_inotifytable(i_watch);
-	    res=inotify_rm_watch(bevent_inotify.fd, i_watch->wd);
+	    res=inotify_rm_watch(fd, i_watch->wd);
 	    free(i_watch);
 
 	}
@@ -382,10 +383,12 @@ static struct fseventbackend_s inotify_fseventbackend = {
 };
 
 
-static int handle_inotify_fd(int fd, void *data, uint32_t events)
+static void handle_inotify_fd(int fd, void *data, struct event_s *event)
 {
     int lenread=0;
     char buff[INOTIFY_BUFF_LEN];
+
+    if (signal_is_error(event) || signal_is_close(event)) return;
 
     lenread=read(fd, buff, INOTIFY_BUFF_LEN);
 
@@ -467,13 +470,10 @@ static int handle_inotify_fd(int fd, void *data, uint32_t events)
 
     }
 
-    return 0;
-
 }
 
 void initialize_inotify(struct beventloop_s *loop, unsigned int *error)
 {
-    struct bevent_s *bevent=NULL;
     int result=0, fd=0;
 
     /* create the inotify instance */
@@ -488,20 +488,26 @@ void initialize_inotify(struct beventloop_s *loop, unsigned int *error)
 
     }
 
-    /*
-	add inotify to the main eventloop
-    */
+    bevent_inotify=create_fd_bevent(loop, handle_inotify_fd, NULL);
 
-    bevent=add_to_beventloop(fd, EPOLLIN | EPOLLPRI, &handle_inotify_fd, loop, &bevent_inotify, NULL);
+    if ( ! bevent_inotify ) {
 
-    if ( ! bevent ) {
-
-        logoutput("initialize_inotify: error adding inotify fd to eventloop.");
+        logoutput("initialize_inotify: error creating inotify event watch.");
         goto error;
+
+    }
+
+    set_bevent_unix_fd(bevent_inotify, fd);
+    set_bevent_watch(bevent_inotify, "incoming data");
+
+    if (add_bevent_beventloop(bevent_inotify)==0) {
+
+        logoutput("initialize_inotify: inotify fd %i added to eventloop", fd);
 
     } else {
 
-        logoutput("initialize_inotify: inotify fd %i added to eventloop", fd);
+	logoutput("initialize_inotify: error adding inotify fd to eventloop.");
+	goto error;
 
     }
 
@@ -521,14 +527,14 @@ void initialize_inotify(struct beventloop_s *loop, unsigned int *error)
     if (fd>0) {
 
 	close(fd);
-	fd=0;
+	fd=-1;
 
     }
 
-    if (bevent) {
+    if (bevent_inotify) {
 
-	remove_bevent_from_beventloop(bevent);
-	bevent=NULL;
+	remove_bevent(bevent_inotify);
+	bevent_inotify=NULL;
 
     }
 
@@ -539,14 +545,20 @@ void initialize_inotify(struct beventloop_s *loop, unsigned int *error)
 void close_inotify()
 {
 
-    if ( bevent_inotify.fd>0 ) {
+    if (bevent_inotify) {
+	int fd=get_bevent_unix_fd(bevent_inotify);
 
-	close(bevent_inotify.fd);
-	bevent_inotify.fd=0;
+	if (fd>=0) {
+
+	    close(fd);
+	    set_bevent_unix_fd(bevent_inotify, -1);
+
+	}
+
+	remove_bevent(bevent_inotify);
 
     }
 
-    remove_bevent_from_beventloop(&bevent_inotify);
     free_group(&group_watches_inotify, free_i_watch);
 
 }

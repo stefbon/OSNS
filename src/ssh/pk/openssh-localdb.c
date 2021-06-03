@@ -330,7 +330,7 @@ int check_serverkey_localdb_openssh(struct fs_connection_s *conn, struct passwd 
     char *remoteipv4=NULL;
     int result=-1;
 
-    remotehost=get_connection_hostname(conn, conn->io.socket.bevent.fd, 1, NULL);
+    remotehost=get_connection_hostname(conn, get_bevent_unix_fd(conn->io.socket.bevent), 1, NULL);
 
     if (remotehost==NULL) {
 
@@ -339,7 +339,7 @@ int check_serverkey_localdb_openssh(struct fs_connection_s *conn, struct passwd 
 
     }
 
-    remoteipv4=get_connection_ipv4(conn, conn->io.socket.bevent.fd, 1, NULL);
+    remoteipv4=get_connection_ipv4(conn, get_bevent_unix_fd(conn->io.socket.bevent), 1, NULL);
 
     if (remoteipv4==NULL) {
 

@@ -24,4 +24,6 @@ void add_compress_ops(struct compress_ops_s *ops);
 void reset_compress(struct ssh_send_s *send, struct algo_list_s *algo);
 int build_compress_list_c2s(struct ssh_connection_s *c, struct algo_list_s *alist, unsigned int start);
 
+void init_compress_once();
+
 #endif

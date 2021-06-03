@@ -139,3 +139,16 @@ void translate_ssh_channel_name(struct ssh_channel_s *channel, char *name)
 
 }
 
+struct fs_connection_s *get_fs_connection_ssh_interface(struct context_interface_s *i)
+{
+
+    if (i->type==_INTERFACE_TYPE_SSH_SESSION) {
+	char *buffer=(* i->get_interface_buffer)(i);
+	struct ssh_session_s *s=(struct ssh_session_s *) buffer;
+
+	return get_session_fs_connection(s);
+
+    }
+
+    return NULL;
+}

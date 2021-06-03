@@ -54,6 +54,7 @@ struct simple_lock_s {
     int					(* lock)(struct simple_lock_s *l);
     int					(* unlock)(struct simple_lock_s *l);
     int					(* upgrade)(struct simple_lock_s *l);
+    int					(* downgrade)(struct simple_lock_s *l);
     int					(* prelock)(struct simple_lock_s *l);
 };
 
@@ -70,5 +71,6 @@ int simple_lock(struct simple_lock_s *lock);
 int simple_unlock(struct simple_lock_s *lock);
 int simple_prelock(struct simple_lock_s *lock);
 int simple_upgradelock(struct simple_lock_s *lock);
+int simple_downgradelock(struct simple_lock_s *lock);
 
 #endif

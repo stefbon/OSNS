@@ -74,6 +74,8 @@ static int _connect_interface_sftp_client(uid_t uid, struct context_interface_s 
 
     }
 
+    logoutput("_connect_interface_ssh_channel: (service type=%i)", service->type);
+
     channel=(struct ssh_channel_s *) sftp->context.conn;
 
     /* when there is an uri it must be for direct tcpip/streamlocal */
@@ -125,7 +127,7 @@ static int _connect_interface_sftp_client(uid_t uid, struct context_interface_s 
 
     }
 
-    logoutput_info("_connect_interface_sftp_client: open and add channel");
+    logoutput("_connect_interface_sftp_client: open and add channel");
 
     if (add_channel(channel, CHANNEL_FLAG_OPEN)==0) {
 
@@ -168,7 +170,7 @@ static int _start_interface_sftp_client(struct context_interface_s *interface, i
 
 	logoutput("_start_interface_sftp_client: send start subsystem sftp");
 
-	if (send_channel_start_command_message(channel, 1, &seq)==0) {
+	if (send_channel_start_command_message(channel, 1, &seq)>0) {
 	    struct ssh_payload_s *payload=NULL;
 	    struct timespec expire;
 	    unsigned int error=0;
@@ -391,7 +393,8 @@ static int _init_interface_sftp_buffer(struct context_interface_s *interface, st
     struct ssh_channel_s *channel=NULL;
     struct ssh_session_s *session=NULL;
     struct service_context_s *context=get_service_context(interface);
-    struct context_interface_s *parent;
+    struct service_context_s *pctx=NULL;
+    struct context_interface_s *parent=NULL;
 
     if (strcmp(ilist->name, "sftp")!=0) {
 
@@ -400,6 +403,7 @@ static int _init_interface_sftp_buffer(struct context_interface_s *interface, st
 
     }
 
+    logoutput("_init_interface_buffer_sftp");
     interface->type=_INTERFACE_TYPE_SFTP;
 
     if (primary) {
@@ -422,8 +426,8 @@ static int _init_interface_sftp_buffer(struct context_interface_s *interface, st
 
     }
 
-
-    if (context->parent) parent=&context->parent->interface;
+    pctx=get_parent_context(context);
+    if (pctx) parent=&pctx->interface;
 
     if (interface->size < get_sftp_buffer_size()) {
 
@@ -463,6 +467,8 @@ static int _init_interface_sftp_buffer(struct context_interface_s *interface, st
 	goto out;
 
     }
+
+    logoutput("_connect_interface_sftp_client: created channel");
 
     sftp=(struct sftp_client_s *) interface->buffer;
     channel->context.ctx=(void *) sftp;
@@ -521,6 +527,13 @@ static void _clear_interface_buffer(struct context_interface_s *interface)
 
 	free(interface->backend.sftp.prefix.path);
 	interface->backend.sftp.prefix.path=NULL;
+
+    }
+
+    if (interface->backend.sftp.name) {
+
+	free(interface->backend.sftp.name);
+	interface->backend.sftp.name=NULL;
 
     }
 

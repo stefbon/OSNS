@@ -124,7 +124,7 @@ int create_ssh_networksocket(struct ssh_connection_s *connection, char *address,
     if ((* sops->bind)(fd, addr, &len, 0)==-1) {
 
 	logoutput("create_ssh_networksocket: error %i binding socket %i to address %s:%i (%s)", errno, fd, address, port, strerror(errno));
-	(* sops->close)(fd);
+	close(fd);
 	fd=-1;
         goto out;
 
@@ -135,7 +135,7 @@ int create_ssh_networksocket(struct ssh_connection_s *connection, char *address,
     if ((* sops->listen)(fd, LISTEN_BACKLOG)==-1 ) {
 
 	logoutput("create_ssh_networksocket: error %i listen on socket %i (%s)", errno, fd, strerror(errno));
-	(* sops->close)(fd);
+	close(fd);
 	fd=-1;
 
     } else {
@@ -175,6 +175,8 @@ int connect_ssh_connection(struct ssh_connection_s *connection, char *address, u
 
     }
 
+    c->io.socket.bevent=create_fd_bevent(NULL, read_ssh_connection_signal, (void *) connection);
+    if (c->io.socket.bevent==NULL) goto error;
     c->status|=FS_CONNECTION_FLAG_CONNECTING;
 
     if (c->type==FS_CONNECTION_TYPE_TCP4 || c->type==FS_CONNECTION_TYPE_TCP6) {
@@ -188,6 +190,8 @@ int connect_ssh_connection(struct ssh_connection_s *connection, char *address, u
     }
 
     if (fd<=0) goto error;
+    set_bevent_unix_fd(c->io.socket.bevent, fd);
+    set_bevent_watch(c->io.socket.bevent, "incoming data");
 
     if (c->type==FS_CONNECTION_TYPE_TCP4 || c->type==FS_CONNECTION_TYPE_UDP4) {
 	struct sockaddr_in *sin=&c->io.socket.sockaddr.inet;
@@ -211,7 +215,7 @@ int connect_ssh_connection(struct ssh_connection_s *connection, char *address, u
 
     }
 
-    if ((* sops->connect)(fd, addr, &len)==0) {
+    if ((* sops->connect)(&c->io.socket, addr, &len)==0) {
 	int flags=0;
 
 	logoutput("connect_ssh_connection: connected to %s:%i with fd %i", address, port, fd);
@@ -227,7 +231,7 @@ int connect_ssh_connection(struct ssh_connection_s *connection, char *address, u
 	c->status|=FS_CONNECTION_FLAG_DISCONNECTING;
 	logoutput("connect_ssh_connection: error (%i:%s) connecting to %s:%i", errno, strerror(errno), address, port);
 	c->error=errno;
-	(* sops->close)(fd);
+	close(fd);
 	c->status-=FS_CONNECTION_FLAG_DISCONNECTING;
 	c->status|=FS_CONNECTION_FLAG_DISCONNECTED;
 	goto error;
@@ -248,11 +252,16 @@ void disconnect_ssh_connection(struct ssh_connection_s *connection)
 
     if (c->status & FS_CONNECTION_FLAG_CONNECTED) {
 
-    	if (c->io.socket.bevent.fd>0) {
+    	if (c->io.socket.bevent) {
+	    int fd=get_bevent_unix_fd(c->io.socket.bevent);
 
-	    logoutput("disconnect_ssh_connection: close fd %i", c->io.socket.bevent.fd);
-	    (* c->io.socket.sops->close)(c->io.socket.bevent.fd);
-    	    c->io.socket.bevent.fd=-1;
+	    if (fd>=0) {
+
+		logoutput("disconnect_ssh_connection: close fd %i", fd);
+		close(fd);
+		set_bevent_unix_fd(c->io.socket.bevent, -1);
+
+	    }
 
 	}
 
@@ -273,15 +282,27 @@ int add_ssh_connection_eventloop(struct ssh_connection_s *connection, unsigned i
 
     } else {
 	struct fs_connection_s *fs_c=&connection->connection;
-	struct bevent_s *bevent=&fs_c->io.socket.bevent;
+	struct bevent_s *bevent=fs_c->io.socket.bevent;
 
-	if (add_to_beventloop(fd, BEVENT_CODE_IN, read_ssh_connection_signal, (void *) connection, bevent, NULL)) {
+	if (bevent==NULL) {
+
+	    bevent=create_fd_bevent(NULL, read_ssh_connection_signal, (void *) connection);
+	    if (bevent==NULL) goto out;
+	    set_bevent_unix_fd(bevent, fd);
+	    set_bevent_watch(bevent, "incoming data");
+	    fs_c->io.socket.bevent=bevent;
+
+	}
+
+	if (add_bevent_beventloop(bevent)==0) {
 
 	    result=0;
 
 	}
 
     }
+
+    out:
 
     if (result==0) {
 
@@ -300,8 +321,13 @@ int add_ssh_connection_eventloop(struct ssh_connection_s *connection, unsigned i
 void remove_ssh_connection_eventloop(struct ssh_connection_s *connection)
 {
     struct fs_connection_s *fs_c=&connection->connection;
-    struct bevent_s *bevent=&fs_c->io.socket.bevent;
+    struct bevent_s *bevent=fs_c->io.socket.bevent;
 
-    remove_bevent_from_beventloop(bevent);
+    if (bevent) {
+
+	remove_bevent(bevent);
+	fs_c->io.socket.bevent=NULL;
+
+    }
 
 }

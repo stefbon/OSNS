@@ -56,54 +56,36 @@
 
 static struct fuse_fs_s virtual_dir_fs;
 static struct fuse_fs_s virtual_nondir_fs;
-static unsigned char done=0;
-static pthread_mutex_t done_mutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t datalink_mutex=PTHREAD_MUTEX_INITIALIZER;
 static struct statfs default_statfs;
-
-// void use_virtual_fs(struct service_context_s *context, struct inode_s *inode);
 
 static int _lock_datalink(struct inode_s *inode)
 {
     return pthread_mutex_lock(&datalink_mutex);
 }
-
 static int _unlock_datalink(struct inode_s *inode)
 {
     return pthread_mutex_unlock(&datalink_mutex);
 }
+
+static void _fs_get_data_link_nondir(struct inode_s *inode, struct data_link_s **p_link)
+{
+    *p_link=&inode->link;
+}
+
+static void _fs_get_data_link_dir(struct inode_s *inode, struct data_link_s **p_link)
+{
+    struct directory_s *d=get_directory(inode);
+    *p_link=&d->link;
+}
+
 static void _fs_forget(struct inode_s *inode)
 {
 }
-
-static void _fs_get_inode_link_dir(struct inode_s *inode, struct inode_link_s **link)
-{
-    struct directory_s *directory=NULL;
-
-    logoutput_debug("_fs_get_inode_link_dir: ino %li", inode->st.st_ino);
-
-    pthread_mutex_lock(&datalink_mutex);
-    directory=(struct directory_s *) inode->link.link.ptr;
-    // (* directory->dops->get_inode_link)(directory, inode, link);
-    *link=&directory->link;
-    pthread_mutex_unlock(&datalink_mutex);
-}
-
-static void _fs_get_inode_link_nondir(struct inode_s *inode, struct inode_link_s **link)
-{
-
-    logoutput_debug("_fs_get_inode_link_nondir");
-
-    pthread_mutex_lock(&datalink_mutex);
-    *link=&inode->link;
-    pthread_mutex_unlock(&datalink_mutex);
-}
-
 static void _fs_lookup(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, const char *name, unsigned int len)
 {
     _fs_common_virtual_lookup(context, request, inode, name, len);
 }
-
 static void _fs_getattr(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode)
 {
     _fs_common_getattr(context, request, inode);
@@ -242,31 +224,35 @@ static void _fs_releasedir(struct fuse_opendir_s *opendir, struct fuse_request_s
 
 static struct entry_s *_fs_get_fuse_direntry(struct fuse_opendir_s *opendir, struct fuse_request_s *request)
 {
-    return get_fuse_direntry_virtual(opendir, request);
+    return get_fuse_direntry_virtual(opendir, NULL, request);
 }
 
 static void _fs_setxattr(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, const char *name, const char *value, size_t size, int flags)
 {
+    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
 
-    if (inode==&context->workspace->inodes.rootinode) logoutput("_fs_setxattr: root inode");
+    if (inode==&workspace->inodes.rootinode) logoutput("_fs_setxattr: root inode");
     reply_VFS_error(request, ENODATA);
 }
 
 static void _fs_getxattr(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, const char *name, size_t size)
 {
-    if (inode==&context->workspace->inodes.rootinode) logoutput("_fs_getxattr: root inode");
+    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
+    if (inode==&workspace->inodes.rootinode) logoutput("_fs_getxattr: root inode");
     reply_VFS_error(request, ENODATA);
 }
 
 static void _fs_listxattr(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, size_t size)
 {
-    if (inode==&context->workspace->inodes.rootinode) logoutput("_fs_listxattr: root inode");
+    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
+    if (inode==&workspace->inodes.rootinode) logoutput("_fs_listxattr: root inode");
     reply_VFS_error(request, ENODATA);
 }
 
 static void _fs_removexattr(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, const char *name)
 {
-    if (inode==&context->workspace->inodes.rootinode) logoutput("_fs_removexattr: root inode");
+    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
+    if (inode==&workspace->inodes.rootinode) logoutput("_fs_removexattr: root inode");
     reply_VFS_error(request, ENODATA);
 }
 
@@ -275,21 +261,10 @@ static void _fs_statfs(struct service_context_s *context, struct fuse_request_s 
     _fs_common_statfs(context, request, inode, default_statfs.f_blocks, default_statfs.f_bfree, default_statfs.f_bavail, default_statfs.f_bsize);
 }
 
-static void init_virtual_fs();
-
-void use_virtual_fs(struct service_context_s *context, struct inode_s *inode)
+void use_virtual_fs(struct inode_s *inode)
 {
 
     logoutput("use_virtual_fs");
-
-    pthread_mutex_lock(&done_mutex);
-
-    if (done==0) {
-	init_virtual_fs();
-	done=1;
-    }
-
-    pthread_mutex_unlock(&done_mutex);
 
     if (S_ISDIR(inode->st.st_mode)) {
 
@@ -315,7 +290,7 @@ static void _set_virtual_fs(struct fuse_fs_s *fs)
 
     if ((fs->flags & FS_SERVICE_FLAG_DIR) || (fs->flags & FS_SERVICE_FLAG_ROOT)) {
 
-	fs->get_inode_link=_fs_get_inode_link_dir;
+	fs->get_data_link=_fs_get_data_link_dir;
 	fs->type.dir.use_fs=use_virtual_fs;
 	fs->type.dir.lookup=_fs_lookup;
 
@@ -338,7 +313,7 @@ static void _set_virtual_fs(struct fuse_fs_s *fs)
 
     } else {
 
-	fs->get_inode_link=_fs_get_inode_link_nondir;
+	fs->get_data_link=_fs_get_data_link_nondir;
 
 	fs->type.nondir.readlink=_fs_readlink;
 
@@ -369,7 +344,7 @@ static void _set_virtual_fs(struct fuse_fs_s *fs)
 
 }
 
-static void init_virtual_fs()
+void init_virtual_fs()
 {
     struct fuse_fs_s *fs=NULL;
 
@@ -398,17 +373,12 @@ static void init_virtual_fs()
 
 }
 
-
 void set_virtual_fs(struct fuse_fs_s *fs)
 {
-    pthread_mutex_lock(&done_mutex);
-
-    if (done==0) {
-	init_virtual_fs();
-	done=1;
-    }
-
-    pthread_mutex_unlock(&done_mutex);
-
     _set_virtual_fs(fs);
+}
+
+void _fs_statfs_workspace(struct service_context_s *context, struct fuse_request_s *request, struct pathinfo_s *pathinfo)
+{
+    _fs_statfs(context, request, NULL);
 }
