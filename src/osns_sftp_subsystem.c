@@ -64,16 +64,15 @@
 
 char *program_name=NULL;
 
-static void workspace_signal_handler(struct beventloop_s *bloop, void *data, struct signalfd_siginfo *fdsi)
+static void workspace_signal_handler(struct beventloop_s *bloop, unsigned int signo, pid_t pid, int fd)
 {
-    unsigned int signo=fdsi->ssi_signo;
 
     logoutput("workspace_signal_handler: received %i", signo);
 
     if ( signo==SIGHUP || signo==SIGINT || signo==SIGTERM ) {
 
 	logoutput("workspace_signal_handler: got signal (%i): terminating", signo);
-	bloop->status=BEVENTLOOP_STATUS_DOWN;
+	stop_beventloop(loop);
 
 	/*
 	    TODO: send a signal to all available io contexes to stop waiting
@@ -143,7 +142,7 @@ int main(int argc, char *argv[])
 
     }
 
-    if (enable_beventloop_signal(NULL, workspace_signal_handler, NULL, &error)==-1) {
+    if (enable_beventloop_signal(NULL, workspace_signal_handler)==-1) {
 
 	logoutput_error("MAIN: error adding signal handler to eventloop: %i (%s).", error, strerror(error));
         goto out;
