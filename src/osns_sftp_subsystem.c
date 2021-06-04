@@ -69,46 +69,52 @@ static void workspace_signal_handler(struct beventloop_s *loop, unsigned int sig
 
     logoutput("workspace_signal_handler: received %i", signo);
 
-    if ( signo==SIGHUP || signo==SIGINT || signo==SIGTERM ) {
+    switch (signo) {
 
-	logoutput("workspace_signal_handler: got signal (%i): terminating", signo);
-	stop_beventloop(loop);
+	case SIGHUP:
+	case SIGINT:
+	case SIGTERM:
+	case SIGABRT:
+	case SIGSTOP:
 
-	/*
-	    TODO: send a signal to all available io contexes to stop waiting
-	*/
+	    logoutput("workspace_signal_handler: got signal (%i): terminating", signo);
+	    stop_beventloop(loop);
+	    break;
 
-    } else if ( signo==SIGIO ) {
+	case SIGIO:
 
-	logoutput("workspace_signal_handler: SIGIO");
+	    logoutput("workspace_signal_handler: SIGIO");
 
-	/*
+	    /*
 	    TODO:
 	    when receiving an SIGIO signal another application is trying to open a file
 	    is this really the case?
 	    then the fuse fs is the owner!?
 
-	    note 	fdsi->ssi_pid
-			fdsi->ssi_fd
-	*/
+	    note 	pid
+			fd
+	    */
+	    break;
 
-    } else if ( signo==SIGPIPE ) {
+	case SIGPIPE:
 
-	logoutput("workspace_signal_handler: SIGPIPE");
+	    logoutput("workspace_signal_handler: SIGPIPE");
+	    break;
 
-    } else if ( signo==SIGCHLD ) {
+	case SIGCHLD:
 
-	logoutput("workspace_signal_handler: SIGCHLD");
+	    logoutput("workspace_signal_handler: SIGCHLD");
+	    break;
 
-    } else if ( signo==SIGUSR1 ) {
+	case SIGUSR1:
 
-	logoutput("workspace_signal_handler: SIGUSR1");
+	    logoutput("workspace_signal_handler: SIGUSR1");
+	    /* TODO: use to reread the configuration ?*/
+	    break;
 
-	/* TODO: use to reread the configuration ?*/
+	default:
 
-    } else {
-
-        logoutput("workspace_signal_handler: received unknown %i signal", signo);
+    	    logoutput("workspace_signal_handler: received unknown %i signal", signo);
 
     }
 

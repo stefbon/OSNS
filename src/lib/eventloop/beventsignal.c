@@ -129,13 +129,24 @@ static int add_signalhandler(struct beventloop_s *loop, void (* cb) (struct beve
     signal_cb=(cb) ? cb : default_signal_cb;
 
     sigemptyset(&sigset);
+
+    /* default set of signals to react on -> configurable? */
+
     sigaddset(&sigset, SIGINT);
-    sigaddset(&sigset, SIGIO);
     sigaddset(&sigset, SIGHUP);
     sigaddset(&sigset, SIGTERM);
+    sigaddset(&sigset, SIGQUIT);
+    sigaddset(&sigset, SIGSTOP);
+    sigaddset(&sigset, SIGABRT);
+
+    /* io event on socket */
+
+    sigaddset(&sigset, SIGIO);
     sigaddset(&sigset, SIGPIPE);
+
     sigaddset(&sigset, SIGCHLD);
     sigaddset(&sigset, SIGUSR1);
+
     if (sigprocmask(SIG_BLOCK, &sigset, NULL) == -1) goto error;
 
     fd = signalfd(-1, &sigset, 0);

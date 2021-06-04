@@ -359,27 +359,26 @@ static int read_sftp_connection_socket(struct sftp_subsystem_s *s, int fd, uint3
 
 }
 
-int read_sftp_connection_signal(int fd, void *ptr, uint32_t events)
+void read_sftp_connection_signal(int fd, void *ptr, struct event_s *event)
 {
     struct sftp_subsystem_s *s=(struct sftp_subsystem_s *) ptr;
     int result=0;
 
-    if (signal_is_error(events) || signal_is_close(events)) {
+    if (signal_is_error(event) || signal_is_close(event)) {
 
 	s->flags |= SFTP_SUBSYSTEM_FLAG_TROUBLE;
 	start_thread_sftp_connection_problem(&s->connection);
 
-    } else if (signal_is_data(events)) {
+    } else if (signal_is_data(event)) {
 
-	result=read_sftp_connection_socket(s, fd, events);
+	result=read_sftp_connection_socket(s, fd, event);
 
     } else {
 
-	logoutput_warning("read_sftp_connection_signal: event %i not reckognized", events);
+	logoutput_warning("read_sftp_connection_signal: event not reckognized (fd=%i) value events %i", fd, printf_event_uint(event));
 
     }
 
-    return result;
 
 }
 

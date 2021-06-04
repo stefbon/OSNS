@@ -72,8 +72,12 @@ static int get_fd_incoming_data(struct sftp_connection_s *connection)
     return fd;
 }
 
+static void cb_dummy(int fd, void *ptr, struct event_s *event)
+{}
+
 static int open_std_connection(struct sftp_connection_s *connection)
 {
+    struct sftp_subsystem_s *s=(struct sftp_subsystem_s *)((char *) connection - offsetof(struct sftp_subsystem_s, connection));
     struct fs_connection_s *fsc=NULL;
     struct io_std_s *io_std=NULL;
     struct std_ops_s *sops=NULL;
@@ -84,6 +88,8 @@ static int open_std_connection(struct sftp_connection_s *connection)
     io_std=&fsc->io.std;
     sops=io_std->sops;
 
+    io_std->bevent=create_fd_bevent(NULL, read_sftp_connection_signal, (void *) s);
+    if (io_std->bevent==NULL) goto error;
     set_bevent_unix_fd(io_std->bevent, (* sops->open)(io_std, 0));
 
     /* STDOUT */
@@ -92,6 +98,8 @@ static int open_std_connection(struct sftp_connection_s *connection)
     io_std=&fsc->io.std;
     sops=io_std->sops;
 
+    io_std->bevent=create_fd_bevent(NULL, cb_dummy, (void *) s);
+    if (io_std->bevent==NULL) goto error;
     set_bevent_unix_fd(io_std->bevent, (* sops->open)(io_std, 0));
 
     /* STDERR */
@@ -100,9 +108,48 @@ static int open_std_connection(struct sftp_connection_s *connection)
     io_std=&fsc->io.std;
     sops=io_std->sops;
 
+    io_std->bevent=create_fd_bevent(NULL, cb_dummy, (void *) s);
+    if (io_std->bevent==NULL) goto error;
     set_bevent_unix_fd(io_std->bevent, (* sops->open)(io_std, 0));
 
     return 0;
+
+    error:
+
+    /* close/remove any (b)event */
+
+    fsc=&connection->type.std.stdin;
+    io_std=&fsc->io.std;
+
+    if (io_std->bevent) {
+
+	remove_bevent(io_std->bevent);
+	io_std->bevent=NULL;
+
+    }
+
+    fsc=&connection->type.std.stdout;
+    io_std=&fsc->io.std;
+
+    if (io_std->bevent) {
+
+	remove_bevent(io_std->bevent);
+	io_std->bevent=NULL;
+
+    }
+
+    fsc=&connection->type.std.stderr;
+    io_std=&fsc->io.std;
+
+    if (io_std->bevent) {
+
+	remove_bevent(io_std->bevent);
+	io_std->bevent=NULL;
+
+    }
+
+    return -1;
+
 }
 
 static int close_std_connection(struct sftp_connection_s *connection)
