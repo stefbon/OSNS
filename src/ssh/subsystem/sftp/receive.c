@@ -449,7 +449,7 @@ int init_sftp_receive(struct sftp_receive_s *receive)
     pthread_mutex_init(&receive->mutex, NULL);
     pthread_cond_init(&receive->cond, NULL);
 
-    receive->process_sftp_payload=process_sftp_payload_dummy;
+    receive->process_sftp_payload=process_sftp_subsystem_init;
 
     receive->read=0;
     receive->size=SFTP_RECEIVE_BUFFER_SIZE_DEFAULT;
