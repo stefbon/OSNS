@@ -230,6 +230,8 @@ static void read_sftp_buffer(void *ptr)
 
 	    memcpy(payload->data, &buffer[pos], length - 5);
 
+	    logoutput("read_sftp_buffer: process payload len %i id %i", payload->len, payload->id);
+
 	    (* receive->process_sftp_payload)(payload);
 
 	} else {
@@ -272,7 +274,7 @@ static void start_thread_read_sftp_connection_buffer(struct sftp_subsystem_s *s)
     work_workerthread(NULL, 0, read_sftp_buffer, (void *) s, NULL);
 }
 
-static int read_sftp_connection_socket(struct sftp_subsystem_s *s, int fd, uint32_t events)
+static int read_sftp_connection_socket(struct sftp_subsystem_s *s, int fd, struct event_s *events)
 {
     struct sftp_connection_s *c=&s->connection;
     struct sftp_receive_s *receive=&s->receive;
