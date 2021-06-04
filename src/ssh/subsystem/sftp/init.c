@@ -203,7 +203,6 @@ static int init_sftp_identity(struct sftp_identity_s *user)
 
     memset(user, 0, sizeof(struct sftp_identity_s));
 
-    user->result=NULL;
     user->buffer=NULL;
     user->size=128;
 

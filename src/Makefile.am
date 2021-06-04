@@ -218,7 +218,7 @@ osns_sftp_subsystem_SOURCES	=	osns_sftp_subsystem.c \
 					ssh/subsystem/sftp/ownergroup.c ssh/subsystem/sftp/supported.c \
 					ssh/subsystem/sftp/receive.c ssh/subsystem/sftp/send.c \
 					lib/datatypes/ssh-string.c lib/datatypes/ssh-uint.c \
-					lib/eventloop/bevent.c lib/eventloop/beventloop.c lib/eventloop/beventsignal.c lib/eventloop/beventtimer.c \
+					lib/eventloop/beventloop.c lib/eventloop/beventsignal.c \
 					lib/error/error-handling.c \
 					lib/list/simple-list.c lib/list/simple-locking.c lib/list/simple-hash.c \
 					lib/log/logging.c \

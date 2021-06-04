@@ -364,12 +364,12 @@ int read_sftp_connection_signal(int fd, void *ptr, uint32_t events)
     struct sftp_subsystem_s *s=(struct sftp_subsystem_s *) ptr;
     int result=0;
 
-    if (signal_is_error(events) || signal_is_hangup(events)) {
+    if (signal_is_error(events) || signal_is_close(events)) {
 
 	s->flags |= SFTP_SUBSYSTEM_FLAG_TROUBLE;
 	start_thread_sftp_connection_problem(&s->connection);
 
-    } else if (signal_is_dataavail(events)) {
+    } else if (signal_is_data(events)) {
 
 	result=read_sftp_connection_socket(s, fd, events);
 

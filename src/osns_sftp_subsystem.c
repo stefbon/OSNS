@@ -64,7 +64,7 @@
 
 char *program_name=NULL;
 
-static void workspace_signal_handler(struct beventloop_s *bloop, unsigned int signo, pid_t pid, int fd)
+static void workspace_signal_handler(struct beventloop_s *loop, unsigned int signo, pid_t pid, int fd)
 {
 
     logoutput("workspace_signal_handler: received %i", signo);
