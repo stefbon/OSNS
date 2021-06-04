@@ -215,22 +215,22 @@ static void read_sftp_buffer(void *ptr)
 
 	/* enough data available */
 
-	payload=malloc(sizeof(struct sftp_payload_s) + length - 5);
+	payload=malloc(sizeof(struct sftp_payload_s) + length - 1);
 
 	if (payload) {
 	    unsigned char pos=4;
 	    char *buffer=receive->buffer;
 
-	    memset(payload, 0, sizeof(struct sftp_payload_s) + length - 5);
+	    memset(payload, 0, sizeof(struct sftp_payload_s) + length - 1);
 	    payload->sftp=s;
-	    payload->len=length - 5;
+	    payload->len=length - 1;
 	    init_list_element(&payload->list, NULL);
 	    payload->type=(unsigned char) buffer[pos];
 	    pos++;
 	    payload->id=get_uint32(&buffer[pos]);
 	    pos+=4;
 
-	    memcpy(payload->data, &buffer[pos], length - 5);
+	    memcpy(payload->data, &buffer[pos], length - 1);
 
 	    logoutput("read_sftp_buffer: process payload len %i id %i", payload->len, payload->id);
 
