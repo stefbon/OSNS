@@ -20,9 +20,11 @@
 #ifndef OSNS_LIB_DISCOVER_AVAHI_H
 #define OSNS_LIB_DISCOVER_AVAHI_H
 
-// Prototypes
+#define DISCOVER_AVAHI_FLAG_ALLOW_LOCALHOST			1
 
-void browse_services_avahi(void (* cb)(const char *name, const char *hostname, char *ipv4, const char *domain, unsigned int port, const char *type));
+/* Prototypes */
+
+void browse_services_avahi(unsigned int flags, void (* cb)(const char *name, const char *hostname, char *ipv4, const char *domain, unsigned int port, const char *type));
 void stop_browse_avahi();
 
 #endif

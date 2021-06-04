@@ -47,9 +47,11 @@
 
 #include "misc.h"
 #include "eventloop.h"
+#include "avahi.h"
 
 static AvahiClient *client = NULL;
 static AvahiStringList *types = NULL;
+static unsigned int AvahiGlobalFlags=0;
 static void (* add_net_service_cb)(const char *name, const char *hostname, char *ipv4, const char *domain, unsigned int port, const char *type);
 
 static void service_resolver_cb(AvahiServiceResolver *r, AvahiIfIndex interface, AvahiProtocol protocol, AvahiResolverEvent event,
@@ -97,7 +99,12 @@ static void service_browser_cb(AvahiServiceBrowser *b, AvahiIfIndex interface, A
 
         case AVAHI_BROWSER_NEW: {
 
-            if (flags & AVAHI_LOOKUP_RESULT_LOCAL) break;
+	    if ((AvahiGlobalFlags & DISCOVER_AVAHI_FLAG_ALLOW_LOCALHOST)==0) {
+
+        	if (flags & AVAHI_LOOKUP_RESULT_LOCAL) break;
+
+	    }
+
             logoutput("service_browser_cb: new %s %s %s", name, type, domain);
 
 	    if (! avahi_service_resolver_new(client, interface, protocol, name, type, domain, AVAHI_PROTO_UNSPEC, 0, service_resolver_cb, NULL)) {
@@ -112,7 +119,12 @@ static void service_browser_cb(AvahiServiceBrowser *b, AvahiIfIndex interface, A
 
         case AVAHI_BROWSER_REMOVE: {
 
-	    if (flags & AVAHI_LOOKUP_RESULT_LOCAL) break;
+	    if ((AvahiGlobalFlags & DISCOVER_AVAHI_FLAG_ALLOW_LOCALHOST)==0) {
+
+		if (flags & AVAHI_LOOKUP_RESULT_LOCAL) break;
+
+	    }
+
             logoutput_info("service_browser_cb: remove %s %s %s", name, type, domain);
 
             /* send main message
@@ -195,7 +207,6 @@ static void client_cb(AvahiClient *c, AvahiClientState state, AVAHI_GCC_UNUSED v
 {
     if (state == AVAHI_CLIENT_FAILURE) {
         logoutput_info("server connection failure: %s", avahi_strerror(avahi_client_errno(c)));
-        // avahi_threaded_poll_quit(threadedpoll);
     }
 }
 
@@ -204,11 +215,21 @@ static void cb_default(const char *name, const char *hostname, char *ipv4, const
     logoutput("cb_default: name %s host %s ipv4 %s domain %s port %i type %s", name, hostname, ipv4, domain, port, type);
 }
 
-void browse_services_avahi(void (* cb)(const char *name, const char *hostname, char *ipv4, const char *domain, unsigned int port, const char *type)) {
+void browse_services_avahi(unsigned int flags, void (* cb)(const char *name, const char *hostname, char *ipv4, const char *domain, unsigned int port, const char *type))
+{
     AvahiServiceTypeBrowser *browser = NULL;
     AvahiPoll *poll_api=NULL;
     AvahiGLibPoll *glib_poll=NULL;
-    int error;
+    int error=0;
+
+    if (client) {
+
+	logoutput_warning("browse_services_avahi: client already created");
+	return;
+
+    }
+
+    AvahiGlobalFlags|=flags;
 
     avahi_set_allocator(avahi_glib_allocator());
 

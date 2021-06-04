@@ -980,6 +980,6 @@ void discover_services()
 
     }
 
-    browse_services_avahi(add_net_service_avahi);
+    browse_services_avahi(0, add_net_service_avahi);
 
 }
