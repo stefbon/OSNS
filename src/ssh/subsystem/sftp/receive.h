@@ -24,6 +24,8 @@
 
 /* prototypes */
 
+void set_sftp_subsystem_process_payload(struct sftp_subsystem_s *sftp, const char *what);
+
 void read_sftp_connection_signal(int fd, void *ptr, struct event_s *event);
 int init_sftp_receive(struct sftp_receive_s *receive);
 void free_sftp_receive(struct sftp_receive_s *receive);

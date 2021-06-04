@@ -65,6 +65,9 @@
 #include "osns_sftp_subsystem.h"
 #include "receive.h"
 #include "connect.h"
+#include "init.h"
+
+/* is this still required?? getting payload from a queue ... */
 
 static void process_sftp_payload_queue(struct sftp_subsystem_s *s)
 {
@@ -92,7 +95,6 @@ static void process_sftp_payload_queue(struct sftp_subsystem_s *s)
 
     }
 
-
     return;
 
     finish:
@@ -106,6 +108,56 @@ static void process_sftp_payload_queue(struct sftp_subsystem_s *s)
     }
 
     pthread_mutex_unlock(&queue->mutex);
+
+}
+
+static void process_sftp_subsystem_error(struct sftp_payload_s *payload)
+{
+    logoutput("process_sftp_subsystem_error: ... ");
+}
+
+static void process_sftp_subsystem_session(struct sftp_payload_s *payload)
+{
+    unsigned char pos=0;
+    char *buffer=payload->data;
+    struct sftp_subsystem_s *s=payload->sftp;
+
+    payload->id=get_uint32(&buffer[pos]);
+    pos+=4;
+    memmove(buffer, &buffer[pos], payload->len - pos);
+
+    (* s->cb[payload->type])(payload);
+    if (s->flags & SFTP_SUBSYSTEM_FLAG_FINISH) goto finish;
+    free(payload);
+    return;
+
+    finish:
+
+    logoutput("process_sftp_subsystem_session: finish ... TODO");
+
+}
+
+void set_sftp_subsystem_process_payload(struct sftp_subsystem_s *sftp, const char *what)
+{
+    struct sftp_receive_s *receive=&sftp->receive;
+
+    if (strcmp(what, "init")==0) {
+
+	receive->process_sftp_payload=process_sftp_subsystem_init;
+
+    } else if (strcmp(what, "error")==0) {
+
+	receive->process_sftp_payload=process_sftp_subsystem_error;
+
+    } else if (strcmp(what, "session")==0) {
+
+	receive->process_sftp_payload=process_sftp_subsystem_session;
+
+    } else {
+
+	logoutput("set_sftp_subsystem_process_payload: unreckognized phase: %s", what);
+
+    }
 
 }
 
@@ -227,8 +279,6 @@ static void read_sftp_buffer(void *ptr)
 	    init_list_element(&payload->list, NULL);
 	    payload->type=(unsigned char) buffer[pos];
 	    pos++;
-	    payload->id=get_uint32(&buffer[pos]);
-	    pos+=4;
 
 	    memcpy(payload->data, &buffer[pos], length - 1);
 
