@@ -190,6 +190,8 @@ static void read_sftp_buffer(void *ptr)
 
 	/* wait for data to arrive */
 
+	logoutput("read_sftp_buffer: tid %i read %i length %i", gettid(), receive->read, length);
+
 	while (receive->read < length + 4) {
 
 	    receive->flags |= SFTP_RECEIVE_STATUS_WAITING2;
