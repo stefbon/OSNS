@@ -182,7 +182,7 @@ static void process_sftp_payload_init(struct sftp_payload_s *payload)
 
     }
 
-    logoutput_warning("process_sftp_init: received init version");
+    logoutput("process_sftp_init: received init version");
     sftp->flags |= SFTP_SUBSYSTEM_FLAG_VERSION_RECEIVED;
 
     /* set function to process to handle error:

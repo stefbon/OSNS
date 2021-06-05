@@ -25,7 +25,6 @@
 /* prototypes */
 
 int send_sftp_init(struct sftp_subsystem_s *sftp);
-void process_sftp_subsystem_init(struct sftp_payload_s *payload);
 
 int init_sftp_subsystem(struct sftp_subsystem_s *sftp);
 void free_sftp_subsystem(struct sftp_subsystem_s *sftp);

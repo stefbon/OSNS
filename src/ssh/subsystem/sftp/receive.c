@@ -111,58 +111,6 @@ static void process_sftp_payload_queue(struct sftp_subsystem_s *s)
 
 }
 
-static void process_sftp_subsystem_error(struct sftp_payload_s *payload)
-{
-    logoutput("process_sftp_subsystem_error: ... ");
-}
-
-static void process_sftp_subsystem_session(struct sftp_payload_s *payload)
-{
-    unsigned char pos=0;
-    char *buffer=payload->data;
-    struct sftp_subsystem_s *s=payload->sftp;
-
-    logoutput("process_sftp_subsystem_session:");
-
-    payload->id=get_uint32(&buffer[pos]);
-    pos+=4;
-    memmove(buffer, &buffer[pos], payload->len - pos);
-
-    (* s->cb[payload->type])(payload);
-    if (s->flags & SFTP_SUBSYSTEM_FLAG_FINISH) goto finish;
-    free(payload);
-    return;
-
-    finish:
-
-    logoutput("process_sftp_subsystem_session: finish ... TODO");
-
-}
-
-void set_sftp_subsystem_process_payload(struct sftp_subsystem_s *sftp, const char *what)
-{
-    struct sftp_receive_s *receive=&sftp->receive;
-
-    if (strcmp(what, "init")==0) {
-
-	receive->process_sftp_payload=process_sftp_subsystem_init;
-
-    } else if (strcmp(what, "error")==0) {
-
-	receive->process_sftp_payload=process_sftp_subsystem_error;
-
-    } else if (strcmp(what, "session")==0) {
-
-	receive->process_sftp_payload=process_sftp_subsystem_session;
-
-    } else {
-
-	logoutput("set_sftp_subsystem_process_payload: unreckognized phase: %s", what);
-
-    }
-
-}
-
 static void read_sftp_buffer(void *ptr)
 {
     struct sftp_subsystem_s *s=(struct sftp_subsystem_s *) ptr;
@@ -286,21 +234,7 @@ static void read_sftp_buffer(void *ptr)
 
 	    logoutput("read_sftp_buffer: process payload len %i id %i", payload->len, payload->id);
 
-	    if (s->flags & SFTP_SUBSYSTEM_FLAG_SESSION) {
-
-		process_sftp_subsystem_session(payload);
-
-	    } else if ((s->flags & SFTP_SUBSYSTEM_FLAG_VERSION_RECEIVED)==0) {
-
-		process_sftp_subsystem_init(payload);
-
-	    } else {
-
-		process_sftp_subsystem_error(payload);
-
-	    }
-
-	    // (* receive->process_sftp_payload)(payload);
+	    (* receive->process_sftp_payload)(payload);
 
 	} else {
 
@@ -468,7 +402,7 @@ int init_sftp_receive(struct sftp_receive_s *receive)
     pthread_mutex_init(&receive->mutex, NULL);
     pthread_cond_init(&receive->cond, NULL);
 
-    receive->process_sftp_payload=process_sftp_subsystem_init;
+    receive->process_sftp_payload=process_sftp_payload_dummy;
 
     receive->read=0;
     receive->size=SFTP_RECEIVE_BUFFER_SIZE_DEFAULT;
