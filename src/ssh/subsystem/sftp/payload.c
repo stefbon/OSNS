@@ -247,20 +247,24 @@ static void set_process_sftp_payload(struct sftp_subsystem_s *sftp, void (* proc
 
 void set_process_sftp_payload_init(struct sftp_subsystem_s *sftp)
 {
+    logoutput("set_process_sftp_payload_init");
     set_process_sftp_payload(sftp, process_sftp_payload_init);
 }
 
 void set_process_sftp_payload_session(struct sftp_subsystem_s *sftp)
 {
+    logoutput("set_process_sftp_payload_session");
     set_process_sftp_payload(sftp, process_sftp_payload_session);
 }
 
 void set_process_sftp_payload_disconnect(struct sftp_subsystem_s *sftp)
 {
+    logoutput("set_process_sftp_payload_disconnect");
     set_process_sftp_payload(sftp, process_sftp_payload_disconnect);
 }
 
 void set_process_sftp_payload_notsupp(struct sftp_subsystem_s *sftp)
 {
+    logoutput("set_process_sftp_payload_notsupp");
     set_process_sftp_payload(sftp, process_sftp_payload_notsupp);
 }
