@@ -170,14 +170,14 @@ static void process_sftp_payload_init(struct sftp_payload_s *payload)
     struct sftp_subsystem_s *sftp=payload->sftp;
     struct sftp_receive_s *receive=&sftp->receive;
 
-    pthread_mutex_lock(&receive->mutex);
+    // pthread_mutex_lock(&receive->mutex);
 
     if (sftp->flags & SFTP_SUBSYSTEM_FLAG_VERSION_RECEIVED) {
 
 	/* error: version already received */
 
 	logoutput_warning("process_sftp_init: init version message already received from client");
-	pthread_mutex_unlock(&receive->mutex);
+	// pthread_mutex_unlock(&receive->mutex);
 	goto disconnect;
 
     }
@@ -189,7 +189,7 @@ static void process_sftp_payload_init(struct sftp_payload_s *payload)
 	the client has to wait for reply! */
 
     set_process_sftp_payload_disconnect(sftp);
-    pthread_mutex_unlock(&receive->mutex);
+    // pthread_mutex_unlock(&receive->mutex);
 
     if (payload->type != SSH_FXP_INIT) {
 
