@@ -122,6 +122,8 @@ static void process_sftp_subsystem_session(struct sftp_payload_s *payload)
     char *buffer=payload->data;
     struct sftp_subsystem_s *s=payload->sftp;
 
+    logoutput("process_sftp_subsystem_session:");
+
     payload->id=get_uint32(&buffer[pos]);
     pos+=4;
     memmove(buffer, &buffer[pos], payload->len - pos);
@@ -284,7 +286,21 @@ static void read_sftp_buffer(void *ptr)
 
 	    logoutput("read_sftp_buffer: process payload len %i id %i", payload->len, payload->id);
 
-	    (* receive->process_sftp_payload)(payload);
+	    if (s->flags & SFTP_SUBSYSTEM_FLAG_SESSION) {
+
+		process_sftp_subsystem_session(payload);
+
+	    } else if ((s->flags & SFTP_SUBSYSTEM_FLAG_VERSION_RECEIVED)==0) {
+
+		process_sftp_subsystem_init(payload);
+
+	    } else {
+
+		process_sftp_subsystem_error(payload);
+
+	    }
+
+	    // (* receive->process_sftp_payload)(payload);
 
 	} else {
 
@@ -391,6 +407,8 @@ static int read_sftp_connection_socket(struct sftp_subsystem_s *s, int fd, struc
 
 	receive->read+=bytesread;
 
+	logoutput("read_sftp_connection_socket: read %i", receive->read);
+
 	if (receive->flags & SFTP_RECEIVE_STATUS_WAIT) {
 
 	    /* there is a thread waiting for more data to arrive: signal it */
@@ -438,6 +456,7 @@ void read_sftp_connection_signal(int fd, void *ptr, struct event_s *event)
 
 static void process_sftp_payload_dummy(struct sftp_payload_s *p)
 {
+    logoutput("process_sftp_subsystem_dummy");
     free(p);
 }
 

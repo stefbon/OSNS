@@ -246,7 +246,7 @@ void process_sftp_subsystem_init(struct sftp_payload_s *payload)
         /* switch to processing "normal" payload */
 
         set_sftp_subsystem_process_payload(sftp, "session");
-        sftp->flags |= SFTP_SUBSYSTEM_FLAG_VERSION_RECEIVED;
+        sftp->flags |= (SFTP_SUBSYSTEM_FLAG_VERSION_RECEIVED | SFTP_SUBSYSTEM_FLAG_SESSION);
 
     } else {
 
