@@ -306,6 +306,7 @@ static int std_default_write(struct io_std_s *s, char *data, unsigned int size)
 {
     struct bevent_s *bevent=s->bevent;
     int fd=get_bevent_unix_fd(bevent);
+    logoutput("std_default_write: fs %i", fd);
     return write(fd, data, size);
 }
 

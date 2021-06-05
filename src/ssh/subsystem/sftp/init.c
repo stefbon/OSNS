@@ -178,7 +178,7 @@ int send_sftp_init(struct sftp_subsystem_s *sftp)
 
     store_uint32(&data[0], pos-4);
 
-    if (send_sftp_subsystem(sftp, data, pos)==0) {
+    if (send_sftp_subsystem(sftp, data, pos)>=0) {
 
         sftp->flags|=SFTP_SUBSYSTEM_FLAG_VERSION_SEND;
         return 0;
