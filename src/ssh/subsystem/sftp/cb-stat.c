@@ -170,13 +170,15 @@ static void sftp_op_stat_generic(struct sftp_subsystem_s *sftp, struct sftp_payl
 
 }
 
-void sftp_op_stat(struct sftp_subsystem_s *sftp, struct sftp_payload_s *payload)
+void sftp_op_stat(struct sftp_payload_s *payload)
 {
+    struct sftp_subsystem_s *sftp=payload->sftp;
     sftp_op_stat_generic(sftp, payload, stat);
 }
 
-void sftp_op_lstat(struct sftp_subsystem_s *sftp, struct sftp_payload_s *payload)
+void sftp_op_lstat(struct sftp_payload_s *payload)
 {
+    struct sftp_subsystem_s *sftp=payload->sftp;
     sftp_op_stat_generic(sftp, payload, lstat);
 }
 
@@ -188,8 +190,9 @@ void sftp_op_lstat(struct sftp_subsystem_s *sftp, struct sftp_payload_s *payload
     - uint32				flags
     */
 
-void sftp_op_fstat(struct sftp_subsystem_s *sftp, struct sftp_payload_s *payload)
+void sftp_op_fstat(struct sftp_payload_s *payload)
 {
+    struct sftp_subsystem_s *sftp=payload->sftp; 
     unsigned int status=SSH_FX_BAD_MESSAGE;
 
     logoutput("sftp_op_fstat");

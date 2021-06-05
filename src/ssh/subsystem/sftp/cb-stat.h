@@ -20,26 +20,10 @@
 #ifndef SSH_SUBSYSTEM_SFTP_OP_STAT_H
 #define SSH_SUBSYSTEM_SFTP_OP_STAT_H
 
-struct sftp_attr_s {
-    unsigned int 				flags;
-    unsigned char				valid[9];
-    unsigned int				count;
-    unsigned int				type;
-    uint64_t					size;
-    uid_t					uid;
-    struct ssh_string_s				user;
-    gid_t					gid;
-    struct ssh_string_s				group;
-    uint32_t					permissions;
-    struct sftp_time_s				atime;
-    struct sftp_time_s				mtime;
-    struct sftp_time_s				ctime;
-};
-
 /* prototypes */
 
-void sftp_op_stat(struct sftp_subsystem_s *sftp, struct sftp_payload_s *p);
-void sftp_op_lstat(struct sftp_subsystem_s *sftp, struct sftp_payload_s *p);
-void sftp_op_fstat(struct sftp_subsystem_s *sftp, struct sftp_payload_s *p);
+void sftp_op_stat(struct sftp_payload_s *p);
+void sftp_op_lstat(struct sftp_payload_s *p);
+void sftp_op_fstat(struct sftp_payload_s *p);
 
 #endif

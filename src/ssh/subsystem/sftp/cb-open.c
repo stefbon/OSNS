@@ -62,8 +62,9 @@
     - string				handle
     */
 
-void sftp_op_close(struct sftp_subsystem_s *sftp, struct sftp_payload_s *payload)
+void sftp_op_close(struct sftp_payload_s *payload)
 {
+    struct sftp_subsystem_s *sftp=payload->sftp; 
     unsigned int status=SSH_FX_BAD_MESSAGE;
 
     logoutput("sftp_op_close (%i) header %i", (int) gettid(), payload->len);

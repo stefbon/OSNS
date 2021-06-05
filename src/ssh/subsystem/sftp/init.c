@@ -59,6 +59,10 @@
 #include "payload.h"
 #include "protocol.h"
 
+#include "cb-open.h"
+// #include "cb-opendir.h"
+#include "cb-stat.h"
+
 /*
     for sftp init data looks like:
 
@@ -292,6 +296,15 @@ int init_sftp_subsystem(struct sftp_subsystem_s *sftp)
 
     set_process_sftp_payload_notsupp(sftp);
     for (unsigned int i=0; i<256; i++) sftp->cb[i]=reply_sftp_notsupported;
+
+    //sftp->cb[SSH_FXP_OPENDIR]=
+    //sftp->cb[SSH_FXP_READDIR]=
+
+    sftp->cb[SSH_FXP_CLOSE]=sftp_op_close;
+    sftp->cb[SSH_FXP_LSTAT]=sftp_op_lstat;
+    sftp->cb[SSH_FXP_STAT]=sftp_op_stat;
+    sftp->cb[SSH_FXP_FSTAT]=sftp_op_fstat;
+
     return 0;
 
 }
