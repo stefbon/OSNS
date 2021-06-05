@@ -86,9 +86,15 @@ static void process_sftp_payload_queue(void *ptr)
 
     if (list) {
 	struct sftp_payload_s *payload=(struct sftp_payload_s *) ((char *) list - offsetof(struct sftp_payload_s, list));
+	char *data=payload->data;
+
+	payload->id=get_uint32(data);
+	memmove(data, &data[4], payload->len - 4);
+	payload->len-=4;
 
 	(* s->cb[payload->type])(payload);
 	free(payload);
+	list=NULL;
 	if (s->flags & SFTP_SUBSYSTEM_FLAG_FINISH) goto finish;
 
 	pthread_mutex_lock(&queue->mutex);
@@ -104,7 +110,7 @@ static void process_sftp_payload_queue(void *ptr)
 
     pthread_mutex_lock(&queue->mutex);
     queue->threads--;
-    if (queue->threads==0) {
+    if (queue->threads==0 && (s->flags & SFTP_SUBSYSTEM_FLAG_FINISH)) {
 
 	/* last thread: cleanup and close */
 	finish_sftp_subsystem(s);
@@ -124,7 +130,7 @@ static void process_sftp_payload_session(struct sftp_payload_s *payload)
     struct sftp_connection_s *connection=&sftp->connection;
     struct sftp_payload_queue_s *queue=&sftp->queue;
 
-    logoutput("process_sftp_payload_session: received %i bytes length %i type %i id %i", payload->len, payload->type, payload->id);
+    logoutput("process_sftp_payload_session: received %i bytes length %i type %i", payload->len, payload->type);
 
     pthread_mutex_lock(&queue->mutex);
     add_list_element_last(&queue->header, &payload->list);

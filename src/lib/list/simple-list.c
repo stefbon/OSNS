@@ -186,7 +186,6 @@ static void delete_element_one(struct list_header_s *h, struct list_element_s *e
 
     _delete_element_common(h, e);
     h->count--;
-    init_list_element(e, NULL);
     set_header_ops_empty(h);
 }
 
