@@ -235,6 +235,7 @@ static void read_sftp_buffer(void *ptr)
 	    logoutput("read_sftp_buffer: process payload len %i id %i", payload->len, payload->id);
 
 	    (* receive->process_sftp_payload)(payload);
+	    logoutput("read_sftp_buffer: process payload ready");
 
 	} else {
 
@@ -249,6 +250,8 @@ static void read_sftp_buffer(void *ptr)
 	receive->threads--;
 
 	if (receive->read>0) {
+
+	    logoutput("read_sftp_buffer: %i bytes still in buffer", receive->read);
 
 	    memmove(receive->buffer, (char *)(receive->buffer + length + 4), receive->read);
 	    if (receive->threads==0) goto start; /* notice receive mutex is still locked here */
