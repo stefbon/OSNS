@@ -127,17 +127,16 @@ static void process_sftp_payload_queue(void *ptr)
 static void process_sftp_payload_session(struct sftp_payload_s *payload)
 {
     struct sftp_subsystem_s *sftp=payload->sftp;
-    struct sftp_connection_s *connection=&sftp->connection;
     struct sftp_payload_queue_s *queue=&sftp->queue;
 
-    logoutput("process_sftp_payload_session: received %i bytes length %i type %i", payload->len, payload->type);
+    logoutput("process_sftp_payload_session: received %i bytes type %i", payload->len, payload->type);
 
     pthread_mutex_lock(&queue->mutex);
     add_list_element_last(&queue->header, &payload->list);
     pthread_cond_broadcast(&queue->cond);
     pthread_mutex_unlock(&queue->mutex);
 
-    work_workerthread(NULL, 0, process_sftp_payload_queue, (void *) connection, NULL);
+    work_workerthread(NULL, 0, process_sftp_payload_queue, (void *) sftp, NULL);
     return;
 }
 
