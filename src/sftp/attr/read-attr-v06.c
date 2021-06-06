@@ -260,8 +260,8 @@ static void read_sftp_attributes(struct sftp_client_s *sftp, unsigned int valid,
     av06.attrcb=valid_attr06;
     av06.ntimecb=valid_ntime06;
 
-    logoutput_debug("read_sftp_attributes: len %i pos %i", buffer->len , (int)(buffer->pos - buffer->buffer));
-    // logoutput_base64encoded("read_sftp_attributes", buffer->buffer, buffer->len);
+    logoutput("read_sftp_attributes: len %i pos %i", buffer->len , (int)(buffer->pos - buffer->buffer));
+    logoutput_base64encoded("read_sftp_attributes", buffer->buffer, buffer->len);
 
     /* read type (always present)
 	- byte			type
@@ -273,7 +273,7 @@ static void read_sftp_attributes(struct sftp_client_s *sftp, unsigned int valid,
 
     read_sftp_attributes_generic(sftp, &av06, 15, buffer, attr);
 
-    logoutput_debug("read_sftp_attributes: received %i", attr->received);
+    logoutput("read_sftp_attributes: received %i", attr->received);
 
 }
 

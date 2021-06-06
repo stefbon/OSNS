@@ -122,10 +122,11 @@ void write_attributes_v06(struct sftp_client_s *sftp, struct attr_buffer_s *buff
     vb[4] = (attr->asked && SFTP_ATTR_MTIME);
     vb[5] = (attr->asked && SFTP_ATTR_CTIME);
 
-    pos=buffer->pos;
+    pos=buffer->pos; /* keep for later user: to write the correct valid value */
     (* buffer->ops->rw.write.write_uint32)(buffer, valid); /* correct this later */
 
     type=IFTODT(attr->type);
+    logoutput("write_attributes_v06: type %i", type);
     (* buffer->ops->rw.write.write_uchar)(buffer, (type<13) ? type_reverse[type] : (unsigned char) SSH_FILEXFER_TYPE_UNKNOWN);
 
     /* size */
