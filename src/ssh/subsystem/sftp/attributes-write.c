@@ -302,6 +302,8 @@ unsigned int write_attributes(struct sftp_subsystem_s *s, char *buffer, unsigned
     store_uint32(pos, valid);
     pos+=4;
 
+    logoutput("write_attributes: attr->type %i valid %i", attr->type, valid);
+
     if (attr->type > 13) {
 
 	*pos=(unsigned char) SSH_FILEXFER_TYPE_UNKNOWN;
