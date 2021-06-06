@@ -159,6 +159,17 @@ int main(int argc, char *argv[])
 
     }
 
+    if (init_commonhandles(&error)==0) {
+
+	logoutput_info("MAIN: initializing common handles (open and opendir)");
+
+    } else {
+
+	logoutput_info("MAIN: error initializing common handles");
+	goto out;
+
+    }
+
     /* Initialize and start default threads
 	NOTE: important to start these after initializing the signal handler, if not doing this this way any signal will make the program crash */
 
@@ -225,6 +236,7 @@ int main(int argc, char *argv[])
 
     logoutput_info("MAIN: destroy eventloop");
     clear_beventloop(NULL);
+    free_commonhandles();
 
     if (pidfile) {
 
