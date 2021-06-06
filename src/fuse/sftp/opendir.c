@@ -433,6 +433,8 @@ static int _sftp_get_readdir_names(struct fuse_opendir_s *opendir, unsigned int 
 		names->buff = NULL;
 		names->size = 0;
 
+		logoutput("_sftp_get_readdir_names: names size: %i count %i", opendir->data.buffer.size, opendir->data.buffer.count);
+
 	    } else if (reply->type==SSH_FXP_STATUS) {
 		struct status_response_s *status=&reply->response.status;
 
