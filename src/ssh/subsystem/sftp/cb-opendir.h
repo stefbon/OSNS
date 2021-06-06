@@ -17,12 +17,12 @@
 
 */
 
-#ifndef BFILESERVER_SFTP_OP_OPENDIR_H
-#define BFILESERVER_SFTP_OP_OPENDIR_H
+#ifndef SSH_SUBSYSTEM_SFTP_CB_OPENDIR_H
+#define SSH_SUBSYSTEM_SFTP_CB_OPENDIR_H
 
 /* prototypes */
 
-void sftp_op_opendir(struct ssh_session_s *session, struct sftp_header_s *header, char *buffer);
-void sftp_op_readdir(struct ssh_session_s *session, struct sftp_header_s *header, char *buffer);
+void sftp_op_opendir(struct sftp_payload_s *payload);
+void sftp_op_readdir(struct sftp_payload_s *payload);
 
 #endif

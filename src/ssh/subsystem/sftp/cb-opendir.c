@@ -280,8 +280,9 @@ static void _sftp_op_opendir(struct sftp_subsystem_s *sftp, struct sftp_payload_
     - string				path
     */
 
-void sftp_op_opendir(struct sftp_subsystem_s *sftp, struct sftp_payload_s *payload)
+void sftp_op_opendir(struct sftp_payload_s *payload)
 {
+    struct sftp_subsystem_s *sftp=payload->sftp; 
     unsigned int status=SSH_FX_BAD_MESSAGE;
 
     logoutput("sftp_op_opendir (%i)", (int) gettid());
@@ -330,8 +331,9 @@ void sftp_op_opendir(struct sftp_subsystem_s *sftp, struct sftp_payload_s *paylo
     - string				handle
     */
 
-void sftp_op_readdir(struct sftp_subsystem_s *sftp, struct sftp_payload_s *payload)
+void sftp_op_readdir(struct sftp_payload_s *payload)
 {
+    struct sftp_subsystem_s *sftp=payload->sftp;
     unsigned int status=SSH_FX_BAD_MESSAGE;
 
     logoutput("sftp_op_readdir (%i)", (int) gettid());

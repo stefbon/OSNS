@@ -17,8 +17,8 @@
 
 */
 
-#ifndef OSNS_SSH_SUBSYSTEM_SFTP_OPEN_H
-#define OSNS_SSH_SUBSYSTEM_SFTP_OPEN_H
+#ifndef SSH_SUBSYSTEM_SFTP_CB_OPEN_H
+#define SSH_SUBSYSTEM_SFTP_CB_OPEN_H
 
 /* prototypes */
 

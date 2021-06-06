@@ -17,8 +17,8 @@
 
 */
 
-#ifndef SSH_SUBSYSTEM_SFTP_OP_STAT_H
-#define SSH_SUBSYSTEM_SFTP_OP_STAT_H
+#ifndef SSH_SUBSYSTEM_SFTP_CB_STAT_H
+#define SSH_SUBSYSTEM_SFTP_CB_STAT_H
 
 /* prototypes */
 
