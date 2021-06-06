@@ -328,21 +328,43 @@ unsigned int get_remote_services_ssh_server(struct service_context_s *context, u
     /* result is comma seperated list like:
 	ssh-channel:sftp:home:,ssh-channel:sftp:public: */
 
-    if (size>=0 && option.type==_CTX_OPTION_TYPE_BUFFER && option.value.buffer.ptr && option.value.buffer.len>0) {
-	char list[option.value.buffer.len + 2];
+    if (ctx_option_error(&option)) {
+
+	if (ctx_option_buffer(&option)==0) {
+
+	    logoutput("get_remote_services_ssh_server: unknown error");
+
+	} else {
+	    unsigned int len=0;
+	    char *data=ctx_option_get_buffer(&option, &len);
+	    char tmp[len+1];
+
+	    memset(tmp, 0, len+1);
+	    memcpy(tmp, data, len);
+
+	    logoutput("get_remote_services_ssh_server: error %s", tmp);
+
+	}
+
+    } else if (ctx_option_buffer(&option)) {
+	unsigned int len=0;
+	char *data=ctx_option_get_buffer(&option, &len);
+	char list[len + 2];
 	char *sep=NULL;
 	char *service=NULL;
 
-	/* make sure the comma seperated list is started by a comma and ends with one like:
+	/* make sure the comma seperated list ends with one like:
 
-	    ,firstname,secondname,thirdname,fourthname,
+	    firstname,secondname,thirdname,fourthname,
 	    so walking and searching through this list is much easier */
 
-	memcpy(list, option.value.buffer.ptr, option.value.buffer.len);
-	list[option.value.buffer.len]=',';
-	list[option.value.buffer.len+1]='\0';
+	memset(list, 0, len+2);
+	memcpy(list, data, len);
+	list[len]=',';
+	list[len+1]='\0';
+
 	service=list;
-	logoutput("get_remote_services_ssh_server: received %s", list);
+	logoutput("get_remote_services_ssh_server: received %.*s", len, data);
 
 	findservice:
 
@@ -361,15 +383,13 @@ unsigned int get_remote_services_ssh_server(struct service_context_s *context, u
 
 	}
 
-	logoutput("get_remote_services_ssh_server: ready");
-
     } else {
 
 	logoutput("get_remote_services_ssh_server: nothing received");
 
     }
 
-    (* option.free)(&option);
+    ctx_option_free(&option);
     return count;
 
 }

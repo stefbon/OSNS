@@ -99,9 +99,22 @@ int reply_sftp_bytes_common(struct sftp_subsystem_s *sftp, uint32_t id, unsigned
     return send_sftp_subsystem(sftp, data, pos);
 }
 
+/* same as reply_sftp_bytes_common, but then without the indicator of the length before the data/bytes/attr */
+
 int reply_sftp_attrs(struct sftp_subsystem_s *sftp, uint32_t id, char *attr, unsigned int len)
 {
-    return reply_sftp_bytes_common(sftp, id, SSH_FXP_ATTRS, attr, len);
+    char data[9+len];
+    unsigned int pos=4;
+
+    data[pos]=SSH_FXP_ATTRS;
+    pos++;
+    store_uint32(&data[pos], id);
+    pos+=4;
+    memcpy(&data[pos], attr, len);
+    pos+=len;
+
+    store_uint32(&data[0], pos-4);
+    return send_sftp_subsystem(sftp, data, pos);
 }
 
 int reply_sftp_data(struct sftp_subsystem_s *sftp, uint32_t id, char *bytes, unsigned int len, unsigned char eof)

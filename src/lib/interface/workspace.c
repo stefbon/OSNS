@@ -63,6 +63,42 @@ void init_ctx_option(struct ctx_option_s *option, unsigned char type)
     option->type=type;
 }
 
+unsigned char ctx_option_error(struct ctx_option_s *option)
+{
+    return (option->flags & _CTX_OPTION_FLAG_ERROR) ? 1 : 0;
+}
+
+unsigned char ctx_option_buffer(struct ctx_option_s *option)
+{
+    return (option->type==_CTX_OPTION_TYPE_BUFFER && option->value.buffer.len>0) ? 1 : 0;
+}
+
+unsigned char ctx_option_uint(struct ctx_option_s *option)
+{
+    return (option->type==_CTX_OPTION_TYPE_INT) ? 1 : 0;
+}
+
+unsigned char ctx_option_valid(struct ctx_option_s *option)
+{
+    return (option->flags & _CTX_OPTION_FLAG_VALID) ? 1 : 0;
+}
+
+char *ctx_option_get_buffer(struct ctx_option_s *option, unsigned int *len)
+{
+    if (len) *len=option->value.buffer.len;
+    return option->value.buffer.ptr;
+}
+
+unsigned int ctx_option_get_uint(struct ctx_option_s *option)
+{
+    return option->value.integer;
+}
+
+void ctx_option_free(struct ctx_option_s *option)
+{
+    (* option->free)(option);
+}
+
 static int _connect_interface(uid_t uid, struct context_interface_s *interface, struct host_address_s *host, struct service_address_s *service)
 {
     return -1;

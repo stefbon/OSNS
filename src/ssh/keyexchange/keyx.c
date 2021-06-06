@@ -197,7 +197,11 @@ static int get_support_publickey_system_config(struct ssh_session_s *session, ch
 
 	if ((* session->context.signal_ssh2ctx)(session, what, &option)>=0) {
 
-	    result=(option.type==_CTX_OPTION_TYPE_INT) ? option.value.integer : 0;
+	    if (ctx_option_uint(&option)) {
+
+		result=ctx_option_get_uint(&option);
+
+	    }
 
 	}
 

@@ -207,21 +207,43 @@ void start_timecorrection_ssh_server(struct ssh_session_s *session)
 
     init_ctx_option(&option, _CTX_OPTION_TYPE_BUFFER);
     get_current_time(&send_client);
+
     if ((* session->context.signal_ssh2remote)(session, "info:remotetime:", &option)>=0) {
 
-	/* buffer is in the form:
-	    1524159292.579901450 */
+	if (ctx_option_error(&option)) {
 
-	get_current_time(&recv_client);
+	    if (ctx_option_buffer(&option)==0) {
 
-	if (option.type==_CTX_OPTION_TYPE_BUFFER && option.value.buffer.ptr && option.value.buffer.len) {
-	    char tmp[option.value.buffer.len + 1];
+		logoutput("start_timecorrection_ssh_server: unknown error");
+
+	    } else {
+		unsigned int len=0;
+		char *data=ctx_option_get_buffer(&option, &len);
+		char tmp[len+1];
+
+		memset(tmp, 0, len+1);
+		memcpy(tmp, data, len);
+
+		logoutput("start_timecorrection_ssh_server: error %s", tmp);
+
+	    }
+
+	} else if (ctx_option_buffer(&option)) {
+	    unsigned int len=0;
+	    char *data=ctx_option_get_buffer(&option, &len);
+	    char tmp[len + 1];
 	    char *sep=NULL;
 
-	    memcpy(tmp, option.value.buffer.ptr, option.value.buffer.len);
-	    tmp[option.value.buffer.len]='\0';
+	    /* buffer is in the form:
+		1524159292.579901450 */
 
-	    sep=memchr(tmp, '.', option.value.buffer.len);
+	    get_current_time(&recv_client);
+
+	    memset(tmp, 0, len+1);
+	    memcpy(tmp, data, len);
+	    tmp[len]='\0';
+
+	    sep=memchr(tmp, '.', len);
 
 	    if (sep) {
 
@@ -237,13 +259,13 @@ void start_timecorrection_ssh_server(struct ssh_session_s *session)
 
 	    }
 
-	    (* option.free)(&option);
-
 	} else {
 
 	    logoutput("start_timecorrection_ssh_server: received not the right format (buffer)");
 
 	}
+
+	ctx_option_free(&option);
 
     }
 

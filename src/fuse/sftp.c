@@ -139,22 +139,37 @@ static int signal_sftp2ctx(struct context_interface_s *interface, const char *wh
     the second part is the uri to connect to (if empty the default sftp subsystem is used)
 */
 
-static int get_service_info_prefix(struct ctx_option_s *option, char **prefix, char **uri)
+static int get_service_info_prefix(char *data, unsigned int len, char **p_prefix, char **p_uri)
 {
-    char *pos=option->value.buffer.ptr;
-    int left=option->value.buffer.len;
+    char *pos=data;
+    int left=len;
     char *sep=memchr(pos, '|', left);
-    if (sep==NULL) return -1;
-    *prefix=pos;
-    *sep='\0';
-    sep++;
-    if ((int) (sep - pos) >= left - 2) return 0;
-    left -= (int)(sep - option->value.buffer.ptr);
+
+    if (sep) {
+
+	*p_prefix=pos;
+	*sep='\0';
+	sep++;
+
+    } else {
+
+	return -1;
+
+    }
+
+    left -= (int)(sep - data);
+    if (left < 3) return 0;
+
     pos=sep;
+
     sep=memchr(pos, '|', left);
-    if (sep==NULL) return 0;
-    *uri=pos;
-    *sep='\0';
+    if (sep) {
+
+	*p_uri=pos;
+	*sep='\0';
+
+    }
+
     return 0;
 }
 
@@ -291,14 +306,33 @@ struct service_context_s *add_shared_map_sftp(struct service_context_s *context,
     init_ctx_option(&option, _CTX_OPTION_TYPE_PCHAR);
     option.value.name=service->fullname;
 
-    if ((* interface->signal_interface)(interface, "info:service:", &option)>=0 &&
-	option.type==_CTX_OPTION_TYPE_BUFFER && option.value.buffer.ptr && option.value.buffer.len>0) {
+    if ((* interface->signal_interface)(interface, "info:service:", &option)>=0) {
 
-	if ((option.flags & _CTX_OPTION_FLAG_ERROR)==0) {
+	if (ctx_option_error(&option)) {
+
+	    if (ctx_option_buffer(&option)==0) {
+
+		logoutput("add_shared_map_sftp: unknown error");
+
+	    } else {
+		unsigned int len=0;
+		char *data=ctx_option_get_buffer(&option, &len);
+		char tmp[len+1];
+
+		memset(tmp, 0, len+1);
+		memcpy(tmp, data, len);
+
+		logoutput("add_shared_map_sftp: error %s", tmp);
+
+	    }
+
+	} else if (ctx_option_buffer(&option)) {
+	    unsigned int len=0;
+	    char *data=ctx_option_get_buffer(&option, &len);
 	    char *prefix=NULL;
 	    char *uri=NULL;
 
-	    if (get_service_info_prefix(&option, &prefix, &uri)==-1) {
+	    if (get_service_info_prefix(data, len, &prefix, &uri)==-1) {
 
 		(* option.free)(&option);
 		goto error;
@@ -312,19 +346,19 @@ struct service_context_s *add_shared_map_sftp(struct service_context_s *context,
 
 	    if (sftpctx) {
 
-		logoutput("add_shared_map_sftp: sftp client context added for %s (prefix=%s, uri=%s)", service->fullname, (service->prefix ? service->prefix : "NULL"), (service->uri ? service->uri : "NULL"));
+		logoutput("add_shared_map_sftp: sftp client context added for %s (prefix=%s, uri=%s)", service->fullname, (prefix ? prefix : "NULL"), (uri ? uri : "NULL"));
 
 	    } else {
 
 		logoutput("add_shared_map_sftp: failed to add sftp client context");
-		(* option.free)(&option);
+		ctx_option_free(&option);
 		goto error;
 
 	    }
 
 	}
 
-	(* option.free)(&option);
+	ctx_option_free(&option);
 
     }
 

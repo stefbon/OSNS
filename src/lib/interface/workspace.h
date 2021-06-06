@@ -54,6 +54,7 @@
 #define _CTX_OPTION_FLAG_ALLOC				2
 #define _CTX_OPTION_FLAG_NOTDEFINED			4
 #define _CTX_OPTION_FLAG_DEFAULT			8
+#define _CTX_OPTION_FLAG_VALID				16
 
 struct ctx_option_s {
     unsigned char					type;
@@ -157,7 +158,14 @@ struct interface_ops_s {
 void init_interfaces();
 
 void init_ctx_option(struct ctx_option_s *option, unsigned char type);
-void set_ctx_option_free(struct ctx_option_s *option, const char *what);
+unsigned char ctx_option_error(struct ctx_option_s *option);
+unsigned char ctx_option_valid(struct ctx_option_s *option);
+unsigned char ctx_option_buffer(struct ctx_option_s *option);
+unsigned char ctx_option_uint(struct ctx_option_s *option);
+
+char *ctx_option_get_buffer(struct ctx_option_s *option, unsigned int *len);
+unsigned int ctx_option_get_uint(struct ctx_option_s *option);
+void ctx_option_free(struct ctx_option_s *option);
 
 int init_context_interface(struct context_interface_s *interface, struct interface_list_s *ilist, struct context_interface_s *primary);
 void reset_context_interface(struct context_interface_s *interface);
