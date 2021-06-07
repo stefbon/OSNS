@@ -254,6 +254,7 @@ static void read_sftp_attributes(struct sftp_client_s *sftp, unsigned int valid,
 {
     struct attr_version_s av06;
     unsigned char type=0;
+    unsigned char *pos=buffer->pos;
 
     memset(&av06, 0, sizeof(struct attr_version_s));
     av06.valid=valid;
@@ -273,7 +274,7 @@ static void read_sftp_attributes(struct sftp_client_s *sftp, unsigned int valid,
 
     read_sftp_attributes_generic(sftp, &av06, 15, buffer, attr);
 
-    logoutput("read_sftp_attributes: received %i", attr->received);
+    logoutput("read_sftp_attributes: received %i size %i", attr->received, (unsigned int)(buffer->pos - pos));
 
 }
 

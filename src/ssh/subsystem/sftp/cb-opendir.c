@@ -131,6 +131,7 @@ static void _sftp_op_readdir(struct sftp_dirhandle_s *dirhandle, struct sftp_pay
 	logoutput("sftp_op_readdir: found %s", de->d_name);
 
 	if (fstatat(dirhandle->handle.fd, de->d_name, &st, AT_SYMLINK_NOFOLLOW)==0) {
+	    unsigned int keep=pos;
 
 	    /* does it fit? */
 
@@ -138,6 +139,8 @@ static void _sftp_op_readdir(struct sftp_dirhandle_s *dirhandle, struct sftp_pay
 	    pos+=write_readdir_attr(sftp, &buffer[pos], SFTP_READDIR_NAMES_SIZE - pos, de->d_name, strlen(de->d_name), &st, valid, &error);
 
 	    if (error==0) {
+
+		logoutput("sftp_op_readdir: size attr %i", (unsigned int)(pos - keep));
 
 		count++;
 		dirhandle->pos += de->d_reclen;
