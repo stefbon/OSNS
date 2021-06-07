@@ -72,6 +72,7 @@ static unsigned int write_attr_zerol(struct sftp_subsystem_s *s, struct sftp_att
 static unsigned int write_attr_size(struct sftp_subsystem_s *s, char *pos, unsigned int size, struct sftp_attr_s *attr)
 {
     store_uint64(pos, attr->size);
+    logoutput("write_attr_size");
     return 8;
 }
 
@@ -94,6 +95,8 @@ static unsigned int write_attr_ownergroup(struct sftp_subsystem_s *s, char *buff
     memcpy(pos, attr->group.ptr, attr->group.len);
     pos+=attr->group.len;
 
+    logoutput("write_attr_ownergroup");
+
     return (unsigned int) (pos-buffer);
 
 }
@@ -113,6 +116,7 @@ static unsigned int write_attr_ownergroup_len(struct sftp_subsystem_s *s, struct
 static unsigned int write_attr_permissions(struct sftp_subsystem_s *s, char *pos, unsigned int size, struct sftp_attr_s *attr)
 {
     store_uint32(pos, attr->permissions & ( S_IRWXU | S_IRWXG | S_IRWXO ));
+    logoutput("write_attr_permissions");
     return 4;
 }
 
@@ -135,6 +139,7 @@ static unsigned int write_attr_time_n(struct sftp_subsystem_s *s, char *pos, uns
 
 static unsigned int write_attr_accesstime(struct sftp_subsystem_s *s, char *pos, unsigned int size, struct sftp_attr_s *attr)
 {
+    logoutput("write_attr_accesstime");
     return write_attr_time(s, pos, size, &attr->atime);
 }
 
@@ -145,6 +150,7 @@ static unsigned int write_attr_accesstime_len(struct sftp_subsystem_s *s, struct
 
 static unsigned int write_attr_accesstime_n(struct sftp_subsystem_s *s, char *pos, unsigned int size, struct sftp_attr_s *attr)
 {
+    logoutput("write_attr_accesstime_n");
     return write_attr_time_n(s, pos, size, &attr->atime);
 }
 
@@ -155,6 +161,7 @@ static unsigned int write_attr_accesstime_n_len(struct sftp_subsystem_s *s, stru
 
 static unsigned int write_attr_modifytime(struct sftp_subsystem_s *s, char *pos, unsigned int size, struct sftp_attr_s *attr)
 {
+    logoutput("write_attr_modifytime");
     return write_attr_time(s, pos, size, &attr->mtime);
 }
 
@@ -165,6 +172,7 @@ static unsigned int write_attr_modifytime_len(struct sftp_subsystem_s *s, struct
 
 static unsigned int write_attr_modifytime_n(struct sftp_subsystem_s *s, char *pos, unsigned int size, struct sftp_attr_s *attr)
 {
+    logoutput("write_attr_modifytime_n");
     return write_attr_time_n(s, pos, size, &attr->mtime);
 }
 
@@ -175,6 +183,7 @@ static unsigned int write_attr_modifytime_n_len(struct sftp_subsystem_s *s, stru
 
 static unsigned int write_attr_changetime(struct sftp_subsystem_s *s, char *pos, unsigned int size, struct sftp_attr_s *attr)
 {
+    logoutput("write_attr_changetime");
     return write_attr_time(s, pos, size, &attr->ctime);
 }
 
@@ -185,6 +194,7 @@ static unsigned int write_attr_changetime_len(struct sftp_subsystem_s *s, struct
 
 static unsigned int write_attr_changetime_n(struct sftp_subsystem_s *s, char *pos, unsigned int size, struct sftp_attr_s *attr)
 {
+    logoutput("write_attr_changetime_n");
     return write_attr_time_n(s, pos, size, &attr->ctime);
 }
 
@@ -381,6 +391,8 @@ unsigned int write_readdir_attr(struct sftp_subsystem_s *s, char *buffer, unsign
 	string			filename (len = 4 + strlen(name))
 	ATTRS			attrs (5)
     */
+
+    logoutput("write_readdir_attr: name %.*s valid %i", lenname, name, valid);
 
     if (4 + lenname + attrlen <= size) {
 	unsigned int pos=0;

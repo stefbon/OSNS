@@ -144,7 +144,7 @@ void read_sftp_attributes_generic(struct sftp_client_s *sftp, struct attr_versio
 
 	flag=(av->valid & av->attrcb[ctr].code) >> av->attrcb[ctr].shift;
 
-	logoutput_debug("read_sftp_attributes_generic: %s valid %i ctr %i flag %i pos %i", av->attrcb[ctr].name, av->valid, ctr, flag, (int)(buffer->pos - buffer->buffer));
+	logoutput("read_sftp_attributes_generic: %s valid %i ctr %i flag %i pos %i", av->attrcb[ctr].name, av->valid, ctr, flag, (int)(buffer->pos - buffer->buffer));
 
 	/* run the cb if flag 1 or the "do nothing" cb if flag 0*/
 
@@ -166,7 +166,7 @@ void read_sftp_attributes_v03(struct sftp_client_s *sftp, unsigned int valid, st
     av03.valid=valid;
     av03.attrcb=valid_attr03;
 
-    logoutput_debug("read_sftp_attributes: len %i pos %i", buffer->len , (int)(buffer->pos - buffer->buffer));
+    logoutput("read_sftp_attributes: len %i pos %i", buffer->len , (int)(buffer->pos - buffer->buffer));
     // logoutput_base64encoded("read_sftp_attributes", buffer->buffer, buffer->len);
 
     read_sftp_attributes_generic(sftp, &av03, 5, buffer, attr);
