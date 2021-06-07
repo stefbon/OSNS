@@ -392,8 +392,6 @@ unsigned int write_readdir_attr(struct sftp_subsystem_s *s, char *buffer, unsign
 	ATTRS			attrs (5)
     */
 
-    logoutput("write_readdir_attr: name %.*s valid %i", lenname, name, valid);
-
     if (4 + lenname + attrlen <= size) {
 	unsigned int pos=0;
 
@@ -403,6 +401,7 @@ unsigned int write_readdir_attr(struct sftp_subsystem_s *s, char *buffer, unsign
 	pos+=lenname;
 
 	pos += write_attributes(s, &buffer[pos], size-pos, &attr, valid);
+	logoutput("write_readdir_attr: name %.*s valid %i size %i", lenname, name, valid, pos);
 	return pos;
 
     }

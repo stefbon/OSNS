@@ -71,6 +71,7 @@ static struct _valid_attrcb_s valid_attr05[] = {
 		    {SSH_FILEXFER_ATTR_ACCESSTIME, 		3,				{read_attr_zero, read_attr_accesstime_v04},		"accesstime"},
 		    {SSH_FILEXFER_ATTR_CREATETIME, 		4,				{read_attr_zero, read_attr_createtime_v04},		"createtime"},
 		    {SSH_FILEXFER_ATTR_MODIFYTIME,		5,				{read_attr_zero, read_attr_modifytime_v04},		"modifytime"},
+		    {SSH_FILEXFER_ATTR_SUBSECOND_TIMES,		8,				{read_attr_zero, read_attr_subsecond_time_v04},		"subseconds"},
 		    {SSH_FILEXFER_ATTR_ACL,			6,				{read_attr_zero, read_attr_acl_v04},			"acl"},
 		    {SSH_FILEXFER_ATTR_BITS,			9,				{read_attr_zero, read_attr_bits_v05},			"bits"},
 		    {SSH_FILEXFER_ATTR_EXTENDED,		31,				{read_attr_zero, read_attr_extensions_v03},		"extensions"}};
@@ -94,15 +95,11 @@ static void read_sftp_attributes(struct sftp_client_s *sftp, unsigned int valid,
     logoutput_debug("read_sftp_attributes: len %i pos %i", buffer->len , (int)(buffer->pos - buffer->buffer));
     logoutput_base64encoded("read_sftp_attributes", buffer->buffer, buffer->len);
 
-    /* read type (always present)
-	- byte			type
-    */
-
     av05.type=(* buffer->ops->rw.read.read_uchar)(buffer);
     attr->type=(av05.type<10) ? type_mapping[av05.type] : 0;
     attr->received|=SFTP_ATTR_TYPE;
 
-    read_sftp_attributes_generic(sftp, &av05, 9, buffer, attr);
+    read_sftp_attributes_generic(sftp, &av05, 10, buffer, attr);
     logoutput_debug("read_sftp_attributes: received %i", attr->received);
 
 }

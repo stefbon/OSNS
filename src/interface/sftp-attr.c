@@ -76,6 +76,7 @@ void read_name_nameresponse_ctx(struct context_interface_s *interface, struct fu
     struct attr_buffer_s ab;
     set_attr_buffer_read(&ab, buffer->pos, buffer->left);
     (*sftp->attr_ops.read_name_response)(sftp, &ab, name);
+    logoutput("read_name_nameresponse_ctx: size %i", (unsigned int)(((char *) ab.pos) - buffer->pos));
     buffer->pos = ab.pos;
     buffer->left = ab.left;
 }
@@ -85,6 +86,7 @@ void read_attr_nameresponse_ctx(struct context_interface_s *interface, struct fu
     struct attr_buffer_s ab;
     set_attr_buffer_read(&ab, buffer->pos, buffer->left);
     (*sftp->attr_ops.read_attr_response)(sftp, &ab, attr);
+    logoutput("read_attr_nameresponse_ctx: size %i", (unsigned int)(((char *) ab.pos) - buffer->pos));
     buffer->pos = ab.pos;
     buffer->left = ab.left;
     buffer->count++;

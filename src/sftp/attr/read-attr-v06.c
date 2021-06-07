@@ -86,12 +86,6 @@ void read_attr_changetime_n_v06(struct sftp_client_s *sftp, struct attr_buffer_s
 
     av06->version.v46.changetime_n=(* buffer->ops->rw.read.read_uint32)(buffer);
     attr->ctime_n=av06->version.v46.changetime_n;
-
-    /* NOTE: this is the latest subseconds call for this protocol version
-	so it's safe to remove, not too soon cause the SUBSECONDS
-	flag is used more than once */
-
-    av06->valid -= SSH_FILEXFER_ATTR_SUBSECOND_TIMES;
 }
 
 struct _attr_cb_s {
@@ -234,6 +228,7 @@ static struct _valid_attrcb_s valid_attr06[] = {
 		    {SSH_FILEXFER_ATTR_CREATETIME, 		4,				{read_attr_zero, read_attr_createtime_v04},		"createtime"},
 		    {SSH_FILEXFER_ATTR_MODIFYTIME,		5,				{read_attr_zero, read_attr_modifytime_v04},		"modifytime"},
 		    {SSH_FILEXFER_ATTR_CTIME,			15,				{read_attr_zero, read_attr_changetime_v06},		"changetime"},
+		    {SSH_FILEXFER_ATTR_SUBSECOND_TIMES,		8,				{read_attr_zero, read_attr_subsecond_time_v04},		"subseconds"},
 		    {SSH_FILEXFER_ATTR_ACL,			6,				{read_attr_zero, read_attr_acl_v06},			"acl"},
 		    {SSH_FILEXFER_ATTR_BITS,			9,				{read_attr_zero, read_attr_bits_v06},			"bits"},
 		    {SSH_FILEXFER_ATTR_TEXT_HINT,		11,				{read_attr_zero, read_attr_texthint_v06},		"text hint"},
@@ -264,15 +259,10 @@ static void read_sftp_attributes(struct sftp_client_s *sftp, unsigned int valid,
     logoutput("read_sftp_attributes: len %i pos %i", buffer->len , (int)(buffer->pos - buffer->buffer));
     logoutput_base64encoded("read_sftp_attributes", buffer->buffer, buffer->len);
 
-    /* read type (always present)
-	- byte			type
-    */
-
     av06.type=(* buffer->ops->rw.read.read_uchar)(buffer);
     attr->type=(av06.type<10) ? type_mapping[av06.type] : 0;
     attr->received|=SFTP_ATTR_TYPE;
-
-    read_sftp_attributes_generic(sftp, &av06, 15, buffer, attr);
+    read_sftp_attributes_generic(sftp, &av06, 16, buffer, attr);
 
     logoutput("read_sftp_attributes: received %i size %i", attr->received, (unsigned int)(buffer->pos - pos));
 

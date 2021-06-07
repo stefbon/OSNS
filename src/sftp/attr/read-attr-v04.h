@@ -29,6 +29,7 @@ void read_attr_createtime_v04(struct sftp_client_s *sftp, struct attr_buffer_s *
 void read_attr_createtime_n_v04(struct sftp_client_s *sftp, struct attr_buffer_s *buffer, struct attr_version_s *av04, struct sftp_attr_s *attr);
 void read_attr_modifytime_v04(struct sftp_client_s *sftp, struct attr_buffer_s *buffer, struct attr_version_s *av04, struct sftp_attr_s *attr);
 void read_attr_modifytime_n_v04(struct sftp_client_s *sftp, struct attr_buffer_s *buffer, struct attr_version_s *av04, struct sftp_attr_s *attr);
+void read_attr_subsecond_time_v04(struct sftp_client_s *sftp, struct attr_buffer_s *buffer, struct attr_version_s *av04, struct sftp_attr_s *attr);
 void read_attr_acl_v04(struct sftp_client_s *sftp, struct attr_buffer_s *buffer, struct attr_version_s *av04, struct sftp_attr_s *attr);
 
 void read_attributes_v04(struct sftp_client_s *sftp, struct attr_buffer_s *buffer, struct sftp_attr_s *attr);

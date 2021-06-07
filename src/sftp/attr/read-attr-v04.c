@@ -166,12 +166,11 @@ void read_attr_modifytime_n_v04(struct sftp_client_s *sftp, struct attr_buffer_s
 
     av04->version.v46.modifytime_n=(* buffer->ops->rw.read.read_uint32)(buffer);
     attr->mtime_n=av04->version.v46.modifytime_n;
+}
 
-    /* NOTE: this is the latest subseconds call for this protocol version
-	so it's safe to unset this flag in valid, not too soon cause the SUBSECONDS
-	flag is used more than once */
+void read_attr_subsecond_time_v04(struct sftp_client_s *sftp, struct attr_buffer_s *buffer, struct attr_version_s *av04, struct sftp_attr_s *attr)
+{
     av04->valid -= SSH_FILEXFER_ATTR_SUBSECOND_TIMES;
-
 }
 
 static void _attr_cb_acl(struct attr_buffer_s *buffer, struct ssh_string_s *aclblock, void *ptr)
@@ -247,6 +246,7 @@ static struct _valid_attrcb_s valid_attr04[] = {
 		    {SSH_FILEXFER_ATTR_ACCESSTIME, 		3,				{read_attr_zero, read_attr_accesstime_v04},		"accesstime"},
 		    {SSH_FILEXFER_ATTR_CREATETIME, 		4,				{read_attr_zero, read_attr_createtime_v04},		"createtime"},
 		    {SSH_FILEXFER_ATTR_MODIFYTIME,		5,				{read_attr_zero, read_attr_modifytime_v04},		"modifytime"},
+		    {SSH_FILEXFER_ATTR_SUBSECOND_TIMES,		8,				{read_attr_zero, read_attr_subsecond_time_v04},		"subseconds"},
 		    {SSH_FILEXFER_ATTR_ACL,			6,				{read_attr_zero, read_attr_acl_v04},			"acl"},
 		    {SSH_FILEXFER_ATTR_EXTENDED,		31,				{read_attr_zero, read_attr_extensions_v03},		"extensions"}};
 
