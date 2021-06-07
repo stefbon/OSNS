@@ -117,7 +117,7 @@ void read_attr_accesstime_v04(struct sftp_client_s *sftp, struct attr_buffer_s *
     av04->valid -= SSH_FILEXFER_ATTR_ACCESSTIME;
 
     flag=(av04->valid & ntimecb[1].code) >> ntimecb[1].shift;
-    (* ntimecb[1].cb[flag])(sftp, buffer, av04, attr);
+    (* ntimecb[0].cb[flag])(sftp, buffer, av04, attr);
 
 }
 
@@ -136,7 +136,7 @@ void read_attr_createtime_v04(struct sftp_client_s *sftp, struct attr_buffer_s *
     av04->valid -= SSH_FILEXFER_ATTR_CREATETIME;
 
     flag=(av04->valid & ntimecb[2].code) >> ntimecb[2].shift;
-    (* ntimecb[2].cb[flag])(sftp, buffer, av04, attr);
+    (* ntimecb[1].cb[flag])(sftp, buffer, av04, attr);
 
 }
 
@@ -156,7 +156,7 @@ void read_attr_modifytime_v04(struct sftp_client_s *sftp, struct attr_buffer_s *
     av04->valid -= SSH_FILEXFER_ATTR_MODIFYTIME;
 
     flag=(av04->valid & ntimecb[2].code) >> ntimecb[3].shift;
-    (* ntimecb[3].cb[flag])(sftp, buffer, av04, attr);
+    (* ntimecb[2].cb[flag])(sftp, buffer, av04, attr);
 
 }
 
