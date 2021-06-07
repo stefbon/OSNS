@@ -75,7 +75,7 @@ void read_attr_changetime_v06(struct sftp_client_s *sftp, struct attr_buffer_s *
     attr->received|=SFTP_ATTR_CTIME;
     av06->valid -= SSH_FILEXFER_ATTR_CTIME;
 
-    flag=(av06->valid & ntimecb[4].code) >> ntimecb[4].shift;
+    flag=(av06->valid & ntimecb[3].code) >> ntimecb[3].shift;
     (* ntimecb[3].cb[flag])(sftp, buffer, av06, attr);
 
 }
