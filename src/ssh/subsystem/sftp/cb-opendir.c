@@ -72,7 +72,7 @@ static void _sftp_op_readdir(struct sftp_dirhandle_s *dirhandle, struct sftp_pay
 {
     struct sftp_subsystem_s *sftp=dirhandle->sftp;
     unsigned int status=SSH_FX_BAD_MESSAGE;
-    unsigned int valid=SSH_FILEXFER_ATTR_SIZE | SSH_FILEXFER_ATTR_UIDGID | SSH_FILEXFER_ATTR_PERMISSIONS | SSH_FILEXFER_ATTR_ACCESSTIME | SSH_FILEXFER_ATTR_MODIFYTIME | SSH_FILEXFER_ATTR_SUBSECOND_TIMES | SSH_FILEXFER_ATTR_CTIME;
+    unsigned int valid=SSH_FILEXFER_ATTR_SIZE | SSH_FILEXFER_ATTR_PERMISSIONS | SSH_FILEXFER_ATTR_MODIFYTIME | SSH_FILEXFER_ATTR_SUBSECOND_TIMES | SSH_FILEXFER_ATTR_CTIME;
     unsigned int error=0;
     char buffer[SFTP_READDIR_NAMES_SIZE];
     unsigned int pos=0;
