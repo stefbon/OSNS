@@ -552,13 +552,15 @@ static void get_sftp_readdir_thread(void *ptr)
 
 	while (buffer->left>0) {
 	    struct ssh_string_s name=SSH_STRING_INIT;
+	    char *keep=buffer->pos;
 
 	    /* extract name and attributes from names
 		only get the name, do the attr later */
 
 	    read_name_nameresponse_ctx(&context->interface, buffer, &name);
 
-	    logoutput("get_sftp_readdir_thread: got name %.*s", name.len, name.ptr);
+	    logoutput("get_sftp_readdir_thread: got name %.*s at %i", name.len, name.ptr, (unsigned int)(buffer->pos - keep));
+	    keep=buffer->pos;
 
 	    if ((name.len==1 && strncmp(name.ptr, ".", 1)==0) || (name.len==2 && strncmp(name.ptr, "..", 2)==0)) {
 		struct sftp_attr_s attr;
@@ -566,6 +568,7 @@ static void get_sftp_readdir_thread(void *ptr)
 		/* skip the . and .. entries */
 
 		read_attr_nameresponse_ctx(&context->interface, buffer, &attr);
+		logoutput("get_sftp_readdir_thread: after reading attr at %i", (unsigned int)(buffer->pos - keep));
 
 	    } else {
 
@@ -593,6 +596,8 @@ static void get_sftp_readdir_thread(void *ptr)
 		    }
 
 		}
+
+		logoutput("get_sftp_readdir_thread: after reading attr at %i", (unsigned int)(buffer->pos - keep));
 
 	    }
 
