@@ -140,7 +140,7 @@ static void _sftp_op_readdir(struct sftp_dirhandle_s *dirhandle, struct sftp_pay
 
 	    if (error==0) {
 
-		logoutput("sftp_op_readdir: size attr %i", (unsigned int)(pos - keep));
+		logoutput("sftp_op_readdir: name %s size attr %i at %i", de->d_name, (unsigned int)(pos - keep), keep);
 
 		count++;
 		dirhandle->pos += de->d_reclen;
