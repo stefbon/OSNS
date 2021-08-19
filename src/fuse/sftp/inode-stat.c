@@ -48,6 +48,7 @@
 #include "fuse.h"
 
 #include "sftp/common-protocol.h"
+#include "sftp/attr-context.h"
 #include "interface/sftp-attr.h"
 
 typedef void (* copy_attr_cb)(struct context_interface_s *interface, struct stat *st, struct sftp_attr_s *attr);
@@ -212,7 +213,7 @@ void fill_inode_attr_sftp(struct context_interface_s *interface, struct stat *st
 
 */
 
-unsigned int get_attr_buffer_size(struct context_interface_s *interface, struct stat *st, unsigned int fattr, struct sftp_attr_s *attr, unsigned char raw)
+unsigned int get_attr_buffer_size(struct context_interface_s *interface, struct stat *st, unsigned int fattr, struct rw_attr_result_s *r, struct sftp_attr_s *attr, unsigned char raw)
 {
     unsigned int set=0;
 
@@ -305,6 +306,6 @@ unsigned int get_attr_buffer_size(struct context_interface_s *interface, struct 
     }
 
     attr->type=(st->st_mode & S_IFMT);
-    return write_attributes_len_ctx(interface, attr);
+    return write_attributes_len_ctx(interface, r, attr);
 
 }

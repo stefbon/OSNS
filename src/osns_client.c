@@ -410,7 +410,9 @@ struct service_context_s *create_mount_context(struct osns_user_s *user, char **
 
     interface=&context->interface;
     interface->signal_context=signal_fuse2ctx;
+    logoutput("create_mount_context: register fuse cb");
     register_fuse_functions(interface);
+    logoutput("create_mount_context: set directory dump");
     set_directory_dump(&workspace->inodes.rootinode, get_dummy_directory());
 
     /* connect to the fuse interface: mount */
@@ -433,6 +435,7 @@ struct service_context_s *create_mount_context(struct osns_user_s *user, char **
     }
 
     logoutput("create_mount_context: starting FUSE mountpoint using fd %i", fd);
+    context->interface.backend.fuse.loop=get_mainloop();
 
     if ((* context->interface.start)(interface, fd, NULL)==0) {
 	struct inode_s *inode=&workspace->inodes.rootinode;
@@ -899,6 +902,7 @@ int main(int argc, char *argv[])
     init_fusesocket_interface();
     init_sftp_client_interface();
     init_ssh_session_interface();
+    init_smb_share_interface();
 
     logoutput_info("MAIN: initializing hashtable fuse socket");
 
@@ -916,13 +920,6 @@ int main(int argc, char *argv[])
     init_special_fs();
     init_service_fs();
     init_browse_fs();
-
-    /* Initialize and start default threads
-	NOTE: important to start these after initializing the signal handler, if not doing this this way any signal will make the program crash */
-
-    init_workerthreads(NULL);
-    set_max_numberthreads(NULL, 6); /* depends on the number of users and connected workspaces, 6 is a reasonable amount for this moment */
-    start_default_workerthreads(NULL);
 
     if (init_discover_group(NULL, NULL)==-1) {
 
@@ -964,8 +961,14 @@ int main(int argc, char *argv[])
 
     }
 
-    init_mountinfo_once();
+    /* Initialize and start default threads
+	NOTE: important to start these after initializing the signal handler, if not doing this this way any signal will make the program crash */
 
+    init_workerthreads(NULL);
+    set_max_numberthreads(NULL, 6); /* depends on the number of users and connected workspaces, 6 is a reasonable amount for this moment */
+    start_default_workerthreads(NULL);
+
+    init_mountinfo_once();
     add_mountinfo_source("network@osns.net", ADD_MOUNTINFO_FLAG_INCLUDE);
 
     if (add_mountinfo_watch(NULL)==-1) {
@@ -1023,7 +1026,7 @@ int main(int argc, char *argv[])
 	if (users_bevent==NULL) goto out;
 
 	set_bevent_unix_fd(users_bevent, res);
-	set_bevent_watch(users_bevent, "incoming data");
+	set_bevent_watch(users_bevent, "i");
 
 	if (add_bevent_beventloop(users_bevent)==0) {
 
@@ -1038,6 +1041,8 @@ int main(int argc, char *argv[])
     }
 
     read_user_monitor_event(0, NULL, 0);
+
+
     res=start_beventloop(NULL);
 
     out:

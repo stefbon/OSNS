@@ -46,21 +46,22 @@
 #include "sftp/common.h"
 
 #include "attr.h"
-#include "attr/read-attr-v03.h"
-#include "attr/read-attr-v04.h"
-#include "attr/read-attr-v05.h"
-#include "attr/read-attr-v06.h"
+//#include "attr/read-attr-v03.h"
+//#include "attr/read-attr-v04.h"
+//#include "attr/read-attr-v05.h"
+//#include "attr/read-attr-v06.h"
 
 #include "recv.h"
-#include "recv/recv-v03.h"
-#include "recv/recv-v04.h"
-#include "recv/recv-v05.h"
-#include "recv/recv-v06.h"
+//#include "recv/recv-v03.h"
+//#include "recv/recv-v04.h"
+//#include "recv/recv-v05.h"
+//#include "recv/recv-v06.h"
 
-#include "send/send-v03.h"
-#include "send/send-v04.h"
-#include "send/send-v05.h"
-#include "send/send-v06.h"
+#include "send.h"
+//#include "send/send-v03.h"
+//#include "send/send-v04.h"
+//#include "send/send-v05.h"
+//#include "send/send-v06.h"
 
 #include "datatypes/ssh-uint.h"
 
@@ -198,7 +199,7 @@ static void process_sftp_extension(struct sftp_client_s *sftp, struct ssh_string
 
     } else if (compare_ssh_string(name, 'c', "supported2")==0) {
 
-	if (sftp->server_version>=6) {
+	if (get_sftp_protocol_version(sftp)>=6) {
 
 	    read_default_features_v06(sftp, data);
 
@@ -210,7 +211,7 @@ static void process_sftp_extension(struct sftp_client_s *sftp, struct ssh_string
 
     } else {
 
-	if (sftp->server_version<6) {
+	if (get_sftp_protocol_version(sftp) < 6) {
 
 	    if (compare_ssh_string(name, 'c', "statfs@openssh.org")==0 || compare_ssh_string(name, 'c', "statvfs@openssh.com")==0 || compare_ssh_string(name, 'c', "fsync@openshh.com")==0) {
 
@@ -243,16 +244,16 @@ int process_sftp_version(struct sftp_client_s *sftp, struct sftp_reply_s *reply)
     unsigned char *buffer=reply->response.init.buff;
     unsigned int size=reply->response.init.size;
     unsigned int len=0;
-    unsigned int server_version=0;
+    unsigned int version=0;
     unsigned int pos=0;
     unsigned int name_len=0;
     unsigned int data_len=0;
 
-    server_version=get_uint32((char *) &buffer[pos]);
+    version=get_uint32((char *) &buffer[pos]);
     pos+=4;
 
-    logoutput("process_sftp_version: received server sftp version %i", server_version);
-    set_sftp_server_version(sftp, server_version);
+    logoutput("process_sftp_version: received server sftp version %i", version);
+    set_sftp_protocol_version(sftp, version);
 
     /* check there is enough space for 2 uint and minimal 1 name */
 
@@ -289,57 +290,40 @@ int process_sftp_version(struct sftp_client_s *sftp, struct sftp_reply_s *reply)
 int set_sftp_protocol(struct sftp_client_s *sftp)
 {
     int result=-1;
+    unsigned char version=get_sftp_protocol_version(sftp);
 
-    logoutput("set_sftp_protocol: use server version %i", sftp->server_version);
+    logoutput("set_sftp_protocol: use protocol version %i", version);
 
-    set_sftp_attr(sftp);
+    if (version >= 3 && version <= 6) {
 
-    if (sftp->server_version==3) {
+	set_sftp_attr_version(sftp);
+	set_sftp_recv_version(sftp);
+	set_sftp_send_version(sftp);
 
-	use_sftp_send_v03(sftp);
-	use_sftp_recv_v03(sftp);
-	result=3;
-
-    } else if (sftp->server_version==4) {
-
-	use_sftp_send_v04(sftp);
-	use_sftp_recv_v04(sftp);
-	result=4;
-
-    } else if (sftp->server_version==5) {
-
-	use_sftp_send_v05(sftp);
-	use_sftp_recv_v05(sftp);
-	result=5;
-
-    } else if (sftp->server_version==6) {
-
-	use_sftp_send_v06(sftp);
-	use_sftp_recv_v06(sftp);
-	result=6;
+	result=(int) sftp->protocol.version;
+	read_sftp_features(sftp);
 
     } else {
 
-	logoutput("set_sftp_protocol: version %i not supported", sftp->server_version);
+	logoutput("set_sftp_protocol: version %i not supported", version);
 
     }
 
-    if (result>0) (* sftp->attr_ops.read_sftp_features)(sftp);
     return result;
 
 }
 
-unsigned int get_sftp_server_version(struct sftp_client_s *sftp)
+unsigned char get_sftp_protocol_version(struct sftp_client_s *sftp)
 {
+    unsigned char version = (sftp) ? sftp->protocol.version : 0;
 
     /* TODO ... */
 
-    if (sftp && sftp->server_version>0) return sftp->server_version;
-    return 6; /* preferred version */
+    return (unsigned char) ((version>0) ? version : 6);
 
 }
 
-void set_sftp_server_version(struct sftp_client_s *sftp, unsigned int version)
+void set_sftp_protocol_version(struct sftp_client_s *sftp, unsigned char version)
 {
-    sftp->server_version=version;
+    sftp->protocol.version=version;
 }

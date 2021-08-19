@@ -23,8 +23,10 @@
 /* prototypes */
 
 int process_sftp_version(struct sftp_client_s *sftp, struct sftp_reply_s *reply);
+
 int set_sftp_protocol(struct sftp_client_s *sftp);
-unsigned int get_sftp_server_version(struct sftp_client_s *sftp);
-void set_sftp_server_version(struct sftp_client_s *sftp, unsigned int version);
+
+unsigned char get_sftp_protocol_version(struct sftp_client_s *sftp);
+void set_sftp_protocol_version(struct sftp_client_s *sftp, unsigned char version);
 
 #endif

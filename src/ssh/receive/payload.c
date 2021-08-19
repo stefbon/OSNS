@@ -48,6 +48,7 @@
 #include "ssh-connections.h"
 #include "ssh-receive.h"
 #include "ssh-utils.h"
+#include "ssh-signal.h"
 
 static int cb_payload_default(struct ssh_connection_s *connection, struct ssh_payload_s *payload, void *ptr)
 {
@@ -82,12 +83,9 @@ static struct ssh_payload_s *select_requested_payload(struct ssh_connection_s *c
     return NULL;
 }
 
-/*
-    common function to wait for a ssh_payload to arrive
+/*  common function to wait for a ssh_payload to arrive
     on a queue; this queue can be the transport queue used to setup a connection
-    or the queue to handle key reexchange
-
-*/
+    or the queue to handle key reexchange */
 
 struct ssh_payload_s *get_ssh_payload(struct ssh_connection_s *connection, struct payload_queue_s *queue, struct timespec *expire, uint32_t *seq, int (* cb)(struct ssh_connection_s *connection, struct ssh_payload_s *payload, void *ptr), void *ptr, struct generic_error_s *error)
 {
@@ -99,11 +97,11 @@ struct ssh_payload_s *get_ssh_payload(struct ssh_connection_s *connection, struc
     /* if no cb is defined use the default: select any message */
     if (cb==NULL) cb=cb_payload_default;
 
-    pthread_mutex_lock(signal->mutex);
+    ssh_signal_lock(signal);
 
     while ((connection->setup.flags & SSH_SETUP_FLAG_DISCONNECT)==0 && (payload=select_requested_payload(connection, header, cb, ptr))==NULL) {
 
-	int result=pthread_cond_timedwait(signal->cond, signal->mutex, expire);
+	int result=ssh_signal_condtimedwait(signal, expire);
 
 	if ((payload=select_requested_payload(connection, header, cb, ptr))) {
 
@@ -112,7 +110,7 @@ struct ssh_payload_s *get_ssh_payload(struct ssh_connection_s *connection, struc
 	} else if (result==ETIMEDOUT) {
 	    struct fs_connection_s *conn=&connection->connection;
 
-	    pthread_mutex_unlock(signal->mutex);
+	    ssh_signal_unlock(signal);
 	    set_generic_error_system(error, ETIMEDOUT, NULL);
 
 	    /* is there a better error causing this timeout?
@@ -123,7 +121,7 @@ struct ssh_payload_s *get_ssh_payload(struct ssh_connection_s *connection, struc
 
 	} else if (signal->error>0 && (seq && *seq==signal->sequence_number_error)) {
 
-	    pthread_mutex_unlock(signal->mutex);
+	    ssh_signal_unlock(signal);
 	    set_generic_error_system(error, signal->error, NULL);
 	    signal->sequence_number_error=0;
 	    signal->error=0;
@@ -131,16 +129,16 @@ struct ssh_payload_s *get_ssh_payload(struct ssh_connection_s *connection, struc
 
 	} else if (connection->setup.flags & SSH_SETUP_FLAG_DISCONNECT) {
 
+	    ssh_signal_unlock(signal);
 	    set_generic_error_system(error, ENOTCONN, NULL);
-	    pthread_mutex_unlock(signal->mutex);
 	    return NULL;
 
 	}
 
     }
 
-    pthread_cond_broadcast(signal->cond);
-    pthread_mutex_unlock(signal->mutex);
+    ssh_signal_broadcast(signal);
+    ssh_signal_unlock(signal);
     return payload;
 
 }
@@ -171,7 +169,7 @@ void queue_ssh_payload_locked(struct payload_queue_s *queue, struct ssh_payload_
     struct ssh_signal_s *signal=queue->signal;
 
     add_list_element_last(&queue->header, &payload->list);
-    pthread_cond_broadcast(queue->signal->cond);
+    ssh_signal_broadcast(signal);
 
 }
 
@@ -179,9 +177,9 @@ void queue_ssh_payload(struct payload_queue_s *queue, struct ssh_payload_s *payl
 {
     struct ssh_signal_s *signal=queue->signal;
 
-    pthread_mutex_lock(signal->mutex);
+    ssh_signal_lock(signal);
     queue_ssh_payload_locked(queue, payload);
-    pthread_mutex_unlock(signal->mutex);
+    ssh_signal_unlock(signal);
 
 }
 

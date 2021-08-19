@@ -109,12 +109,8 @@ int init_ssh_session_client(struct ssh_session_s *session, uid_t uid, void *ctx)
 
     if (init_ssh_backend()==-1) goto error;
 
-    logoutput("_init_ssh_session: A");
-
     init_ssh_session(session, uid, ctx);
-    logoutput("_init_ssh_session: B");
     init_ssh_session_signals_client(&session->context);
-    logoutput("_init_ssh_session: C");
 
     if (init_ssh_identity_client(session, uid)==-1) {
 
@@ -140,8 +136,7 @@ int connect_ssh_session_client(struct ssh_session_s *session, char *target, unsi
     struct ssh_connection_s *connection=NULL;
     struct ctx_option_s option;
     int fd=-1;
-    pthread_mutex_t *mutex=NULL;
-    pthread_cond_t *cond=NULL;
+    struct common_signal_s *signal=NULL;
 
     /* get the ctx for values like:
 	- shared mutex and cond for shared event signalling when for example the connection and/or
@@ -151,27 +146,17 @@ int connect_ssh_session_client(struct ssh_session_s *session, char *target, unsi
 
     memset(&option, 0, sizeof(struct ctx_option_s));
     option.type=_CTX_OPTION_TYPE_PVOID;
-    if ((* session->context.signal_ssh2ctx)(session, "io:shared-mutex", &option)>=0) {
+    if ((* session->context.signal_ssh2ctx)(session, "io:shared-signal", &option)>=0) {
 
-	mutex=(pthread_mutex_t *) option.value.ptr;
-	logoutput("connect_ssh_session: received shared mutex");
-
-    }
-
-    memset(&option, 0, sizeof(struct ctx_option_s));
-    option.type=_CTX_OPTION_TYPE_PVOID;
-    if ((* session->context.signal_ssh2ctx)(session, "io:shared-cond", &option)>=0) {
-
-	cond=(pthread_cond_t *) option.value.ptr;
-	logoutput("connect_ssh_session: received shared cond");
+	signal=(struct common_signal_s *) option.value.ptr;
+	logoutput("connect_ssh_session_client: received shared workspace signal");
 
     }
 
-    if ((mutex==NULL || cond==NULL) && (mutex || cond)) {
+    if (set_ssh_connections_signal(session, signal)==-1) {
 
-	logoutput_warning("connect_ssh_session: both mutex and cond must be suplied by ctx, not only the %s", (mutex) ? "mutex" : "cond");
-	mutex=NULL;
-	cond=NULL;
+	logoutput("connect_ssh_session_client: error setting shared signal");
+	goto out;
 
     }
 
@@ -180,24 +165,17 @@ int connect_ssh_session_client(struct ssh_session_s *session, char *target, unsi
     if ((* session->context.signal_ssh2ctx)(session, "option:ssh.init_timeout", &option)>0) {
 
 	session->config.connection_expire=option.value.integer;
-	logoutput("init_ssh_session: received connection timeout %i", option.value.integer);
-
-    }
-
-    if (set_ssh_connections_signal(session, mutex, cond)==-1) {
-
-	logoutput("_init_ssh_session: error setting shared signal");
-	goto out;
+	logoutput("connect_ssh_session_client: received connection timeout %i", option.value.integer);
 
     }
 
     if (add_main_ssh_connection(session)==0) {
 
-	logoutput("connect_ssh_session: main connection added to session");
+	logoutput("connect_ssh_session_client: main connection added to session");
 
     } else {
 
-	logoutput("connect_ssh_session: error adding main connection");
+	logoutput("connect_ssh_session_client: error adding main connection");
 	goto out;
 
     }
@@ -207,11 +185,11 @@ int connect_ssh_session_client(struct ssh_session_s *session, char *target, unsi
 
     if (fd>0) {
 
-	logoutput("connect_ssh_session: connected to %s:%i with fd %i", target, port, fd);
+	logoutput("connect_ssh_session_client: connected to %s:%i with fd %i", target, port, fd);
 
     } else {
 
-	logoutput("connect_ssh_session: unable to connect to %s:%i", target, port);
+	logoutput("connect_ssh_session_client: unable to connect to %s:%i", target, port);
 
     }
 

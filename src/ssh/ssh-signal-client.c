@@ -42,6 +42,8 @@
 #include "log.h"
 #include "main.h"
 #include "misc.h"
+#include "commonsignal.h"
+
 #include "ssh-common.h"
 #include "ssh-utils.h"
 #include "ssh-send.h"
@@ -358,49 +360,49 @@ static int _signal_ctx2ssh(void **p_ptr, const char *what, struct ctx_option_s *
 
 	    /* what to lock and check here */
 
-	    pthread_mutex_lock(session->connections.mutex);
+	    signal_lock(session->connections.signal);
 
 	    if (session->connections.flags & SSH_CONNECTIONS_FLAG_DISCONNECT) {
 
-		pthread_mutex_unlock(session->connections.mutex);
+		signal_unlock(session->connections.signal);
 		return -1;
 
 	    }
 
 	    session->connections.flags |= SSH_CONNECTIONS_FLAG_DISCONNECTING;
-	    pthread_mutex_unlock(session->connections.mutex);
+	    signal_unlock(session->connections.signal);
 
 	    /* close all channels*/
 
 	    _close_ssh_session_channels(session, "close");
 	    _close_ssh_session_connections(session, "close");
 
-	    pthread_mutex_lock(session->connections.mutex);
+	    signal_lock(session->connections.signal);
 	    session->connections.flags |= SSH_CONNECTIONS_FLAG_DISCONNECTED;
-	    pthread_mutex_unlock(session->connections.mutex);
+	    signal_unlock(session->connections.signal);
 
 	} else if (strncmp(&what[pos], "free:", 5)==0 || strncmp(&what[pos], "clear:", 6)==0) {
 
-	    pthread_mutex_lock(session->connections.mutex);
+	    signal_lock(session->connections.signal);
 
 	    if (session->connections.flags & SSH_CONNECTIONS_FLAG_CLEAR) {
 
-		pthread_mutex_unlock(session->connections.mutex);
+		signal_unlock(session->connections.signal);
 		return -1;
 
 	    }
 
 	    session->connections.flags |= SSH_CONNECTIONS_FLAG_CLEARING;
-	    pthread_mutex_unlock(session->connections.mutex);
+	    signal_unlock(session->connections.signal);
 
 	    /* close and remove all channels*/
 
 	    _close_ssh_session_channels(session, "remove");
 	    _close_ssh_session_connections(session, "remove");
 
-	    pthread_mutex_lock(session->connections.mutex);
+	    signal_lock(session->connections.signal);
 	    session->connections.flags |= SSH_CONNECTIONS_FLAG_CLEARED;
-	    pthread_mutex_unlock(session->connections.mutex);
+	    signal_unlock(session->connections.signal);
 
 	    _free_ssh_session(p_ptr);
 

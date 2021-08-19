@@ -1,5 +1,5 @@
 /*
-  2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020 Stef Bon <stefbon@gmail.com>
+  2010, 2011, 2012, 2013, 2014, 2015 Stef Bon <stefbon@gmail.com>
 
   This program is free software; you can redistribute it and/or
   modify it under the terms of the GNU General Public License
@@ -14,15 +14,19 @@
   You should have received a copy of the GNU General Public License
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
-
 */
 
-#ifndef _SFTP_ATTR_READ_NAME_V03_H
-#define _SFTP_ATTR_READ_NAME_V03_H
+#ifndef INTERFACE_SMB_EVENTLOOP_H
+#define INTERFACE_SMB_EVENTLOOP_H
 
 /* prototypes */
 
-void read_name_nameresponse_v03(struct sftp_client_s *sftp, struct attr_buffer_s *buffer, struct ssh_string_s *name);
-void read_attr_nameresponse_v03(struct sftp_client_s *sftp, struct attr_buffer_s *buffer, struct sftp_attr_s *attr);
+short translate_bevent_to_poll(struct event_s *event);
+void translate_poll_to_bevent(struct bevent_s *bevent, short events);
+void process_smb_share_event(int fd, void *ptr, struct event_s *event);
+int wait_smb_share_connected(struct context_interface_s *interface, struct timespec *timeout);
+
+void _smb2_change_fd_cb(struct smb2_context *smb2, int fd, int cmd);
+void _smb2_change_events_cb(struct smb2_context *smb2, int fd, int events);
 
 #endif

@@ -32,9 +32,10 @@ struct event_s {
 
 /* struct to identify the fd when eventloop signals activity on that fd */
 
-#define BEVENT_FLAG_FD				1
-#define BEVENT_FLAG_TIMEOUT			2
-#define BEVENT_FLAG_EVENTLOOP			4
+#define BEVENT_FLAG_CREATE			1
+#define BEVENT_FLAG_FD				2
+#define BEVENT_FLAG_TIMEOUT			4
+#define BEVENT_FLAG_EVENTLOOP			8
 
 struct bevent_s {
     union _loop_type_s {
@@ -44,7 +45,7 @@ struct bevent_s {
 	} glib;
     } ltype;
     unsigned int				flags;
-    struct beventloop_s 			*loop;
+    struct list_element_s			list;
     union _bevent_type_s {
 	struct _bevent_fd_s {
 	    void 				(* cb)(int fd, void *ptr, struct event_s *event);
@@ -78,6 +79,7 @@ struct beventloop_s {
     pthread_mutex_t				mutex;
     pthread_cond_t				cond;
     struct list_header_s			timers;
+    struct list_header_s			bevents;
     uint32_t (* event_is_error)(struct event_s *event);
     uint32_t (* event_is_close)(struct event_s *event);
     uint32_t (* event_is_data)(struct event_s *event);
@@ -88,12 +90,18 @@ struct beventloop_s {
 
 struct bevent_s *create_fd_bevent(struct beventloop_s *eloop, void (* cb)(int fd, void *ptr, struct event_s *event), void *ptr);
 int add_bevent_beventloop(struct bevent_s *bevent);
+struct beventloop_s *get_eventloop_bevent(struct bevent_s *bevent);
 
 void set_bevent_unix_fd(struct bevent_s *bevent, int fd);
 int get_bevent_unix_fd(struct bevent_s *bevent);
+short get_bevent_events(struct bevent_s *bevent);
 
+struct bevent_s *get_next_bevent(struct beventloop_s *loop, struct bevent_s *bevent);
+
+int modify_bevent_watch(struct bevent_s *bevent, const char *what, short events);
 void set_bevent_watch(struct bevent_s *bevent, const char *what);
 void remove_bevent(struct bevent_s *bevent);
+void free_bevent(struct bevent_s **p_bevent);
 
 unsigned int create_timer_eventloop(struct beventloop_s *eloop, struct timespec *timeout, void (* cb)(unsigned int id, void *ptr), void *ptr);
 

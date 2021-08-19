@@ -47,7 +47,9 @@ int is_later(struct timespec *ats, struct timespec *bts, int sec, long nsec);
 int compare_stat_time(struct stat *ast, struct stat *bst, unsigned char ntype);
 void copy_stat_times(struct stat *st_to, struct stat *st_from);
 void copy_stat(struct stat *st_to, struct stat *st_from);
+
 void get_current_time(struct timespec *rightnow);
+void get_expire_time(struct timespec *expire, struct timespec *timeout);
 
 unsigned char issubdirectory(const char *path1, const char *path2, unsigned char maybethesame);
 char *check_path(char *path);
@@ -59,5 +61,7 @@ int custom_fork();
 
 uint32_t safe_atoi(char *b);
 uint64_t safe_atoii(char *b);
+
+void strdup_target_path(char *target, char **p_path, unsigned int *error);
 
 #endif

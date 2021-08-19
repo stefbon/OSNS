@@ -439,7 +439,7 @@ void add_net_service(unsigned int method, char *name, struct host_address_s *hos
     struct discover_resource_s *resource_netsocket=NULL;
     struct list_header_s *header=NULL;
 
-    logoutput("add_net_service");
+    logoutput("add_net_service: method %i name %s flag %i", method, name, flag);
 
     hostname=gethostnamefromspec(host, (GETHOSTNAME_FLAG_IGNORE_IPv4 | GETHOSTNAME_FLAG_IGNORE_IPv6));
     if (hostname==NULL) hostname=host->hostname;
@@ -901,10 +901,6 @@ void queue_service_avahi(const char *name, const char *hostname, char *ipv4, uns
 {
     unsigned int service=0;
     unsigned int fam=0;
-    struct host_address_s host;
-    struct network_port_s netport;
-
-    logoutput("queue_service_avahi: name %s ipv4 %s port %i type %s", name, ipv4, port, type);
 
     if (strcmp(type, "_sftp-ssh._tcp")==0) { 
 
@@ -916,25 +912,37 @@ void queue_service_avahi(const char *name, const char *hostname, char *ipv4, uns
 	service=DISCOVER_RESOURCE_FLAG_SSH;
 	fam=_NETWORK_PORT_TCP;
 
-    } else if (strcmp(name, "_smb._tcp")==0) {
+    } else if (strcmp(type, "_smb._tcp")==0) {
 
 	service=DISCOVER_RESOURCE_FLAG_SMB;
 	fam=_NETWORK_PORT_TCP;
 
-    } else if (strcmp(name, "_nfs._tcp")==0) {
+    } else if (strcmp(type, "_nfs._tcp")==0) {
 
 	service=DISCOVER_RESOURCE_FLAG_NFS;
 	fam=_NETWORK_PORT_TCP;
 
     }
 
-    init_host_address(&host);
-    set_host_address(&host, name, ipv4, NULL);
+    if (service>0) {
+	struct host_address_s host;
+	struct network_port_s netport;
 
-    netport.nr=port;
-    netport.type=fam;
+	init_host_address(&host);
+	set_host_address(&host, name, ipv4, NULL);
 
-    add_net_service(DISCOVER_METHOD_AVAHI, hostname, &host, &netport, service, NULL);
+	netport.nr=port;
+	netport.type=fam;
+
+	logoutput("queue_service_avahi: add name %s ipv4 %s port %i type %s", name, ipv4, port, type);
+
+	add_net_service(DISCOVER_METHOD_AVAHI, hostname, &host, &netport, service, NULL);
+
+    } else {
+
+	logoutput("queue_service_avahi: ignore name %s ipv4 %s port %i type %s", name, ipv4, port, type);
+
+    }
 
     /*struct discover_queue_s *data=malloc(sizeof(struct discover_queue_s));
 
@@ -981,5 +989,34 @@ void discover_services()
     }
 
     browse_services_avahi(0, add_net_service_avahi);
+
+}
+
+const char *get_name_resource_flag(struct discover_resource_s *r)
+{
+
+    if (r->flags & DISCOVER_RESOURCE_FLAG_SSH) {
+
+	return "SSH";
+
+    } else if (r->flags & DISCOVER_RESOURCE_FLAG_SFTP) {
+
+	return "SFTP";
+
+    } else if (r->flags & DISCOVER_RESOURCE_FLAG_SMB) {
+
+	return "SMB";
+
+    } else if (r->flags & DISCOVER_RESOURCE_FLAG_WEBDAV) {
+
+	return "WEBDAV";
+
+    } else if (r->flags & DISCOVER_RESOURCE_FLAG_NFS) {
+
+	return "NFS";
+
+    }
+
+    return "UNKNOWN";
 
 }

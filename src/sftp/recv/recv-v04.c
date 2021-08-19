@@ -149,7 +149,7 @@ static struct sftp_recv_ops_s recv_ops_v04 = {
     .extension_reply			= receive_sftp_extension_reply_v03,
 };
 
-void use_sftp_recv_v04(struct sftp_client_s *sftp)
+struct sftp_recv_ops_s *get_sftp_recv_ops_v04()
 {
-    sftp->recv_ops=&recv_ops_v04;
+    return &recv_ops_v04;
 }

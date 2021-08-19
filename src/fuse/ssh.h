@@ -20,6 +20,6 @@
 #define _FUSE_SSH_H
 
 struct service_context_s *create_ssh_server_service_context(struct service_context_s *networkctx, struct interface_list_s *ilist, uint32_t unique);
-unsigned int get_remote_services_ssh_server(struct service_context_s *context, unsigned int (* cb)(struct service_context_s *context, char *name, void *ptr), void *ptr);
+unsigned int get_remote_services_ssh_server(struct service_context_s *context, void *ptr);
 
 #endif

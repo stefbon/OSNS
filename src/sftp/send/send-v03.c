@@ -50,6 +50,7 @@
 #include "sftp/common-protocol.h"
 #include "sftp/common.h"
 #include "sftp/protocol-v03.h"
+#include "sftp/attr.h"
 #include "send-v03.h"
 #include "datatypes/ssh-uint.h"
 
@@ -125,7 +126,7 @@ int send_sftp_init_v03(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r
 
     /* TODO: add extensions (which?) */
 
-    return (* sftp->context.send_data)(sftp, data, len, &sftp_r->reply.sequence);
+    return (* sftp->context.send_data)(sftp, data, len, &sftp_r->reply.sequence, &sftp_r->slist);
 
 }
 
@@ -171,7 +172,7 @@ int send_sftp_open_v03(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r
     data[pos]=(unsigned char) SSH_FILEXFER_TYPE_REGULAR;
     pos++;
 
-    return (* sftp->context.send_data)(sftp, data, pos, &sftp_r->reply.sequence);
+    return (* sftp_r->send)(sftp_r, data, pos, &sftp_r->reply.sequence, &sftp_r->slist);
 
 }
 
@@ -213,7 +214,7 @@ int send_sftp_create_v03(struct sftp_client_s *sftp, struct sftp_request_s *sftp
     memcpy((char *) &data[pos], sftp_r->call.create.buff, sftp_r->call.create.size);
     pos+=sftp_r->call.create.size;
 
-    return (* sftp->context.send_data)(sftp, data, pos, &sftp_r->reply.sequence);
+    return (* sftp_r->send)(sftp_r, data, pos, &sftp_r->reply.sequence, &sftp_r->slist);
 
 }
 
@@ -243,7 +244,7 @@ int send_sftp_opendir_v03(struct sftp_client_s *sftp, struct sftp_request_s *sft
     memcpy((char *) &data[pos], sftp_r->call.opendir.path, sftp_r->call.opendir.len);
     pos+=sftp_r->call.opendir.len;
 
-    return (* sftp->context.send_data)(sftp, data, pos, &sftp_r->reply.sequence);
+    return (* sftp_r->send)(sftp_r, data, pos, &sftp_r->reply.sequence, &sftp_r->slist);
 
 }
 
@@ -279,7 +280,7 @@ int send_sftp_read_v03(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r
     store_uint32(&data[pos], sftp_r->call.read.size);
     pos+=4;
 
-    return (* sftp->context.send_data)(sftp, data, pos, &sftp_r->reply.sequence);
+    return (* sftp_r->send)(sftp_r, data, pos, &sftp_r->reply.sequence, &sftp_r->slist);
 
 }
 
@@ -318,7 +319,7 @@ int send_sftp_write_v03(struct sftp_client_s *sftp, struct sftp_request_s *sftp_
     memcpy(&data[pos], sftp_r->call.write.data, sftp_r->call.write.size);
     pos+=sftp_r->call.write.size;
 
-    return (* sftp->context.send_data)(sftp, data, pos, &sftp_r->reply.sequence);
+    return (* sftp_r->send)(sftp_r, data, pos, &sftp_r->reply.sequence, &sftp_r->slist);
 }
 
 /*
@@ -349,7 +350,7 @@ int send_sftp_readdir_v03(struct sftp_client_s *sftp, struct sftp_request_s *sft
     memcpy((char *) &data[pos], sftp_r->call.readdir.handle, sftp_r->call.readdir.len);
     pos+=sftp_r->call.readdir.len;
 
-    return (* sftp->context.send_data)(sftp, data, pos, &sftp_r->reply.sequence);
+    return (* sftp_r->send)(sftp_r, data, pos, &sftp_r->reply.sequence, &sftp_r->slist);
 }
 
 /*
@@ -378,7 +379,7 @@ int send_sftp_close_v03(struct sftp_client_s *sftp, struct sftp_request_s *sftp_
     memcpy((char *) &data[pos], sftp_r->call.close.handle, sftp_r->call.close.len);
     pos+=sftp_r->call.close.len;
 
-    return (* sftp->context.send_data)(sftp, data, pos, &sftp_r->reply.sequence);
+    return (* sftp_r->send)(sftp_r, data, pos, &sftp_r->reply.sequence, &sftp_r->slist);
 
 }
 
@@ -408,7 +409,7 @@ int send_sftp_remove_v03(struct sftp_client_s *sftp, struct sftp_request_s *sftp
     memcpy((char *) &data[pos], sftp_r->call.remove.path, sftp_r->call.remove.len);
     pos+=sftp_r->call.remove.len;
 
-    return (* sftp->context.send_data)(sftp, data, pos, &sftp_r->reply.sequence);
+    return (* sftp_r->send)(sftp_r, data, pos, &sftp_r->reply.sequence, &sftp_r->slist);
 
 }
 
@@ -445,7 +446,7 @@ int send_sftp_rename_v03(struct sftp_client_s *sftp, struct sftp_request_s *sftp
     pos+=sftp_r->call.rename.target_len;
 
 
-    return (* sftp->context.send_data)(sftp, data, pos, &sftp_r->reply.sequence);
+    return (* sftp_r->send)(sftp_r, data, pos, &sftp_r->reply.sequence, &sftp_r->slist);
 
 }
 
@@ -481,7 +482,7 @@ int send_sftp_mkdir_v03(struct sftp_client_s *sftp, struct sftp_request_s *sftp_
     memcpy((char *) &data[pos], sftp_r->call.mkdir.buff, sftp_r->call.mkdir.size);
     pos+=sftp_r->call.mkdir.size;
 
-    return (* sftp->context.send_data)(sftp, data, pos, &sftp_r->reply.sequence);
+    return (* sftp_r->send)(sftp_r, data, pos, &sftp_r->reply.sequence, &sftp_r->slist);
 
 }
 
@@ -511,7 +512,7 @@ int send_sftp_rmdir_v03(struct sftp_client_s *sftp, struct sftp_request_s *sftp_
     memcpy((char *) &data[pos], sftp_r->call.remove.path, sftp_r->call.remove.len);
     pos+=sftp_r->call.remove.len;
 
-    return (* sftp->context.send_data)(sftp, data, pos, &sftp_r->reply.sequence);
+    return (* sftp_r->send)(sftp_r, data, pos, &sftp_r->reply.sequence, &sftp_r->slist);
 
 }
 
@@ -541,7 +542,7 @@ int send_sftp_stat_v03(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r
     memcpy((char *) &data[pos], sftp_r->call.stat.path, sftp_r->call.stat.len);
     pos+=sftp_r->call.stat.len;
 
-    return (* sftp->context.send_data)(sftp, data, pos, &sftp_r->reply.sequence);
+    return (* sftp_r->send)(sftp_r, data, pos, &sftp_r->reply.sequence, &sftp_r->slist);
 
 }
 
@@ -571,7 +572,7 @@ int send_sftp_lstat_v03(struct sftp_client_s *sftp, struct sftp_request_s *sftp_
     memcpy((char *) &data[pos], sftp_r->call.lstat.path, sftp_r->call.lstat.len);
     pos+=sftp_r->call.lstat.len;
 
-    return (* sftp->context.send_data)(sftp, data, pos, &sftp_r->reply.sequence);
+    return (* sftp_r->send)(sftp_r, data, pos, &sftp_r->reply.sequence, &sftp_r->slist);
 
 }
 
@@ -601,7 +602,7 @@ int send_sftp_fstat_v03(struct sftp_client_s *sftp, struct sftp_request_s *sftp_
     memcpy((char *) &data[pos], sftp_r->call.fstat.handle, sftp_r->call.fstat.len);
     pos+=sftp_r->call.fstat.len;
 
-    return (* sftp->context.send_data)(sftp, data, pos, &sftp_r->reply.sequence);
+    return (* sftp_r->send)(sftp_r, data, pos, &sftp_r->reply.sequence, &sftp_r->slist);
 
 }
 
@@ -639,7 +640,7 @@ int send_sftp_setstat_v03(struct sftp_client_s *sftp, struct sftp_request_s *sft
     memcpy((char *) &data[pos], sftp_r->call.setstat.buff, sftp_r->call.setstat.size);
     pos+=sftp_r->call.setstat.size;
 
-    return (* sftp->context.send_data)(sftp, data, pos, &sftp_r->reply.sequence);
+    return (* sftp_r->send)(sftp_r, data, pos, &sftp_r->reply.sequence, &sftp_r->slist);
 
 }
 
@@ -676,7 +677,7 @@ int send_sftp_fsetstat_v03(struct sftp_client_s *sftp, struct sftp_request_s *sf
     memcpy((char *) &data[pos], sftp_r->call.fsetstat.buff, sftp_r->call.fsetstat.size);
     pos+=sftp_r->call.fsetstat.size;
 
-    return (* sftp->context.send_data)(sftp, data, pos, &sftp_r->reply.sequence);
+    return (* sftp_r->send)(sftp_r, data, pos, &sftp_r->reply.sequence, &sftp_r->slist);
 
 }
 
@@ -706,7 +707,7 @@ int send_sftp_readlink_v03(struct sftp_client_s *sftp, struct sftp_request_s *sf
     memcpy((char *) &data[pos], sftp_r->call.readlink.path, sftp_r->call.readlink.len);
     pos+=sftp_r->call.readlink.len;
 
-    return (* sftp->context.send_data)(sftp, data, pos, &sftp_r->reply.sequence);
+    return (* sftp_r->send)(sftp_r, data, pos, &sftp_r->reply.sequence, &sftp_r->slist);
 
 }
 
@@ -742,7 +743,7 @@ int send_sftp_symlink_v03(struct sftp_client_s *sftp, struct sftp_request_s *sft
     memcpy((char *) &data[pos], sftp_r->call.link.target_path, sftp_r->call.link.target_len);
     pos+=sftp_r->call.link.target_len;
 
-    return (* sftp->context.send_data)(sftp, data, pos, &sftp_r->reply.sequence);
+    return (* sftp_r->send)(sftp_r, data, pos, &sftp_r->reply.sequence, &sftp_r->slist);
 
 }
 
@@ -795,7 +796,7 @@ int send_sftp_realpath_v03(struct sftp_client_s *sftp, struct sftp_request_s *sf
     memcpy((char *) &data[pos], sftp_r->call.realpath.path, sftp_r->call.realpath.len);
     pos+=sftp_r->call.realpath.len;
 
-    return (* sftp->context.send_data)(sftp, data, pos, &sftp_r->reply.sequence);
+    return (* sftp_r->send)(sftp_r, data, pos, &sftp_r->reply.sequence, &sftp_r->slist);
 
 }
 
@@ -838,7 +839,7 @@ int send_sftp_extension_v03(struct sftp_client_s *sftp, struct sftp_request_s *s
     memcpy((char *) &data[pos], sftp_r->call.extension.data, size);
     pos+=size;
 
-    return (* sftp->context.send_data)(sftp, data, pos, &sftp_r->reply.sequence);
+    return (* sftp_r->send)(sftp_r, data, pos, &sftp_r->reply.sequence, &sftp_r->slist);
 
 }
 
@@ -872,7 +873,7 @@ int send_sftp_custom_v03(struct sftp_client_s *sftp, struct sftp_request_s *sftp
     memcpy((char *) &data[pos], sftp_r->call.extension.data, size);
     pos+=size;
 
-    return (* sftp->context.send_data)(sftp, data, pos, &sftp_r->reply.sequence);
+    return (* sftp_r->send)(sftp_r, data, pos, &sftp_r->reply.sequence, &sftp_r->slist);
 
 }
 
@@ -904,7 +905,7 @@ static struct sftp_send_ops_s send_ops_v03 = {
     .custom				= send_sftp_custom_v03,
 };
 
-void use_sftp_send_v03(struct sftp_client_s *sftp_client)
+struct sftp_send_ops_s *get_sftp_send_ops_v03()
 {
-    sftp_client->send_ops=&send_ops_v03;
+    return &send_ops_v03;
 }

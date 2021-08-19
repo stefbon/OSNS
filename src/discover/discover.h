@@ -153,4 +153,6 @@ void add_net_service_avahi(const char *name, const char *hostname, char *ipv4, c
 void synchronize_discover_resources();
 void discover_services();
 
+const char *get_name_resource_flag(struct discover_resource_s *r);
+
 #endif

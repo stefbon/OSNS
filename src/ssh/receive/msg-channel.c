@@ -48,6 +48,7 @@
 #include "ssh-receive.h"
 #include "ssh-send.h"
 #include "ssh-utils.h"
+#include "ssh-signal.h"
 
 /*
 
@@ -450,9 +451,9 @@ static void receive_msg_channel_eof(struct ssh_connection_s *connection, struct 
 
 	if (signal) {
 
-	    pthread_mutex_lock(signal->mutex);
-	    pthread_cond_broadcast(signal->cond);
-	    pthread_mutex_unlock(signal->mutex);
+	    ssh_signal_lock(signal);
+	    ssh_signal_broadcast(signal);
+	    ssh_signal_unlock(signal);
 
 	}
 
@@ -497,9 +498,9 @@ static void receive_msg_channel_close(struct ssh_connection_s *connection, struc
 
 	if (signal) {
 
-	    pthread_mutex_lock(signal->mutex);
-	    pthread_cond_broadcast(signal->cond);
-	    pthread_mutex_unlock(signal->mutex);
+	    ssh_signal_lock(signal);
+	    ssh_signal_broadcast(signal);
+	    ssh_signal_unlock(signal);
 
 	}
 
@@ -531,8 +532,6 @@ static void receive_msg_channel_request_s(struct ssh_connection_s *connection, s
 
 	    memmove(payload->buffer, &payload->buffer[pos], len);
 	    memset(&payload->buffer[len], 0, payload->len - len);
-
-	    // logoutput("receive_msg_channel_data: resized from %i to %i", payload->len, len);
 
 	    payload->len=len;
 

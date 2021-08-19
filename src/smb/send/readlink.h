@@ -17,16 +17,12 @@
 
 */
 
-#ifndef _SFTP_ATTR_WRITE_ATTR_V05_H
-#define _SFTP_ATTR_WRITE_ATTR_V05_H
+#ifndef SMB_SEND_READLINK_H
+#define SMB_SEND_READLINK_H
 
 /* prototypes */
 
-void write_attr_accesstime_v05(struct sftp_client_s *sftp, struct attr_buffer_s *buffer, struct sftp_attr_s *attr, unsigned int *valid);
-void write_attr_modifytime_v05(struct sftp_client_s *sftp, struct attr_buffer_s *buffer, struct sftp_attr_s *attr, unsigned int *valid);
-void write_attr_changetime_v05(struct sftp_client_s *sftp, struct attr_buffer_s *buffer, struct sftp_attr_s *attr, unsigned int *valid);
-
-void write_attributes_v05(struct sftp_client_s *sftp, struct attr_buffer_s *buffer, struct sftp_attr_s *attr);
-unsigned int write_attributes_len_v05(struct sftp_client_s *sftp, struct sftp_attr_s *attr);
+int send_smb_readlink_ctx(struct context_interface_s *interface, struct smb_request_s *smb_r, char *path, struct smb_data_s *data);
 
 #endif
+

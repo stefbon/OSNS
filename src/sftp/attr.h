@@ -20,22 +20,14 @@
 #ifndef _SFTP_ATTR_H
 #define _SFTP_ATTR_H
 
-#include "attr/buffer.h"
-
-#include "attr/read-attr-v03.h"
-#include "attr/read-attr-v04.h"
-#include "attr/read-attr-v05.h"
-#include "attr/read-attr-v06.h"
-
-#include "attr/read-name-v03.h"
-
-#include "attr/write-attr-v03.h"
-#include "attr/write-attr-v04.h"
-#include "attr/write-attr-v05.h"
-#include "attr/write-attr-v06.h"
-
 /* prototypes */
 
-void set_sftp_attr(struct sftp_client_s *sftp);
+void set_sftp_attr_version(struct sftp_client_s *sftp);
+void init_sftp_client_attr_context(struct sftp_client_s *sftp);
+
+void read_sftp_features(struct sftp_client_s *sftp);
+
+unsigned int get_sftp_attribute_mask(struct sftp_client_s *sftp);
+int get_sftp_attribute_info(unsigned char version, unsigned int valid, const char *what);
 
 #endif

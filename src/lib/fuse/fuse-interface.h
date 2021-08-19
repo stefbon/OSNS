@@ -26,8 +26,8 @@
 
 struct fuse_request_s;
 typedef void (* fuse_cb_t)(struct fuse_request_s *request);
-typedef int (* signal_ctx2fuse_t)(void **p_ptr, const char *what, struct ctx_option_s *o);
-typedef int (* signal_fuse2ctx_t)(void *ptr, const char *what, struct ctx_option_s *o);
+typedef int (* signal_ctx2fuse_t)(struct context_interface_s *i, const char *what, struct ctx_option_s *o);
+typedef int (* signal_fuse2ctx_t)(struct context_interface_s *i, const char *what, struct ctx_option_s *o);
 
 #define FUSE_REQUEST_FLAG_INTERRUPTED			1
 #define FUSE_REQUEST_FLAG_RESPONSE			2
@@ -37,9 +37,8 @@ typedef int (* signal_fuse2ctx_t)(void *ptr, const char *what, struct ctx_option
 #define FUSESOCKET_INIT_FLAG_SIZE_INCLUDES_SOCKET	2
 
 struct fuse_request_s {
-    char						*ptr; /* pointer to fuse socket */
-    void						*ctx; /* pointer to related requests following this like sftp request */
-    void						*data; /* additional data for set_request_flags like sftp service context */
+    struct context_interface_s				*root; /* pointer to root interface/fuse socket */
+    void						*followup; /* pointer to related requests following this like sftp request */
     uint32_t						opcode;
     unsigned char					flags;
     struct list_element_s 				list;
@@ -64,44 +63,45 @@ struct direntry_buffer_s {
 
 /* prototypes */
 
-void notify_VFS_delete(char *ptr, uint64_t pino, uint64_t ino, char *name, unsigned int len);
-void notify_VFS_create(char *ptr, uint64_t pino, char *name);
-void notify_VFS_change(char *ptr, uint64_t ino, uint32_t mask);
+void notify_VFS_delete(struct context_interface_s *root, uint64_t pino, uint64_t ino, char *name, unsigned int len);
+void notify_VFS_create(struct context_interface_s *r, uint64_t pino, char *name);
+void notify_VFS_change(struct context_interface_s *r, uint64_t ino, uint32_t mask);
 void reply_VFS_data(struct fuse_request_s *r, char *buffer, size_t size);
 void reply_VFS_error(struct fuse_request_s *r, unsigned int error);
 void reply_VFS_nosys(struct fuse_request_s *r);
 void reply_VFS_xattr(struct fuse_request_s *r, size_t size);
 
-void register_fuse_function(char *ptr, uint32_t opcode, void (* cb) (struct fuse_request_s *request));
+void register_fuse_function(struct context_interface_s *root, uint32_t opcode, void (* cb) (struct fuse_request_s *request));
 
-void disable_masking_userspace(char *ptr);
-mode_t get_masked_permissions(char *ptr, mode_t perm, mode_t mask);
+void disable_masking_userspace(struct context_interface_s *root);
+mode_t get_masked_permissions(struct context_interface_s *root, mode_t perm, mode_t mask);
 
-unsigned char signal_fuse_request_interrupted(char *ptr, uint64_t unique);
-unsigned char signal_fuse_request_response(char *ptr, uint64_t unique);
-unsigned char signal_fuse_request_error(char *ptr, uint64_t unique, unsigned int error);
+unsigned char signal_fuse_request_interrupted(struct context_interface_s *root, uint64_t unique);
+unsigned char signal_fuse_request_response(struct context_interface_s *root, uint64_t unique);
+unsigned char signal_fuse_request_error(struct context_interface_s *root, uint64_t unique, unsigned int error);
 
 void set_fuse_request_flags_cb(struct fuse_request_s *request, void (* cb)(struct fuse_request_s *request));
+void unset_fuse_request_flags_cb(struct fuse_request_s *request);
+
 void set_fuse_request_interrupted(struct fuse_request_s *request, uint64_t ino);
 
-pthread_mutex_t *get_fuse_pthread_mutex(char *ptr);
-pthread_cond_t *get_fuse_pthread_cond(char *ptr);
+struct common_signal_s *get_fusesocket_signal(struct context_interface_s *root);
 
-struct timespec *get_fuse_attr_timeout(char *ptr);
-struct timespec *get_fuse_entry_timeout(char *ptr);
-struct timespec *get_fuse_negative_timeout(char *ptr);
+struct timespec *get_fuse_attr_timeout(struct context_interface_s *root);
+struct timespec *get_fuse_entry_timeout(struct context_interface_s *root);
+struct timespec *get_fuse_negative_timeout(struct context_interface_s *root);
 
-int add_direntry_buffer(void *ptr, struct direntry_buffer_s *buffer, struct name_s *xname, struct stat *st);
-int add_direntry_plus_buffer(void *ptr, struct direntry_buffer_s *buffer, struct name_s *xname, struct stat *st);
+int add_direntry_buffer(struct context_interface_s *root, struct direntry_buffer_s *buffer, struct name_s *xname, struct stat *st);
+int add_direntry_plus_buffer(struct context_interface_s *root, struct direntry_buffer_s *buffer, struct name_s *xname, struct stat *st);
 
-struct fs_connection_s *get_fs_connection_fuse(char *ptr);
-signal_ctx2fuse_t get_signal_ctx2fuse(char *ptr);
-void set_signal_fuse2ctx(char *ptr, signal_fuse2ctx_t cb);
+struct fs_connection_s *get_fs_connection_fuse(struct context_interface_s *root);
+signal_ctx2fuse_t get_signal_ctx2fuse(struct context_interface_s *root);
+void set_signal_fuse2ctx(struct context_interface_s *root, signal_fuse2ctx_t cb);
 
 void umount_fuse_interface(struct pathinfo_s *pathinfo);
 void *create_fuse_interface();
-void init_fusesocket(char *ptr, void *ctx, size_t size, unsigned char flags);
-int connect_fusesocket(char *ptr, uid_t uid, char *source, char *mountpoint, char *name, unsigned int *error);
+void init_fusesocket(struct context_interface_s *root, size_t size, unsigned char flags);
+int connect_fusesocket(struct context_interface_s *root, uid_t uid, char *source, char *mountpoint, char *name, unsigned int *error);
 unsigned int get_fuse_buffer_size();
 void read_fusesocket_event(int fd, void *ptr, struct event_s *event);
 

@@ -16,37 +16,13 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
-#ifndef OSNS_SSH_SUBSYSTEM_COMMONHANDLE_H
-#define OSNS_SSH_SUBSYSTEM_COMMONHANDLE_H
+#ifndef SSH_SUBSYSTEM_COMMONHANDLE_H
+#define SSH_SUBSYSTEM_COMMONHANDLE_H
 
-#define COMMONHANDLE_TYPE_FILE				1
-#define COMMONHANDLE_TYPE_DIR				2
-
-struct commonhandle_s {
-    unsigned char					type;
-    dev_t						dev;
-    uint64_t						ino;
-    unsigned int					pid;
-    unsigned int					fd;
-    void						(* close)(struct commonhandle_s *handle);
-    void						(* free)(struct commonhandle_s **handle);
-};
-
-// Prototypes
-
-int writelock_commonhandles(struct simple_lock_s *lock);
-int readlock_commonhandles(struct simple_lock_s *lock);
-int unlock_commonhandles(struct simple_lock_s *lock);
-
-void insert_commonhandle_hash(struct commonhandle_s *handle);
-void remove_commonhandle_hash(struct commonhandle_s *handle);
-unsigned int calculate_ino_hash(uint64_t ino);
-
-struct commonhandle_s *get_next_commonhandle(void **index, unsigned int hashvalue);
-
-int init_commonhandles(unsigned int *error);
-void free_commonhandles();
-
-unsigned char write_commonhandle(struct commonhandle_s *handle, char *buffer);
+#include "commonhandle/handle.h"
+#include "commonhandle/create.h"
+#include "commonhandle/hash.h"
+#include "commonhandle/init.h"
+#include "commonhandle/utils.h"
 
 #endif

@@ -48,6 +48,7 @@
 #include "fuse.h"
 
 #include "sftp/common-protocol.h"
+#include "sftp/attr-context.h"
 #include "interface/sftp-attr.h"
 #include "interface/sftp-send.h"
 #include "interface/sftp-wait-response.h"
@@ -92,30 +93,21 @@ void _fs_sftp_setattr(struct service_context_s *context, struct fuse_request_s *
     struct sftp_request_s sftp_r;
     unsigned int error=EIO;
     struct sftp_attr_s attr;
-    unsigned int size=get_attr_buffer_size(interface, st, set, &attr, 0);
+    struct rw_attr_result_s r;
+    unsigned int size=get_attr_buffer_size(interface, st, set, &r, &attr, 0);
     char buffer[size];
     unsigned int pathlen=(* interface->backend.sftp.get_complete_pathlen)(interface, pathinfo->len);
     char path[pathlen];
 
     pathinfo->len += (* interface->backend.sftp.complete_path)(interface, path, pathinfo);
-    write_attributes_ctx(interface, buffer, size, &attr);
+    write_attributes_ctx(interface, buffer, size, &r, &attr);
 
-    memset(&sftp_r, 0, sizeof(struct sftp_request_s));
-    sftp_r.id=0;
+    init_sftp_request(&sftp_r, interface, f_request);
+
     sftp_r.call.setstat.path=(unsigned char *)pathinfo->path;
     sftp_r.call.setstat.len=pathinfo->len;
     sftp_r.call.setstat.size=size;
     sftp_r.call.setstat.buff=(unsigned char *)buffer;
-    sftp_r.status=SFTP_REQUEST_STATUS_WAITING;
-
-    set_sftp_request_fuse(&sftp_r, f_request);
-
-    if (f_request->flags & FUSE_REQUEST_FLAG_INTERRUPTED) {
-
-	reply_VFS_error(f_request, EINTR);
-	return;
-
-    }
 
     if (send_sftp_setstat_ctx(interface, &sftp_r)>0) {
 	struct timespec timeout;
@@ -136,6 +128,7 @@ void _fs_sftp_setattr(struct service_context_s *context, struct fuse_request_s *
 
 		    set_local_attributes(inode, &attr);
 		    _fs_common_getattr(get_root_context(context), f_request, inode);
+		    unset_fuse_request_flags_cb(f_request);
 		    return;
 
 		} else {
@@ -160,6 +153,7 @@ void _fs_sftp_setattr(struct service_context_s *context, struct fuse_request_s *
 
     out:
     reply_VFS_error(f_request, error);
+    unset_fuse_request_flags_cb(f_request);
 
 }
 
@@ -172,27 +166,18 @@ void _fs_sftp_fsetattr(struct fuse_openfile_s *openfile, struct fuse_request_s *
     struct sftp_request_s sftp_r;
     unsigned int error=EIO;
     struct sftp_attr_s attr;
-    unsigned int size=get_attr_buffer_size(interface, st, set, &attr, 0);
+    struct rw_attr_result_s r;
+    unsigned int size=get_attr_buffer_size(interface, st, set, &r, &attr, 0);
     char buffer[size];
 
-    write_attributes_ctx(interface, buffer, size, &attr);
+    write_attributes_ctx(interface, buffer, size, &r, &attr);
 
-    memset(&sftp_r, 0, sizeof(struct sftp_request_s));
-    sftp_r.id=0;
+    init_sftp_request(&sftp_r, interface, f_request);
+
     sftp_r.call.fsetstat.handle=(unsigned char *) openfile->handle.name.name;
     sftp_r.call.fsetstat.len=openfile->handle.name.len;
     sftp_r.call.fsetstat.size=size;
     sftp_r.call.fsetstat.buff=(unsigned char *)buffer;
-    sftp_r.status=SFTP_REQUEST_STATUS_WAITING;
-
-    set_sftp_request_fuse(&sftp_r, f_request);
-
-    if (f_request->flags & FUSE_REQUEST_FLAG_INTERRUPTED) {
-
-	reply_VFS_error(f_request, EINTR);
-	return;
-
-    }
 
     /* send fsetstat cause a handle is available */
 
@@ -212,6 +197,7 @@ void _fs_sftp_fsetattr(struct fuse_openfile_s *openfile, struct fuse_request_s *
 
 		    set_local_attributes(openfile->inode, &attr);
 		    _fs_common_getattr(get_root_context(context), f_request, openfile->inode);
+		    unset_fuse_request_flags_cb(f_request);
 		    return;
 
 		}
@@ -235,6 +221,7 @@ void _fs_sftp_fsetattr(struct fuse_openfile_s *openfile, struct fuse_request_s *
 
     out:
     reply_VFS_error(f_request, error);
+    unset_fuse_request_flags_cb(f_request);
 
 }
 

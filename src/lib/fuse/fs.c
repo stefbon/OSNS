@@ -46,6 +46,7 @@
 #include "misc.h"
 #include "workspace-interface.h"
 #include "workspace.h"
+#include "commonsignal.h"
 #include "fuse.h"
 
 extern int check_entry_special(struct inode_s *inode);
@@ -79,7 +80,7 @@ void fs_get_data_link(struct inode_s *inode, struct data_link_s **p_link)
 
 struct context_interface_s *get_fuse_request_interface(struct fuse_request_s *request)
 {
-    return (struct context_interface_s *)( request->ctx);
+    return (request->root);
 }
 
 void fuse_fs_forget(struct fuse_request_s *request)
@@ -157,13 +158,10 @@ void fuse_fs_getattr(struct fuse_request_s *request)
 	if ((getattr_in->getattr_flags & FUSE_GETATTR_FH) && getattr_in->fh>0) {
 	    struct fuse_openfile_s *openfile= (struct fuse_openfile_s *) getattr_in->fh;
 
-	    // logoutput("fuse_fs_getattr: fgetattr");
-
 	    (* inode->fs->type.nondir.fgetattr) (openfile, request);
 
 	} else {
 
-	    // logoutput("fuse_fs_getattr: getattr");
 
 	    (* inode->fs->getattr)(context, request, inode);
 
@@ -177,13 +175,10 @@ void fuse_fs_getattr(struct fuse_request_s *request)
 	    if ((getattr_in->getattr_flags & FUSE_GETATTR_FH) && getattr_in->fh>0) {
 		struct fuse_openfile_s *openfile=(struct fuse_openfile_s *) getattr_in->fh;
 
-		// logoutput("fuse_fs_getattr: fgetattr");
-
 		(* inode->fs->type.nondir.fgetattr) (openfile, request);
 
 	    } else {
 
-		// logoutput("fuse_fs_getattr: getattr");
 
 		(* inode->fs->getattr)(context, request, inode);
 
@@ -745,6 +740,7 @@ void _fuse_fs_opendir(struct service_context_s *context, struct inode_s *inode, 
 	opendir->context=context;
 	opendir->inode=inode;
 	opendir->ino=0;
+	opendir->count_keep=0;
 	opendir->count_created=0;
 	opendir->count_found=0;
 	opendir->error=0;
@@ -763,8 +759,7 @@ void _fuse_fs_opendir(struct service_context_s *context, struct inode_s *inode, 
 
 	init_list_header(&opendir->entries, SIMPLE_LIST_TYPE_EMPTY, NULL);
 	init_list_header(&opendir->symlinks, SIMPLE_LIST_TYPE_EMPTY, NULL);
-	opendir->mutex = get_fuse_pthread_mutex(request->ptr);
-	opendir->cond = get_fuse_pthread_cond(request->ptr);
+	opendir->signal = get_fusesocket_signal(request->root);
 
 	logoutput("_fuse_fs_opendir: ino %li", inode->st.st_ino);
 
@@ -864,6 +859,7 @@ void fuse_fs_releasedir(struct fuse_request_s *request)
 {
     struct fuse_release_in *release_in=(struct fuse_release_in *) request->buffer;
     struct fuse_opendir_s *opendir=(struct fuse_opendir_s *) (uintptr_t) release_in->fh;
+    struct common_signal_s *signal=opendir->signal;
 
     logoutput("fuse_fs_releasedir");
 
@@ -875,7 +871,7 @@ void fuse_fs_releasedir(struct fuse_request_s *request)
 
 	release_in->fh=0;
 
-	pthread_mutex_lock(opendir->mutex);
+	signal_lock(signal);
 
 	opendir->flags |= (_FUSE_OPENDIR_FLAG_RELEASE | _FUSE_OPENDIR_FLAG_READDIR_FINISH | _FUSE_OPENDIR_FLAG_QUEUE_READY);
 
@@ -885,7 +881,7 @@ void fuse_fs_releasedir(struct fuse_request_s *request)
 
 	}
 
-	pthread_mutex_unlock(opendir->mutex);
+	signal_unlock(signal);
 
 	if (dofree) {
 
@@ -1338,7 +1334,27 @@ void fuse_fs_interrupt(struct fuse_request_s *request)
 
 }
 
-static void get_fusefs_flags(struct fuse_init_in *in, struct fuse_init_out *out, struct context_interface_s *interface, const char *what, uint64_t code)
+void fuse_fs_lseek(struct fuse_request_s *request)
+{
+    struct context_interface_s *interface=get_fuse_request_interface(request);
+    struct service_context_s *context=get_service_context(interface);
+    struct fuse_lseek_in *lseek_in=(struct fuse_lseek_in *) request->buffer;
+    struct fuse_openfile_s *openfile=(struct fuse_openfile_s *) (uintptr_t) lseek_in->fh;
+
+    if (openfile) {
+	struct inode_s *inode=openfile->inode;
+
+	(* inode->fs->type.nondir.lseek) (openfile, request, lseek_in->offset, lseek_in->whence);
+
+    } else {
+
+	reply_VFS_error(request, EIO);
+
+    }
+
+}
+
+static void get_fusefs_flags(struct fuse_init_in *in, struct fuse_init_out *out, struct context_interface_s *interface, const char *what, uint64_t code, unsigned char defaulton)
 {
 
     if (in->flags & code) {
@@ -1359,7 +1375,15 @@ static void get_fusefs_flags(struct fuse_init_in *in, struct fuse_init_out *out,
 
 	    } else {
 
-		logoutput("fuse_fs_init: kernel supports %s but fs does not", what);
+		if (defaulton) {
+
+		    logoutput("fuse_fs_init: kernel supports %s but fs does not: taking default = on", what);
+
+		} else {
+
+		    logoutput("fuse_fs_init: kernel supports %s but fs does not: taking default = off", what);
+
+		}
 
 	    }
 
@@ -1407,83 +1431,87 @@ void fuse_fs_init(struct fuse_request_s *request)
 
 
 #ifdef FUSE_ASYNC_READ
-	get_fusefs_flags(in, &out, interface, "async-read", FUSE_ASYNC_READ);
+	get_fusefs_flags(in, &out, interface, "async-read", FUSE_ASYNC_READ, 0);
 #endif
 
 #ifdef FUSE_POSIX_LOCKS
-	get_fusefs_flags(in, &out, interface, "posix-locks", FUSE_POSIX_LOCKS);
+	get_fusefs_flags(in, &out, interface, "posix-locks", FUSE_POSIX_LOCKS, 0);
 #endif
 
 #ifdef FUSE_FILE_OPS
-	get_fusefs_flags(in, &out, interface, "file-ops", FUSE_FILE_OPS);
+	get_fusefs_flags(in, &out, interface, "file-ops", FUSE_FILE_OPS, 0);
 #endif
 
 #ifdef FUSE_ATOMIC_O_TRUNC
-	get_fusefs_flags(in, &out, interface, "atomic-o-trunc", FUSE_ATOMIC_O_TRUNC);
+	get_fusefs_flags(in, &out, interface, "atomic-o-trunc", FUSE_ATOMIC_O_TRUNC, 0);
 #endif
 
 #ifdef FUSE_EXPORT_SUPPORT
-	get_fusefs_flags(in, &out, interface, "export-support", FUSE_EXPORT_SUPPORT);
+	get_fusefs_flags(in, &out, interface, "export-support", FUSE_EXPORT_SUPPORT, 0);
 #endif
 
 #ifdef FUSE_BIG_WRITES
-	get_fusefs_flags(in, &out, interface, "big-writes", FUSE_BIG_WRITES);
+	get_fusefs_flags(in, &out, interface, "big-writes", FUSE_BIG_WRITES, 0);
 #endif
 
 #ifdef FUSE_DONT_MASK
-	get_fusefs_flags(in, &out, interface, "dont-mask", FUSE_DONT_MASK);
+	get_fusefs_flags(in, &out, interface, "dont-mask", FUSE_DONT_MASK, 0);
 #endif
 
 #ifdef FUSE_SPLICE_WRITE
-	get_fusefs_flags(in, &out, interface, "splice-write", FUSE_SPLICE_WRITE);
+	get_fusefs_flags(in, &out, interface, "splice-write", FUSE_SPLICE_WRITE, 0);
 #endif
 
 #ifdef FUSE_SPLICE_MOVE
-	get_fusefs_flags(in, &out, interface, "splice-move", FUSE_SPLICE_MOVE);
+	get_fusefs_flags(in, &out, interface, "splice-move", FUSE_SPLICE_MOVE, 0);
 #endif
 
 #ifdef FUSE_SPLICE_READ
-	get_fusefs_flags(in, &out, interface, "splice-read", FUSE_SPLICE_READ);
+	get_fusefs_flags(in, &out, interface, "splice-read", FUSE_SPLICE_READ, 0);
 #endif
 
 #ifdef FUSE_FLOCK_LOCKS
-	get_fusefs_flags(in, &out, interface, "flock-locks", FUSE_FLOCK_LOCKS);
+	get_fusefs_flags(in, &out, interface, "flock-locks", FUSE_FLOCK_LOCKS, 0);
 #endif
 
 #ifdef FUSE_HAS_IOCTL_DIR
-	get_fusefs_flags(in, &out, interface, "has-ioctl-dir", FUSE_HAS_IOCTL_DIR);
+	get_fusefs_flags(in, &out, interface, "has-ioctl-dir", FUSE_HAS_IOCTL_DIR, 0);
 #endif
 
 #ifdef FUSE_AUTO_INVAL_DATA
-	get_fusefs_flags(in, &out, interface, "auto-inval-data", FUSE_AUTO_INVAL_DATA);
+	get_fusefs_flags(in, &out, interface, "auto-inval-data", FUSE_AUTO_INVAL_DATA, 0);
 #endif
 
 #ifdef FUSE_DO_READDIRPLUS
-	get_fusefs_flags(in, &out, interface, "do-readdirplus", FUSE_DO_READDIRPLUS);
+	get_fusefs_flags(in, &out, interface, "do-readdirplus", FUSE_DO_READDIRPLUS, 0);
 #endif
 
 #ifdef FUSE_READDIRPLUS_AUTO
-	get_fusefs_flags(in, &out, interface, "readdirplus-auto", FUSE_READDIRPLUS_AUTO);
+	get_fusefs_flags(in, &out, interface, "readdirplus-auto", FUSE_READDIRPLUS_AUTO, 0);
 #endif
 
 #ifdef FUSE_ASYNC_DIO
-	get_fusefs_flags(in, &out, interface, "async-dio", FUSE_ASYNC_DIO);
+	get_fusefs_flags(in, &out, interface, "async-dio", FUSE_ASYNC_DIO, 0);
 #endif
 
 #ifdef FUSE_WRITEBACK_CACHE
-	get_fusefs_flags(in, &out, interface, "writeback-cache", FUSE_WRITEBACK_CACHE);
+	get_fusefs_flags(in, &out, interface, "writeback-cache", FUSE_WRITEBACK_CACHE, 0);
 #endif
 
 #ifdef FUSE_NO_OPEN_SUPPORT
-	get_fusefs_flags(in, &out, interface, "no-open-support", FUSE_NO_OPEN_SUPPORT);
+	get_fusefs_flags(in, &out, interface, "no-open-support", FUSE_NO_OPEN_SUPPORT, 0);
 #endif
 
 #ifdef FUSE_PARALLEL_DIROPS
-	get_fusefs_flags(in, &out, interface, "parallel-dirops", FUSE_PARALLEL_DIROPS);
+	get_fusefs_flags(in, &out, interface, "parallel-dirops", FUSE_PARALLEL_DIROPS, 0);
 #endif
 
 #ifdef FUSE_POSIX_ACL
-	get_fusefs_flags(in, &out, interface, "posix-acl", FUSE_POSIX_ACL);
+	get_fusefs_flags(in, &out, interface, "posix-acl", FUSE_POSIX_ACL, 0);
+#endif
+
+#ifdef FUSE_CACHE_SYMLINKS
+	get_fusefs_flags(in, &out, interface, "cache-symlinks", FUSE_CACHE_SYMLINKS, 0);
 #endif
 
 	out.max_readahead = in->max_readahead;
@@ -1500,15 +1528,15 @@ void fuse_fs_init(struct fuse_request_s *request)
 
 	    /* only flocks */
 
-	    register_fuse_function(interface->buffer, FUSE_SETLK, fuse_fs_flock_lock);
-	    register_fuse_function(interface->buffer, FUSE_SETLKW, fuse_fs_flock_lock_wait);
+	    register_fuse_function(interface, FUSE_SETLK, fuse_fs_flock_lock);
+	    register_fuse_function(interface, FUSE_SETLKW, fuse_fs_flock_lock_wait);
 
 	} else if (!(out.flags & FUSE_FLOCK_LOCKS) && (out.flags & FUSE_POSIX_LOCKS)) {
 
 	    /* only posix locks */
 
-	    register_fuse_function(interface->buffer, FUSE_SETLK, fuse_fs_posix_lock);
-	    register_fuse_function(interface->buffer, FUSE_SETLKW, fuse_fs_posix_lock_wait);
+	    register_fuse_function(interface, FUSE_SETLK, fuse_fs_posix_lock);
+	    register_fuse_function(interface, FUSE_SETLKW, fuse_fs_posix_lock_wait);
 
 	}
 
@@ -1516,7 +1544,7 @@ void fuse_fs_init(struct fuse_request_s *request)
 
 	    /* do not apply mask to permissions: kernel has done it already */
 
-	    disable_masking_userspace(interface->buffer);
+	    disable_masking_userspace(interface);
 
 	}
 
@@ -1531,66 +1559,79 @@ void fuse_fs_destroy (struct fuse_request_s *request)
 
 void register_fuse_functions(struct context_interface_s *interface)
 {
-    char *ptr=interface->buffer;
 
-    register_fuse_function(ptr, FUSE_INIT, fuse_fs_init);
-    register_fuse_function(ptr, FUSE_DESTROY, fuse_fs_destroy);
+    register_fuse_function(interface, FUSE_INIT, fuse_fs_init);
+    register_fuse_function(interface, FUSE_DESTROY, fuse_fs_destroy);
 
-    register_fuse_function(ptr, FUSE_LOOKUP, fuse_fs_lookup);
-    register_fuse_function(ptr, FUSE_FORGET, fuse_fs_forget);
-    register_fuse_function(ptr, FUSE_BATCH_FORGET, fuse_fs_forget_multi);
+    register_fuse_function(interface, FUSE_LOOKUP, fuse_fs_lookup);
+    register_fuse_function(interface, FUSE_FORGET, fuse_fs_forget);
 
-    register_fuse_function(ptr, FUSE_GETATTR, fuse_fs_getattr);
-    register_fuse_function(ptr, FUSE_SETATTR, fuse_fs_setattr);
+#ifdef FUSE_BATCH_FORGET
+    register_fuse_function(interface, FUSE_BATCH_FORGET, fuse_fs_forget_multi);
+#endif
 
-    register_fuse_function(ptr, FUSE_MKDIR, fuse_fs_mkdir);
-    register_fuse_function(ptr, FUSE_MKNOD, fuse_fs_mknod);
-    register_fuse_function(ptr, FUSE_SYMLINK, fuse_fs_symlink);
+    register_fuse_function(interface, FUSE_GETATTR, fuse_fs_getattr);
+    register_fuse_function(interface, FUSE_SETATTR, fuse_fs_setattr);
 
-    register_fuse_function(ptr, FUSE_RMDIR, fuse_fs_rmdir);
-    register_fuse_function(ptr, FUSE_UNLINK, fuse_fs_unlink);
+    register_fuse_function(interface, FUSE_MKDIR, fuse_fs_mkdir);
+    register_fuse_function(interface, FUSE_MKNOD, fuse_fs_mknod);
+    register_fuse_function(interface, FUSE_SYMLINK, fuse_fs_symlink);
 
-    register_fuse_function(ptr, FUSE_READLINK, fuse_fs_readlink);
-    register_fuse_function(ptr, FUSE_RENAME, fuse_fs_rename);
-    register_fuse_function(ptr, FUSE_LINK, fuse_fs_link);
+    register_fuse_function(interface, FUSE_RMDIR, fuse_fs_rmdir);
+    register_fuse_function(interface, FUSE_UNLINK, fuse_fs_unlink);
 
-    register_fuse_function(ptr, FUSE_OPENDIR, fuse_fs_opendir);
-    register_fuse_function(ptr, FUSE_READDIR, fuse_fs_readdir);
-    register_fuse_function(ptr, FUSE_READDIRPLUS, fuse_fs_readdirplus);
-    register_fuse_function(ptr, FUSE_RELEASEDIR, fuse_fs_releasedir);
-    register_fuse_function(ptr, FUSE_FSYNCDIR, fuse_fs_fsyncdir);
+    register_fuse_function(interface, FUSE_READLINK, fuse_fs_readlink);
+    register_fuse_function(interface, FUSE_RENAME, fuse_fs_rename);
+    register_fuse_function(interface, FUSE_LINK, fuse_fs_link);
 
-    register_fuse_function(ptr, FUSE_CREATE, fuse_fs_create);
-    register_fuse_function(ptr, FUSE_OPEN, fuse_fs_open);
-    register_fuse_function(ptr, FUSE_READ, fuse_fs_read);
-    register_fuse_function(ptr, FUSE_WRITE, fuse_fs_write);
-    register_fuse_function(ptr, FUSE_FSYNC, fuse_fs_fsync);
-    register_fuse_function(ptr, FUSE_FLUSH, fuse_fs_flush);
-    register_fuse_function(ptr, FUSE_RELEASE, fuse_fs_release);
+    register_fuse_function(interface, FUSE_OPENDIR, fuse_fs_opendir);
+    register_fuse_function(interface, FUSE_READDIR, fuse_fs_readdir);
+    register_fuse_function(interface, FUSE_READDIRPLUS, fuse_fs_readdirplus);
+    register_fuse_function(interface, FUSE_RELEASEDIR, fuse_fs_releasedir);
+    register_fuse_function(interface, FUSE_FSYNCDIR, fuse_fs_fsyncdir);
 
-    register_fuse_function(ptr, FUSE_GETLK, fuse_fs_getlock);
-    register_fuse_function(ptr, FUSE_SETLK, fuse_fs_lock);
-    register_fuse_function(ptr, FUSE_SETLKW, fuse_fs_lock_wait);
+    register_fuse_function(interface, FUSE_CREATE, fuse_fs_create);
+    register_fuse_function(interface, FUSE_OPEN, fuse_fs_open);
+    register_fuse_function(interface, FUSE_READ, fuse_fs_read);
+    register_fuse_function(interface, FUSE_WRITE, fuse_fs_write);
+    register_fuse_function(interface, FUSE_FSYNC, fuse_fs_fsync);
+    register_fuse_function(interface, FUSE_FLUSH, fuse_fs_flush);
+    register_fuse_function(interface, FUSE_RELEASE, fuse_fs_release);
 
-    register_fuse_function(ptr, FUSE_STATFS, fuse_fs_statfs);
+    register_fuse_function(interface, FUSE_GETLK, fuse_fs_getlock);
+    register_fuse_function(interface, FUSE_SETLK, fuse_fs_lock);
+    register_fuse_function(interface, FUSE_SETLKW, fuse_fs_lock_wait);
 
-    register_fuse_function(ptr, FUSE_LISTXATTR, fuse_fs_listxattr);
-    register_fuse_function(ptr, FUSE_GETXATTR, fuse_fs_getxattr);
-    register_fuse_function(ptr, FUSE_SETXATTR, fuse_fs_setxattr);
-    register_fuse_function(ptr, FUSE_REMOVEXATTR, fuse_fs_removexattr);
+    register_fuse_function(interface, FUSE_STATFS, fuse_fs_statfs);
 
-    register_fuse_function(ptr, FUSE_INTERRUPT, fuse_fs_interrupt);
+    register_fuse_function(interface, FUSE_LISTXATTR, fuse_fs_listxattr);
+    register_fuse_function(interface, FUSE_GETXATTR, fuse_fs_getxattr);
+    register_fuse_function(interface, FUSE_SETXATTR, fuse_fs_setxattr);
+    register_fuse_function(interface, FUSE_REMOVEXATTR, fuse_fs_removexattr);
+
+    register_fuse_function(interface, FUSE_INTERRUPT, fuse_fs_interrupt);
+
+#ifdef FUSE_LSEEK
+
+    register_fuse_function(interface, FUSE_LSEEK, fuse_fs_lseek);
+
+#endif
 
 };
 
-void init_fuse_buffer(struct fuse_buffer_s *buffer, char *data, unsigned int size, unsigned int count, signed char eof)
+void init_fuse_buffer(struct fuse_buffer_s *buffer, char *data, unsigned int size, unsigned int count)
 {
-    buffer->data=data;
-    buffer->pos=data;
-    buffer->size=size;
-    buffer->left=size;
+
+    buffer->flags=0;
+
+    buffer->done=0;
     buffer->count=count;
-    buffer->eof=eof;
+
+    buffer->left=size;
+    buffer->size=size;
+    buffer->data=data;
+    buffer->pos=buffer->data;
+
 }
 
 void clear_fuse_buffer(struct fuse_buffer_s *buffer)
@@ -1603,49 +1644,62 @@ void clear_fuse_buffer(struct fuse_buffer_s *buffer)
 
     }
 
-    init_fuse_buffer(buffer, NULL, 0, 0, -1);
+    init_fuse_buffer(buffer, NULL, 0, 0);
 
 }
 
 struct entry_s *get_fuse_direntry_common(struct fuse_opendir_s *opendir, struct list_header_s *header, struct fuse_request_s *request)
 {
+    struct common_signal_s *signal=opendir->signal;
     struct directory_s *directory=get_directory(opendir->inode);
     struct list_element_s *list=NULL;
     struct fuse_direntry_s *direntry=NULL;
     struct entry_s *entry=NULL;
     unsigned int opendirflags=(_FUSE_OPENDIR_FLAG_READDIR_FINISH | _FUSE_OPENDIR_FLAG_READDIR_INCOMPLETE | _FUSE_OPENDIR_FLAG_READDIR_ERROR | _FUSE_OPENDIR_FLAG_QUEUE_READY);
+    struct timespec expire;
+    int result=0;
 
-    logoutput("get_fuse_direntry_common");
+    logoutput("get_fuse_direntry_common: opendir flags %i", opendir->flags);
 
-    pthread_mutex_lock(opendir->mutex);
+    signal_lock(signal);
 
-    while ((list=get_list_head(header, SIMPLE_LIST_FLAG_REMOVE))==NULL && (opendir->flags & opendirflags)==0 && (request->flags & FUSE_REQUEST_FLAG_INTERRUPTED)==0) {
-	struct timespec expire;
+    get_current_time(&expire);
+    expire.tv_sec+=4; /* make configurable */
 
-	get_current_time(&expire);
-	expire.tv_sec+=2; /* make configurable */
+    checkandwait:
 
-	int result=pthread_cond_timedwait(opendir->cond, opendir->mutex, &expire);
+    if ((list=get_list_head(header, SIMPLE_LIST_FLAG_REMOVE))) {
 
-	if ((list=get_list_head(header, SIMPLE_LIST_FLAG_REMOVE))) {
+	goto unlock;
 
-	    break;
+    } else if (request->flags & FUSE_REQUEST_FLAG_INTERRUPTED) {
 
-	} else if (request->flags & FUSE_REQUEST_FLAG_INTERRUPTED) {
+	signal_unlock(signal);
+	return NULL;
 
-	    pthread_mutex_unlock(opendir->mutex);
-	    return NULL;
+    } else if (opendir->flags & opendirflags) {
 
-	} else if (opendir->flags & opendirflags) {
-
-	    pthread_mutex_unlock(opendir->mutex);
-	    return NULL;
-
-	}
+	signal_unlock(signal);
+	return NULL;
 
     }
 
-    pthread_mutex_unlock(opendir->mutex);
+    result=signal_condtimedwait(signal, &expire);
+
+    if (result>0) {
+
+	signal_unlock(signal);
+	return NULL;
+
+    } else {
+
+	goto checkandwait;
+
+    }
+
+    unlock:
+
+    signal_unlock(signal);
 
     if (list) {
 
@@ -1673,15 +1727,16 @@ static void queue_fuse_direntry_common(struct fuse_opendir_s *opendir, struct li
     struct fuse_direntry_s *direntry=malloc(sizeof(struct fuse_direntry_s));
 
     if (direntry) {
+	struct common_signal_s *signal=opendir->signal;
 
 	memset(direntry, 0, sizeof(struct fuse_direntry_s));
 	direntry->entry=entry;
 	init_list_element(&direntry->list, NULL);
 
-	pthread_mutex_lock(opendir->mutex);
+	signal_lock(signal);
 	add_list_element_last(header, &direntry->list);
-	pthread_cond_broadcast(opendir->cond);
-	pthread_mutex_unlock(opendir->mutex);
+	signal_broadcast(signal);
+	signal_unlock(signal);
 
     }
 
@@ -1728,14 +1783,18 @@ void queue_fuse_direntries_virtual(struct fuse_opendir_s *opendir)
 
     }
 
+    finish_get_fuse_direntry(opendir);
+
 }
 
 void set_flag_fuse_opendir(struct fuse_opendir_s *opendir, uint32_t flag)
 {
-    pthread_mutex_lock(opendir->mutex);
+    struct common_signal_s *signal=opendir->signal;
+
+    signal_lock(signal);
     opendir->flags |= flag;
-    pthread_cond_broadcast(opendir->cond);
-    pthread_mutex_unlock(opendir->mutex);
+    signal_broadcast(signal);
+    signal_unlock(signal);
 }
 
 void set_get_fuse_direntry_common(struct fuse_opendir_s *opendir)
@@ -1745,22 +1804,34 @@ void set_get_fuse_direntry_common(struct fuse_opendir_s *opendir)
 
 void finish_get_fuse_direntry(struct fuse_opendir_s *opendir)
 {
-    struct fuse_direntry_s *direntry=malloc(sizeof(struct fuse_direntry_s));
+    struct common_signal_s *signal=opendir->signal;
 
-    pthread_mutex_lock(opendir->mutex);
+    logoutput("finish_get_fuse_direntry: opendir flags %i", opendir->flags);
 
-    if (direntry) {
+    signal_lock(signal);
 
-	memset(direntry, 0, sizeof(struct fuse_direntry_s));
-	direntry->entry=NULL;
-	init_list_element(&direntry->list, NULL);
-	add_list_element_last(&opendir->entries, &direntry->list);
+    if ((opendir->flags & _FUSE_OPENDIR_FLAG_QUEUE_READY)==0) {
+	struct fuse_direntry_s *direntry=malloc(sizeof(struct fuse_direntry_s));
+
+	if (direntry) {
+
+	    memset(direntry, 0, sizeof(struct fuse_direntry_s));
+	    direntry->entry=NULL;
+	    init_list_element(&direntry->list, NULL);
+	    add_list_element_last(&opendir->entries, &direntry->list);
+
+	}
+
+	opendir->flags &= ~ _FUSE_OPENDIR_FLAG_THREAD;
+	opendir->flags |= _FUSE_OPENDIR_FLAG_QUEUE_READY;
+	logoutput("finish_get_fuse_direntry: B opendir flags %i", opendir->flags);
+	signal_broadcast(signal);
+
 
     }
 
-    opendir->flags |= _FUSE_OPENDIR_FLAG_QUEUE_READY;
+    logoutput("finish_get_fuse_direntry: C opendir flags %i", opendir->flags);
 
-    pthread_cond_broadcast(opendir->cond);
-    pthread_mutex_unlock(opendir->mutex);
+    signal_unlock(signal);
 }
 

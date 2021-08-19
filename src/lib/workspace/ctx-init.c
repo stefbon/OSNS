@@ -93,8 +93,7 @@ static void init_service_context(struct service_context_s *context, unsigned cha
 
 	context->service.workspace.fs=NULL;
 	init_list_header(&context->service.workspace.header, SIMPLE_LIST_TYPE_EMPTY, NULL);
-	context->service.workspace.mutex=NULL;
-	context->service.workspace.cond=NULL;
+	context->service.workspace.signal=NULL;
 
     } else if (ctype==SERVICE_CTX_TYPE_NETWORK) {
 
@@ -229,16 +228,15 @@ struct service_context_s *create_service_context(struct workspace_mount_s *works
 	    if (ops->name && ilist->name) snprintf(context->name, sizeof(context->name) - 1, "%s:%s", ops->name, ilist->name);
 
 	    if (context->type==SERVICE_CTX_TYPE_WORKSPACE && ilist->type==_INTERFACE_TYPE_FUSE) {
-		char *ptr=(* context->interface.get_interface_buffer)(&context->interface);
 
-		context->service.workspace.mutex=get_fuse_pthread_mutex(ptr);
-		context->service.workspace.cond=get_fuse_pthread_cond(ptr);
+		context->service.workspace.signal=get_fusesocket_signal(&context->interface);
 
 	    }
 
 	} else {
 
 	    if (workspace) (* workspace->remove_context)(&context->wlist);
+	    if (parent) unset_parent_service_context(parent, context);
 	    free(context);
 	    context=NULL;
 	    goto out;

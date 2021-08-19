@@ -58,9 +58,10 @@ static void get_local_uid_shared_byid(struct sftp_client_s *sftp, struct sftp_us
 static void get_local_uid_shared_byname(struct sftp_client_s *sftp, struct sftp_user_s *user)
 {
     struct sftp_usermapping_s *usermapping=&sftp->usermapping;
-    uid_t uid=usermapping->unknown_uid;
     char name[user->remote.name.len + 1];
     char *sep=NULL;
+
+    user->uid=usermapping->unknown_uid;
 
     /* name can contain a @ sign for the domain */
     memcpy(name, user->remote.name.ptr, user->remote.name.len);
@@ -103,6 +104,8 @@ static void get_local_uid_nonshared_byname(struct sftp_client_s *sftp, struct sf
     char *sep=NULL;
 
     user->uid=usermapping->unknown_uid;
+
+    // logoutput("get_local_uid_nonshared_byname: %.*s (unknown uid %i)", user->remote.name.len, user->remote.name.ptr, user->uid);
 
     memcpy(name, user->remote.name.ptr, len);
     name[len]='@';
@@ -326,10 +329,11 @@ static void get_remote_groupname_nonshared(struct sftp_client_s *sftp, struct sf
 void set_usermapping(struct sftp_client_s *sftp)
 {
     struct sftp_usermapping_s *usermapping=&sftp->usermapping;
+    unsigned char version=get_sftp_protocol_version(sftp);
 
     if (usermapping->mapping==_SFTP_USER_MAPPING_SHARED) {
 
-	if (sftp->server_version<=3) {
+	if (version<=3) {
 
 	    /* users and groups are communicated via uid and gid */
 
@@ -355,7 +359,7 @@ void set_usermapping(struct sftp_client_s *sftp)
 
 	/* user- and groupnames do not have a common id database like openldap */
 
-	if (sftp->server_version<=3) {
+	if (version<=3) {
 
 	    usermapping->get_local_uid=get_local_uid_nonshared_byid;
 	    usermapping->get_local_gid=get_local_gid_nonshared_byid;

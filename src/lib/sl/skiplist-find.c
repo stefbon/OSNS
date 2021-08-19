@@ -223,7 +223,7 @@ void sl_find_generic(struct sl_skiplist_s *sl, unsigned char opcode, struct sl_l
 	    result->row+=dirnode->junction[vector->level].step;
 	    (* lockops->move_readlock_vector_path)(sl, vector, next);
 	    dirnode=next;
-	    list=list->n;
+	    list=get_next_element(list);
 
 	    if (list==NULL) {
 
@@ -252,7 +252,7 @@ void sl_find_generic(struct sl_skiplist_s *sl, unsigned char opcode, struct sl_l
 	if (diff<0) {
 
 	    /* before name still */
-	    list=list->n;
+	    list=get_next_element(list);
 	    result->row++;
 	    result->step++;
 

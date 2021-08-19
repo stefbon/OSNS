@@ -49,6 +49,7 @@
 #include "datatypes/ssh-uint.h"
 
 #include "sftp/common-protocol.h"
+#include "sftp/attr-context.h"
 #include "interface/sftp-attr.h"
 #include "interface/sftp-send.h"
 #include "interface/sftp-wait-response.h"

@@ -44,6 +44,8 @@
 #include "directory.h"
 
 extern struct directory_s *get_dummy_directory();
+extern void set_directory_getpath(struct directory_s *d);
+extern void release_directory_pathcache(struct directory_s *d);
 
 /* callbacks for the skiplist
     compare two elements to determine the right order */

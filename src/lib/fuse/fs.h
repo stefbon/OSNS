@@ -60,13 +60,17 @@ struct fuse_openfile_s {
     } handle;
 };
 
+#define FUSE_BUFFER_FLAG_EOF_SUPPORTED				1
+#define FUSE_BUFFER_FLAG_EOF					2
+
 struct fuse_buffer_s {
+    unsigned int						flags;
+    unsigned int						count;
+    unsigned int						done;
+    unsigned int						size;
+    int								left;
     char							*data;
     char							*pos;
-    int								left;
-    unsigned int						size;
-    signed char							eof;
-    unsigned int						count;
 };
 
 struct fuse_direntry_s {
@@ -80,6 +84,7 @@ struct fuse_opendir_s {
     struct inode_s						*inode;
     ino_t							ino;
     unsigned int 						error;
+    unsigned int						count_keep;
     unsigned int						count_created;
     unsigned int						count_found;
     void 							(* readdir) (struct fuse_opendir_s *opendir, struct fuse_request_s *request, size_t size, off_t offset);
@@ -88,12 +93,11 @@ struct fuse_opendir_s {
     void 							(* fsyncdir) (struct fuse_opendir_s *opendir, struct fuse_request_s *request, unsigned char datasync);
     signed char							(* hidefile)(struct fuse_opendir_s *opendir, struct entry_s *entry);
     struct entry_s 						*(* get_fuse_direntry)(struct fuse_opendir_s *opendir, struct list_header_s *h, struct fuse_request_s *request);
-    int 							(* add_direntry_buffer)(void *ptr, struct direntry_buffer_s *buffer, struct name_s *xname, struct stat *st);
+    int 							(* add_direntry_buffer)(struct context_interface_s *i, struct direntry_buffer_s *buffer, struct name_s *xname, struct stat *st);
     void							(* clear)(struct fuse_opendir_s *opendir);
     struct list_header_s					entries;
     struct list_header_s					symlinks;
-    pthread_mutex_t						*mutex;
-    pthread_cond_t						*cond;
+    struct common_signal_s					*signal;
     unsigned char						threads;
     union {
 	uint64_t						fd;
@@ -153,6 +157,7 @@ struct fuse_fs_s {
 	    void (*flush) (struct fuse_openfile_s *openfile, struct fuse_request_s *request, uint64_t lock_owner);
 	    void (*fsync) (struct fuse_openfile_s *openfile, struct fuse_request_s *request, unsigned char datasync);
 	    void (*release) (struct fuse_openfile_s *openfile, struct fuse_request_s *request, unsigned int flags, uint64_t lock_owner);
+	    void (*lseek) (struct fuse_openfile_s *openfile, struct fuse_request_s *request, off_t off, int whence);
 
 	    void (*fgetattr) (struct fuse_openfile_s *openfile, struct fuse_request_s *request);
 	    void (*fsetattr) (struct fuse_openfile_s *openfile, struct fuse_request_s *request, struct stat *st, int fuse_set);
@@ -248,7 +253,7 @@ void fuse_fs_destroy (struct fuse_request_s *request);
 
 void register_fuse_functions(struct context_interface_s *interface);
 
-void init_fuse_buffer(struct fuse_buffer_s *buffer, char *data, unsigned int size, unsigned int count, signed char eof);
+void init_fuse_buffer(struct fuse_buffer_s *buffer, char *data, unsigned int size, unsigned int count);
 void clear_fuse_buffer(struct fuse_buffer_s *buffer);
 
 void queue_fuse_direntry(struct fuse_opendir_s *opendir, struct entry_s *entry);

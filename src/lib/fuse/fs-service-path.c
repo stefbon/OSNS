@@ -280,7 +280,7 @@ static void _fs_service_mk_common(struct service_context_s *context, struct fuse
 
 	    if (S_ISDIR(type)) {
 
-		perm=get_masked_permissions(request->ptr, mk->mk.mkdir.mode - type, mk->mk.mkdir.mask);
+		perm=get_masked_permissions(request->root, mk->mk.mkdir.mode - type, mk->mk.mkdir.mask);
 
 	    } else {
 
@@ -296,7 +296,7 @@ static void _fs_service_mk_common(struct service_context_s *context, struct fuse
 
 	    if (S_ISREG(type)) {
 
-		perm=get_masked_permissions(request->ptr, mk->mk.mknod.mode - type, mk->mk.mknod.mask);
+		perm=get_masked_permissions(request->root, mk->mk.mknod.mode - type, mk->mk.mknod.mask);
 
 	    } else {
 
@@ -312,7 +312,7 @@ static void _fs_service_mk_common(struct service_context_s *context, struct fuse
 
 	    if (S_ISREG(type)) {
 
-		perm=get_masked_permissions(request->ptr, mk->mk.create.mode - type, mk->mk.create.mask);
+		perm=get_masked_permissions(request->root, mk->mk.create.mode - type, mk->mk.create.mask);
 
 	    } else {
 

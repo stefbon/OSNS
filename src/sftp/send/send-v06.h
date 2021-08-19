@@ -17,8 +17,8 @@
 
 */
 
-#ifndef FS_WORKSPACE_SSH_SEND_SFTP_V06_H
-#define FS_WORKSPACE_SSH_SEND_SFTP_V06_H
+#ifndef SFTP_SEND_SEND_V06_H
+#define SFTP_SEND_SEND_V06_H
 
 /* prototypes */
 
@@ -27,7 +27,7 @@ int send_sftp_block_v06(struct sftp_client_s *sftp, struct sftp_request_s *sftp_
 int send_sftp_unblock_v06(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r);
 int send_sftp_realpath_v06(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r);
 
-void use_sftp_send_v06(struct sftp_client_s *sftp);
+struct sftp_send_ops_s *get_sftp_send_ops_v06();
 
 #endif
 

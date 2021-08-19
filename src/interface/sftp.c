@@ -225,6 +225,7 @@ static int _start_interface_sftp_client(struct context_interface_s *interface, i
 	    it's not required to set the cb here...it's already set in the init phase */
 	switch_msg_channel_receive_data(channel, "context", NULL);
 	result=start_init_sftp_client(sftp);
+
 	if (result==-1) {
 
 	    logoutput_warning("_start_interface_sftp_client: error starting sftp subsystem");
@@ -239,6 +240,7 @@ static int _start_interface_sftp_client(struct context_interface_s *interface, i
     }
 
     out:
+
     return result;
 
 }
@@ -322,9 +324,14 @@ static void _receive_data_ssh_channel(struct ssh_channel_s *channel, char **buff
 
 }
 
-static int _send_data_ssh_channel(struct sftp_client_s *sftp, char *buffer, unsigned int size, uint32_t *seq)
+static int _send_data_ssh_channel(struct sftp_client_s *sftp, char *buffer, unsigned int size, uint32_t *seq, struct list_element_s *list)
 {
     struct ssh_channel_s *channel=(struct ssh_channel_s *) sftp->context.conn;
+
+    // pthread_mutex_lock(&sftp->mutex);
+    // add_list_element_last(&sftp->pending, list);
+    // pthread_mutex_unlock(&sftp->mutex);
+
     return send_channel_data_message(channel, buffer, size, seq);
 }
 
@@ -483,8 +490,7 @@ static int _init_interface_sftp_buffer(struct context_interface_s *interface, st
 	sftp->context.signal_sftp2conn=_signal_sftp2channel;
 	sftp->context.conn=(void *) channel;
 
-	sftp->signal.mutex=channel->queue.signal->mutex;
-	sftp->signal.cond=channel->queue.signal->cond;
+	sftp->signal.signal=channel->queue.signal->signal;
 
 	sftp->time_ops.correct_time_c2s=_correct_time_c2s;
 	sftp->time_ops.correct_time_s2c=_correct_time_s2c;

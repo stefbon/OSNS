@@ -1,5 +1,6 @@
 /*
-  2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020 Stef Bon <stefbon@gmail.com>
+
+  2010, 2011 Stef Bon <stefbon@gmail.com>
 
   This program is free software; you can redistribute it and/or
   modify it under the terms of the GNU General Public License
@@ -17,20 +18,9 @@
 
 */
 
-#ifndef _SFTP_ATTR_BUFFER_H
-#define _SFTP_ATTR_BUFFER_H
+#ifndef _LIB_COMMONSIGNAL_H
+#define _LIB_COMMONSIGNAL_H
 
-/* prototypes */
-
-extern struct attr_buffer_s init_read_attr_buffer;
-extern struct attr_buffer_s init_nowrite_attr_buffer;
-
-#define INIT_ATTR_BUFFER_READ		init_read_attr_buffer
-#define INIT_ATTR_BUFFER_NOWRITE	init_nowrite_attr_buffer
-
-void set_attr_buffer_read(struct attr_buffer_s *ab, char *buffer, unsigned int len);
-void set_attr_buffer_read_attr_response(struct attr_buffer_s *ab, struct attr_response_s *response);
-void set_attr_buffer_nowrite(struct attr_buffer_s *ab);
-void set_attr_buffer_write(struct attr_buffer_s *ab, char *buffer, unsigned int len);
+#include "commonsignal/lock.h"
 
 #endif

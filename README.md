@@ -141,31 +141,43 @@ USEFULL INFO
 SSH:
 
 https://tools.ietf.org/html/rfc4250
+
 https://tools.ietf.org/html/rfc4251
+
 https://tools.ietf.org/html/rfc4252
+
 https://tools.ietf.org/html/rfc4253
+
 https://tools.ietf.org/html/rfc4254
 
 Extension Negotiation
+
 https://tools.ietf.org/html/rfc8308
 
 Elliptic Curve Algorithm
+
 https://tools.ietf.org/html/rfc5656 (generic)
+
 https://tools.ietf.org/html/rfc8709 (ed25519 and ed448)
 
 SHA-2 Data Integrity Verification
+
 https://tools.ietf.org/html/rfc6668
 
 Use of RSA Keys with SHA-256 and SHA-512
+
 https://tools.ietf.org/html/rfc8332
 
 Key exchange method curve25519-sha256@libssh.org by libssh.
+
 https://git.libssh.org/projects/libssh.git/tree/doc/curve25519-sha256@libssh.org.txt
 
 Cipher and hmac chacha20poly1305@openssh.com
+
 https://cvsweb.openbsd.org/src/usr.bin/ssh/PROTOCOL.chacha20poly1305?annotate=HEAD
 
 Extensions by OPENSSH
+
 https://cvsweb.openbsd.org/src/usr.bin/ssh/PROTOCOL?annotate=HEAD
 
 SFTP:
@@ -184,6 +196,7 @@ https://www.youtube.com/channel/UC1usFRN4LCMcfIV7UjHNuQg/featured
 Last but not leasT, ververy usefull information about different sftp implementations:
 
 https://www.greenend.org.uk/rjk/sftp/sftpimpls.html
+
 https://www.greenend.org.uk/rjk/sftp/sftpversions.html
 
 Especially the latest is usefull. It gives an oversight of the properties and changes in the different sftp protocol versions,
@@ -192,5 +205,6 @@ and a table of the documentation versus protocol. Very very usefull!
 AVAHI:
 
 For network service discovery:
+
 https://www.avahi.org/doxygen/html/index.html
 

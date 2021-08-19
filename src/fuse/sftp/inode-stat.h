@@ -23,6 +23,6 @@
 /* prototypes */
 
 void fill_inode_attr_sftp(void *ptr, struct stat *st, struct sftp_attr_s *attr);
-unsigned int get_attr_buffer_size(void *ptr, struct stat *st, unsigned int set, struct sftp_attr_s *attr, unsigned char raw);
+unsigned int get_attr_buffer_size(void *ptr, struct stat *st, unsigned int set, struct rw_attr_result_s *r, struct sftp_attr_s *attr, unsigned char raw);
 
 #endif

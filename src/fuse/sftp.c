@@ -60,7 +60,7 @@
 
 #define _SFTP_NETWORK_NAME			"SFTP_Network"
 #define _SFTP_HOME_MAP				"home"
-#define _SFTP_DEFAULT_SERVICE			"ssh-channel:sftp:home"
+#define _SFTP_DEFAULT_SERVICE			"ssh-channel:sftp:home:"
 
 extern struct fs_options_s fs_options;
 
@@ -255,6 +255,9 @@ static struct service_context_s *create_start_sftp_client_context(struct service
 
     if (context) {
 
+	unset_parent_service_context(sshctx, context);
+	(* interface->signal_interface)(interface, "command:close:", NULL);
+	(* interface->signal_interface)(interface, "command:clear:", NULL);
 	free_service_context(context);
 	context=NULL;
 
@@ -386,3 +389,35 @@ struct service_context_s *add_shared_map_sftp(struct service_context_s *context,
     return NULL;
 
 }
+
+unsigned int add_ssh_channel_sftp(struct service_context_s *context, char *fullname, unsigned int len, char *name, void *ptr)
+{
+    struct sftp_service_s service;
+    unsigned int len2=strlen(name);
+    char tmp[len2+1];
+    unsigned int count=0;
+
+    memset(tmp, 0, len2+1);
+    memcpy(tmp, name, len2);
+
+    replace_cntrl_char(tmp, len2, REPLACE_CNTRL_FLAG_TEXT);
+    if (skip_heading_spaces(tmp, len2)>0) len2=strlen(tmp);
+    if (skip_trailing_spaces(tmp, len2, SKIPSPACE_FLAG_REPLACEBYZERO)>0) len2=strlen(tmp);
+
+    memset(&service, 0, sizeof(struct sftp_service_s));
+
+    service.fullname=fullname;
+    service.name=tmp;
+    service.prefix=NULL;
+    service.uri=NULL;
+
+    if (add_shared_map_sftp(context, &service, ptr)) count++;
+    return count;
+
+}
+
+unsigned int add_default_ssh_channel_sftp(struct service_context_s *context, void *ptr)
+{
+    return add_ssh_channel_sftp(context, _SFTP_DEFAULT_SERVICE, strlen(_SFTP_DEFAULT_SERVICE), _SFTP_HOME_MAP, ptr);
+}
+

@@ -275,7 +275,7 @@ static void notify_VFS_inode_delete(struct workspace_mount_s *workspace, struct 
 
 	}
 
-	notify_VFS_delete(context->interface.buffer, pino, ino, name.name, name.len);
+	notify_VFS_delete(&context->interface, pino, ino, name.name, name.len);
 
     }
 

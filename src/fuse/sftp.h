@@ -29,5 +29,7 @@ struct sftp_service_s {
 /* prototypes */
 
 struct service_context_s *add_shared_map_sftp(struct service_context_s *context, struct sftp_service_s *service, void *ptr);
+unsigned int add_ssh_channel_sftp(struct service_context_s *context, char *fullname, unsigned int len, char *name, void *ptr);
+unsigned int add_default_ssh_channel_sftp(struct service_context_s *context, void *ptr);
 
 #endif

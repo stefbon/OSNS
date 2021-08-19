@@ -40,6 +40,7 @@
 #include "log.h"
 #include "main.h"
 #include "misc.h"
+#include "commonsignal.h"
 
 #include "ssh-common-protocol.h"
 #include "ssh-common.h"
@@ -143,9 +144,9 @@ int start_channel(struct ssh_channel_s *channel, unsigned int *error)
     if (result==0) {
 	struct ssh_signal_s *signal=channel->queue.signal;
 
-	pthread_mutex_lock(signal->mutex);
-	pthread_cond_broadcast(signal->cond);
-	pthread_mutex_unlock(signal->mutex);
+	signal_lock(signal->signal);
+	signal_broadcast(signal->signal);
+	signal_unlock(signal->signal);
 
     }
 
@@ -184,11 +185,11 @@ void close_channel(struct ssh_channel_s *channel, unsigned int flags)
 
 	get_channel_expire_init(channel, &expire);
 
-	pthread_mutex_lock(signal->mutex);
+	signal_lock(signal->signal);
 
 	while((channel->flags & CHANNEL_FLAG_SERVER_CLOSE)==0) {
 
-	    if (pthread_cond_timedwait(signal->cond, signal->mutex, &expire)==ETIMEDOUT) {
+	    if (signal_condtimedwait(signal->signal, &expire)==ETIMEDOUT) {
 
 		logoutput("close_channel: timeout waiting for server close");
 		break;
@@ -197,7 +198,7 @@ void close_channel(struct ssh_channel_s *channel, unsigned int flags)
 
 	}
 
-	pthread_mutex_unlock(signal->mutex);
+	signal_unlock(signal->signal);
 
     }
 

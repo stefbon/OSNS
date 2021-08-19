@@ -332,7 +332,7 @@ static void init_connection_localsocket(struct fs_connection_s *c, unsigned int 
     if (bevent==NULL) return;
 
     set_bevent_unix_fd(bevent, (int) fd);
-    set_bevent_watch(bevent, "incoming data");
+    set_bevent_watch(bevent, "i");
 
     if (add_bevent_beventloop(bevent)==0) {
 

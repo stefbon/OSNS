@@ -40,6 +40,7 @@
 #include "main.h"
 #include "log.h"
 #include "misc.h"
+#include "commonsignal.h"
 
 #include "ssh-common.h"
 #include "ssh-common-protocol.h"
@@ -422,11 +423,11 @@ int send_global_request_message(struct ssh_connection_s *connection, const char 
 
     /* prevent more than one GLOBAL_REQUEST pending */
 
-    pthread_mutex_lock(connections->mutex);
+    signal_lock(connections->signal);
 
     while ((connections->flags & SSH_CONNECTIONS_FLAG_DISCONNECT)==0 && (connection->flags & SSH_CONNECTION_FLAG_GLOBAL_REQUEST)) {
 
-	pthread_cond_wait(connections->cond, connections->mutex);
+	signal_condwait(connections->signal);
 
 	if ((connection->flags & SSH_CONNECTION_FLAG_GLOBAL_REQUEST)==0) {
 
@@ -434,7 +435,7 @@ int send_global_request_message(struct ssh_connection_s *connection, const char 
 
 	} else if (connections->flags & SSH_CONNECTIONS_FLAG_DISCONNECT) {
 
-	    pthread_mutex_unlock(connections->mutex);
+	    signal_unlock(connections->signal);
 	    return -1;
 
 	}
@@ -442,7 +443,7 @@ int send_global_request_message(struct ssh_connection_s *connection, const char 
     }
 
     connection->flags |= SSH_CONNECTION_FLAG_GLOBAL_REQUEST;
-    pthread_mutex_unlock(connections->mutex);
+    signal_unlock(connections->signal);
 
     return write_ssh_packet(connection, payload, seq);
 }

@@ -27,8 +27,9 @@ struct context_interface_s *get_parent_interface(struct context_interface_s *int
 
 void add_service_context_workspace(struct workspace_mount_s *workspace, struct service_context_s *ctx);
 
-void set_parent_service_context_unlocked(struct service_context_s *pctx, struct service_context_s *ctx);
+void set_parent_service_context_unlocked(struct service_context_s *pctx, struct service_context_s *ctx, const char *what);
 void set_parent_service_context(struct service_context_s *pctx, struct service_context_s *ctx);
+void unset_parent_service_context(struct service_context_s *pctx, struct service_context_s *ctx);
 
 struct service_context_s *get_next_service_context(struct service_context_s *parent, struct service_context_s *context, const char *what);
 struct context_interface_s *get_next_context_interface(struct context_interface_s *reference, struct context_interface_s *interface);
@@ -36,5 +37,9 @@ struct context_interface_s *get_next_context_interface(struct context_interface_
 struct workspace_mount_s *get_workspace_mount_ctx(struct service_context_s *context);
 struct service_context_s *get_root_context_workspace(struct workspace_mount_s *w);
 struct service_context_s *get_root_context(struct service_context_s *context);
+
+struct passwd *get_workspace_user_pwd(struct context_interface_s *i);
+struct beventloop_s *get_workspace_eventloop(struct context_interface_s *i);
+struct common_signal_s *get_workspace_signal(struct context_interface_s *i);
 
 #endif

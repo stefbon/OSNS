@@ -21,7 +21,7 @@
 #define _LIB_FUSE_FS_VIRTUAL_H
 
 void set_virtual_fs(struct fuse_fs_s *fs);
-void use_virtual_fs(struct inode_s *inode);
+void use_virtual_fs(struct service_context_s *context, struct inode_s *inode);
 void init_virtual_fs();
 
 void _fs_statfs_workspace(struct service_context_s *context, struct fuse_request_s *request, struct pathinfo_s *pathinfo);

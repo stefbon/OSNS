@@ -22,8 +22,12 @@
 
 #include <sys/types.h>
 #include <pwd.h>
+
 #include "workspace-interface.h"
-#include "common-protocol.h"
+#include "sftp/common-protocol.h"
+#include "sftp/attr-context.h"
+#include "sftp/attr-read.h"
+#include "sftp/attr-write.h"
 
 #define SFTP_SENDHASH_TABLE_SIZE_DEFAULT		64
 
@@ -34,7 +38,6 @@
 #define SFTP_RECEIVE_FLAG_ERROR				2
 
 struct sftp_client_s;
-struct attr_version_s;
 
 struct sftp_header_s {
     unsigned char					type;
@@ -43,55 +46,6 @@ struct sftp_header_s {
     unsigned int 					len;
     char						*buffer;
 };
-
-typedef void (* read_attr_cb)(struct sftp_client_s *sftp, struct attr_buffer_s *buffer, struct attr_version_s *av, struct sftp_attr_s *attr);
-
-struct _valid_attrcb_s {
-	uint32_t					code;
-	unsigned char					shift;
-	read_attr_cb					cb[2];
-	char						*name;
-};
-
-struct attr_version_s {
-    uint32_t						valid;
-    unsigned char					type;
-    uint64_t						size;
-    uint32_t						permissions;
-    struct _valid_attrcb_s				*attrcb;
-    struct _valid_attrcb_s				*ntimecb;
-    union {
-	struct attr_v03_s {
-	    uint32_t					uid;
-	    uint32_t					gid;
-	    uint32_t					accesstime;
-	    uint32_t					modifytime;
-	} v03;
-	struct attr_v46_s {
-	    struct ssh_string_s				owner;
-	    struct ssh_string_s				group;
-	    int64_t					accesstime;
-	    uint64_t					accesstime_n;
-	    int64_t					createtime;
-	    uint64_t					createtime_n;
-	    int64_t					modifytime;
-	    uint64_t					modifytime_n;
-	    struct ssh_string_s				acl;
-	    uint32_t					bits;
-	    uint32_t					bits_valid;
-	    int64_t					changetime;
-	    uint64_t					changetime_n;
-	    unsigned char				texthint;
-	    struct ssh_string_s				mimetype;
-	    uint32_t					link_count;
-	    struct ssh_string_s				untranslated_name;
-	    uint64_t					alloc_size;
-	} v46;
-    } version;
-    uint32_t						extended_count;
-    char						*extensions;
-};
-
 
 /* interface specific data like prefix */
 
@@ -124,14 +78,11 @@ struct sftp_send_ops_s {
 };
 
 struct sftp_attr_ops_s {
-    void 						(* read_attributes)(struct sftp_client_s *sftp, struct attr_buffer_s *buffer, struct sftp_attr_s *attr);
-    void 						(* write_attributes)(struct sftp_client_s *sftp, struct attr_buffer_s *buffer, struct sftp_attr_s *attr);
-    unsigned int					(* write_attributes_len)(struct sftp_client_s *sftp, struct sftp_attr_s *attr);
-    void						(* read_name_response)(struct sftp_client_s *sftp, struct attr_buffer_s *buffer, struct ssh_string_s *name);
-    void						(* read_attr_response)(struct sftp_client_s *sftp, struct attr_buffer_s *buffer, struct sftp_attr_s *attr);
-    void						(* read_sftp_features)(struct sftp_client_s *sftp);
-    unsigned int					(* get_attribute_mask)(struct sftp_client_s *sftp);
-    int							(* get_attribute_info)(struct sftp_client_s *sftp, unsigned int valid, const char *what);
+    void 						(* read_attributes)(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct sftp_attr_s *attr);
+    void 						(* write_attributes)(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *result, struct sftp_attr_s *attr);
+    unsigned int					(* write_attributes_len)(struct attr_context_s *ctx, struct rw_attr_result_s *result, struct sftp_attr_s *attr);
+    void						(* read_name_response)(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct ssh_string_s *name);
+    void						(* read_attr_response)(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct sftp_attr_s *attr);
 };
 
 struct sftp_recv_ops_s {
@@ -202,22 +153,6 @@ struct sftp_supported_s {
     unsigned int					attr_supported;
 };
 
-struct sftp_user_s {
-    union {
-	struct ssh_string_s 				name;
-	unsigned int					id;
-    } remote;
-    uid_t						uid;
-};
-
-struct sftp_group_s {
-    union {
-	struct ssh_string_s 				name;
-	unsigned int					id;
-    } remote;
-    gid_t						gid;
-};
-
 #define _SFTP_USER_MAPPING_SHARED			1
 #define _SFTP_USER_MAPPING_NONSHARED			2
 
@@ -281,7 +216,7 @@ struct sftp_context_s {
     int							(* signal_sftp2ctx)(struct sftp_client_s *s, const char *what, struct ctx_option_s *o);
     int							(* signal_conn2sftp)(struct sftp_client_s *s, const char *what, struct ctx_option_s *o);
     int							(* signal_sftp2conn)(struct sftp_client_s *s, const char *what, struct ctx_option_s *o);
-    int							(* send_data)(struct sftp_client_s *s, char *buffer, unsigned int size, uint32_t *seq);
+    int							(* send_data)(struct sftp_client_s *s, char *buffer, unsigned int size, uint32_t *seq, struct list_element_s *list);
     void						(* receive_data)(struct sftp_client_s *s, char **buffer, unsigned int size, uint32_t seq, unsigned int flags);
 };
 
@@ -298,8 +233,7 @@ struct sftp_context_s {
 
 struct sftp_signal_s {
     unsigned int					flags;
-    pthread_mutex_t					*mutex;
-    pthread_cond_t					*cond;
+    struct common_signal_s				*signal;
     uint32_t						seq;
     struct timespec					seqset;
     unsigned char					seqtype;
@@ -310,14 +244,20 @@ struct sftp_receive_s {
     void						(* receive_data)(struct sftp_client_s *sftp, char **p_buffer, unsigned int size, uint32_t seq, unsigned int flags);
 };
 
+struct sftp_protocol_s {
+    unsigned char					version;
+};
+
 struct sftp_client_s {
     struct sftp_context_s				context;
     struct sftp_signal_s				signal;
     unsigned int					flags;
     pthread_mutex_t					mutex;
     struct sftp_receive_s				receive;
+    struct attr_context_s				attrctx;
     unsigned int					refcount;
-    unsigned int 					server_version;
+    struct sftp_protocol_s 				protocol;
+    struct list_header_s				pending;
     struct sftp_sendhash_s				sendhash;
     struct sftp_send_ops_s				*send_ops;
     struct sftp_recv_ops_s				*recv_ops;

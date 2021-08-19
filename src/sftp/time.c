@@ -52,7 +52,7 @@
 #include "ssh-utils.h"
 #include "ssh-hostinfo.h"
 
-#include "common-protocol.h"
+#include "sftp/common-protocol.h"
 #include "common.h"
 #include "time.h"
 

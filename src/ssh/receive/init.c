@@ -52,7 +52,7 @@
 void msg_not_supported(struct ssh_connection_s *connection, struct ssh_payload_s *payload)
 {
     unsigned int seq=payload->sequence;
-    logoutput("msg_not_supported: received %i", payload->type);
+    logoutput("msg_not_supported: received type %i", payload->type);
     free_payload(&payload);
 
     if (send_unimplemented_message(connection, seq)>0) {
@@ -94,11 +94,7 @@ int init_ssh_connection_receive(struct ssh_connection_s *connection, unsigned in
 	from the server arrives but also when the original request
 	is interrupted by fuse/user */
 
-    receive->signal.flags=0;
-    receive->signal.sequence_number_error=0;
-    receive->signal.error=0;
-    receive->signal.mutex=session->connections.mutex;
-    receive->signal.cond=session->connections.cond;
+    init_ssh_signal(&receive->signal, 0, session->connections.signal);
 
     receive->status=0;
     pthread_mutex_init(&receive->mutex, NULL);
@@ -181,26 +177,7 @@ void free_ssh_connection_receive(struct ssh_connection_s *connection)
     struct ssh_decrypt_s *decrypt=&receive->decrypt;
     struct ssh_decompress_s *decompress=&receive->decompress;
 
-    if (receive->signal.flags & SSH_SIGNAL_FLAG_ALLOCATED) {
-
-	if (receive->signal.mutex) {
-
-	    pthread_mutex_destroy(receive->signal.mutex);
-	    free(receive->signal.mutex);
-	    receive->signal.mutex=NULL;
-
-	}
-
-	if (receive->signal.cond) {
-
-	    pthread_mutex_destroy(receive->signal.mutex);
-	    free(receive->signal.cond);
-	    receive->signal.cond=NULL;
-
-	}
-
-    }
-
+    receive->signal.signal=NULL;
     pthread_mutex_destroy(&receive->mutex);
     pthread_cond_destroy(&receive->cond);
 

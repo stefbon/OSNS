@@ -38,10 +38,12 @@
 #include <sys/param.h>
 #include <sys/types.h>
 
+#include <systemd/sd-login.h>
+
 #include "log.h"
 #include "datatypes/ssh-string.h"
 
-#include <systemd/sd-login.h>
+#include "monitor.h"
 
 #define _MONITOR_FLAG_CHANGED				1
 #define _MONITOR_FLAG_THREAD				2

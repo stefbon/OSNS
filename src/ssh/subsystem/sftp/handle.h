@@ -22,79 +22,16 @@
 
 #include "ssh/subsystem/commonhandle.h"
 
-/*
-    every handle has the form:
-    dev || inode || pid || fd || type
-
-    - 4 bytes				dev
-    - 8 bytes				inode
-    - 4 bytes				pid
-    - 4 bytes				fd
-    - 1 byte				type
-
-    ---------
-    21 bytes
-
-    - encrypt and decrypt?
-
-*/
-
-#define SFTP_HANDLE_SIZE					21
-
-#define FILEHANDLE_BLOCK_READ					1
-#define FILEHANDLE_BLOCK_WRITE					2
-#define FILEHANDLE_BLOCK_DELETE					4
-
-union serverflags_u {
-    struct sftp_s {
-	unsigned int						access;
-	unsigned int						flags;
-    } sftp;
-};
-
-struct sftp_filehandle_s {
-    struct commonhandle_s					handle;
-    struct sftp_subsystem_s					*sftp;
-    // unsigned int						posix_flags;
-    // union serverflags_u						server;
-    // int								(* get_lock_flags)(struct filehandle_s *h, const char *what);
-};
-
-struct insert_filehandle_s {
-    unsigned int						status;
-    unsigned int						error;
-    union serverflags_u						server;
-    union {
-	struct lockconflict_s {
-	    uid_t						uid;
-	    struct ip_address_s					address;
-	} lock;
-    } info;
-};
-
-struct sftp_dirhandle_s {
-    struct commonhandle_s					handle;
-    struct sftp_subsystem_s					*sftp;
-    unsigned int						size;
-    char							*buffer;
-    unsigned int						pos;
-    unsigned int						read;
-    unsigned int						flags;
-    unsigned int						valid;
-    void 							(* readdir)(struct sftp_dirhandle_s *d, struct sftp_payload_s *p);
-};
-
-
 /* prototypes */
 
-unsigned char write_sftp_filehandle(struct sftp_filehandle_s *filehandle, char *buffer);
-struct sftp_filehandle_s *insert_sftp_filehandle(struct sftp_subsystem_s *sftp, dev_t dev, uint64_t ino, unsigned int fd);
-struct sftp_filehandle_s *find_sftp_filehandle_buffer(struct sftp_subsystem_s *sftp, char *buffer);
+struct commonhandle_s *find_sftp_commonhandle_buffer(struct sftp_subsystem_s *sftp, char *buffer, unsigned int *p_count);
 
-int release_sftp_handle_buffer(char *buffer, struct sftp_subsystem_s *sftp);
+void set_sftp_handle_access(struct commonhandle_s *handle, unsigned int access);
+void set_sftp_handle_flags(struct commonhandle_s *handle, unsigned int flags);
 
-unsigned char write_sftp_dirhandle(struct sftp_dirhandle_s *dirhandle, char *buffer);
-struct sftp_dirhandle_s *insert_sftp_dirhandle(struct sftp_subsystem_s *sftp, dev_t dev, uint64_t ino, unsigned int fd);
-struct sftp_dirhandle_s *find_sftp_dirhandle_buffer(struct sftp_subsystem_s *s, char *buffer);
+struct commonhandle_s *init_sftp_filehandle(struct sftp_subsystem_s *sftp, unsigned int inserttype, dev_t dev, uint64_t ino, char *name);
+int insert_sftp_filehandle(struct commonhandle_s *new, struct insert_filehandle_s *insert);
+
+void release_sftp_handle_buffer(struct sftp_subsystem_s *sftp, char *buffer);
 
 #endif

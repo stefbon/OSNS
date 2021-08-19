@@ -67,10 +67,48 @@ struct linux_dirent64 {
     char			d_name[];
 };
 
-
-static void _sftp_op_readdir(struct sftp_dirhandle_s *dirhandle, struct sftp_payload_s *payload)
+static int open_direntries_from_system(struct commonhandle_s *handle, char *path)
 {
-    struct sftp_subsystem_s *sftp=dirhandle->sftp;
+    int fd=open(path, O_DIRECTORY);
+
+    if (fd==-1) {
+
+	logoutput("open_direntries_from_system: error %i open (%s)", errno, strerror(errno));
+
+    } else {
+
+	dirhandle->fd=fd;
+
+    }
+
+}
+
+static int get_direntries_from_system(struct commonhandle_s *handle, struct ssh_name_s *name)
+{
+    struct dirhandle_s *dirhandle=handle->type.dirhandle;
+
+    /* read a batch of dirents */
+
+    return syscall(SYS_getdents64, dirhandle->fd, (struct linux_dirent64 *) dirhandle->buffer, dirhandle->size);
+
+}
+
+static void close_direntries_from_system(struct commonhandle_s *handle)
+{
+    struct dirhandle_s *dirhandle=handle->type.dirhandle;
+
+    if (dirhandle->fd>=0) {
+
+	close(dirhandle->fd);
+	dirhandle->fd=-1;
+
+    }
+
+}
+
+static void _sftp_op_readdir(struct commonhandle_s *handle, struct sftp_payload_s *payload)
+{
+    struct sftp_subsystem_s *sftp=payload->sftp;
     unsigned int status=SSH_FX_BAD_MESSAGE;
     unsigned int valid=SSH_FILEXFER_ATTR_SIZE | SSH_FILEXFER_ATTR_PERMISSIONS | SSH_FILEXFER_ATTR_MODIFYTIME | SSH_FILEXFER_ATTR_SUBSECOND_TIMES | SSH_FILEXFER_ATTR_CTIME;
     unsigned int error=0;
@@ -140,7 +178,7 @@ static void _sftp_op_readdir(struct sftp_dirhandle_s *dirhandle, struct sftp_pay
 
 	    if (error==0) {
 
-		logoutput("sftp_op_readdir: name %s size attr %i at %i", de->d_name, (unsigned int)(pos - keep), keep);
+		logoutput_debug("sftp_op_readdir: name %s size attr %i at %i", de->d_name, (unsigned int)(pos - keep), keep);
 
 		count++;
 		dirhandle->pos += de->d_reclen;
@@ -168,7 +206,7 @@ static void _sftp_op_readdir(struct sftp_dirhandle_s *dirhandle, struct sftp_pay
 
     finish:
 
-    logoutput("sftp_op_readdir: reply count %i pos %i", count, pos);
+    logoutput_debug("sftp_op_readdir: reply count %i pos %i", count, pos);
     if (reply_sftp_names(sftp, payload->id, count, buffer, pos, eof)==-1) logoutput_warning("sftp_op_readdir: error sending readdir names");
 
     return;
@@ -199,9 +237,7 @@ static void _sftp_op_opendir(struct sftp_subsystem_s *sftp, struct sftp_payload_
     unsigned int status=0;
     unsigned int error=0;
     struct stat st;
-    struct sftp_dirhandle_s *dirhandle=NULL;
-
-    int fd=-1;
+    struct commonhandle_s *handle=NULL;
 
     logoutput("_sftp_op_opendir: path %s", path);
 
@@ -223,39 +259,32 @@ static void _sftp_op_opendir(struct sftp_subsystem_s *sftp, struct sftp_payload_
 
 	goto error;
 
-    }
-
-    if (! S_ISDIR(st.st_mode)) {
+    } else if (! S_ISDIR(st.st_mode)) {
 
 	status=SSH_FX_NOT_A_DIRECTORY;
 	goto error;
 
     }
 
-    logoutput("_sftp_op_opendir: insert dirhandle");
+    logoutput_debug("_sftp_op_opendir: insert dirhandle");
 
-    dirhandle=insert_sftp_dirhandle(sftp, st.st_dev, st.st_ino, 0);
+    handle=create_sftp_dirhandle(sftp, st.st_dev, st.st_ino, 0);
 
-    if (dirhandle==NULL) {
+    if (handle==NULL) {
 
 	status=SSH_FX_FAILURE;
 	goto error;
 
     }
 
-    fd=open(path, O_DIRECTORY);
-    error=errno;
+    if (open_direntries_from_system(handle, path)==-1) {
 
-    if (fd==-1) {
-
-	logoutput("_sftp_op_opendir: error %i open (%s)", error, strerror(error));
 	status=SSH_FX_FAILURE;
 	goto error;
 
     }
 
-    dirhandle->handle.fd=(unsigned int) fd;
-    dirhandle->size=SFTP_READDIR_NAMES_SIZE;
+    handle.type.dirhandle->size=SFTP_READDIR_NAMES_SIZE;
     dirhandle->flags=0;
     dirhandle->readdir=_sftp_op_readdir;
 
@@ -360,8 +389,6 @@ void sftp_op_readdir(struct sftp_payload_s *payload)
 
 	    } else {
 
-		logoutput("sftp_op_readdir: handle not found");
-
 		if (error==EPERM) {
 
 		    /* serious error: client wants to use a handle he has no permissions for */
@@ -371,6 +398,7 @@ void sftp_op_readdir(struct sftp_payload_s *payload)
 
 		}
 
+		logoutput("sftp_op_readdir: handle not found");
 		status=SSH_FX_INVALID_HANDLE;
 
 	    }

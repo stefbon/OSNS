@@ -255,21 +255,13 @@ static int signal_context_ssh(struct context_interface_s *interface, const char 
 	option->type=_CTX_OPTION_TYPE_INT;
 	option->value.integer=(unsigned int) fs_options.ssh.timeout_userauth;
 
-    } else if (strcmp(what, "io:shared-mutex")==0) {
+    } else if (strcmp(what, "io:shared-signal")==0) {
 	struct service_context_s *root_context=get_root_context(context);
 
-	/* get the "root" shared mutex from fuse */
+	/* get the "root" shared signal from fuse */
 
 	option->type=_CTX_OPTION_TYPE_PVOID;
-	option->value.ptr=(void *) get_fuse_pthread_mutex(root_context->interface.buffer);
-
-    } else if (strcmp(what, "io:shared-cond")==0) {
-	struct service_context_s *root_context=get_root_context(context);
-
-	/* get the "root" shared cond from fuse */
-
-	option->type=_CTX_OPTION_TYPE_PVOID;
-	option->value.ptr=(void *) get_fuse_pthread_cond(root_context->interface.buffer);
+	option->value.ptr=(void *) get_fusesocket_signal(&root_context->interface);
 
     } else if (strcmp(what, "command:disconnected:")==0) {
 
@@ -311,7 +303,16 @@ struct service_context_s *create_ssh_server_service_context(struct service_conte
 
 }
 
-unsigned int get_remote_services_ssh_server(struct service_context_s *context, unsigned int (* cb)(struct service_context_s *context, char *name, void *ptr), void *ptr)
+static int compare_starting_substring(char *name, unsigned int len, const char *start)
+{
+    unsigned int lens=strlen(start);
+
+    if (len>=lens && strncmp(name, start, lens)==0) return 0;
+
+    return -1;
+}
+
+unsigned int get_remote_services_ssh_server(struct service_context_s *context, void *ptr)
 {
     struct context_interface_s *interface=&context->interface;
     struct ctx_option_s option;
@@ -347,38 +348,45 @@ unsigned int get_remote_services_ssh_server(struct service_context_s *context, u
 	}
 
     } else if (ctx_option_buffer(&option)) {
-	unsigned int len=0;
-	char *data=ctx_option_get_buffer(&option, &len);
-	char list[len + 2];
+	unsigned int tmp=0;
+	char *data=ctx_option_get_buffer(&option, &tmp);
+	char list[tmp + 2];
 	char *sep=NULL;
-	char *service=NULL;
+	char *item=NULL;
+
+	logoutput("get_remote_services_ssh_server: received %s", data);
 
 	/* make sure the comma seperated list ends with one like:
 
 	    firstname,secondname,thirdname,fourthname,
 	    so walking and searching through this list is much easier */
 
-	memset(list, 0, len+2);
-	memcpy(list, data, len);
-	list[len]=',';
-	list[len+1]='\0';
+	memset(list, 0, tmp+2);
+	memcpy(list, data, tmp);
+	list[tmp]=',';
+	list[tmp+1]='\0';
 
-	service=list;
-	logoutput("get_remote_services_ssh_server: received %.*s", len, data);
+	item=list;
 
 	findservice:
 
-	sep=memchr(service, ',', strlen(service));
+	sep=memchr(item, ',', strlen(item));
 
 	if (sep) {
+	    unsigned int len=0;
 
 	    *sep='\0';
-	    logoutput("get_remote_supported_services: found %s", service);
+	    len=strlen(item);
+	    logoutput("get_remote_supported_services: found %s", item);
 
-	    if ((* cb)(context, service, ptr)) count++;
+	    if (compare_starting_substring(item, len, "ssh-channel:sftp:")==0) {
+
+		count += add_ssh_channel_sftp(context, item, len, &item[strlen("ssh-channel:sftp:")], ptr);
+
+	    }
 
 	    *sep=',';
-	    service=sep+1;
+	    item=sep+1;
 	    goto findservice;
 
 	}

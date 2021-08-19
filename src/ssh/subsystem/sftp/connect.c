@@ -90,7 +90,7 @@ static int open_std_connection(struct sftp_connection_s *connection)
 
     io_std->bevent=create_fd_bevent(NULL, read_sftp_connection_signal, (void *) s);
     if (io_std->bevent==NULL) goto error;
-    set_bevent_watch(io_std->bevent, "incoming data");
+    set_bevent_watch(io_std->bevent, "i");
     set_bevent_unix_fd(io_std->bevent, (* sops->open)(io_std, 0));
 
     /* STDOUT */
@@ -101,7 +101,7 @@ static int open_std_connection(struct sftp_connection_s *connection)
 
     io_std->bevent=create_fd_bevent(NULL, cb_dummy, (void *) s);
     if (io_std->bevent==NULL) goto error;
-    set_bevent_watch(io_std->bevent, "outgoing data");
+    set_bevent_watch(io_std->bevent, "o");
     set_bevent_unix_fd(io_std->bevent, (* sops->open)(io_std, 0));
 
     /* STDERR */
@@ -113,8 +113,8 @@ static int open_std_connection(struct sftp_connection_s *connection)
     io_std->bevent=create_fd_bevent(NULL, cb_dummy, (void *) s);
     if (io_std->bevent==NULL) goto error;
     /* stderr is both directions */
-    set_bevent_watch(io_std->bevent, "incoming data");
-    set_bevent_watch(io_std->bevent, "outgoing data");
+    set_bevent_watch(io_std->bevent, "i");
+    set_bevent_watch(io_std->bevent, "o");
     set_bevent_unix_fd(io_std->bevent, (* sops->open)(io_std, 0));
 
     return 0;

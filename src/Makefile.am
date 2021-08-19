@@ -28,32 +28,33 @@ osns_client_SOURCES =  	lib/fuse/directory.c lib/fuse/dentry.c lib/fuse/dentry-o
 			lib/list/simple-hash.c lib/list/simple-list.c lib/list/simple-locking.c \
 			lib/mountinfo/monitor.c lib/mountinfo/utils.c lib/mountinfo/mountinfo.c lib/mountinfo/monitormounts.c \
 			lib/fsnotify/fschangenotify.c \
-			lib/log/logging.c \
-			lib/mime/handlemime.c  lib/misc/replaceandskip.c \
+			lib/log/logging.c lib/mime/handlemime.c lib/misc/replaceandskip.c lib/commonsignal/lock.c \
 			options.c \
 			osns_client.c osns_socket.c \
 			lib/datatypes/ssh-string.c lib/datatypes/ssh-uint.c \
 			lib/datatypes/ssh-namelist.c lib/datatypes/ssh-payload.c lib/datatypes/ssh-mpint.c lib/datatypes/ssh-msg-buffer.c \
 			lib/users/check.c lib/users/local.c lib/users/monitor.c \
-			fuse/network.c fuse/ssh.c fuse/sftp.c \
+			fuse/network.c fuse/ssh.c fuse/sftp.c fuse/smb.c \
 			fuse/workspace-fs.c fuse/workspace/access.c fuse/workspace/getattr.c fuse/workspace/lookup.c fuse/workspace/opendir.c fuse/workspace/statfs.c fuse/workspace/xattr.c \
-			fuse/sftp-fs.c \
-			fuse/sftp/access.c \
-			fuse/sftp/inode-stat.c \
+			fuse/sftp-fs.c fuse/sftp/access.c fuse/sftp/inode-stat.c \
 			fuse/sftp/getattr.c fuse/sftp/lock.c fuse/sftp/lookup.c fuse/sftp/mk.c fuse/sftp/open.c fuse/sftp/opendir.c \
 			fuse/sftp/realpath.c fuse/sftp/rm.c fuse/sftp/setattr.c fuse/sftp/statfs.c  fuse/sftp/symlink.c fuse/sftp/xattr.c \
+			fuse/smb-fs.c fuse/smb/access.c fuse/smb/getattr.c fuse/smb/lookup.c fuse/smb/opendir.c fuse/smb/readlink.c \
 			interface/fuse.c \
 			interface/sftp-attr.c interface/sftp-extensions.c interface/sftp-prefix.c interface/sftp-send.c interface/sftp-wait-response.c interface/sftp.c \
 			interface/ssh-utils.c interface/ssh.c \
-			sftp/attr/buffer.c \
-			sftp/attr/read-attr-v03.c sftp/attr/read-attr-v04.c sftp/attr/read-attr-v05.c sftp/attr/read-attr-v06.c \
-			sftp/attr/write-attr-v03.c sftp/attr/write-attr-v04.c sftp/attr/write-attr-v05.c sftp/attr/write-attr-v06.c \
-			sftp/attr/read-name-v03.c \
-			sftp/recv/recv-v03.c sftp/recv/recv-v04.c sftp/recv/recv-v05.c sftp/recv/recv-v06.c \
-			sftp/send/send-v03.c sftp/send/send-v04.c sftp/send/send-v05.c sftp/send/send-v06.c \
+			interface/smb.c interface/smb-wait-response.c interface/smb-signal.c interface/smb-eventloop.c interface/smb-utils.c interface/smb-enum-shares.c \
+			lib/sftp/attr-context.c \
+			lib/sftp/attr/buffer.c lib/sftp/attr/read-attr-generic.c lib/sftp/attr/write-attr-generic.c \
+			lib/sftp/attr/read-attr-v03.c lib/sftp/attr/read-attr-v04.c lib/sftp/attr/read-attr-v05.c lib/sftp/attr/read-attr-v06.c \
+			lib/sftp/attr/write-attr-v03.c lib/sftp/attr/write-attr-v04.c lib/sftp/attr/write-attr-v05.c lib/sftp/attr/write-attr-v06.c \
+			lib/sftp/attr/read-name-v03.c \
+			sftp/recv.c sftp/recv/recv-v03.c sftp/recv/recv-v04.c sftp/recv/recv-v05.c sftp/recv/recv-v06.c \
+			sftp/send.c sftp/send/send-v03.c sftp/send/send-v04.c sftp/send/send-v05.c sftp/send/send-v06.c \
 			sftp/user/mapping.c \
 			sftp/attr.c sftp/context.c sftp/common.c sftp/extensions.c sftp/init.c   \
-			sftp/request-hash.c sftp/recv.c sftp/time.c sftp/usermapping.c \
+			sftp/request-hash.c sftp/time.c sftp/usermapping.c \
+			smb/send/stat.c smb/send/opendir.c smb/send/readlink.c \
 			ssh/channel/init.c ssh/channel/payload.c ssh/channel/shell.c ssh/channel/startclose.c \
 			ssh/channel/table.c ssh/channel/uri.c ssh/channel/utils.c \
 			ssh/connections/connect.c  ssh/connections/init.c ssh/connections/setup.c ssh/connections/utils.c \
@@ -75,6 +76,7 @@ osns_client_SOURCES =  	lib/fuse/directory.c lib/fuse/dentry.c lib/fuse/dentry-o
 			ssh/ssh-hostinfo.c \
 			ssh/ssh-language.c \
 			ssh/ssh-pubkey.c \
+			ssh/ssh-signal.c \
 			ssh/ssh-utils.c
 
 if LIBRSYNC_AVAIL
@@ -90,9 +92,9 @@ osns_client_LDADD += $(GLIB_LIBS)
 endif
 
 if GOBJECT2_AVAIL
-osns_client_CFLAGS += $(GOBJECT2_CFLAGS)
-osns_client_CPPFLAGS += $(GOBJECT2_CFLAGS)
-osns_client_LDADD += $(GOBJECT2_LIBS)
+osns_client_CFLAGS += $(GOBJECT_CFLAGS)
+osns_client_CPPFLAGS += $(GOBJECT_CFLAGS)
+osns_client_LDADD += $(GOBJECT_LIBS)
 endif
 
 if GIO2_AVAIL
@@ -108,6 +110,13 @@ else
 osns_client_CFLAGS += -lcrypt
 osns_client_CPPFLAGS += -lcrypt
 endif
+
+if LIBSMB2_AVAIL
+osns_client_CFLAGS += $(LIBSMB2_CFLAGS)
+osns_client_CPPFLAGS += $(LIBSMB2_CFLAGS)
+osns_client_LDADD += $(LIBSMB2_LIBS)
+endif
+
 
 if BUILD_SSH_SERVER
 sbin_PROGRAMS += osns_server
@@ -136,7 +145,7 @@ osns_server_SOURCES =  	lib/threads/workerthreads.c \
 			lib/datatypes/ssh-string.c lib/datatypes/ssh-uint.c \
 			lib/datatypes/ssh-namelist.c lib/datatypes/ssh-payload.c lib/datatypes/ssh-mpint.c lib/datatypes/ssh-msg-buffer.c \
 			lib/users/check.c lib/users/local.c \
-			sftp/attr/buffer.c \
+			sftp/attr/buffer.c sftp/attr/read-attr-generic.c \
 			sftp/attr/read-attr-v03.c sftp/attr/read-attr-v04.c sftp/attr/read-attr-v05.c sftp/attr/read-attr-v06.c \
 			sftp/attr/write-attr-v03.c sftp/attr/write-attr-v04.c sftp/attr/write-attr-v05.c sftp/attr/write-attr-v06.c \
 			sftp/attr/read-name-v03.c \
@@ -212,8 +221,10 @@ osns_sftp_subsystem_LDADD = $(GLIB_LIBS) $(SYSTEMD_LIBS) $(LDFLAGS)
 osns_sftp_subsystem_SOURCES	=	osns_sftp_subsystem.c \
 					ssh/subsystem/sftp/attributes-read.c ssh/subsystem/sftp/attributes-write.c \
 					ssh/subsystem/sftp/cb-opendir.c ssh/subsystem/sftp/cb-open.c ssh/subsystem/sftp/cb-stat.c \
+					ssh/subsystem/sftp/cb-utils.c \
 					ssh/subsystem/sftp/path.c ssh/subsystem/sftp/payload.c \
-					ssh/subsystem/commonhandle.c ssh/subsystem/sftp/connect.c \
+					ssh/subsystem/commonhandle\create.c ssh/subsystem/commonhandle\hash.c ssh/subsystem/commonhandle\init.c ssh/subsystem/commonhandle\utils.c \
+					ssh/subsystem/sftp/connect.c \
 					ssh/subsystem/sftp/handle.c ssh/subsystem/sftp/init.c \
 					ssh/subsystem/sftp/ownergroup.c ssh/subsystem/sftp/supported.c \
 					ssh/subsystem/sftp/receive.c ssh/subsystem/sftp/send.c \

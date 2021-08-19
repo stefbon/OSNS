@@ -72,7 +72,7 @@ static unsigned int write_attr_zerol(struct sftp_subsystem_s *s, struct sftp_att
 static unsigned int write_attr_size(struct sftp_subsystem_s *s, char *pos, unsigned int size, struct sftp_attr_s *attr)
 {
     store_uint64(pos, attr->size);
-    logoutput("write_attr_size");
+    logoutput_debug("write_attr_size");
     return 8;
 }
 
@@ -107,8 +107,8 @@ static unsigned int write_attr_ownergroup_len(struct sftp_subsystem_s *s, struct
 
     if (get_username(attr->uid, &attr->user)>0 && get_groupname(attr->gid, &attr->group)>0) result=(8 + attr->user.len + attr->group.len);
 
-    logoutput("write_attr_ownergroup_len: username %.*s", attr->user.len, attr->user.ptr);
-    logoutput("write_attr_ownergroup_len: groupname %.*s", attr->group.len, attr->group.ptr);
+    logoutput_debug("write_attr_ownergroup_len: username %.*s", attr->user.len, attr->user.ptr);
+    logoutput_debug("write_attr_ownergroup_len: groupname %.*s", attr->group.len, attr->group.ptr);
 
     return 0;
 }
@@ -116,7 +116,7 @@ static unsigned int write_attr_ownergroup_len(struct sftp_subsystem_s *s, struct
 static unsigned int write_attr_permissions(struct sftp_subsystem_s *s, char *pos, unsigned int size, struct sftp_attr_s *attr)
 {
     store_uint32(pos, attr->permissions & ( S_IRWXU | S_IRWXG | S_IRWXO ));
-    logoutput("write_attr_permissions");
+    logoutput_debug("write_attr_permissions");
     return 4;
 }
 
@@ -139,7 +139,7 @@ static unsigned int write_attr_time_n(struct sftp_subsystem_s *s, char *pos, uns
 
 static unsigned int write_attr_accesstime(struct sftp_subsystem_s *s, char *pos, unsigned int size, struct sftp_attr_s *attr)
 {
-    logoutput("write_attr_accesstime");
+    logoutput_debug("write_attr_accesstime");
     return write_attr_time(s, pos, size, &attr->atime);
 }
 
@@ -150,7 +150,7 @@ static unsigned int write_attr_accesstime_len(struct sftp_subsystem_s *s, struct
 
 static unsigned int write_attr_accesstime_n(struct sftp_subsystem_s *s, char *pos, unsigned int size, struct sftp_attr_s *attr)
 {
-    logoutput("write_attr_accesstime_n");
+    logoutput_debug("write_attr_accesstime_n");
     return write_attr_time_n(s, pos, size, &attr->atime);
 }
 
@@ -161,7 +161,7 @@ static unsigned int write_attr_accesstime_n_len(struct sftp_subsystem_s *s, stru
 
 static unsigned int write_attr_modifytime(struct sftp_subsystem_s *s, char *pos, unsigned int size, struct sftp_attr_s *attr)
 {
-    logoutput("write_attr_modifytime");
+    logoutput_debug("write_attr_modifytime");
     return write_attr_time(s, pos, size, &attr->mtime);
 }
 
@@ -172,7 +172,7 @@ static unsigned int write_attr_modifytime_len(struct sftp_subsystem_s *s, struct
 
 static unsigned int write_attr_modifytime_n(struct sftp_subsystem_s *s, char *pos, unsigned int size, struct sftp_attr_s *attr)
 {
-    logoutput("write_attr_modifytime_n");
+    logoutput_debug("write_attr_modifytime_n");
     return write_attr_time_n(s, pos, size, &attr->mtime);
 }
 
@@ -183,7 +183,7 @@ static unsigned int write_attr_modifytime_n_len(struct sftp_subsystem_s *s, stru
 
 static unsigned int write_attr_changetime(struct sftp_subsystem_s *s, char *pos, unsigned int size, struct sftp_attr_s *attr)
 {
-    logoutput("write_attr_changetime");
+    logoutput_debug("write_attr_changetime");
     return write_attr_time(s, pos, size, &attr->ctime);
 }
 
@@ -194,7 +194,7 @@ static unsigned int write_attr_changetime_len(struct sftp_subsystem_s *s, struct
 
 static unsigned int write_attr_changetime_n(struct sftp_subsystem_s *s, char *pos, unsigned int size, struct sftp_attr_s *attr)
 {
-    logoutput("write_attr_changetime_n");
+    logoutput_debug("write_attr_changetime_n");
     return write_attr_time_n(s, pos, size, &attr->ctime);
 }
 
@@ -312,7 +312,7 @@ unsigned int write_attributes(struct sftp_subsystem_s *s, char *buffer, unsigned
     store_uint32(pos, valid);
     pos+=4;
 
-    logoutput("write_attributes: attr->type %i valid %i", attr->type, valid);
+    logoutput_debug("write_attributes: attr->type %i valid %i", attr->type, valid);
 
     if (attr->type > 13) {
 
@@ -401,7 +401,7 @@ unsigned int write_readdir_attr(struct sftp_subsystem_s *s, char *buffer, unsign
 	pos+=lenname;
 
 	pos += write_attributes(s, &buffer[pos], size-pos, &attr, valid);
-	logoutput("write_readdir_attr: name %.*s valid %i size %i", lenname, name, valid, pos);
+	logoutput_debug("write_readdir_attr: name %.*s valid %i size %i", lenname, name, valid, pos);
 	return pos;
 
     }

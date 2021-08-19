@@ -181,46 +181,17 @@ void receive_sftp_status_v05(struct sftp_client_s *sftp, struct sftp_header_s *h
 
 }
 
-void receive_sftp_data_v05(struct sftp_client_s *sftp, struct sftp_header_s *header)
-{
-    struct generic_error_s error=GENERIC_ERROR_INIT;
-    struct sftp_request_s *req=NULL;
-
-    if ((req=get_sftp_request(sftp, header->id, &error))) {
-	char *buffer=header->buffer;
-        unsigned int pos=0;
-	struct sftp_reply_s *reply=&req->reply;
-
-	reply->type=header->type;
-	reply->response.data.size=get_uint32(&buffer[pos]);
-	pos+=4;
-	memmove(buffer, &buffer[pos], reply->response.data.size);
-
-	/* let the processing of this into names, attr to the receiving thread */
-	reply->response.data.data=(unsigned char *)buffer;
-	reply->response.data.eof=-1;
-	header->buffer=NULL;
-	signal_sftp_received_id(sftp, req);
-
-    } else {
-
-	logoutput("receive_sftp_data_v05: error finding id %i  (%s)", header->id, get_error_description(&error));
-
-    }
-
-}
-
 static struct sftp_recv_ops_s recv_ops_v05 = {
     .status				= receive_sftp_status_v05,
     .handle				= receive_sftp_handle_v03,
-    .data				= receive_sftp_data_v05,
+    .data				= receive_sftp_data_v03,
     .name				= receive_sftp_name_v03,
     .attr				= receive_sftp_attr_v03,
     .extension				= receive_sftp_extension_v03,
     .extension_reply			= receive_sftp_extension_reply_v03,
 };
 
-void use_sftp_recv_v05(struct sftp_client_s *sftp)
+struct sftp_recv_ops_s *get_sftp_recv_ops_v05()
 {
-    sftp->recv_ops=&recv_ops_v05;
+    return &recv_ops_v05;
 }

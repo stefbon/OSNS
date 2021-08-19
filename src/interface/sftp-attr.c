@@ -56,27 +56,26 @@ void read_sftp_attributes_ctx(struct context_interface_s *interface, struct attr
     struct sftp_client_s *sftp=(struct sftp_client_s *) (* interface->get_interface_buffer)(interface);
     struct attr_buffer_s ab;
     set_attr_buffer_read_attr_response(&ab, response);
-    (*sftp->attr_ops.read_attributes)(sftp, &ab, attr);
+    (*sftp->attr_ops.read_attributes)(&sftp->attrctx, &ab, attr);
 }
-void write_attributes_ctx(struct context_interface_s *interface, char *buffer, unsigned int len, struct sftp_attr_s *attr)
+void write_attributes_ctx(struct context_interface_s *interface, char *buffer, unsigned int len, struct rw_attr_result_s *r, struct sftp_attr_s *attr)
 {
     struct sftp_client_s *sftp=(struct sftp_client_s *) (* interface->get_interface_buffer)(interface);
     struct attr_buffer_s ab;
     set_attr_buffer_write(&ab, buffer, len);
-    (*sftp->attr_ops.write_attributes)(sftp, &ab, attr);
+    (*sftp->attr_ops.write_attributes)(&sftp->attrctx, &ab, r, attr);
 }
-unsigned int write_attributes_len_ctx(struct context_interface_s *interface, struct sftp_attr_s *attr)
+unsigned int write_attributes_len_ctx(struct context_interface_s *interface, struct rw_attr_result_s *r, struct sftp_attr_s *attr)
 {
     struct sftp_client_s *sftp=(struct sftp_client_s *) (* interface->get_interface_buffer)(interface);
-    return (*sftp->attr_ops.write_attributes_len)(sftp, attr);
+    return (*sftp->attr_ops.write_attributes_len)(&sftp->attrctx, r, attr);
 }
 void read_name_nameresponse_ctx(struct context_interface_s *interface, struct fuse_buffer_s *buffer, struct ssh_string_s *name)
 {
     struct sftp_client_s *sftp=(struct sftp_client_s *) (* interface->get_interface_buffer)(interface);
     struct attr_buffer_s ab;
     set_attr_buffer_read(&ab, buffer->pos, buffer->left);
-    (*sftp->attr_ops.read_name_response)(sftp, &ab, name);
-    logoutput("read_name_nameresponse_ctx: size %i", (unsigned int)(((char *) ab.pos) - buffer->pos));
+    (*sftp->attr_ops.read_name_response)(&sftp->attrctx, &ab, name);
     buffer->pos = ab.pos;
     buffer->left = ab.left;
 }
@@ -85,16 +84,16 @@ void read_attr_nameresponse_ctx(struct context_interface_s *interface, struct fu
     struct sftp_client_s *sftp=(struct sftp_client_s *) (* interface->get_interface_buffer)(interface);
     struct attr_buffer_s ab;
     set_attr_buffer_read(&ab, buffer->pos, buffer->left);
-    (*sftp->attr_ops.read_attr_response)(sftp, &ab, attr);
-    logoutput("read_attr_nameresponse_ctx: size %i", (unsigned int)(((char *) ab.pos) - buffer->pos));
+    (*sftp->attr_ops.read_attr_response)(&sftp->attrctx, &ab, attr);
     buffer->pos = ab.pos;
     buffer->left = ab.left;
-    buffer->count++;
+    buffer->done++;
 }
 int get_attribute_info_ctx(struct context_interface_s *interface, unsigned int valid, const char *what)
 {
     struct sftp_client_s *sftp=(struct sftp_client_s *) (* interface->get_interface_buffer)(interface);
-    return (* sftp->attr_ops.get_attribute_info)(sftp, valid, what);
+    unsigned char version=get_sftp_protocol_version(sftp);
+    return get_sftp_attribute_info(version, valid, what);
 }
 void correct_time_s2c_ctx(struct context_interface_s *interface, struct timespec *t)
 {

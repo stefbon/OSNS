@@ -48,6 +48,7 @@
 #include "fuse.h"
 
 #include "sftp/common-protocol.h"
+#include "sftp/attr-context.h"
 #include "interface/sftp-attr.h"
 #include "interface/sftp-send.h"
 #include "interface/sftp-wait-response.h"
@@ -63,7 +64,8 @@ void _fs_sftp_mkdir(struct service_context_s *context, struct fuse_request_s *f_
     struct inode_s *inode=entry->inode;
     struct sftp_request_s sftp_r;
     struct sftp_attr_s attr;
-    unsigned int size=get_attr_buffer_size(interface, st, FATTR_MODE | FATTR_UID | FATTR_GID, &attr, 0); /* uid and gid by server ?*/
+    struct rw_attr_result_s r;
+    unsigned int size=get_attr_buffer_size(interface, st, FATTR_MODE | FATTR_UID | FATTR_GID, &r, &attr, 0); /* uid and gid by server ?*/
     char buffer[size];
     unsigned int error=EIO;
     unsigned int pathlen=(* interface->backend.sftp.get_complete_pathlen)(interface, pathinfo->len);
@@ -71,24 +73,14 @@ void _fs_sftp_mkdir(struct service_context_s *context, struct fuse_request_s *f_
 
     pathinfo->len += (* interface->backend.sftp.complete_path)(interface, path, pathinfo);
 
-    write_attributes_ctx(interface, buffer, size, &attr);
+    write_attributes_ctx(interface, buffer, size, &r, &attr);
 
-    memset(&sftp_r, 0, sizeof(struct sftp_request_s));
-    sftp_r.id=0;
+    init_sftp_request(&sftp_r, interface, f_request);
+
     sftp_r.call.mkdir.path=(unsigned char *) pathinfo->path;
     sftp_r.call.mkdir.len=pathinfo->len;
     sftp_r.call.mkdir.size=size;
     sftp_r.call.mkdir.buff=(unsigned char *) buffer;
-    sftp_r.status=SFTP_REQUEST_STATUS_WAITING;
-
-    set_sftp_request_fuse(&sftp_r, f_request);
-
-    if (f_request->flags & FUSE_REQUEST_FLAG_INTERRUPTED) {
-
-	reply_VFS_error(f_request, EINTR);
-	return;
-
-    }
 
     if (send_sftp_mkdir_ctx(interface, &sftp_r)>0) {
 	struct timespec timeout;
@@ -110,6 +102,7 @@ void _fs_sftp_mkdir(struct service_context_s *context, struct fuse_request_s *f_
 		    _fs_common_cached_lookup(context, f_request, inode);
 		    adjust_pathmax(workspace, pathinfo->len);
 		    set_directory_dump(inode, get_dummy_directory());
+		    unset_fuse_request_flags_cb(f_request);
 		    return;
 
 		}
@@ -136,6 +129,7 @@ void _fs_sftp_mkdir(struct service_context_s *context, struct fuse_request_s *f_
     out:
 
     reply_VFS_error(f_request, error);
+    unset_fuse_request_flags_cb(f_request);
 
 }
 

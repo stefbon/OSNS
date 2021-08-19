@@ -49,7 +49,6 @@
 #define NAMEINDEX_ROOT4						71639296		/* 92 ^ 4 */
 #define NAMEINDEX_ROOT5						6590815232		/* 92 ^ 5 */
 
-extern void use_virtual_fs(struct inode_s *inode);
 static struct list_header_s cacheheader=INIT_LIST_HEADER;
 static pthread_mutex_t cachemutex=PTHREAD_MUTEX_INITIALIZER;
 
@@ -129,7 +128,7 @@ int check_create_inodecache(struct inode_s *inode, unsigned int size, char *buff
     struct inodecache_s *cache=NULL;
     int result=0;
 
-    logoutput_debug("check_create_inodecache: size %i flag %i", size, flag);
+    logoutput("check_create_inodecache: size %i flag %i", size, flag);
 
     pthread_mutex_lock(&cachemutex);
 
@@ -139,7 +138,7 @@ int check_create_inodecache(struct inode_s *inode, unsigned int size, char *buff
 	struct ssh_string_s *tmp=NULL;
 	struct ssh_string_s *copy=NULL;
 
-	logoutput_debug("check_create_inodecache: exist");
+	logoutput("check_create_inodecache: exist");
 
 	switch (flag) {
 
@@ -168,8 +167,7 @@ int check_create_inodecache(struct inode_s *inode, unsigned int size, char *buff
 
 	if (tmp==NULL || (tmp->len==0 && size==0)) return -1;
 
-
-	logoutput_debug("check_create_inodecache: size buffer %i size cache %i", size, tmp->len);
+	logoutput("check_create_inodecache: size buffer %i size cache %i", size, tmp->len);
 
 	if (tmp->len == size) {
 
@@ -177,7 +175,7 @@ int check_create_inodecache(struct inode_s *inode, unsigned int size, char *buff
 
 		/* differ */
 
-		logoutput_debug("check_create_inodecache: memcmp");
+		logoutput("check_create_inodecache: memcmp");
 		memcpy(tmp->ptr, buffer, size);
 		result=1;
 
@@ -254,7 +252,7 @@ int check_create_inodecache(struct inode_s *inode, unsigned int size, char *buff
     } else {
 	char *ptr=NULL;
 
-	logoutput_debug("check_create_inodecache: create");
+	logoutput("check_create_inodecache: create");
 
 	/* create */
 

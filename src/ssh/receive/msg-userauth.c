@@ -41,6 +41,7 @@
 #include "main.h"
 #include "eventloop.h"
 #include "threads.h"
+#include "commonsignal.h"
 
 #include "misc.h"
 
@@ -133,7 +134,7 @@ static void receive_msg_userauth_request(struct ssh_connection_s *connection, st
     struct ssh_session_s *session=get_ssh_connection_session(connection);
     struct ssh_setup_s *setup=&connection->setup;
 
-    pthread_mutex_lock(setup->mutex);
+    signal_lock(setup->signal);
 
     if ((session->flags & SSH_SESSION_FLAG_SERVER)==0) {
 
@@ -142,7 +143,7 @@ static void receive_msg_userauth_request(struct ssh_connection_s *connection, st
 
     } else if (setup->flags & SSH_SETUP_FLAG_DISCONNECT) {
 
-	pthread_mutex_unlock(setup->mutex);
+	signal_unlock(setup->signal);
 	free_payload(&payload);
 	return;
 
@@ -162,7 +163,7 @@ static void receive_msg_userauth_request(struct ssh_connection_s *connection, st
 
     }
 
-    pthread_mutex_unlock(setup->mutex);
+    signal_unlock(setup->signal);
 
     if (payload) {
 
@@ -178,13 +179,12 @@ static void receive_msg_userauth_result_common(struct ssh_connection_s *connecti
     struct ssh_session_s *session=get_ssh_connection_session(connection);
     struct ssh_setup_s *setup=&connection->setup;
 
-    pthread_mutex_lock(setup->mutex);
+    signal_lock(setup->signal);
 
     if (setup->flags & SSH_SETUP_FLAG_DISCONNECT) {
 
-	pthread_mutex_unlock(setup->mutex);
+	signal_unlock(setup->signal);
 	free_payload(&payload);
-	return;
 
     } else if ((setup->flags & SSH_SETUP_FLAG_TRANSPORT) && setup->status==SSH_SETUP_PHASE_SERVICE && setup->phase.service.status==SSH_SERVICE_TYPE_AUTH) {
 
@@ -193,7 +193,7 @@ static void receive_msg_userauth_result_common(struct ssh_connection_s *connecti
 
     }
 
-    pthread_mutex_unlock(setup->mutex);
+    signal_unlock(setup->signal);
 
     if (payload) {
 

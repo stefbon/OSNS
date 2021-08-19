@@ -43,11 +43,16 @@
 #include "main.h"
 #include "misc.h"
 #include "error.h"
+#include "commonsignal.h"
 
-#include "common-protocol.h"
+#include "sftp/common-protocol.h"
 #include "common.h"
 #include "request-hash.h"
 #include "datatypes/ssh-uint.h"
+#include "recv/recv-v03.h"
+#include "recv/recv-v04.h"
+#include "recv/recv-v05.h"
+#include "recv/recv-v06.h"
 
 /*
     SFTP callbacks
@@ -114,13 +119,13 @@ static void process_receive_sftp_reply_error(struct sftp_client_s *sftp, char *b
 
     /* not able to get the unique sftp id .... rely on the sequence number to communcate with waiting thread */
 
-    pthread_mutex_lock(signal->mutex);
+    signal_lock(signal->signal);
     signal->seq=seq;
     signal->seqtype=type;
     get_current_time(&signal->seqset);
     set_generic_error_application(&signal->error, _ERROR_APPLICATION_TYPE_PROTOCOL, NULL, __PRETTY_FUNCTION__);
-    pthread_cond_broadcast(signal->cond);
-    pthread_mutex_lock(signal->mutex);
+    signal_broadcast(signal->signal);
+    signal_unlock(signal->signal);
 
 }
 
@@ -278,6 +283,8 @@ static void _receive_sftp_init(struct sftp_client_s *sftp, char **p_buffer, unsi
 	pos++;
 	len--;
 
+	logoutput("_receive_sftp_init: received len %i size %i type %i", len, size, type);
+
 	if (5 + len <= size && type==SSH_FXP_VERSION) {
 	    struct generic_error_s error = GENERIC_ERROR_INIT;
 	    struct sftp_request_s *req=NULL;
@@ -289,6 +296,8 @@ static void _receive_sftp_init(struct sftp_client_s *sftp, char **p_buffer, unsi
 
 	    if ((req=get_sftp_request(sftp, (uint32_t) -1, &error))) {
 		struct sftp_reply_s *reply=&req->reply;
+
+		logoutput("_receive_sftp_init: type %i req found", type);
 
 		reply->type=type;
 		reply->response.init.size=len;
@@ -349,4 +358,33 @@ void switch_sftp_receive(struct sftp_client_s *sftp, const char *what)
     }
 
     pthread_mutex_unlock(&sftp->mutex);
+}
+
+void set_sftp_recv_version(struct sftp_client_s *sftp)
+{
+    unsigned char version=sftp->protocol.version;
+
+    if (version==3) {
+
+	sftp->recv_ops=get_sftp_recv_ops_v03();
+
+    } else if (version==4) {
+
+	sftp->recv_ops=get_sftp_recv_ops_v04();
+
+    } else if (version==5) {
+
+	sftp->recv_ops=get_sftp_recv_ops_v05();
+
+    } else if (version==6) {
+
+	sftp->recv_ops=get_sftp_recv_ops_v06();
+
+    } else {
+
+	logoutput_warning("set_sftp_recv_version: error sftp protocol version not suuported", version);
+
+
+    }
+
 }

@@ -47,6 +47,7 @@
 #include "sftp/common-protocol.h"
 #include "sftp/common.h"
 #include "sftp/protocol-v06.h"
+#include "sftp/attr.h"
 #include "send-v03.h"
 #include "send-v04.h"
 #include "send-v05.h"
@@ -94,19 +95,19 @@ static unsigned int get_sftp_lockflags_flock(unsigned int type)
 
 static int send_sftp_stat_v06(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r)
 {
-    unsigned int flags=(* sftp->attr_ops.get_attribute_mask)(sftp);
+    unsigned int flags=get_sftp_attribute_mask(sftp);
     return send_sftp_stat_v04_generic(sftp, sftp_r, flags & SSH_FILEXFER_STAT_VALUE);
 }
 
 static int send_sftp_lstat_v06(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r)
 {
-    unsigned int flags=(* sftp->attr_ops.get_attribute_mask)(sftp);
+    unsigned int flags=get_sftp_attribute_mask(sftp);
     return send_sftp_lstat_v04_generic(sftp, sftp_r, flags & SSH_FILEXFER_STAT_VALUE);
 }
 
 static int send_sftp_fstat_v06(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r)
 {
-    unsigned int flags=(* sftp->attr_ops.get_attribute_mask)(sftp);
+    unsigned int flags=get_sftp_attribute_mask(sftp);
     return send_sftp_fstat_v04_generic(sftp, sftp_r, flags & SSH_FILEXFER_STAT_VALUE);
 }
 
@@ -145,7 +146,7 @@ int send_sftp_symlink_v06(struct sftp_client_s *sftp, struct sftp_request_s *sft
     data[pos]=1;
     pos++;
 
-    return (* sftp->context.send_data)(sftp, data, pos, &sftp_r->reply.sequence);
+    return (* sftp_r->send)(sftp_r, data, pos, &sftp_r->reply.sequence, &sftp_r->slist);
 
 }
 
@@ -185,7 +186,7 @@ int send_sftp_block_v06(struct sftp_client_s *sftp, struct sftp_request_s *sftp_
     store_uint32(&data[pos], mask);
     pos+=4;
 
-    return (* sftp->context.send_data)(sftp, data, pos, &sftp_r->reply.sequence);
+    return (* sftp_r->send)(sftp_r, data, pos, &sftp_r->reply.sequence, &sftp_r->slist);
 
 }
 
@@ -221,7 +222,7 @@ int send_sftp_unblock_v06(struct sftp_client_s *sftp, struct sftp_request_s *sft
     store_uint64(&data[pos], sftp_r->call.unblock.size);
     pos+=8;
 
-    return (* sftp->context.send_data)(sftp, data, pos, &sftp_r->reply.sequence);
+    return (* sftp_r->send)(sftp_r, data, pos, &sftp_r->reply.sequence, &sftp_r->slist);
 
 }
 
@@ -260,7 +261,7 @@ int send_sftp_realpath_v06(struct sftp_client_s *sftp, struct sftp_request_s *sf
     data[pos]=SSH_FXP_REALPATH_STAT_ALWAYS;
     pos++;
 
-    return (* sftp->context.send_data)(sftp, data, pos, &sftp_r->reply.sequence);
+    return (* sftp_r->send)(sftp_r, data, pos, &sftp_r->reply.sequence, &sftp_r->slist);
 
 }
 
@@ -292,7 +293,7 @@ static struct sftp_send_ops_s send_ops_v06 = {
     .custom				= send_sftp_custom_v03,
 };
 
-void use_sftp_send_v06(struct sftp_client_s *sftp)
+struct sftp_send_ops_s *get_sftp_send_ops_v06()
 {
-    sftp->send_ops=&send_ops_v06;
+    return &send_ops_v06;
 }

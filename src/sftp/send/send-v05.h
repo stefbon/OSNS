@@ -17,8 +17,8 @@
 
 */
 
-#ifndef FS_WORKSPACE_SSH_SEND_SFTP_V05_H
-#define FS_WORKSPACE_SSH_SEND_SFTP_V05_H
+#ifndef SFTP_SEND_SEND_V05_H
+#define SFTP_SEND_SEND_V05_H
 
 /* prototypes */
 
@@ -26,7 +26,7 @@ int send_sftp_open_v05(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r
 int send_sftp_create_v05(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r);
 int send_sftp_rename_v05(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r);
 
-void use_sftp_send_v05(struct sftp_client_s *sftp);
+struct sftp_send_ops_s *get_sftp_send_ops_v05();
 
 #endif
 

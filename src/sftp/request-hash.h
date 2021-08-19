@@ -28,8 +28,6 @@ unsigned char wait_sftp_response(struct sftp_client_s *sftp, struct sftp_request
 unsigned char wait_sftp_service_complete(struct sftp_client_s *sftp, struct timespec *timeout);
 
 void init_sftp_sendhash();
-
-void init_sftp_request(struct sftp_request_s *r);
 void clear_sftp_reply(struct sftp_reply_s *r);
 
 #endif

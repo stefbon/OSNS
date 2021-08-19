@@ -48,6 +48,7 @@
 #include "workspaces.h"
 #include "fuse.h"
 #include "context.h"
+#include "session.h"
 #include "log.h"
 
 struct service_context_s *get_parent_context(struct service_context_s *ctx)
@@ -121,14 +122,22 @@ void add_service_context_workspace(struct workspace_mount_s *workspace, struct s
 
 }
 
-void set_parent_service_context_unlocked(struct service_context_s *pctx, struct service_context_s *ctx)
+void set_parent_service_context_unlocked(struct service_context_s *pctx, struct service_context_s *ctx, const char *what)
 {
 
     if (ctx->type==SERVICE_CTX_TYPE_FILESYSTEM) {
 
 	if (pctx->type==SERVICE_CTX_TYPE_BROWSE) {
 
-	    add_list_element_last(&pctx->service.browse.header, &ctx->service.filesystem.clist);
+	    if (strcmp(what, "add")==0) {
+
+		add_list_element_last(&pctx->service.browse.header, &ctx->service.filesystem.clist);
+
+	    } else if (strcmp(what, "remove")==0) {
+
+		remove_list_element(&ctx->service.filesystem.clist);
+
+	    }
 
 	} else {
 
@@ -140,11 +149,27 @@ void set_parent_service_context_unlocked(struct service_context_s *pctx, struct 
 
 	if (pctx->type==SERVICE_CTX_TYPE_BROWSE) {
 
-	    add_list_element_last(&pctx->service.browse.header, &ctx->service.browse.clist);
+	    if (strcmp(what, "add")==0) {
+
+		add_list_element_last(&pctx->service.browse.header, &ctx->service.browse.clist);
+
+	    } else if (strcmp(what, "remove")==0) {
+
+		remove_list_element(&ctx->service.browse.clist);
+
+	    }
 
 	} else if (pctx->type==SERVICE_CTX_TYPE_WORKSPACE) {
 
-	    add_list_element_last(&pctx->service.workspace.header, &ctx->service.browse.clist);
+	    if (strcmp(what, "add")==0) {
+
+		add_list_element_last(&pctx->service.workspace.header, &ctx->service.browse.clist);
+
+	    } else if (strcmp(what, "remove")==0) {
+
+		remove_list_element(&ctx->service.browse.clist);
+
+	    }
 
 	} else {
 
@@ -160,8 +185,7 @@ void set_parent_service_context_unlocked(struct service_context_s *pctx, struct 
 
 }
 
-
-void set_parent_service_context(struct service_context_s *pctx, struct service_context_s *ctx)
+static void _set_parent_service_context(struct service_context_s *pctx, struct service_context_s *ctx, const char *what)
 {
     struct service_context_lock_s ctxlock=SERVICE_CTX_LOCK_INIT;
 
@@ -169,11 +193,21 @@ void set_parent_service_context(struct service_context_s *pctx, struct service_c
 
     if (lock_service_context(&ctxlock, "w", "p")==1) {
 
-	set_parent_service_context_unlocked(pctx, ctx);
+	set_parent_service_context_unlocked(pctx, ctx, what);
 	unlock_service_context(&ctxlock, "w", "p");
 
     }
 
+}
+
+void set_parent_service_context(struct service_context_s *pctx, struct service_context_s *ctx)
+{
+    _set_parent_service_context(pctx, ctx, "add");
+}
+
+void unset_parent_service_context(struct service_context_s *pctx, struct service_context_s *ctx)
+{
+    _set_parent_service_context(pctx, ctx, "remove");
 }
 
 struct service_context_s *get_next_service_context_workspace(struct service_context_s *parent, struct service_context_s *context)
@@ -305,6 +339,41 @@ struct service_context_s *get_root_context(struct service_context_s *context)
     }
 
     return NULL;
+
+}
+
+struct passwd *get_workspace_user_pwd(struct context_interface_s *i)
+{
+    struct service_context_s *ctx=(struct service_context_s *) (((char *) i) - offsetof(struct service_context_s, interface));
+    struct list_header_s *h=ctx->wlist.h;
+
+    if (h) {
+	struct workspace_mount_s *w=(struct workspace_mount_s *)((char *) h - offsetof(struct workspace_mount_s, contexes));
+	struct osns_user_s *user=w->user;
+
+	if (user) return &user->pwd;
+
+    }
+
+    return NULL;
+
+}
+
+struct beventloop_s *get_workspace_eventloop(struct context_interface_s *interface)
+{
+    struct service_context_s *ctx=(struct service_context_s *) (((char *) interface) - offsetof(struct service_context_s, interface));
+    struct service_context_s *root=get_root_context(ctx);
+
+    return (root && root->type==SERVICE_CTX_TYPE_WORKSPACE) ? root->interface.backend.fuse.loop : NULL;
+
+}
+
+struct common_signal_s *get_workspace_signal(struct context_interface_s *interface)
+{
+    struct service_context_s *ctx=(struct service_context_s *) (((char *) interface) - offsetof(struct service_context_s, interface));
+    struct service_context_s *root=get_root_context(ctx);
+
+    return (root && root->type==SERVICE_CTX_TYPE_WORKSPACE) ? root->service.workspace.signal : NULL;
 
 }
 

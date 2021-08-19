@@ -67,9 +67,10 @@ void move_sl_dirnode_left(struct sl_skiplist_s *sl, struct sl_move_dirnode_s *mo
 
     while (move->left - move->right > 1) {
 	struct list_element_s *list=dirnode->list;
+	struct list_element_s *prev=get_prev_element(list);
 
-	if (list->p==NULL || list->p==move->list) break;
-	dirnode->list=list->p;
+	if (prev==NULL || prev==move->list) break;
+	dirnode->list=prev;
 	move->step--;
 	move->left--;
 	move->right++;
@@ -86,9 +87,10 @@ void move_sl_dirnode_right(struct sl_skiplist_s *sl, struct sl_move_dirnode_s *m
 
     while (move->right - move->left > 1) {
 	struct list_element_s *list=dirnode->list;
+	struct list_element_s *next=get_next_element(list);
 
-	if (list->n==NULL || list->n==move->list) break;
-	dirnode->list=list->n;
+	if (next==NULL || next==move->list) break;
+	dirnode->list=next;
 	move->step++;
 	move->left++;
 	move->right--;

@@ -48,6 +48,7 @@
 #include "eventloop.h"
 #include "workspace-interface.h"
 #include "threads.h"
+#include "commonsignal.h"
 
 #include "ssh-common.h"
 #include "ssh-connections.h"
@@ -87,8 +88,8 @@ static int init_ssh_connection(struct ssh_session_s *session, struct ssh_connect
     if (init_ssh_connection_send(connection)==-1) return -1;
     if (init_ssh_connection_receive(connection, &error)==-1) return -1;
     init_ssh_connection_setup(connection, "init", 0);
-    connection->setup.mutex=session->connections.mutex;
-    connection->setup.cond=session->connections.cond;
+    connection->setup.signal=session->connections.signal;
+
     return 0;
 
 }
@@ -110,10 +111,11 @@ static struct ssh_connection_s *new_ssh_connection(struct ssh_session_s *session
 int get_ssh_connections_unlocked(struct ssh_session_s *session)
 {
     struct ssh_connections_s *connections=&session->connections;
+    struct common_signal_s *signal=connections->signal;
 
     while (connections->flags & SSH_CONNECTIONS_FLAG_LOCKED) {
 
-	int result=pthread_cond_wait(connections->cond, connections->mutex);
+	int result=signal_condwait(signal);
 
 	if ((connections->flags & SSH_CONNECTIONS_FLAG_LOCKED)==0) {
 
@@ -136,29 +138,31 @@ int get_ssh_connections_unlocked(struct ssh_session_s *session)
 void set_ssh_connections_unlocked(struct ssh_session_s *session)
 {
     struct ssh_connections_s *connections=&session->connections;
-    connections->flags -= SSH_CONNECTIONS_FLAG_LOCKED;
+    connections->flags &= ~SSH_CONNECTIONS_FLAG_LOCKED;
 }
 
 int add_ssh_connection(struct ssh_session_s *session, unsigned char type, unsigned int flags)
 {
     struct ssh_connections_s *connections=&session->connections;
+    struct common_signal_s *signal=connections->signal;
     struct ssh_connection_s *connection=NULL;
     int result=1;
 
-    pthread_mutex_lock(connections->mutex);
+    signal_lock(signal);
 
     if (get_ssh_connections_unlocked(session)==-1) {
 
-	pthread_mutex_unlock(connections->mutex);
+	signal_unlock(signal);
 	return -1;
 
     }
 
-    pthread_mutex_unlock(connections->mutex);
+    signal_unlock(signal);
 
-    if (flags & SSH_CONNECTION_FLAG_MAIN) {
+    if ((flags & SSH_CONNECTION_FLAG_MAIN) && connections->main) {
 
-	if (connections->main) return 0;
+	result=0;
+	goto unlock;
 
     }
 
@@ -176,10 +180,12 @@ int add_ssh_connection(struct ssh_session_s *session, unsigned char type, unsign
 
     }
 
-    pthread_mutex_lock(connections->mutex);
+    unlock:
+
+    signal_lock(signal);
     set_ssh_connections_unlocked(session);
-    pthread_cond_broadcast(connections->cond);
-    pthread_mutex_unlock(connections->mutex);
+    signal_broadcast(signal);
+    signal_unlock(signal);
 
     return result;
 
@@ -193,25 +199,26 @@ int add_main_ssh_connection(struct ssh_session_s *session)
 void remove_ssh_connection(struct ssh_session_s *session, struct ssh_connection_s *connection)
 {
     struct ssh_connections_s *connections=&session->connections;
+    struct common_signal_s *signal=connections->signal;
 
-    pthread_mutex_lock(connections->mutex);
+    signal_lock(signal);
 
     if (get_ssh_connections_unlocked(session)==-1) {
 
-	pthread_mutex_unlock(connections->mutex);
+	signal_unlock(signal);
 	return;
 
     }
 
-    pthread_mutex_unlock(connections->mutex);
+    signal_unlock(signal);
 
     remove_list_element(&connection->list);
     if (connections->main==connection) connections->main=NULL;
 
-    pthread_mutex_lock(connections->mutex);
+    signal_lock(signal);
     set_ssh_connections_unlocked(session);
-    pthread_cond_broadcast(connections->cond);
-    pthread_mutex_unlock(connections->mutex);
+    signal_broadcast(signal);
+    signal_unlock(signal);
 }
 
 void free_ssh_connection(struct ssh_connection_s **p_connection)
@@ -229,13 +236,12 @@ void init_ssh_connections(struct ssh_session_s *session)
     struct ssh_connections_s *connections=&session->connections;
     connections->flags=0;
     connections->unique=0;
-    connections->mutex=NULL;
-    connections->cond=NULL;
+    connections->signal=NULL;
     connections->main=NULL;
     init_list_header(&connections->header, SIMPLE_LIST_TYPE_EMPTY, NULL);
 }
 
-int set_ssh_connections_signal(struct ssh_session_s *session, pthread_mutex_t *mutex, pthread_cond_t *cond)
+int set_ssh_connections_signal(struct ssh_session_s *session, struct common_signal_s *signal)
 {
     struct ssh_connections_s *connections=&session->connections;
 
@@ -244,29 +250,8 @@ int set_ssh_connections_signal(struct ssh_session_s *session, pthread_mutex_t *m
 	- arriving of messages
     */
 
-    if (mutex==NULL || cond==NULL) {
-
-	mutex=malloc(sizeof(pthread_mutex_t));
-	cond=malloc(sizeof(pthread_cond_t));
-
-	if (mutex && cond) {
-
-	    pthread_mutex_init(mutex, NULL);
-	    pthread_cond_init(cond, NULL);
-	    connections->flags |= SSH_CONNECTIONS_FLAG_SIGNAL_ALLOCATED;
-
-	} else {
-
-	    if (mutex) free(mutex);
-	    if (cond) free(cond);
-	    return -1;
-
-	}
-
-    }
-
-    connections->mutex=mutex;
-    connections->cond=cond;
+    if (signal==NULL) signal=get_default_common_signal();
+    connections->signal=signal;
     return 0;
 
 }
@@ -287,18 +272,7 @@ void free_ssh_connections(struct ssh_session_s *session)
 
     }
 
-    if (connections->flags & SSH_CONNECTIONS_FLAG_SIGNAL_ALLOCATED) {
-
-	pthread_mutex_destroy(connections->mutex);
-	pthread_cond_destroy(connections->cond);
-	free(connections->mutex);
-	free(connections->cond);
-	connections->flags -= SSH_CONNECTIONS_FLAG_SIGNAL_ALLOCATED;
-
-    }
-
-    connections->mutex=NULL;
-    connections->cond=NULL;
+    connections->signal=NULL;
     connections->main=NULL;
 
 }

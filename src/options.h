@@ -159,6 +159,11 @@
 #define _OPTIONS_NFS_FLAG_HOME_USE_REMOTENAME				2
 #define _OPTIONS_NFS_FLAG_USE_VERSION_4					4
 
+/* SMB */
+
+#define _OPTIONS_SMB_NETWORK_NAME_DEFAULT				"Windows Network"
+
+
 /* USER*/
 
 #define _OPTIONS_USER_NETWORK_MOUNT_TEMPLATE_DEFAULT			"/run/network/$USER/fs"
@@ -202,6 +207,11 @@ struct nfs_options_s {
     char				*network_name;
 };
 
+struct smb_options_s {
+    unsigned int 			flags;
+    char				*network_name;
+};
+
 struct network_options_s {
     unsigned int 			flags;
     unsigned int			services;
@@ -240,6 +250,7 @@ struct fs_options_s {
     struct ssh_options_s		ssh;
     struct sftp_options_s		sftp;
     struct nfs_options_s		nfs;
+    struct smb_options_s		smb;
     struct user_options_s		user;
 };
 

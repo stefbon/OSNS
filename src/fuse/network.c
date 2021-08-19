@@ -57,6 +57,7 @@
 
 #include "fuse/sftp.h"
 #include "fuse/ssh.h"
+#include "fuse/smb.h"
 #include "network.h"
 #include "workspace-fs.h"
 
@@ -87,7 +88,30 @@ static struct interface_list_s *find_interface_list(struct interface_list_s *ail
 
 }
 
-struct service_context_s *get_next_network_browse_context(struct workspace_mount_s *workspace, struct service_context_s *context, uint32_t unique)
+static struct service_context_s *walk_network_context_back(struct service_context_s *ctx)
+{
+
+    gohigher:
+
+    if (ctx) {
+
+	if (ctx->type==SERVICE_CTX_TYPE_BROWSE) {
+
+	    if (ctx->service.browse.type==SERVICE_BROWSE_TYPE_NETWORK) goto out;
+
+	    ctx=get_parent_context(ctx);
+	    goto gohigher;
+
+	}
+
+    }
+
+    out:
+
+    return ctx;
+}
+
+struct service_context_s *get_next_network_browse_context(struct workspace_mount_s *workspace, struct service_context_s *networkctx, struct service_context_s *context, uint32_t unique)
 {
     struct service_context_s *root=get_root_context_workspace(workspace);
 
@@ -95,8 +119,25 @@ struct service_context_s *get_next_network_browse_context(struct workspace_mount
 
     while (context) {
 
-	if (get_workspace_mount_ctx(context)==workspace && 
-	(context->type==SERVICE_CTX_TYPE_BROWSE && (unique==0 || context->service.browse.unique==unique))) break;
+	if (get_workspace_mount_ctx(context) != workspace) {
+
+	    goto next;
+
+	} else if (context->type != SERVICE_CTX_TYPE_BROWSE) {
+
+	    goto next;
+
+	} else if (unique>0 && context->service.browse.unique != unique) {
+
+	    goto next;
+
+	} else if ((networkctx->flags & SERVICE_CTX_FLAGS_REMOTEBACKEND) == (context->flags & SERVICE_CTX_FLAGS_REMOTEBACKEND)) {
+
+	    break;
+
+	}
+
+	next:
 	context=get_next_service_context(root, context, "workspace");
 
     }
@@ -269,6 +310,10 @@ char *get_network_name(unsigned int flag)
 
 	return (fs_options.nfs.network_name) ? fs_options.nfs.network_name : _OPTIONS_NFS_NETWORK_NAME_DEFAULT;
 
+    } else if (flag==SERVICE_CTX_FLAG_SMB) {
+
+	return (fs_options.smb.network_name) ? fs_options.smb.network_name : _OPTIONS_SMB_NETWORK_NAME_DEFAULT;
+
     }
 
     return NULL;
@@ -280,12 +325,13 @@ unsigned int get_network_flag(struct name_s *xname)
     unsigned int flag=0;
 
     name=get_network_name(SERVICE_CTX_FLAG_SFTP);
-
     if (strlen(name)==xname->len && memcmp(name, xname->name, xname->len)==0) return SERVICE_CTX_FLAG_SFTP;
 
     name=get_network_name(SERVICE_CTX_FLAG_NFS);
-
     if (strlen(name)==xname->len && memcmp(name, xname->name, xname->len)==0) return SERVICE_CTX_FLAG_NFS;
+
+    name=get_network_name(SERVICE_CTX_FLAG_SMB);
+    if (strlen(name)==xname->len && memcmp(name, xname->name, xname->len)==0) return SERVICE_CTX_FLAG_SMB;
 
     return flag;
 }
@@ -375,43 +421,6 @@ static void read_hostname_domainname(char *name, char *hostname, size_t lenh, ch
 
 }
 
-static unsigned int check_create_remote_service_ssh(struct service_context_s *context, char *fullname, void *ptr)
-{
-    unsigned int len1=strlen("ssh-channel:sftp:");
-    unsigned int len2=0;
-    unsigned int count=0;
-
-    if (fullname==NULL) fullname="ssh-channel:sftp:home";
-    len2=strlen(fullname);
-    if (len2<=len1) return 0;
-
-    if (memcmp(fullname, "ssh-channel:sftp:", len1)==0) {
-	char name[len2];
-	struct sftp_service_s service;
-
-	memset(name, 0, len2);
-	strcpy(name, &fullname[len1]);
-	len2=strlen(name);
-
-	replace_cntrl_char(name, len2, REPLACE_CNTRL_FLAG_TEXT);
-	if (skip_heading_spaces(name, len2)>0) len2=strlen(name);
-	if (skip_trailing_spaces(name, len2, SKIPSPACE_FLAG_REPLACEBYZERO)>0) len2=strlen(name);
-
-	memset(&service, 0, sizeof(struct sftp_service_s));
-
-	service.fullname=fullname;
-	service.name=name;
-	service.prefix=NULL;
-	service.uri=NULL;
-
-	if (add_shared_map_sftp(context, &service, ptr)) count++;
-
-    }
-
-    return count;
-
-}
-
 static void determine_fqdn(struct service_context_s *hostctx, int fd, struct discover_resource_s *nethost)
 {
     struct discover_resource_s *netgroup=get_discover_netgroup(nethost);
@@ -430,15 +439,22 @@ static void determine_fqdn(struct service_context_s *hostctx, int fd, struct dis
 	    return;
 
 	} else {
-	    struct fs_connection_s *conn=get_fs_connection_ssh_interface(&hostctx->interface);
 
-	    name=get_connection_hostname(conn, fd, 1, NULL);
+	    if (fd>=0) {
 
-	    if (name) {
+		if (hostctx->interface.type==_INTERFACE_TYPE_SSH_SESSION) {
+		    struct fs_connection_s *conn=get_fs_connection_ssh_interface(&hostctx->interface);
 
-		nethost->service.host.lookupname.type=LOOKUP_NAME_TYPE_CANONNAME;
-		nethost->service.host.lookupname.name.canonname=name;
-		return;
+		    name=get_connection_hostname(conn, fd, 1, NULL);
+
+		    if (name) {
+
+			nethost->service.host.lookupname.type=LOOKUP_NAME_TYPE_CANONNAME;
+			nethost->service.host.lookupname.name.canonname=name;
+
+		    }
+
+		}
 
 	    }
 
@@ -504,8 +520,7 @@ static struct service_context_s *connect_resource_via_host(struct discover_resou
     struct service_address_s service;
     char *name=NULL;
     int fd=-1;
-
-    logoutput("connect_resource_via_host");
+    unsigned int itype=0;
 
     networkctx=discover->networkctx;
     parentctx=networkctx;
@@ -514,11 +529,13 @@ static struct service_context_s *connect_resource_via_host(struct discover_resou
 
     name=(strlen(host->hostname)>0 ? host->hostname : ((host->ip.family==IP_ADDRESS_FAMILY_IPv6) ? host->ip.ip.v6 : host->ip.ip.v4));
 
+    logoutput("connect_resource_via_host: host %s uid %i", name, uid);
+
     init_service_ctx_lock(&ctxlock, NULL, NULL);
     set_root_service_ctx_lock(get_root_context(networkctx), &ctxlock);
     lock_service_context(&ctxlock, "w", "w");
 
-    hostctx=get_next_network_browse_context(workspace, NULL, nethost->unique);
+    hostctx=get_next_network_browse_context(workspace, networkctx, NULL, nethost->unique);
 
     if (hostctx) {
 
@@ -530,7 +547,6 @@ static struct service_context_s *connect_resource_via_host(struct discover_resou
 	logoutput("connect_resource_via_host: host context does already exist for %s:%s:%i", ((port->type==_NETWORK_PORT_UDP) ? "udp" : "tcp"), name, port->nr);
 
     } else {
-	unsigned int itype=0;
 
 	if (flag & DISCOVER_RESOURCE_FLAG_SSH) {
 
@@ -538,42 +554,57 @@ static struct service_context_s *connect_resource_via_host(struct discover_resou
 
 	} else if (flag & DISCOVER_RESOURCE_FLAG_SMB) {
 
+	    /* TODO: how? */
+
 	    itype=_INTERFACE_TYPE_SMB_SERVER;
 
 	/* more inerfaces like NFS, WEBDAV, GIT .. */
 
 	}
 
-	if (itype>0) {
-	    struct interface_list_s *ilist=get_interface_list(discover->ailist, discover->count, itype);
+    }
 
-	    if (ilist==NULL) {
+    if (itype>0) {
+	struct interface_list_s *ilist=get_interface_list(discover->ailist, discover->count, itype);
 
-		logoutput_warning("connect_resource_via_host: interface operations not found for this network");
-		unlock_service_context(&ctxlock, "w", "w");
-		goto error;
+	if (ilist==NULL) {
 
-	    }
-
-	    hostctx=create_ssh_server_service_context(networkctx, ilist, nethost->unique);
-
-	    if (hostctx==NULL) {
-
-		logoutput("connect_resource_via_host: unable to create service context for %s:%s:%i", ((port->type==_NETWORK_PORT_UDP) ? "udp" : "tcp"), name, port->nr);
-		unlock_service_context(&ctxlock, "w", "w");
-		goto error;
-
-	    }
-
-	    logoutput("connect_resource_via_host: created service context for %s:%s:%i", ((port->type==_NETWORK_PORT_UDP) ? "udp" : "tcp"), name, port->nr);
-
-	} else {
-
-	    logoutput("connect_resource_via_host: network type not supported");
+	    logoutput_warning("connect_resource_via_host: interface operations not found for this network");
 	    unlock_service_context(&ctxlock, "w", "w");
 	    goto error;
 
 	}
+
+	/*
+	    20210501: only support SSH session
+	    20210807: add support for SMB server
+	*/
+
+	if (itype==_INTERFACE_TYPE_SSH_SESSION) {
+
+	    hostctx=create_ssh_server_service_context(networkctx, ilist, nethost->unique);
+
+	} else if (itype==_INTERFACE_TYPE_SMB_SERVER) {
+
+	    hostctx=create_smb_server_service_context(networkctx, ilist, nethost->unique);
+
+	}
+
+	if (hostctx==NULL) {
+
+	    logoutput("connect_resource_via_host: unable to create service context for %s:%s:%i", ((port->type==_NETWORK_PORT_UDP) ? "udp" : "tcp"), name, port->nr);
+	    unlock_service_context(&ctxlock, "w", "w");
+	    goto error;
+
+	}
+
+	logoutput("connect_resource_via_host: created service context for %s:%s:%i", ((port->type==_NETWORK_PORT_UDP) ? "udp" : "tcp"), name, port->nr);
+
+    } else {
+
+	logoutput("connect_resource_via_host: network type not supported");
+	unlock_service_context(&ctxlock, "w", "w");
+	goto error;
 
     }
 
@@ -615,7 +646,6 @@ static struct service_context_s *connect_resource_via_host(struct discover_resou
 
     determine_fqdn(hostctx, fd, nethost);
     if (nethost->service.host.lookupname.type==0) goto error;
-
     memset(hostname, 0, HOST_HOSTNAME_MAX_LENGTH + 1);
     memset(domainbuffer, 0, HOST_HOSTNAME_MAX_LENGTH + 1);
 
@@ -642,6 +672,7 @@ static struct service_context_s *connect_resource_via_host(struct discover_resou
 
     if (name && strlen(name)>0) {
 
+	logoutput("connect_resource_via_host: found name %s", name);
 	read_hostname_domainname(name, hostname, HOST_HOSTNAME_FQDN_MAX_LENGTH, domainname, HOST_HOSTNAME_FQDN_MAX_LENGTH);
 
     } else {
@@ -681,7 +712,7 @@ static struct service_context_s *connect_resource_via_host(struct discover_resou
     if (lock_service_context(&ctxlock, "w", "p")==1) {
 	struct service_context_s *domainctx=NULL;
 
-	domainctx=get_next_network_browse_context(workspace, NULL, netgroup->unique);
+	domainctx=get_next_network_browse_context(workspace, networkctx, NULL, netgroup->unique);
 
 	if (domainctx==NULL) {
 
@@ -693,7 +724,7 @@ static struct service_context_s *connect_resource_via_host(struct discover_resou
 
 	    }
 
-	    set_parent_service_context_unlocked(parentctx, domainctx);
+	    set_parent_service_context_unlocked(parentctx, domainctx, "add");
 
 	}
 
@@ -818,12 +849,23 @@ static void network_service_context_connect_thread(void *ptr)
 	    any information before is welcome! so you don't have to connect first...
 	*/
 
-	if ((resource->flags & flag)==0 || resource->type != DISCOVER_RESOURCE_TYPE_NETWORK_SOCKET) goto next;
-	logoutput("network_service_context_connect_thread: found socket %i flags %i", resource->service.socket.port, resource->flags);
+	if ((resource->flags & flag)==0) {
+
+	    logoutput("network_service_context_connect_thread: skip flags %i name %s", resource->flags, get_name_resource_flag(resource));
+	    goto next;
+
+	} else if (resource->type != DISCOVER_RESOURCE_TYPE_NETWORK_SOCKET) {
+
+	    logoutput("network_service_context_connect_thread: skip type %i", resource->type);
+	    goto next;
+
+	}
+
+	logoutput("network_service_context_connect_thread: found port %i flags %i name %s", resource->service.socket.port, resource->flags, get_name_resource_flag(resource));
 
 	lock_service_context(&ctxlock, "w", "w");
 
-	socketctx=get_next_network_browse_context(workspace, NULL, resource->unique);
+	socketctx=get_next_network_browse_context(workspace, networkctx, NULL, resource->unique);
 
 	/* context for this resource does already exist for this workspace: done ..
 	    TODO: look for refresh/reconnect when failed before
@@ -857,7 +899,7 @@ static void network_service_context_connect_thread(void *ptr)
 	    webdav
 	*/
 
-	if (flag & DISCOVER_RESOURCE_FLAG_SSH) hostctx=connect_resource_via_host(resource, discover, flag);
+	hostctx=connect_resource_via_host(resource, discover, flag);
 
 	/* run the cb on the created dentry and connection context to detect the shared directories for example
 
@@ -871,14 +913,17 @@ static void network_service_context_connect_thread(void *ptr)
 
 	    if (hostctx->interface.type==_INTERFACE_TYPE_SSH_SESSION) {
 
-		if (get_remote_services_ssh_server(hostctx, check_create_remote_service_ssh, discover)==0) {
+		if (get_remote_services_ssh_server(hostctx, discover)==0) {
 
 		    /* no services added: take the default */
 
-		    check_create_remote_service_ssh(hostctx, NULL, discover);
-
+		    add_default_ssh_channel_sftp(hostctx, (void *) discover);
 
 		}
+
+	    } else if (hostctx->interface.type==_INTERFACE_TYPE_SMB_SERVER) {
+
+		get_remote_shares_smb_server(hostctx, discover);
 
 	    }
 
@@ -1001,7 +1046,7 @@ void populate_network_workspace_mount(struct workspace_mount_s *workspace)
 
 		if (ctx) {
 
-		    set_parent_service_context_unlocked(root, ctx);
+		    set_parent_service_context_unlocked(root, ctx, "add");
 		    logoutput("populate_network_workspace_mount: add network %s", name);
 
 		} else {
@@ -1028,7 +1073,7 @@ void populate_network_workspace_mount(struct workspace_mount_s *workspace)
 
 		if (ctx) {
 
-		    set_parent_service_context_unlocked(root, ctx);
+		    set_parent_service_context_unlocked(root, ctx, "add");
 		    logoutput("populate_network_workspace_mount: add network %s", name);
 
 		} else {
@@ -1055,7 +1100,7 @@ void populate_network_workspace_mount(struct workspace_mount_s *workspace)
 
 		if (ctx) {
 
-		    set_parent_service_context_unlocked(root, ctx);
+		    set_parent_service_context_unlocked(root, ctx, "add");
 		    logoutput("populate_network_workspace_mount: add network %s", name);
 
 		} else {

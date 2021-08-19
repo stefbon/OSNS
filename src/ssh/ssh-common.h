@@ -119,8 +119,7 @@ struct channel_table_s {
 
 struct ssh_signal_s {
     unsigned char					flags;
-    pthread_mutex_t					*mutex;
-    pthread_cond_t					*cond;
+    struct common_signal_s				*signal;
     unsigned int					sequence_number_error;
     unsigned int					error;
 };
@@ -510,10 +509,10 @@ struct ssh_encryptor_s {
 };
 
 /* struct to
-    - populate this encrypt (cipher and hmac) to the kexinit list
+    - populate this encryptor (cipher and hmac) to the kexinit list
     - get the size to allocate before initializing
-    - initialize the compressor
-    - get various sizes required to allocate buffers*/
+    - initialize the encryptor
+    - get various sizes required of keys/iv's to allocate buffers*/
 
 struct encrypt_ops_s {
     char						*name;
@@ -737,8 +736,7 @@ struct ssh_setup_s {
 	struct ssh_transport_s				transport;
 	struct ssh_service_s				service;
     } phase;
-    pthread_mutex_t					*mutex;
-    pthread_cond_t					*cond;
+    struct common_signal_s				*signal;
     pthread_t						thread;
     struct payload_queue_s 				queue;
 };
@@ -805,8 +803,7 @@ struct ssh_connection_s {
 struct ssh_connections_s {
     unsigned char					unique;
     unsigned char					flags;
-    pthread_mutex_t					*mutex;
-    pthread_cond_t					*cond;
+    struct common_signal_s				*signal;
     struct ssh_connection_s				*main;
     struct list_header_s				header;
 };

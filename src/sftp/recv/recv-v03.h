@@ -29,6 +29,6 @@ void receive_sftp_attr_v03(struct sftp_client_s *sftp, struct sftp_header_s *hea
 void receive_sftp_extension_v03(struct sftp_client_s *sftp, struct sftp_header_s *header);
 void receive_sftp_extension_reply_v03(struct sftp_client_s *sftp, struct sftp_header_s *header);
 
-void use_sftp_recv_v03(struct sftp_client_s *sftp);
+struct sftp_recv_ops_s *get_sftp_recv_ops_v03();
 
 #endif

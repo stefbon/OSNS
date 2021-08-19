@@ -46,6 +46,7 @@
 
 #include "sftp/common-protocol.h"
 #include "sftp/common.h"
+#include "sftp/attr-context.h"
 #include "request-hash.h"
 
 #include "time.h"
@@ -54,6 +55,7 @@
 #include "init.h"
 #include "context.h"
 #include "recv.h"
+#include "attr.h"
 
 uint32_t get_sftp_request_id(struct sftp_client_s *sftp)
 {
@@ -102,8 +104,7 @@ int init_sftp_client(struct sftp_client_s *sftp, uid_t uid)
     init_sftp_default_context(sftp);
 
     sftp->signal.flags=0;
-    sftp->signal.mutex=NULL;
-    sftp->signal.cond=NULL;
+    sftp->signal.signal=NULL;
     sftp->signal.seq=0;
     sftp->signal.seqset.tv_sec=0;
     sftp->signal.seqset.tv_nsec=0;
@@ -112,10 +113,13 @@ int init_sftp_client(struct sftp_client_s *sftp, uid_t uid)
 
     pthread_mutex_init(&sftp->mutex, NULL);
     sftp->refcount=0;
-    sftp->server_version=0;
+
+    sftp->protocol.version=0;
 
     pthread_mutex_init(&sftp->sendhash.mutex, NULL);
     sftp->sendhash.id=0;
+
+    init_list_header(&sftp->pending, SIMPLE_LIST_TYPE_EMPTY, NULL);
 
     sftp->send_ops=NULL;
     sftp->recv_ops=NULL;;
@@ -125,37 +129,32 @@ int init_sftp_client(struct sftp_client_s *sftp, uid_t uid)
     init_sftp_extensions(sftp);
     init_sftp_sendhash();
     init_sftp_usermapping(sftp, uid);
+    init_sftp_client_attr_context(sftp);
+
+    /* here link the attr_context->get_remote_uid/get_local_uid... functions 
+	to the function in usermapping */
+
+    init_readattr_generic();
+    init_writeattr_generic();
 
     return 0;
 }
 
 void clear_sftp_client(struct sftp_client_s *sftp)
 {
+
     clear_sftp_extensions(sftp);
     free_sftp_usermapping(sftp);
-    pthread_mutex_destroy(&sftp->mutex);
+
     pthread_mutex_destroy(&sftp->sendhash.mutex);
+
+    clear_readattr_generic(0);
+    clear_writeattr_generic(0);
 }
 
 void free_sftp_client(struct sftp_client_s **p_sftp)
 {
     struct sftp_client_s *sftp=*p_sftp;
-
-    if (sftp->signal.flags & SFTP_SIGNAL_FLAG_MUTEX_ALLOC) {
-
-	pthread_mutex_destroy(sftp->signal.mutex);
-	free(sftp->signal.mutex);
-	sftp->signal.mutex=NULL;
-
-    }
-
-    if (sftp->signal.flags & SFTP_SIGNAL_FLAG_COND_ALLOC) {
-
-	pthread_cond_destroy(sftp->signal.cond);
-	free(sftp->signal.cond);
-	sftp->signal.cond=NULL;
-
-    }
 
     if (sftp->flags & SFTP_CLIENT_FLAG_ALLOC) {
 
@@ -170,6 +169,7 @@ int start_init_sftp_client(struct sftp_client_s *sftp)
 {
     struct sftp_request_s sftp_r;
     int protocol=0;
+    struct context_interface_s *interface=NULL;
 
     if (sftp==NULL) {
 
@@ -178,14 +178,17 @@ int start_init_sftp_client(struct sftp_client_s *sftp)
 
     }
 
-    set_sftp_server_version(sftp, 6);
+    interface=(struct context_interface_s *) ((char *) sftp - offsetof(struct context_interface_s, buffer));
+
+    set_sftp_protocol_version(sftp, 6); /* start with -> 6 <- */
     set_sftp_protocol(sftp);
     init_sftp_extensions(sftp);
 
     memset(&sftp_r, 0, sizeof(struct sftp_request_s));
     sftp_r.id=(uint32_t) -1; /* use a custom id */
-    sftp_r.call.init.version=get_sftp_server_version(sftp);
+    sftp_r.call.init.version=get_sftp_protocol_version(sftp);
     sftp_r.status=SFTP_REQUEST_STATUS_WAITING;
+    sftp_r.interface=interface;
 
     logoutput("start_init_sftp_client");
 
@@ -217,10 +220,15 @@ int start_init_sftp_client(struct sftp_client_s *sftp)
 
 	    } else {
 
-		logoutput("start_init_sftp_client: no init response from server");
+		logoutput("start_init_sftp_client: no init response from server (received %i)", reply->type);
 		goto error;
 
 	    }
+
+	} else {
+
+	    logoutput("start_init_sftp_client: no init response received");
+	    goto error;
 
 	}
 

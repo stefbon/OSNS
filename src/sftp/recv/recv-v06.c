@@ -208,10 +208,16 @@ void receive_sftp_data_v06(struct sftp_client_s *sftp, struct sftp_header_s *hea
 	struct sftp_reply_s *reply=&sftp_r->reply;
 
 	reply->type=header->type;
+	reply->response.data.flags=SFTP_RESPONSE_FLAG_EOF_SUPPORTED;
 	reply->response.data.size=get_uint32(&buffer[pos]);
 	pos+=4;
-	/* there is an extra byte for eol ? */
-	reply->response.data.eof= (reply->response.data.size + pos + 1 <= header->len) ? (unsigned char) buffer[reply->response.data.size + pos] : -1;
+
+	/* there is an extra byte for eol ? if so test the value */
+	if (reply->response.data.size + pos < header->len) {
+
+	    reply->response.data.flags |= (buffer[reply->response.data.size + pos] ? SFTP_RESPONSE_FLAG_EOF : 0);
+
+	}
 
 	/* let the processing of this into names, attr to the calling/receiving thread */
 
@@ -228,17 +234,46 @@ void receive_sftp_data_v06(struct sftp_client_s *sftp, struct sftp_header_s *hea
 
 }
 
+void receive_sftp_name_v06(struct sftp_client_s *sftp, struct sftp_header_s *header)
+{
+    struct generic_error_s error=GENERIC_ERROR_INIT;
+    struct sftp_request_s *req=NULL;
+
+    if ((req=get_sftp_request(sftp, header->id, &error))) {
+	char *buffer=header->buffer;
+	unsigned int pos=0;
+	struct sftp_reply_s *reply=&req->reply;
+
+	reply->type=header->type;
+	reply->response.names.flags=SFTP_RESPONSE_FLAG_EOF_SUPPORTED; /* it's not possible to determine the eof is present and what value: the size of the names is not set here */
+	reply->response.names.count=get_uint32(&buffer[pos]);
+	pos+=4;
+	reply->response.names.size=header->len - pos; /* minus the count field */
+	memmove(buffer, &buffer[pos], reply->response.names.size);
+	reply->response.names.buff=buffer; /* let the processing of this into names, attr to the receiving (FUSE) thread */
+	header->buffer=NULL;
+
+	signal_sftp_received_id(sftp, req);
+
+    } else {
+
+	logoutput("receive_sftp_name_v03: error finding id (%s)", header->id, get_error_description(&error));
+
+    }
+
+}
+
 static struct sftp_recv_ops_s recv_ops_v06 = {
     .status				= receive_sftp_status_v06,
     .handle				= receive_sftp_handle_v03,
     .data				= receive_sftp_data_v06,
-    .name				= receive_sftp_name_v03,
+    .name				= receive_sftp_name_v06,
     .attr				= receive_sftp_attr_v03,
     .extension				= receive_sftp_extension_v03,
     .extension_reply			= receive_sftp_extension_reply_v03,
 };
 
-void use_sftp_recv_v06(struct sftp_client_s *sftp)
+struct sftp_recv_ops_s *get_sftp_recv_ops_v06()
 {
-    sftp->recv_ops=&recv_ops_v06;
+    return &recv_ops_v06;
 }

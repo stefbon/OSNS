@@ -81,6 +81,8 @@ static void default_signal_cb(struct beventloop_s *loop, unsigned int signo, pid
 static void read_signal_eventloop(int fd, void *ptr, struct event_s *events)
 {
 
+    logoutput("read_signal_eventloop: fd=%i");
+
     if (signal_is_data(events)) {
 	struct signalfd_siginfo fdsi;
 	ssize_t len=0;
@@ -125,7 +127,13 @@ static int add_signalhandler(struct beventloop_s *loop, void (* cb) (struct beve
     sigset_t sigset;
     int fd=-1;
 
-    if (loop->flags & BEVENTLOOP_FLAG_SIGNAL || signal_bevent) return 0;
+    if (loop->flags & BEVENTLOOP_FLAG_SIGNAL || signal_bevent) {
+
+	logoutput_warning("add_signalhandler: signalhandler already added to eventloop");
+	return 0;
+
+    }
+
     signal_cb=(cb) ? cb : default_signal_cb;
 
     sigemptyset(&sigset);
@@ -157,11 +165,11 @@ static int add_signalhandler(struct beventloop_s *loop, void (* cb) (struct beve
 
     } else {
 
-	logoutput_debug("add_signalhandler: open signalfd %i", fd);
+	logoutput("add_signalhandler: open signalfd %i", fd);
 
     }
 
-    signal_bevent=create_fd_bevent(NULL, read_signal_eventloop, (void *) loop);
+    signal_bevent=create_fd_bevent(loop, read_signal_eventloop, (void *) loop);
     if (signal_bevent==NULL) {
 
 	logoutput_warning("add_signalhandler: error creating bevent");
@@ -170,11 +178,11 @@ static int add_signalhandler(struct beventloop_s *loop, void (* cb) (struct beve
     }
 
     set_bevent_unix_fd(signal_bevent, fd);
-    set_bevent_watch(signal_bevent, "incoming data");
+    set_bevent_watch(signal_bevent, "i");
 
     if (add_bevent_beventloop(signal_bevent)==0) {
 
-	logoutput_debug("add_signalhandler: added signal to eventloop");
+	logoutput("add_signalhandler: added signal to eventloop");
 	return 0;
 
     } else {

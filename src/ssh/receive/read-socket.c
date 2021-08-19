@@ -151,18 +151,18 @@ void read_ssh_connection_signal(int fd, void *ptr, struct event_s *event)
 {
     struct ssh_connection_s *connection=(struct ssh_connection_s *) ptr;
 
-    if (signal_is_error(event) || signal_is_close(event)) {
+    if (signal_is_data(event)) {
+
+	logoutput("read_ssh_connection_signal: data is available (fd=%i)", fd);
+	int result=read_ssh_connection_socket(connection, fd, event);
+
+    } else if (signal_is_error(event) || signal_is_close(event)) {
 
 	/* the remote side disconnected */
 
         logoutput("read_ssh_connection_signal: connection break (fd=%i)", fd);
         connection->flags |= SSH_CONNECTION_FLAG_TROUBLE;
 	start_thread_ssh_connection_problem(connection);
-
-    } else if (signal_is_data(event)) {
-
-	logoutput("read_ssh_connection_signal: data is available (fd=%i)", fd);
-	int result=read_ssh_connection_socket(connection, fd, event);
 
     } else {
 

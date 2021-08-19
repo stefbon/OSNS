@@ -29,4 +29,6 @@ void receive_sftp_data(struct sftp_client_s *sftp, char **p_buffer, unsigned int
 void init_sftp_receive(struct sftp_client_s *sftp);
 void switch_sftp_receive(struct sftp_client_s *sftp, const char *what);
 
+void set_sftp_recv_version(struct sftp_client_s *sftp);
+
 #endif

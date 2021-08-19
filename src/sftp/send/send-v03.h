@@ -17,8 +17,8 @@
 
 */
 
-#ifndef FS_WORKSPACE_SFTP_SEND_V03_H
-#define FS_WORKSPACE_SFTP_SEND_V03_H
+#ifndef SFTP_SEND_SEND_V03_H
+#define SFTP_SEND_SEND_V03_H
 
 /* prototypes */
 
@@ -47,7 +47,7 @@ int send_sftp_realpath_v03(struct sftp_client_s *sftp, struct sftp_request_s *sf
 int send_sftp_extension_v03(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r);
 int send_sftp_custom_v03(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r);
 
-void use_sftp_send_v03(struct sftp_client_s *sftp);
+struct sftp_send_ops_s *get_sftp_send_ops_v03();
 
 #endif
 

@@ -48,21 +48,21 @@
 static unsigned int _get_pathlen_dir(struct service_context_s *ctx, struct entry_s *entry)
 {
     struct directory_s *d=get_directory(entry->inode);
-    logoutput("_get_pathlen_dir");
+    logoutput_debug("_get_pathlen_dir");
     return (d->getpath->get_pathlen)(ctx, d);
 }
 
 static void _append_path_dir(struct service_context_s *ctx, struct entry_s *entry, struct fuse_path_s *fp)
 {
     struct directory_s *d=get_directory(entry->inode);
-    logoutput("_append_path_dir");
+    logoutput_debug("_append_path_dir");
     get_service_context_path(ctx, d, fp);
 }
 
 static unsigned int _get_pathlen_nondir(struct service_context_s *ctx, struct entry_s *entry)
 {
     struct directory_s *d=get_upper_directory_entry(entry);
-    logoutput("_get_pathlen_nondir");
+    logoutput_debug("_get_pathlen_nondir");
     /* extra name plus slash */
     return 1 + entry->name.len + (d->getpath->get_pathlen)(ctx, d);
 }
@@ -71,7 +71,7 @@ static void _append_path_nondir(struct service_context_s *ctx, struct entry_s *e
 {
     struct directory_s *d=get_upper_directory_entry(entry);
 
-    logoutput("_append_path_nondir");
+    logoutput_debug("_append_path_nondir");
 
     /* entry */
     fp->pathstart-=entry->name.len;

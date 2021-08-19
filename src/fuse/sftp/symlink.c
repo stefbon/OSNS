@@ -49,6 +49,7 @@
 #include "fuse.h"
 
 #include "sftp/common-protocol.h"
+#include "sftp/attr-context.h"
 #include "interface/sftp-attr.h"
 #include "interface/sftp-send.h"
 #include "interface/sftp-wait-response.h"
@@ -369,20 +370,10 @@ void _fs_sftp_readlink(struct service_context_s *context, struct fuse_request_s 
     strcpy(origpath, pathinfo->path);
     pathinfo->len += (* interface->backend.sftp.complete_path)(interface, pathinfobuffer, pathinfo);
 
-    memset(&sftp_r, 0, sizeof(struct sftp_request_s));
-    sftp_r.id=0;
+    init_sftp_request(&sftp_r, interface, f_request);
+
     sftp_r.call.readlink.path=(unsigned char *) pathinfo->path;
     sftp_r.call.readlink.len=pathinfo->len;
-    sftp_r.status=SFTP_REQUEST_STATUS_WAITING;
-
-    set_sftp_request_fuse(&sftp_r, f_request);
-
-    if (f_request->flags & FUSE_REQUEST_FLAG_INTERRUPTED) {
-
-	reply_VFS_error(f_request, EINTR);
-	return;
-
-    }
 
     if ((inode->alias->flags & _ENTRY_FLAG_REMOTECHANGED)==0) {
 
@@ -390,6 +381,7 @@ void _fs_sftp_readlink(struct service_context_s *context, struct fuse_request_s 
 	    char *target=inode->link.link.ptr;
 
 	    reply_VFS_data(f_request, target, strlen(target));
+	    unset_fuse_request_flags_cb(f_request);
 	    return;
 
 	}
@@ -410,7 +402,7 @@ void _fs_sftp_readlink(struct service_context_s *context, struct fuse_request_s 
 		int result=0;
 
 		if (read_ssh_string(names->buff, names->size, &tmp)>0) {
-		        char target[tmp.len+1];
+		    char target[tmp.len+1];
 
 		    memcpy(target, tmp.ptr, tmp.len);
 		    target[tmp.len]='\0';
@@ -422,6 +414,7 @@ void _fs_sftp_readlink(struct service_context_s *context, struct fuse_request_s 
 		    if (error==0) {
 
 			reply_VFS_data(f_request, target, tmp.len);
+			unset_fuse_request_flags_cb(f_request);
 			return;
 
 		    }
@@ -452,6 +445,7 @@ void _fs_sftp_readlink(struct service_context_s *context, struct fuse_request_s 
 
     out:
     reply_VFS_error(f_request, error);
+    unset_fuse_request_flags_cb(f_request);
 
 }
 
@@ -465,22 +459,12 @@ void _fs_sftp_symlink(struct service_context_s *context, struct fuse_request_s *
     struct sftp_request_s sftp_r;
     unsigned int error=EIO;
 
-    memset(&sftp_r, 0, sizeof(struct sftp_request_s));
-    sftp_r.id=0;
+    init_sftp_request(&sftp_r, interface, f_request);
+
     sftp_r.call.symlink.path=(unsigned char *) pathinfo->path;
     sftp_r.call.symlink.len=pathinfo->len;
     sftp_r.call.symlink.target_path=(unsigned char *) target;
     sftp_r.call.symlink.target_len=strlen(target);
-    sftp_r.status=SFTP_REQUEST_STATUS_WAITING;
-
-    set_sftp_request_fuse(&sftp_r, f_request);
-
-    if (f_request->flags & FUSE_REQUEST_FLAG_INTERRUPTED) {
-
-	reply_VFS_error(f_request, EINTR);
-	return;
-
-    }
 
     if (send_sftp_symlink_ctx(interface, &sftp_r)>0) {
 	struct timespec timeout;
@@ -495,6 +479,7 @@ void _fs_sftp_symlink(struct service_context_s *context, struct fuse_request_s *
 		if (reply->response.status.code==0) {
 
 		    reply_VFS_error(f_request, 0);
+		    unset_fuse_request_flags_cb(f_request);
 		    return;
 
 		}
@@ -515,6 +500,7 @@ void _fs_sftp_symlink(struct service_context_s *context, struct fuse_request_s *
 
     queue_inode_2forget(workspace, entry->inode->st.st_ino, 0, 0);
     reply_VFS_error(f_request, error);
+    unset_fuse_request_flags_cb(f_request);
 
 }
 

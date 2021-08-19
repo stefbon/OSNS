@@ -26,14 +26,16 @@
 #define _INTERFACE_TYPE_SSH_CHANNEL			2
 #define _INTERFACE_TYPE_FUSE				3
 #define _INTERFACE_TYPE_SFTP				4
-#define _INTERFACE_TYPE_SMB_SERVER			5
-#define _INTERFACE_TYPE_SMB_SHARE			6
+#define _INTERFACE_TYPE_SMB_SHARE			5
+#define _INTERFACE_TYPE_SMB_SERVER			6
+#define _INTERFACE_TYPE_NET_HOST			7
 
 #define _SERVICE_TYPE_FUSE				1
 #define _SERVICE_TYPE_PORT				2
 #define _SERVICE_TYPE_SSH_CHANNEL			3
 #define _SERVICE_TYPE_SFTP_SUBSYSTEM			4
 #define _SERVICE_TYPE_SFTP_CLIENT			5
+#define _SERVICE_TYPE_SMB_SHARE				6
 
 #define _INTERFACE_BUFFER_FLAG_ALLOC			1
 #define _INTERFACE_BUFFER_FLAG_ERROR			2
@@ -91,6 +93,10 @@ struct service_address_s {
 	    char					*uri;
 	    char					*prefix; 	/* prefix on remote server, may be empty */
 	} sftp;
+	struct _smb_service_s {
+	    char					*share;
+	    char					*username;
+	} smb;
     } target;
 };
 
@@ -106,6 +112,7 @@ struct context_interface_s {
     unsigned int					flags;
     int 						(* connect)(uid_t uid, struct context_interface_s *interface, struct host_address_s *address, struct service_address_s *service);
     int							(* start)(struct context_interface_s *interface, int fd, struct ctx_option_s *option);
+    int							(* free)(struct context_interface_s *interface, const char *what);
     int							(* signal_context)(struct context_interface_s *interface, const char *what, struct ctx_option_s *option);
     int							(* signal_interface)(struct context_interface_s *interface, const char *what, struct ctx_option_s *option);
     char						*(* get_interface_buffer)(struct context_interface_s *interface);
@@ -130,6 +137,9 @@ struct context_interface_s {
 	    void					(* receive_data)(struct context_interface_s *interface, char **buffer, unsigned int size, uint32_t seq, unsigned int flags);
 	    int						(* send_data)(struct context_interface_s *interface, char *data, unsigned int len, uint32_t *seq);
 	} ssh_channel;
+	struct _smb_share_s {
+	    char					*name;
+	} smb_share;
 	struct _fusesocket_s {
 	    struct beventloop_s 			*loop;
 	} fuse;

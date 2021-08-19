@@ -390,24 +390,20 @@ static int _lock_workspace_contexes(struct service_context_lock_s *servicelock, 
     int result=0;
     struct service_context_s *root=servicelock->root;
 
-    logoutput_debug("_lock_workspace_contexes: A");
-
     if (root && root->type==SERVICE_CTX_TYPE_WORKSPACE) {
 
-	pthread_mutex_lock(root->service.workspace.mutex);
+	signal_lock(root->service.workspace.signal);
 
 	while ((result=check_lockflags_conflict(servicelock))==0) {
 	    int pthreadresult=0;
 
-	    logoutput_debug("_lock_workspace_contexes: B");
-
 	    if (expire) {
 
-		pthreadresult=pthread_cond_timedwait(root->service.workspace.cond, root->service.workspace.mutex, expire);
+		pthreadresult=signal_condtimedwait(root->service.workspace.signal, expire);
 
 	    } else {
 
-		pthreadresult=pthread_cond_wait(root->service.workspace.cond, root->service.workspace.mutex);
+		pthreadresult=signal_condwait(root->service.workspace.signal);
 
 	    }
 
@@ -418,21 +414,21 @@ static int _lock_workspace_contexes(struct service_context_lock_s *servicelock, 
 
 	    } else if (pthreadresult==ETIMEDOUT) {
 
-		pthread_mutex_unlock(root->service.workspace.mutex);
+		signal_unlock(root->service.workspace.signal);
 		return -1;
 
 	    } else if (pthreadresult>0) {
 
 		logoutput_warning("execute_workspace_contexes_cb: error %i waiting condition (%s)", pthreadresult, strerror(pthreadresult));
-		pthread_mutex_unlock(root->service.workspace.mutex);
+		signal_unlock(root->service.workspace.signal);
 		return -2;
 
 	    }
 
 	}
 
-	pthread_cond_broadcast(root->service.workspace.cond);
-	pthread_mutex_unlock(root->service.workspace.mutex);
+	signal_broadcast(root->service.workspace.signal);
+	signal_unlock(root->service.workspace.signal);
 
     }
 

@@ -58,6 +58,9 @@
 /* Define if librsync is available */
 #define HAVE_LIBRSYNC 1
 
+/* Define if libsmbs is available */
+#define HAVE_LIBSMB2 1
+
 /* Define libsystemd is available */
 #define HAVE_LIBSYSTEMD 1
 
@@ -89,6 +92,9 @@
 
 /* Define to 1 if you have the `rmdir' function. */
 #define HAVE_RMDIR 1
+
+/* Define if statx is available */
+#define HAVE_STATX 1
 
 /* Define to 1 if stdbool.h conforms to C99. */
 #define HAVE_STDBOOL_H 1
@@ -157,9 +163,6 @@
 /* Define to 1 if you have the <sys/types.h> header file. */
 #define HAVE_SYS_TYPES_H 1
 
-/* Define if libudt is available */
-/* #undef HAVE_UDT */
-
 /* Define to 1 if you have the <unistd.h> header file. */
 #define HAVE_UNISTD_H 1
 
@@ -210,7 +213,7 @@
 #define VERSION "1.0a1"
 
 /* Define to build OSNS SSH Server */
-#define WITH_OSNS_SFTP_SUBSYSTEM 1
+/* #undef WITH_OSNS_SFTP_SUBSYSTEM */
 
 /* Define for Solaris 2.5.1 so the uint32_t typedef from <sys/synch.h>,
    <pthread.h>, or <semaphore.h> is not used. If the typedef were allowed, the

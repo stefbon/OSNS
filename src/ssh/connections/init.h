@@ -21,7 +21,7 @@
 #define _SSH_CONNECTION_INIT_H
 
 void init_ssh_connections(struct ssh_session_s *session);
-int set_ssh_connections_signal(struct ssh_session_s *session, pthread_mutex_t *mutex, pthread_cond_t *cond);
+int set_ssh_connections_signal(struct ssh_session_s *session, struct common_signal_s *signal);
 void free_ssh_connections(struct ssh_session_s *session);
 
 int get_ssh_connections_unlocked(struct ssh_session_s *session);

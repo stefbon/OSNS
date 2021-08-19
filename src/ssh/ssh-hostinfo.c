@@ -46,6 +46,7 @@
 #include "main.h"
 
 #include "misc.h"
+#include "commonsignal.h"
 #include "ssh-common.h"
 #include "ssh-utils.h"
 
@@ -193,17 +194,17 @@ void start_timecorrection_ssh_server(struct ssh_session_s *session)
     struct timespec set_server;
     struct ctx_option_s option;
 
-    pthread_mutex_lock(connection->setup.mutex);
+    signal_lock(connection->setup.signal);
 
     if (connection->setup.flags & SSH_SETUP_FLAG_HOSTINFO) {
 
-	pthread_mutex_unlock(connection->setup.mutex);
+	signal_unlock(connection->setup.signal);
 	return;
 
     }
 
     connection->setup.flags|=SSH_SETUP_FLAG_HOSTINFO;
-    pthread_mutex_unlock(connection->setup.mutex);
+    signal_unlock(connection->setup.signal);
 
     init_ctx_option(&option, _CTX_OPTION_TYPE_BUFFER);
     get_current_time(&send_client);

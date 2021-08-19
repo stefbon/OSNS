@@ -44,11 +44,8 @@
 
 #include "log.h"
 #include "main.h"
-
 #include "misc.h"
-
-#include "sftp/common-protocol.h"
-#include "sftp/common.h"
+#include "datatypes.h"
 
 static pthread_mutex_t pwd_mutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t grp_mutex=PTHREAD_MUTEX_INITIALIZER;
@@ -64,7 +61,7 @@ void get_local_uid_byname(char *name, uid_t *uid)
     if (pwd) *uid=pwd->pw_uid;
 }
 
-void get_local_user_byuid(uid_t uid, struct ssh_string_s *user)
+unsigned int get_local_user_byuid(uid_t uid, struct ssh_string_s *user)
 {
     struct passwd *pwd=getpwuid(uid);
     unsigned int len=0;
@@ -73,27 +70,22 @@ void get_local_user_byuid(uid_t uid, struct ssh_string_s *user)
 
 	len=strlen(pwd->pw_name);
 
-	if (user->ptr) {
+	if (user && user->ptr) {
+	    unsigned int tmp=len;
 
-	    if (len>user->len) {
-
-		len=user->len;
-
-	    } else {
-
-		memset(user->ptr, 0, user->len);
-
-	    }
-
-	    memcpy(user->ptr, pwd->pw_name, len);
+	    if (user->len<tmp) tmp=user->len;
+	    memset(user->ptr, 0, user->len);
+	    memcpy(user->ptr, pwd->pw_name, tmp);
 
 	}
 
     } else {
 
-	if (user->ptr) memset(user->ptr, '\0', user->len);
+	if (user && user->ptr) memset(user->ptr, '\0', user->len);
 
     }
+
+    return len;
 
 }
 
@@ -123,18 +115,11 @@ unsigned int get_local_group_bygid(gid_t gid, struct ssh_string_s *group)
 	len=strlen(grp->gr_name);
 
 	if (group->ptr) {
+	    unsigned int tmp=len;
 
-	    if (len>group->len) {
-
-		len=group->len;
-
-	    } else {
-
-		memset(group->ptr, 0, group->len);
-
-	    }
-
-	    memcpy(group->ptr, grp->gr_name, len);
+	    if (group->len<tmp) tmp=group->len;
+	    memset(group->ptr, 0, group->len);
+	    memcpy(group->ptr, grp->gr_name, tmp);
 
 	}
 

@@ -23,6 +23,7 @@
 #include "misc.h"
 #include "fuse.h"
 #include "workspaces.h"
+#include "commonsignal.h"
 
 #define SERVICE_CTX_TYPE_DUMMY			0
 #define SERVICE_CTX_TYPE_WORKSPACE		1
@@ -117,8 +118,7 @@ struct service_context_s {
     union {
 	struct workspace_context_s {
 	    struct service_fs_s				*fs; 		/* the fs used for the workspace/root: networkfs or devicefs */
-	    pthread_mutex_t				*mutex;
-	    pthread_cond_t				*cond;
+	    struct common_signal_s			*signal;
 	    struct list_header_s			header;
 	} workspace;
 	struct network_context_s {

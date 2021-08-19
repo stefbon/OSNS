@@ -180,14 +180,11 @@ void receive_sftp_data_v03(struct sftp_client_s *sftp, struct sftp_header_s *hea
 	struct sftp_reply_s *reply=&req->reply;
 
 	reply->type=header->type;
+	reply->response.data.flags=0;
 	reply->response.data.size=get_uint32(&buffer[pos]);
 	pos+=4;
-
 	memmove(buffer, &buffer[pos], reply->response.data.size);
-
-	/* let the processing of this into names, attr to the caller/initiator */
-	reply->response.data.data=(unsigned char *) buffer;
-	reply->response.data.eof=-1;
+	reply->response.data.data=(unsigned char *) buffer; /* let the processing of this into names, attr to the caller/initiator */
 	header->buffer=NULL;
 	signal_sftp_received_id(sftp, req);
 
@@ -210,19 +207,14 @@ void receive_sftp_name_v03(struct sftp_client_s *sftp, struct sftp_header_s *hea
 	struct sftp_reply_s *reply=&req->reply;
 
 	reply->type=header->type;
+	reply->response.names.flags=0;
 	reply->response.names.count=get_uint32(&buffer[pos]);
 	pos+=4;
 	reply->response.names.size=header->len - pos; /* minus the count field */
-
-	// logoutput("receive_sftp_name_v03: len %i", reply->response.names.size);
-
 	memmove(buffer, &buffer[pos], reply->response.names.size);
-
-	/* let the processing of this into names, attr to the receiving (FUSE) thread */
-	reply->response.names.buff=buffer;
-	reply->response.names.eof=-1;
+	reply->response.names.buff=buffer; /* let the processing of this into names, attr to the receiving (FUSE) thread */
 	header->buffer=NULL;
-	reply->response.names.pos=reply->response.names.buff;
+
 	signal_sftp_received_id(sftp, req);
 
     } else {
@@ -295,7 +287,7 @@ static struct sftp_recv_ops_s recv_ops_v03 = {
     .extension_reply			= receive_sftp_extension_reply_v03,
 };
 
-void use_sftp_recv_v03(struct sftp_client_s *sftp)
+struct sftp_recv_ops_s *get_sftp_recv_ops_v03()
 {
-    sftp->recv_ops=&recv_ops_v03;
+    return &recv_ops_v03;
 }

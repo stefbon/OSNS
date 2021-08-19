@@ -247,16 +247,16 @@ static void sl_insert_cb(struct sl_skiplist_s *sl, struct sl_lockops_s *lockops,
 	insert.step=0;
 	insert.list=NULL;
 
-	result->flags |= SL_SEARCHRESULT_FLAG_OK;
-
 	if (result->flags & SL_SEARCHRESULT_FLAG_EMPTY) {
 
 	    logoutput_debug("sl_insert_cb: add %s first result step %i dirnode step %i", sl->ops.get_logname(list), result->step, (prev) ? prev->junction[0].step : -1);
 
 	    add_list_element_first(&sl->header, list);
 	    sl->dirnode.junction[0].step=1; /* one element */
+
 	    result->flags |= SL_SEARCHRESULT_FLAG_OK;
 	    result->found=list;
+
 	    goto unlock;
 
 	} else if (result->flags & SL_SEARCHRESULT_FLAG_BEFORE) {
@@ -264,8 +264,10 @@ static void sl_insert_cb(struct sl_skiplist_s *sl, struct sl_lockops_s *lockops,
 	    logoutput_debug("sl_insert_cb: add %s before %s result step %i dirnode step %i", sl->ops.get_logname(list), sl->ops.get_logname(result->found), result->step, (prev) ? prev->junction[0].step : -1);
 
 	    add_list_element_before(&sl->header, result->found, list);
+
 	    insert.left=result->step;
 	    insert.right=prev->junction[0].step - result->step + 1;
+
 	    result->flags |= SL_SEARCHRESULT_FLAG_OK;
 	    result->found=list;
 
@@ -274,8 +276,10 @@ static void sl_insert_cb(struct sl_skiplist_s *sl, struct sl_lockops_s *lockops,
 	    logoutput_debug("sl_insert_cb: add %s after %s result step %i dirnode step %i", sl->ops.get_logname(list), sl->ops.get_logname(result->found), result->step, (prev) ? prev->junction[0].step : -1);
 
 	    add_list_element_after(&sl->header, result->found, list);
+
 	    insert.left=result->step + 1;
 	    insert.right=prev->junction[0].step - result->step;
+
 	    result->flags |= SL_SEARCHRESULT_FLAG_OK;
 	    result->found=list;
 

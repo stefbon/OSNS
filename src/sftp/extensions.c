@@ -50,7 +50,7 @@
 #include "ssh-send.h"
 #include "ssh-receive.h"
 
-#include "common-protocol.h"
+#include "sftp/common-protocol.h"
 #include "common.h"
 #include "request-hash.h"
 
@@ -115,7 +115,7 @@ static int handle_sftp_reply(struct sftp_request_s *sftp_r, struct sftp_reply_s 
 
 	reply->response.data.data=sftp_r->reply.response.data.data;
 	reply->response.data.size=sftp_r->reply.response.data.size;
-	reply->response.data.eof=sftp_r->reply.response.data.eof;
+	reply->response.data.flags=sftp_r->reply.response.data.flags;
 	sftp_r->reply.response.data.data=NULL;
 	sftp_r->reply.response.data.size=0;
 
@@ -123,9 +123,8 @@ static int handle_sftp_reply(struct sftp_request_s *sftp_r, struct sftp_reply_s 
 
 	reply->response.names.count=sftp_r->reply.response.names.count;
 	reply->response.names.size=sftp_r->reply.response.names.size;
-	reply->response.names.eof=sftp_r->reply.response.names.eof;
+	reply->response.names.flags=sftp_r->reply.response.names.flags;
 	reply->response.names.buff=sftp_r->reply.response.names.buff;
-	reply->response.names.pos=sftp_r->reply.response.names.pos;
 	sftp_r->reply.response.names.buff=NULL;
 	sftp_r->reply.response.names.size=0;
 
@@ -505,8 +504,6 @@ void complete_sftp_protocolextensions(struct sftp_client_s *sftp, char *mapname)
 	/* is mapping supported by server ? 
 	    are there well known mapping extensions?
 	    which mappings to try */
-
-	if (mapname==NULL) mapname=NAME_MAPEXTENSION_DEFAULT;
 	list=search_list_element_forw(&sftp->extensions.header, match_extension_byname, (void *) mapname);
 
 	if (list) {
@@ -553,6 +550,34 @@ void complete_sftp_protocolextensions(struct sftp_client_s *sftp, char *mapname)
 	    }
 
 	    list=get_next_element(list);
+
+	}
+
+    }
+
+    if (sftp->extensions.statvfs==NULL) {
+	struct list_element_s *list=NULL;
+
+	list=search_list_element_forw(&sftp->extensions.header, match_extension_byname, (void *) SFTP_EXTENSION_NAME_STATVFS);
+
+	if (list) {
+	    struct sftp_protocolextension_s *extension=(struct sftp_protocolextension_s *)(((char *) list) - offsetof(struct sftp_protocolextension_s, list));
+
+	    sftp->extensions.statvfs=extension;
+
+	}
+
+    }
+
+    if (sftp->extensions.fsync==NULL) {
+	struct list_element_s *list=NULL;
+
+	list=search_list_element_forw(&sftp->extensions.header, match_extension_byname, (void *) SFTP_EXTENSION_NAME_FSYNC);
+
+	if (list) {
+	    struct sftp_protocolextension_s *extension=(struct sftp_protocolextension_s *)(((char *) list) - offsetof(struct sftp_protocolextension_s, list));
+
+	    sftp->extensions.fsync=extension;
 
 	}
 

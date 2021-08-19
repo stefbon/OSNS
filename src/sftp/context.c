@@ -44,7 +44,7 @@
 #include "threads.h"
 
 #include "workspace.h"
-#include "common-protocol.h"
+#include "sftp/common-protocol.h"
 #include "common.h"
 #include "time.h"
 #include "usermapping.h"
@@ -59,6 +59,7 @@
 static int _signal_ctx2sftp(struct sftp_client_s **p_sftp, const char *what, struct ctx_option_s *option)
 {
     struct sftp_client_s *sftp=*p_sftp;
+    struct common_signal_s *signal=sftp->signal.signal;
 
     logoutput("signal_ctx2sftp: what %s", what);
 
@@ -84,10 +85,11 @@ static int _signal_ctx2sftp(struct sftp_client_s **p_sftp, const char *what, str
 
 	if (strncmp(&what[pos], "close:", 6)==0 || strncmp(&what[pos], "disconnect:", 11)==0) {
 
-	    pthread_mutex_lock(sftp->signal.mutex);
+	    signal_lock(signal);
+
 	    if (sftp->signal.flags & SFTP_SIGNAL_FLAG_DISCONNECT) {
 
-		pthread_mutex_unlock(sftp->signal.mutex);
+		signal_unlock(signal);
 		return 0;
 
 	    }
@@ -96,30 +98,30 @@ static int _signal_ctx2sftp(struct sftp_client_s **p_sftp, const char *what, str
 		is just about closing the connection/channel */
 
 	    sftp->signal.flags |= SFTP_SIGNAL_FLAG_DISCONNECTED;
-	    pthread_cond_broadcast(sftp->signal.cond);
-	    pthread_mutex_unlock(sftp->signal.mutex);
+	    signal_broadcast(signal);
+	    signal_unlock(signal);
 
 	}
 
 	if (strncmp(&what[pos], "clear:", 6)==0 || strncmp(&what[pos], "free:", 5)==0) {
 
-	    pthread_mutex_lock(sftp->signal.mutex);
+	    signal_lock(signal);
 
 	    if (sftp->signal.flags & SFTP_SIGNAL_FLAG_CLEAR) {
 
-		pthread_mutex_unlock(sftp->signal.mutex);
+		signal_unlock(signal);
 		return 0;
 
 	    }
 
 	    sftp->signal.flags |= SFTP_SIGNAL_FLAG_CLEARING;
-	    pthread_mutex_unlock(sftp->signal.mutex);
+	    signal_unlock(signal);
 
 	    clear_sftp_client(sftp);
 
-	    pthread_mutex_lock(sftp->signal.mutex);
+	    signal_lock(signal);
 	    sftp->signal.flags |= SFTP_SIGNAL_FLAG_CLEARED;
-	    pthread_mutex_unlock(sftp->signal.mutex);
+	    signal_unlock(signal);
 
 	    free_sftp_client(p_sftp);
 
@@ -143,6 +145,7 @@ static int _signal_sftp2ctx_default(struct sftp_client_s *sftp, const char *what
 
 static int _signal_conn2sftp(struct sftp_client_s *sftp, const char *what, struct ctx_option_s *option)
 {
+    struct common_signal_s *signal=sftp->signal.signal;
 
     logoutput("signal_conn2sftp: what %s", what);
 
@@ -151,11 +154,11 @@ static int _signal_conn2sftp(struct sftp_client_s *sftp, const char *what, struc
 
 	if (strncmp(&what[pos], "close:", 6)==0 || strncmp(&what[pos], "disconnect:", 11)==0) {
 
-	    pthread_mutex_lock(sftp->signal.mutex);
+	    signal_lock(signal);
 
 	    if (sftp->signal.flags & SFTP_SIGNAL_FLAG_DISCONNECT) {
 
-		pthread_mutex_unlock(sftp->signal.mutex);
+		signal_unlock(signal);
 		return 0;
 
 	    }
@@ -176,8 +179,8 @@ static int _signal_conn2sftp(struct sftp_client_s *sftp, const char *what, struc
 		is just about closing the connection/channel */
 
 	    sftp->signal.flags |= SFTP_SIGNAL_FLAG_DISCONNECTED;
-	    pthread_cond_broadcast(sftp->signal.cond);
-	    pthread_mutex_unlock(sftp->signal.mutex);
+	    signal_broadcast(signal);
+	    signal_unlock(signal);
 
 	}
 
@@ -194,7 +197,7 @@ static int _signal_sftp2conn_default(struct sftp_client_s *sftp, const char *wha
     return 0;
 }
 
-static int _send_data_default(struct sftp_client_s *s, char *buffer, unsigned int size, unsigned int *seq)
+static int _send_data_default(struct sftp_client_s *s, char *buffer, unsigned int size, unsigned int *seq, struct list_element_s *list)
 {
     /* does nothing since here is not known where to send it to */
     return -1;

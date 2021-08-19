@@ -822,7 +822,7 @@ int create_local_serversocket(char *path, struct fs_connection_s *conn, struct b
 	if (bevent==NULL) goto out;
 
 	set_bevent_unix_fd(bevent, fd);
-	set_bevent_watch(bevent, "incoming data");
+	set_bevent_watch(bevent, "i");
 
 	if (add_bevent_beventloop(bevent)==0) {
 
@@ -962,7 +962,7 @@ int create_network_serversocket(char *address, unsigned int port, struct fs_conn
 	if (bevent==NULL) goto out;
 
 	set_bevent_unix_fd(bevent, fd);
-	set_bevent_watch(bevent, "incoming data");
+	set_bevent_watch(bevent, "i");
 
 	if (add_bevent_beventloop(bevent)==0) {
 

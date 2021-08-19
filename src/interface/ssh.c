@@ -139,7 +139,7 @@ static int add_connection_eventloop(struct ssh_session_s *session, struct ssh_co
     bevent=create_fd_bevent(loop, cb, ptr);
     if (bevent==NULL) return -1;
     set_bevent_unix_fd(bevent, fd);
-    set_bevent_watch(bevent, "incoming data");
+    set_bevent_watch(bevent, "i");
 
     if (add_bevent_beventloop(bevent)==0) {
 

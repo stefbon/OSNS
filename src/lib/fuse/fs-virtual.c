@@ -157,6 +157,11 @@ static void _fs_fsync(struct fuse_openfile_s *openfile, struct fuse_request_s *r
     reply_VFS_error(request, 0);
 }
 
+static void _fs_lseek(struct fuse_openfile_s *openfile, struct fuse_request_s *request, off_t off, int whence)
+{
+    reply_VFS_error(request, 0);
+}
+
 static void _fs_release(struct fuse_openfile_s *openfile, struct fuse_request_s *request, unsigned int flags, uint64_t lock_owner)
 {
     reply_VFS_error(request, 0);
@@ -222,11 +227,6 @@ static void _fs_releasedir(struct fuse_opendir_s *opendir, struct fuse_request_s
     _fs_common_virtual_releasedir(opendir, request);
 }
 
-static struct entry_s *_fs_get_fuse_direntry(struct fuse_opendir_s *opendir, struct fuse_request_s *request)
-{
-    return get_fuse_direntry_virtual(opendir, NULL, request);
-}
-
 static void _fs_setxattr(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, const char *name, const char *value, size_t size, int flags)
 {
     struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
@@ -261,7 +261,7 @@ static void _fs_statfs(struct service_context_s *context, struct fuse_request_s 
     _fs_common_statfs(context, request, inode, default_statfs.f_blocks, default_statfs.f_bfree, default_statfs.f_bavail, default_statfs.f_bsize);
 }
 
-void use_virtual_fs(struct inode_s *inode)
+void use_virtual_fs(struct service_context_s *context, struct inode_s *inode)
 {
 
     logoutput("use_virtual_fs");
@@ -309,7 +309,7 @@ static void _set_virtual_fs(struct fuse_fs_s *fs)
 	fs->type.dir.readdirplus=_fs_readdirplus;
 	fs->type.dir.releasedir=_fs_releasedir;
 	fs->type.dir.fsyncdir=_fs_fsyncdir;
-	fs->type.dir.get_fuse_direntry=_fs_get_fuse_direntry;
+	fs->type.dir.get_fuse_direntry=get_fuse_direntry_virtual;
 
     } else {
 
@@ -322,6 +322,7 @@ static void _set_virtual_fs(struct fuse_fs_s *fs)
 	fs->type.nondir.write=_fs_write;
 	fs->type.nondir.flush=_fs_flush;
 	fs->type.nondir.fsync=_fs_fsync;
+	fs->type.nondir.lseek=_fs_lseek;
 	fs->type.nondir.release=_fs_release;
 
 	fs->type.nondir.fgetattr=_fs_fgetattr;

@@ -48,6 +48,7 @@
 #include "fuse.h"
 
 #include "sftp/common-protocol.h"
+#include "sftp/attr-context.h"
 #include "interface/sftp-attr.h"
 #include "interface/sftp-send.h"
 #include "interface/sftp-wait-response.h"
@@ -67,20 +68,10 @@ void _fs_sftp_unlink(struct service_context_s *context, struct fuse_request_s *f
 
     logoutput("_fs_sftp_unlink: remove %.*s", pathinfo->len, pathinfo->path);
 
-    memset(&sftp_r, 0, sizeof(struct sftp_request_s));
-    sftp_r.id=0;
+    init_sftp_request(&sftp_r, interface, f_request);
+
     sftp_r.call.remove.path=(unsigned char *) pathinfo->path;
     sftp_r.call.remove.len=pathinfo->len;
-    sftp_r.status=SFTP_REQUEST_STATUS_WAITING;
-
-    set_sftp_request_fuse(&sftp_r, f_request);
-
-    if (f_request->flags & FUSE_REQUEST_FLAG_INTERRUPTED) {
-
-	reply_VFS_error(f_request, EINTR);
-	return;
-
-    }
 
     if (send_sftp_remove_ctx(interface, &sftp_r)>0) {
 	struct timespec timeout;
@@ -102,6 +93,7 @@ void _fs_sftp_unlink(struct service_context_s *context, struct fuse_request_s *f
 		    *pentry=NULL;
 
 		    reply_VFS_error(f_request, 0);
+		    unset_fuse_request_flags_cb(f_request);
 		    return;
 
 		} else {
@@ -122,6 +114,7 @@ void _fs_sftp_unlink(struct service_context_s *context, struct fuse_request_s *f
 
     out:
     reply_VFS_error(f_request, error);
+    unset_fuse_request_flags_cb(f_request);
 
 }
 
@@ -136,20 +129,10 @@ void _fs_sftp_rmdir(struct service_context_s *context, struct fuse_request_s *f_
 
     pathinfo->len += (* interface->backend.sftp.complete_path)(interface, path, pathinfo);
 
-    memset(&sftp_r, 0, sizeof(struct sftp_request_s));
-    sftp_r.id=0;
+    init_sftp_request(&sftp_r, interface, f_request);
+
     sftp_r.call.rmdir.path=(unsigned char *) pathinfo->path;
     sftp_r.call.rmdir.len=pathinfo->len;
-    sftp_r.status=SFTP_REQUEST_STATUS_WAITING;
-
-    set_sftp_request_fuse(&sftp_r, f_request);
-
-    if (f_request->flags & FUSE_REQUEST_FLAG_INTERRUPTED) {
-
-	reply_VFS_error(f_request, EINTR);
-	return;
-
-    }
 
     if (send_sftp_rmdir_ctx(interface, &sftp_r)>0) {
 	struct timespec timeout;
@@ -169,6 +152,7 @@ void _fs_sftp_rmdir(struct service_context_s *context, struct fuse_request_s *f_
 		    *pentry=NULL;
 
 		    reply_VFS_error(f_request, 0);
+		    unset_fuse_request_flags_cb(f_request);
 		    return;
 
 		} else {
@@ -190,6 +174,7 @@ void _fs_sftp_rmdir(struct service_context_s *context, struct fuse_request_s *f_
 
     out:
     reply_VFS_error(f_request, error);
+    unset_fuse_request_flags_cb(f_request);
 
 }
 

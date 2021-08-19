@@ -48,6 +48,7 @@
 #include "eventloop.h"
 #include "workspace-interface.h"
 #include "threads.h"
+#include "commonsignal.h"
 
 #include "ssh-common.h"
 #include "ssh-connections.h"
@@ -137,9 +138,9 @@ void signal_ssh_connections(struct ssh_session_s *session)
 
     /* signal any waiting thread for a payload (this is done via signal) */
 
-    pthread_mutex_lock(c->mutex);
-    pthread_cond_broadcast(c->cond);
-    pthread_mutex_unlock(c->mutex);
+    signal_lock(c->signal);
+    signal_broadcast(c->signal);
+    signal_unlock(c->signal);
 
 }
 
@@ -147,13 +148,13 @@ static void common_refcount_ssh_connection(struct ssh_connection_s *connection, 
 {
     struct ssh_connections_s *connections=get_ssh_connection_connections(connection);
 
-    logoutput("common_refcount_ssh_connection: step %i con %s mut %s ", step, (connections) ? "defined" : "null", (connections && connections->mutex) ? "defined" : "null");
+    logoutput("common_refcount_ssh_connection: step %i con %s sig %s ", step, (connections) ? "defined" : "null", (connections && connections->signal) ? "defined" : "null");
 
     /* signal any waiting thread for a payload (this is done via signal) */
 
-    pthread_mutex_lock(connections->mutex);
+    signal_lock(connections->signal);
     connection->refcount+=step;
-    pthread_mutex_unlock(connections->mutex);
+    signal_unlock(connections->signal);
 }
 
 void increase_refcount_ssh_connection(struct ssh_connection_s *connection)

@@ -17,8 +17,8 @@
 
 */
 
-#ifndef FS_WORKSPACE_SSH_SEND_SFTP_V04_H
-#define FS_WORKSPACE_SSH_SEND_SFTP_V04_H
+#ifndef SFTP_SEND_SEND_V04_H
+#define SFTP_SEND_SEND_V04_H
 
 /* prototypes */
 
@@ -26,7 +26,7 @@ int send_sftp_stat_v04_generic(struct sftp_client_s *sftp, struct sftp_request_s
 int send_sftp_lstat_v04_generic(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r, unsigned int flags);
 int send_sftp_fstat_v04_generic(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r, unsigned int flags);
 
-void use_sftp_send_v04(struct sftp_client_s *sftp);
+struct sftp_send_ops_s *get_sftp_send_ops_v04();
 
 #endif
 

@@ -47,11 +47,11 @@
 #include "workspace.h"
 #include "fuse.h"
 
-#include "sftp/common-protocol.h"
-#include "interface/sftp-attr.h"
-#include "interface/sftp-send.h"
-#include "interface/sftp-wait-response.h"
-#include "inode-stat.h"
+#include "interface/smb-signal.h"
+#include "interface/smb.h"
+#include "interface/smb-wait-response.h"
+
+#include "smb/send/stat.h"
 
 /*
     common functions to do a
@@ -59,26 +59,26 @@
     of a name on sftp map
 */
 
-static unsigned int _sftp_cb_cache_size(struct create_entry_s *ce)
+static unsigned int _smb_lookup_cb_cache_size(struct create_entry_s *ce)
 {
-    struct attr_response_s *attr=(struct attr_response_s *) ce->cache.link.link.ptr;
-    return attr->size;
+    struct context_interface_s *interface=&ce->context->interface;
+
+    fill_inode_attr_smb(interface, &ce->cache.st, ce->cache.link.link.ptr);
+    return 0;
 }
 
-static void _sftp_lookup_cb_created(struct entry_s *entry, struct create_entry_s *ce)
+static void _smb_lookup_cb_created(struct entry_s *entry, struct create_entry_s *ce)
 {
     struct service_context_s *context=ce->context;
     struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
     struct context_interface_s *interface=&context->interface;
-    struct attr_response_s *response=(struct attr_response_s *) ce->cache.link.link.ptr;
-    struct sftp_attr_s attr;
     struct fuse_request_s *r=(struct fuse_request_s *) ce->ptr;
     struct inode_s *inode=entry->inode;
     struct entry_s *parent=get_parent_entry(entry);
 
-    memset(&attr, 0, sizeof(struct sftp_attr_s));
-    read_sftp_attributes_ctx(interface, response, &attr);
-    fill_inode_attr_sftp(interface, &inode->st, &attr);
+    fill_inode_stat(inode, &ce->cache.st); /* from ce cache */
+    inode->st.st_mode=ce->cache.st.st_mode;
+    inode->st.st_size=ce->cache.st.st_size;
     inode->nlookup=1;
     inode->st.st_nlink=1;
 
@@ -89,12 +89,12 @@ static void _sftp_lookup_cb_created(struct entry_s *entry, struct create_entry_s
 
 	inode->st.st_nlink++;
 	parent->inode->st.st_nlink++;
-	logoutput("_sftp_lookup_cb_created: dir name %s ino %li", entry->name.name, inode->st.st_ino);
+	logoutput_debug("_smb_lookup_cb_created: dir name %s ino %li", entry->name.name, inode->st.st_ino);
 	set_directory_dump(inode, get_dummy_directory());
 
     } else {
 
-	logoutput("_sftp_lookup_cb_created: nondir name %s ino %li", entry->name.name, inode->st.st_ino);
+	logoutput_debug("_smb_lookup_cb_created: nondir name %s ino %li", entry->name.name, inode->st.st_ino);
 
     }
 
@@ -103,44 +103,24 @@ static void _sftp_lookup_cb_created(struct entry_s *entry, struct create_entry_s
     _fs_common_cached_lookup(context, r, inode); /* reply FUSE/VFS */
     adjust_pathmax(workspace, ce->pathlen);
 
-    check_create_inodecache(inode, response->size, (char *)response->buff, INODECACHE_FLAG_STAT);
-    inode->flags|=INODE_FLAG_CACHED;
-
 }
 
-static void _sftp_lookup_cb_found(struct entry_s *entry, struct create_entry_s *ce)
+static void _smb_lookup_cb_found(struct entry_s *entry, struct create_entry_s *ce)
 {
     struct service_context_s *context=ce->context;
-    struct attr_response_s *response=(struct attr_response_s *) ce->cache.link.link.ptr;
     struct fuse_request_s *r=(struct fuse_request_s *) ce->ptr;
     struct inode_s *inode=entry->inode;
+    struct timespec mtim;
 
-    // logoutput("_sftp_lookup_cb_found: name %s ino %li", entry->name.name, inode->st.st_ino);
+    memcpy(&mtim, &inode->st.st_mtim, sizeof(struct timespec));
 
-    if (check_create_inodecache(inode, response->size, (char *)response->buff, INODECACHE_FLAG_STAT)==1) {
-	struct sftp_attr_s attr;
-	struct timespec mtim;
+    fill_inode_stat(inode, &ce->cache.st); /* from ce cache */
+    inode->st.st_mode=ce->cache.st.st_mode;
+    inode->st.st_size=ce->cache.st.st_size;
 
-	/* do this only when there is a difference, it's quite an intensive task */
+    if (inode->st.st_mtim.tv_sec>mtim.tv_sec || (inode->st.st_mtim.tv_sec==mtim.tv_sec && inode->st.st_mtim.tv_nsec>mtim.tv_nsec)) {
 
-	memset(&attr, 0, sizeof(struct sftp_attr_s));
-	read_sftp_attributes_ctx(&context->interface, response, &attr);
-	memcpy(&mtim, &inode->st.st_mtim, sizeof(struct timespec));
-	fill_inode_attr_sftp(&context->interface, &inode->st, &attr);
-
-	/*
-	    keep track the remote entry has a newer mtim
-	    - file: the remote file is changed
-	    - directory: an entry is added and/or removed
-	*/
-
-	if (inode->st.st_mtim.tv_sec>mtim.tv_sec || (inode->st.st_mtim.tv_sec==mtim.tv_sec && inode->st.st_mtim.tv_nsec>mtim.tv_nsec)) {
-
-	    inode->alias->flags |= _ENTRY_FLAG_REMOTECHANGED;
-
-	}
-
-	inode->flags|=INODE_FLAG_CACHED;
+	inode->alias->flags |= _ENTRY_FLAG_REMOTECHANGED;
 
     }
 
@@ -157,104 +137,75 @@ static void _sftp_lookup_cb_found(struct entry_s *entry, struct create_entry_s *
 
 }
 
-static void _sftp_lookup_cb_error(struct entry_s *parent, struct name_s *xname, struct create_entry_s *ce, unsigned int error)
+static void _smb_lookup_cb_error(struct entry_s *parent, struct name_s *xname, struct create_entry_s *ce, unsigned int error)
 {
     struct fuse_request_s *r=(struct fuse_request_s *) ce->ptr;
     reply_VFS_error(r, error); /* reply FUSE/VFS */
 }
 
-void _fs_sftp_lookup_new(struct service_context_s *context, struct fuse_request_s *f_request, struct inode_s *inode, struct name_s *xname, struct pathinfo_s *pathinfo)
+void _fs_smb_lookup_new(struct service_context_s *context, struct fuse_request_s *f_request, struct inode_s *inode, struct name_s *xname, struct pathinfo_s *pathinfo)
 {
     struct context_interface_s *interface=&context->interface;
-    struct sftp_request_s sftp_r;
+    struct smb_request_s smb_r;
+    struct smb_data_s *data=NULL;
     unsigned int error=EIO;
-    unsigned int pathlen=(* interface->backend.sftp.get_complete_pathlen)(interface, pathinfo->len);
-    char path[pathlen];
+    unsigned int size=get_size_buffer_smb_stat();
 
-    // logoutput("_fs_sftp_lookup_new");
+    data=malloc(sizeof(struct smb_data_s) + size);
 
-    // if (get_sftp_version_ctx(context->interface.ptr)<=3) {
+    if (data==NULL) {
 
-	/* versions up to 3 do not support full lookup */
-
-	// reply_VFS_error(f_request, ENOENT);
-	// return;
-
-    //}
-
-
-    pathinfo->len += (* interface->backend.sftp.complete_path)(interface, path, pathinfo);
-
-    logoutput("_fs_sftp_lookup_new: (%li) %i %s", inode->st.st_ino, pathinfo->len, pathinfo->path);
-
-    memset(&sftp_r, 0, sizeof(struct sftp_request_s));
-    sftp_r.id=0;
-    sftp_r.call.lstat.path=(unsigned char *) pathinfo->path;
-    sftp_r.call.lstat.len=pathinfo->len;
-    sftp_r.status=SFTP_REQUEST_STATUS_WAITING;
-
-    set_sftp_request_fuse(&sftp_r, f_request);
-
-    if (f_request->flags & FUSE_REQUEST_FLAG_INTERRUPTED) {
-
-	reply_VFS_error(f_request, EINTR);
-	return;
+	error=ENOMEM;
+	goto out;
 
     }
 
-    /* send lstat cause not interested in target when dealing with symlink */
+    logoutput("_fs_smb_lookup_new: (%li) %i %s", inode->st.st_ino, pathinfo->len, pathinfo->path);
 
-    if (send_sftp_lstat_ctx(interface, &sftp_r)==0) {
+    init_smb_request(&smb_r, interface, f_request);
+
+    if (send_smb_stat_ctx(interface, &smb_r, pathinfo->path, data)==0) {
 	struct timespec timeout;
 
-	get_sftp_request_timeout_ctx(interface, &timeout);
+	get_smb_request_timeout_ctx(interface, &timeout);
+	data->id=get_smb_unique_id(interface);
+	smb_r.id=data->id;
 	error=0;
 
-	if (wait_sftp_response_ctx(interface, &sftp_r, &timeout)==1) {
-	    struct sftp_reply_s *reply=&sftp_r.reply;
+	if (wait_smb_response_ctx(interface, &smb_r, &timeout)==1) {
+	    struct entry_s *entry=NULL;
+	    struct create_entry_s ce;
 
-	    if (reply->type==SSH_FXP_ATTRS) {
-		struct sftp_attr_s attr;
-		struct entry_s *entry=NULL;
-		struct create_entry_s ce;
+	    init_create_entry(&ce, xname, inode->alias, NULL, NULL, context, NULL, (void *) f_request);
 
-		init_create_entry(&ce, xname, inode->alias, NULL, NULL, context, NULL, (void *) f_request);
-		ce.cache.link.link.ptr=(void *) &reply->response.attr;
-		ce.cache.link.type=DATA_LINK_TYPE_CACHE; /* not really required */
-		ce.pathlen=pathinfo->len;
-		ce.cb_created=_sftp_lookup_cb_created;
-		ce.cb_found=_sftp_lookup_cb_found;
-		ce.cb_error=_sftp_lookup_cb_error;
-		ce.cb_cache_size=_sftp_cb_cache_size;
-		entry=create_entry_extended(&ce);
+	    ce.cache.link.link.ptr=(void *) data->buffer;
 
-		// logoutput("_fs_sftp_lookup_new: %i %s", pathinfo->len, pathinfo->path);
+	    ce.pathlen=pathinfo->len;
+	    ce.cb_created=_smb_lookup_cb_created;
+	    ce.cb_found=_smb_lookup_cb_found;
+	    ce.cb_error=_smb_lookup_cb_error;
+	    ce.cb_cache_size=_smb_lookup_cb_cache_size;
 
-		free(reply->response.attr.buff);
-		reply->response.attr.buff=NULL;
-		return;
+	    entry=create_entry_extended(&ce);
+	    unset_fuse_request_flags_cb(f_request);
+	    free(data);
 
-	    } else if (reply->type==SSH_FXP_STATUS) {
-
-		error=reply->response.status.linux_error;
-
-	    } else {
-
-		error=EPROTO;
-
-	    }
+	    return;
 
 	}
 
-    } else {
+	/* put smb data on special list */
 
-	error=(sftp_r.reply.error) ? sftp_r.reply.error : EIO;
+	add_smb_list_pending_requests_ctx(interface, &data->list);
+	error=(smb_r.error) ? smb_r.error : EPROTO;
 
     }
 
     out:
 
+    unset_fuse_request_flags_cb(f_request);
     reply_VFS_error(f_request, error);
+    if (data) free(data);
 
 }
 
@@ -263,85 +214,78 @@ void _fs_smb_lookup_existing(struct service_context_s *context, struct fuse_requ
     struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
     struct context_interface_s *interface=&context->interface;
     struct service_context_s *rootcontext=get_root_context(context);
-    struct smb_request_s *smb_r=NULL;
+    struct smb_request_s smb_r;
+    struct smb_data_s *data=NULL;
     unsigned int error=EIO;
+    unsigned int size=get_size_buffer_smb_stat();
 
-    logoutput("_fs_smb_lookup_existing: (ino=%li) %i %s", entry->inode->st.st_ino, pathinfo->len, pathinfo->path);
+    data=malloc(sizeof(struct smb_data_s) + size);
 
-    smb_r=malloc(sizeof(struct sftp_request_s));
-    if (smb_r==NULL) {
+    if (data==NULL) {
 
 	error=ENOMEM;
 	goto out;
 
     }
 
-    memset(smb_r, 0, sizeof(struct smb_request_s));
-    smb_r.unique=f_request->unique;
-    smb_r.status=SMB_REQUEST_STATUS_WAITING;
 
-    set_smb_request_fuse(smb_r, f_request);
+    logoutput("_fs_smb_lookup_existing: (ino=%li) %i %s", entry->inode->st.st_ino, pathinfo->len, pathinfo->path);
 
-    if (f_request->flags & FUSE_REQUEST_FLAG_INTERRUPTED) {
+    init_smb_request(&smb_r, interface, f_request);
 
-	free(smb_r);
-	error=EINTR;
-	goto out;
-
-    }
-
-    if (send_smb_stat_ctx(interface, pathinfo, smb_r)==0) {
+    if (send_smb_stat_ctx(interface, &smb_r, pathinfo->path, data)==0) {
 	struct timespec timeout;
 
 	get_smb_request_timeout_ctx(interface, &timeout);
+	data->id=get_smb_unique_id(interface);
+	smb_r.id=data->id;
 	error=0;
 
-	if (wait_smb_response_ctx(interface, smb_r, &timeout)==1) {
-	    struct sftp_reply_s *reply=&sftp_r.reply;
+	if (wait_smb_response_ctx(interface, &smb_r, &timeout)==1) {
+	    struct timespec mtim;
+	    struct inode_s *inode=entry->inode;
 
-	    if (smb_r->status & SMB_REQUEST_STATUS_FINISH) {
+	    memcpy(&mtim, &inode->st.st_mtim, sizeof(struct timespec));
 
-		get_current_time(&inode->stim);
+	    fill_inode_attr_smb(interface, &inode->st, data->buffer);
 
-		if (inode->nlookup==0) {
+	    if (inode->st.st_mtim.tv_sec>mtim.tv_sec || (inode->st.st_mtim.tv_sec==mtim.tv_sec && inode->st.st_mtim.tv_nsec>mtim.tv_nsec)) {
 
-		    inode->nlookup=1;
-		    adjust_pathmax(workspace, pathinfo->len);
-		    add_inode_context(context, inode);
-
-		} else {
-
-		    inode->nlookup++;
-
-		}
-
-		_fs_common_cached_lookup(context, f_request, inode); /* reply FUSE/VFS*/
-		free(smb_r);
-		return;
-
-	    } else {
-
-		error=(smb_r->error) ? smb_r->error : EIO;
-		if (error==ENOENT) {
-		    struct inode_s *inode=entry->inode;
-
-		    queue_inode_2forget(workspace, inode->st.st_ino, 0, 0);
-
-		}
-
-	    } else {
-
-		error=EPROTO;
+		inode->alias->flags |= _ENTRY_FLAG_REMOTECHANGED;
 
 	    }
 
-	} else {
+	    get_current_time(&inode->stim);
 
-	    /* no response in time */
+	    if (inode->nlookup==0) {
 
-    } else {
+		inode->nlookup=1;
+		adjust_pathmax(workspace, pathinfo->len);
+		add_inode_context(context, inode);
 
-	error=(smb_r->error) ? smb_r->error : EIO;
+	    } else {
+
+		inode->nlookup++;
+
+	    }
+
+	    _fs_common_cached_lookup(context, f_request, inode); /* reply FUSE/VFS*/
+	    free(data);
+	    return;
+
+	}
+
+	/* put smb data on special list */
+
+	add_smb_list_pending_requests_ctx(interface, &data->list);
+	error=(smb_r.error) ? smb_r.error : EPROTO;
+
+    }
+
+    if (error==ENOENT) {
+	struct inode_s *inode=entry->inode;
+
+	queue_inode_2forget(workspace, inode->st.st_ino, 0, 0);
 
     }
 
@@ -350,7 +294,7 @@ void _fs_smb_lookup_existing(struct service_context_s *context, struct fuse_requ
 
 }
 
-void _fs_sftp_lookup_existing_disconnected(struct service_context_s *context, struct fuse_request_s *f_request, struct entry_s *entry, struct pathinfo_s *pathinfo)
+void _fs_smb_lookup_existing_disconnected(struct service_context_s *context, struct fuse_request_s *f_request, struct entry_s *entry, struct pathinfo_s *pathinfo)
 {
     struct inode_s *inode=entry->inode;
 
@@ -359,7 +303,7 @@ void _fs_sftp_lookup_existing_disconnected(struct service_context_s *context, st
     _fs_common_cached_lookup(context, f_request, inode);
 }
 
-void _fs_sftp_lookup_new_disconnected(struct service_context_s *context, struct fuse_request_s *f_request, struct inode_s *inode, struct name_s *xname, struct pathinfo_s *pathinfo)
+void _fs_smb_lookup_new_disconnected(struct service_context_s *context, struct fuse_request_s *f_request, struct inode_s *inode, struct name_s *xname, struct pathinfo_s *pathinfo)
 {
     reply_VFS_error(f_request, ENOENT);
 }

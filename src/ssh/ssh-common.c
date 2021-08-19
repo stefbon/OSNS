@@ -43,6 +43,7 @@
 
 #include "misc.h"
 #include "threads.h"
+#include "commonsignal.h"
 
 #include "ssh-utils.h"
 #include "ssh-common-protocol.h"
@@ -55,7 +56,7 @@
 #include "ssh-send.h"
 #include "ssh-data.h"
 #include "ssh-channel.h"
-// #include "ssh-signal.h"
+#include "ssh-signal.h"
 #include "ssh-userauth.h"
 #include "ssh-connections.h"
 #include "ssh-extensions.h"
@@ -119,16 +120,10 @@ int init_ssh_backend()
 
     if (init_done==0) {
 
-	logoutput("init_ssh_backend: A");
-
 	init_ssh_send_once();
-	logoutput("init_ssh_backend: B");
 	init_ssh_receive_once();
-	logoutput("init_ssh_backend: C");
 	init_ssh_utils();
-	logoutput("init_ssh_backend: D");
 	init_keyex_once();
-	logoutput("init_ssh_backend: E");
 	result=init_ssh_backend_library();
 	if (result==0) init_done=1;
 
@@ -167,11 +162,11 @@ void _close_ssh_session_connections(struct ssh_session_s *session, const char *h
     struct ssh_connections_s *connections=&session->connections;
     struct ssh_connection_s *connection=NULL;
 
-    pthread_mutex_lock(connections->mutex);
+    signal_lock(connections->signal);
 
     if (connections->flags & SSH_CONNECTIONS_FLAG_DISCONNECT) {
 
-	pthread_mutex_unlock(connections->mutex);
+	signal_unlock(connections->signal);
 	return;
 
     }
@@ -180,12 +175,12 @@ void _close_ssh_session_connections(struct ssh_session_s *session, const char *h
 
     if (get_ssh_connections_unlocked(session)==-1) {
 
-	pthread_mutex_unlock(connections->mutex);
+	signal_unlock(connections->signal);
 	return;
 
     }
 
-    pthread_mutex_unlock(connections->mutex);
+    signal_unlock(connections->signal);
 
     connection=get_next_ssh_connection(connections, connection, how);
 
@@ -210,12 +205,12 @@ void _close_ssh_session_connections(struct ssh_session_s *session, const char *h
 
     }
 
-    pthread_mutex_lock(connections->mutex);
+    signal_lock(connections->signal);
     connections->flags -= SSH_CONNECTIONS_FLAG_DISCONNECTING;
     connections->flags |= SSH_CONNECTIONS_FLAG_DISCONNECTED;
     set_ssh_connections_unlocked(session);
-    pthread_cond_broadcast(connections->cond);
-    pthread_mutex_unlock(connections->mutex);
+    signal_broadcast(connections->signal);
+    signal_unlock(connections->signal);
 }
 
 void _walk_ssh_session_channels(struct ssh_session_s *session, const char *what, struct ssh_connection_s *connection, unsigned char signal)

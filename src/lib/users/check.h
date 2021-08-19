@@ -20,6 +20,8 @@
 #ifndef _LIB_USERS_CHECK_H
 #define _LIB_USERS_CHECK_H
 
+#include "datatypes.h"
+
 /* prototypes */
 
 int check_username_password(struct ssh_string_s *username, struct ssh_string_s *password);

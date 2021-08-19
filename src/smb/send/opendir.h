@@ -17,16 +17,15 @@
 
 */
 
-#ifndef _SFTP_ATTR_WRITE_ATTR_V06_H
-#define _SFTP_ATTR_WRITE_ATTR_V06_H
+#ifndef SMB_SEND_OPENDIR_H
+#define SMB_SEND_OPENDIR_H
 
 /* prototypes */
 
-void write_attr_accesstime_v06(struct sftp_client_s *sftp, struct attr_buffer_s *buffer, struct sftp_attr_s *attr, unsigned int *valid);
-void write_attr_modifytime_v06(struct sftp_client_s *sftp, struct attr_buffer_s *buffer, struct sftp_attr_s *attr, unsigned int *valid);
-void write_attr_changetime_v06(struct sftp_client_s *sftp, struct attr_buffer_s *buffer, struct sftp_attr_s *attr, unsigned int *valid);
-
-void write_attributes_v06(struct sftp_client_s *sftp, struct attr_buffer_s *buffer, struct sftp_attr_s *attr);
-unsigned int write_attributes_len_v06(struct sftp_client_s *sftp, struct sftp_attr_s *attr);
+int send_smb_opendir_ctx(struct context_interface_s *interface, struct smb_request_s *smb_r, char *path, struct smb_data_s *data);
+unsigned int get_size_buffer_smb_opendir();
+int get_smb_direntry(struct context_interface_s *interface, void *ptr, char **p_name, char **p_buffer);
+void smb_closedir_ctx(struct context_interface_s *interface, void *ptr);
 
 #endif
+

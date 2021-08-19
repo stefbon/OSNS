@@ -43,6 +43,7 @@
 #include "misc.h"
 #include "threads.h"
 #include "workspace-interface.h"
+#include "commonsignal.h"
 
 #include "ssh-utils.h"
 
@@ -51,6 +52,7 @@
 #include "ssh-connections.h"
 #include "ssh-receive.h"
 #include "ssh-userauth.h"
+#include "ssh-signal.h"
 
 static void clear_ssh_setup(struct ssh_setup_s *setup)
 {
@@ -93,7 +95,7 @@ void finish_ssh_connection_setup(struct ssh_connection_s *connection, const char
 {
     struct ssh_setup_s *setup=&connection->setup;
 
-    pthread_mutex_lock(setup->mutex);
+    signal_lock(setup->signal);
 
     if (strcmp(phase, "transport")==0) {
 
@@ -155,8 +157,8 @@ void finish_ssh_connection_setup(struct ssh_connection_s *connection, const char
 
     }
 
-    pthread_cond_broadcast(setup->cond);
-    pthread_mutex_unlock(setup->mutex);
+    signal_broadcast(setup->signal);
+    signal_unlock(setup->signal);
 
 }
 
@@ -242,8 +244,7 @@ void init_ssh_connection_setup(struct ssh_connection_s *connection, const char *
 
 	clear_ssh_setup(setup);
 	clear_payload_queue(&setup->queue, 1);
-	setup->mutex=NULL;
-	setup->cond=NULL;
+	setup->signal=NULL;
 	memset(setup, 0, sizeof(struct ssh_setup_s));
 
     }
@@ -256,7 +257,7 @@ int change_ssh_connection_setup(struct ssh_connection_s *connection, const char 
     struct ssh_setup_s *setup=&connection->setup;
     int result=0;
 
-    pthread_mutex_lock(setup->mutex);
+    signal_lock(setup->signal);
 
     if (phase==NULL || strlen(phase)==0) {
 	unsigned int all=(SSH_SETUP_FLAG_GREETER|SSH_SETUP_FLAG_KEX|SSH_SETUP_FLAG_TRANSPORT|SSH_SETUP_FLAG_SERVICE_AUTH);
@@ -430,8 +431,8 @@ int change_ssh_connection_setup(struct ssh_connection_s *connection, const char 
 
     out:
 
-    pthread_cond_broadcast(setup->cond);
-    pthread_mutex_unlock(setup->mutex);
+    signal_broadcast(setup->signal);
+    signal_unlock(setup->signal);
     return result;
 
 }
@@ -512,19 +513,19 @@ int wait_ssh_connection_setup_change(struct ssh_connection_s *connection, const 
     struct ssh_setup_s *setup=&connection->setup;
     int result=0;
 
-    pthread_mutex_lock(setup->mutex);
+    signal_lock(setup->signal);
 
     result=check_ssh_connection_setup(connection, phase, type, flag);
 
     while (result==0) {
 
-	pthread_cond_wait(setup->cond, setup->mutex);
+	signal_condwait(setup->signal);
 	result=check_ssh_connection_setup(connection, phase, type, flag);
 	if (result==1 && setup_cb) (* setup_cb)(connection, data); 
 
     }
 
-    pthread_mutex_unlock(setup->mutex);
+    signal_unlock(setup->signal);
 
     return (result==1) ? 0 : -1;
 }

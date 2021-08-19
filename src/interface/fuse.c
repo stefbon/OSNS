@@ -70,7 +70,7 @@ static int _connect_interface_fuse(uid_t uid, struct context_interface_s *interf
     }
 
     logoutput("_connect_interface_fuse: connect source %s name %s with mountpoint %s", service->target.fuse.source, service->target.fuse.name, service->target.fuse.mountpoint);
-    fd=connect_fusesocket(interface->buffer, uid, service->target.fuse.source, service->target.fuse.mountpoint, service->target.fuse.name, &error);
+    fd=connect_fusesocket(interface, uid, service->target.fuse.source, service->target.fuse.mountpoint, service->target.fuse.name, &error);
 
     out:
     return fd;
@@ -78,28 +78,19 @@ static int _connect_interface_fuse(uid_t uid, struct context_interface_s *interf
 
 static int _start_interface_fuse(struct context_interface_s *interface, int fd, struct ctx_option_s *option)
 {
-    char *buffer=NULL;
-    struct fs_connection_s *connection=NULL;
-    struct beventloop_s *loop=interface->backend.fuse.loop;
+    struct beventloop_s *loop=NULL;
     struct bevent_s *bevent=NULL;
 
-    buffer=(* interface->get_interface_buffer)(interface);
+    /* add to common eventloop */
 
-    if (buffer==NULL) {
-
-	logoutput("_start_interface_fuse: unable to get interface buffer");
-	return -1;
-
-    }
-
-    connection=get_fs_connection_fuse(buffer);
-
-    bevent=create_fd_bevent(loop, read_fusesocket_event, (void *) buffer); /* interface->buffer is filled with fusesocket */
-    if (bevent==NULL) goto error;;
+    loop=interface->backend.fuse.loop;
+    bevent=create_fd_bevent(loop, read_fusesocket_event, (void *) interface);
+    if (bevent==NULL) goto error;
     set_bevent_unix_fd(bevent, fd);
-    set_bevent_watch(bevent, "incoming data");
+    set_bevent_watch(bevent, "i");
 
     if (add_bevent_beventloop(bevent)==0) {
+	struct fs_connection_s * connection=get_fs_connection_fuse(interface);
 
 	logoutput("_start_interface_fuse: added fd %i to eventloop", fd);
 	connection->io.fuse.bevent=bevent;
@@ -115,18 +106,15 @@ static int _start_interface_fuse(struct context_interface_s *interface, int fd, 
 
 }
 
-static int _signal_interface(struct context_interface_s *interface, const char *what, struct ctx_option_s *option)
+static int _signal_interface(struct context_interface_s *i, const char *what, struct ctx_option_s *option)
 {
-    signal_ctx2fuse_t cb=get_signal_ctx2fuse(interface->buffer);
-    void *ptr=(void *) interface->buffer;
-
-    return (* cb)(&ptr, what, option);
+    signal_ctx2fuse_t cb=get_signal_ctx2fuse(i);
+    return (* cb)(i, what, option);
 }
 
-static int _signal_fuse2ctx(void *ptr, const char *what, struct ctx_option_s *option)
+static int _signal_fuse2ctx(struct context_interface_s *i, const char *what, struct ctx_option_s *option)
 {
-    struct context_interface_s *interface=(struct context_interface_s *)((char *) ptr - offsetof(struct context_interface_s, buffer));
-    return (* interface->signal_context)(interface, what, option);
+    return (* i->signal_context)(i, what, option);
 }
 
 /*
@@ -179,15 +167,21 @@ static int _init_interface_buffer_fuse(struct context_interface_s *interface, st
 
     }
 
+    logoutput("_init_interface_buffer_fuse: init_fusesocket");
+
     interface->type=_INTERFACE_TYPE_FUSE;
-    init_fusesocket(interface->buffer, (void *) interface, interface->size, FUSESOCKET_INIT_FLAG_SIZE_INCLUDES_SOCKET);
+    init_fusesocket(interface, interface->size, FUSESOCKET_INIT_FLAG_SIZE_INCLUDES_SOCKET);
+
+    logoutput("_init_interface_buffer_fuse: assign cb");
 
     interface->connect=_connect_interface_fuse;
     interface->start=_start_interface_fuse;
     interface->signal_interface=_signal_interface;
-    set_signal_fuse2ctx(interface->buffer, _signal_fuse2ctx);
+
+    set_signal_fuse2ctx(interface, _signal_fuse2ctx);
 
     interface->flags |= _INTERFACE_FLAG_BUFFER_INIT;
+    logoutput("_init_interface_buffer_fuse: ready");
     return 0;
 
 }

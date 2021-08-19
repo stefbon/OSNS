@@ -126,6 +126,22 @@ void get_current_time(struct timespec *rightnow)
     int res=clock_gettime(CLOCK_REALTIME, rightnow);
 }
 
+void get_expire_time(struct timespec *expire, struct timespec *timeout)
+{
+
+    get_current_time(expire);
+
+    expire->tv_sec+=timeout->tv_sec;
+    expire->tv_nsec+=timeout->tv_nsec;
+
+    if (expire->tv_nsec > 1000000000) {
+
+	expire->tv_nsec -= 1000000000;
+	expire->tv_sec++;
+
+    }
+
+}
 
 int compare_stat_time(struct stat *ast, struct stat *bst, unsigned char ntype)
 {
@@ -485,4 +501,19 @@ uint64_t safe_atoii(char *b)
     memcpy(buffer, b, 8);
     buffer[8]='\0';
     return (uint64_t) atol(buffer);
+}
+
+void strdup_target_path(char *target, char **p_path, unsigned int *error)
+{
+    char *path=strdup(target);
+
+    *error=ENOMEM;
+
+    if (path) {
+
+	*p_path=path;
+	*error=0;
+
+    }
+
 }

@@ -50,6 +50,7 @@
 #include "fuse.h"
 
 #include "sftp/common-protocol.h"
+#include "sftp/attr-context.h"
 #include "interface/sftp-attr.h"
 #include "interface/sftp-send.h"
 #include "interface/sftp-wait-response.h"
@@ -95,22 +96,14 @@ void _fs_sftp_statfs(struct service_context_s *context, struct fuse_request_s *f
     char path[pathlen];
     struct sftp_request_s sftp_r;
 
+    logoutput("_fs_sftp_statfs");
+
     pathinfo->len += (* interface->backend.sftp.complete_path)(interface, path, pathinfo);
 
-    memset(&sftp_r, 0, sizeof(struct sftp_request_s));
-    sftp_r.id=0;
+    init_sftp_request(&sftp_r, interface, f_request);
+
     sftp_r.call.statvfs.path=(unsigned char *)pathinfo->path;
     sftp_r.call.statvfs.len=pathinfo->len;
-    sftp_r.status=SFTP_REQUEST_STATUS_WAITING;
-
-    set_sftp_request_fuse(&sftp_r, f_request);
-
-    if (f_request->flags & FUSE_REQUEST_FLAG_INTERRUPTED) {
-
-	reply_VFS_error(f_request, EINTR);
-	return;
-
-    }
 
     if (send_sftp_statvfs_ctx(interface, &sftp_r, &error)>0) {
 	struct timespec timeout;
@@ -183,6 +176,8 @@ void _fs_sftp_statfs(struct service_context_s *context, struct fuse_request_s *f
 
 		reply_VFS_data(f_request, (char *) &statfs_out, sizeof(struct fuse_statfs_out));
 		free(reply->response.extension.buff);
+		reply->response.extension.buff=NULL;
+		unset_fuse_request_flags_cb(f_request);
 		return;
 
 	    } else if (reply->type==SSH_FXP_STATUS) {
@@ -191,6 +186,7 @@ void _fs_sftp_statfs(struct service_context_s *context, struct fuse_request_s *f
 
 		    set_sftp_statvfs_unsupp_ctx(interface);
 		    _fs_sftp_statfs_unsupp(context, f_request, pathinfo);
+		    unset_fuse_request_flags_cb(f_request);
 		    return;
 
 		}
@@ -213,6 +209,7 @@ void _fs_sftp_statfs(struct service_context_s *context, struct fuse_request_s *f
 
     out:
     reply_VFS_error(f_request, error);
+    unset_fuse_request_flags_cb(f_request);
 
 }
 

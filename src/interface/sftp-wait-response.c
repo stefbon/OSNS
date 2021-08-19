@@ -51,30 +51,76 @@
 #include "sftp/common.h"
 #include "sftp/request-hash.h"
 
-
 unsigned char wait_sftp_response_ctx(struct context_interface_s *interface, struct sftp_request_s *sftp_r, struct timespec *timeout)
 {
     struct sftp_client_s *sftp=(struct sftp_client_s *) (* interface->get_interface_buffer)(interface);
     return wait_sftp_response(sftp, sftp_r, timeout);
 }
 
+static int send_sftp_request_data_default(struct sftp_request_s *r, char *data, unsigned int size, uint32_t *seq, struct list_element_s *list)
+{
+    struct context_interface_s *interface=r->interface;
+    struct sftp_client_s *sftp=(struct sftp_client_s *) (* interface->get_interface_buffer)(interface);
+
+    logoutput("send_sftp_request_data_default: size %i", size);
+
+    return (* sftp->context.send_data)(sftp, data, size, seq, list);
+}
+
+static int send_sftp_request_data_blocked(struct sftp_request_s *r, char *data, unsigned int size, uint32_t *seq, struct list_element_s *list)
+{
+    logoutput("send_sftp_request_data_blocked");
+    r->reply.error=EINTR;
+    return -1;
+}
+
+void set_sftp_request_blocked(struct sftp_request_s *r)
+{
+    r->send=send_sftp_request_data_blocked;
+}
+
 static void set_sftp_request_status(struct fuse_request_s *f_request)
 {
 
     if (f_request->flags & FUSE_REQUEST_FLAG_INTERRUPTED) {
-	struct sftp_request_s *sftp_r=(struct sftp_request_s *) f_request->data;
+	struct sftp_request_s *r=(struct sftp_request_s *) f_request->followup;
 
-	if (sftp_r && (sftp_r->status & SFTP_REQUEST_STATUS_WAITING)) sftp_r->status|=SFTP_REQUEST_STATUS_INTERRUPT;
+	if (r && (r->status & SFTP_REQUEST_STATUS_WAITING)) {
+
+	    r->status|=SFTP_REQUEST_STATUS_INTERRUPT;
+	    r->send=send_sftp_request_data_blocked;
+
+	}
 
     }
 
 }
 
-void set_sftp_request_fuse(struct sftp_request_s *sftp_r, struct fuse_request_s *f_request)
+void init_sftp_request(struct sftp_request_s *r, struct context_interface_s *i, struct fuse_request_s *f_request)
 {
-    f_request->data=(void *) sftp_r;
-    sftp_r->ptr=(void *)f_request;
+
+    memset(r, 0, sizeof(struct sftp_request_s));
+
+    r->status = SFTP_REQUEST_STATUS_WAITING;
+    r->interface=i;
+    r->send=send_sftp_request_data_default;
+    r->ptr=(void *) f_request;
+
     set_fuse_request_flags_cb(f_request, set_sftp_request_status);
+    f_request->followup=(void *) r;
+
+}
+
+void init_sftp_request_minimal(struct sftp_request_s *r, struct context_interface_s *i)
+{
+
+    memset(r, 0, sizeof(struct sftp_request_s));
+
+    r->status = SFTP_REQUEST_STATUS_WAITING;
+    r->interface=i;
+    r->send=send_sftp_request_data_default;
+    r->ptr=NULL;
+
 }
 
 void get_sftp_request_timeout_ctx(struct context_interface_s *interface, struct timespec *timeout)
@@ -82,3 +128,5 @@ void get_sftp_request_timeout_ctx(struct context_interface_s *interface, struct 
     struct sftp_client_s *sftp=(struct sftp_client_s *) (* interface->get_interface_buffer)(interface);
     get_sftp_request_timeout(sftp, timeout);
 }
+
+

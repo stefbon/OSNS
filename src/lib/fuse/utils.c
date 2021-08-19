@@ -153,7 +153,7 @@ struct directory_s *get_directory(struct inode_s *inode)
     struct simple_lock_s wlock;
     struct directory_s *directory=&dummy_directory;
 
-    logoutput("get_directory: ino %li", inode->st.st_ino);
+    logoutput_debug("get_directory: ino %li", inode->st.st_ino);
 
     init_simple_writelock(&directory->locking, &wlock);
 
@@ -278,6 +278,7 @@ struct entry_s *insert_entry_batch(struct directory_s *directory, struct entry_s
     } else if (result.flags & SL_SEARCHRESULT_FLAG_EXACT) {
 
 	*error=EEXIST;
+	return (struct entry_s *)((char *) result.found - offsetof(struct entry_s, list));
 
     } else {
 
@@ -419,7 +420,7 @@ static void _cb_created_default(struct entry_s *entry, struct create_entry_s *ce
     }
 
     set_entry_ops(entry);
-    use_virtual_fs(inode);
+    use_virtual_fs(NULL, inode);
 
 }
 
@@ -432,11 +433,16 @@ static void _cb_found_default(struct entry_s *entry, struct create_entry_s *ce)
     inode->nlookup++;
     get_current_time(&inode->stim);
 
+    logoutput("_cb_found_default: A");
+
     /* when just created (for example by readdir) adjust the pathcache */
 
     if (inode->nlookup==1) (* ce->cb_adjust_pathmax)(ce); /* adjust the maximum path len */
+    logoutput("_cb_found_default: B");
     (* ce->cb_cache_found)(entry, ce); /* get/set the inode stat cache */
+    logoutput("_cb_found_default: C");
     (* ce->cb_context_found)(ce, entry); /* context depending cb, like a FUSE reply and adding inode to context, set fs etc */
+    logoutput("_cb_found_default: D");
 
 }
 
@@ -536,8 +542,6 @@ static struct entry_s *_create_entry_extended_common(struct create_entry_s *ce)
     entry=(* ce->cb_create_entry)(ce->name);
     inode=(* ce->cb_create_inode)();
 
-    logoutput("_create_entry_extended_common: create entry %.*s and ino %li", ce->name->len, ce->name->name, inode->st.st_ino);
-
     if (entry && inode) {
 
 	result=(* ce->cb_insert_entry)(directory, entry, 0, &error);
@@ -546,7 +550,7 @@ static struct entry_s *_create_entry_extended_common(struct create_entry_s *ce)
 
 	    /* new */
 
-	    logoutput("_create_entry_extended_common: entry %.*s added", ce->name->len, ce->name->name);
+	    logoutput("_create_entry_extended_common: entry %.*s added ino %li", ce->name->len, ce->name->name, inode->st.st_ino);
 
 	    inode->alias=entry;
 	    entry->inode=inode;
@@ -554,11 +558,11 @@ static struct entry_s *_create_entry_extended_common(struct create_entry_s *ce)
 
 	} else {
 
+	    logoutput("_create_entry_extended_common: error %i (%s)", error, strerror(error));
+
 	    if (error==EEXIST) {
 
 		/* existing found */
-
-		logoutput("_create_entry_extended_common: entry %.*s does already exist", ce->name->len, ce->name->name);
 
 		destroy_entry(entry);
 		entry=result;
@@ -572,8 +576,6 @@ static struct entry_s *_create_entry_extended_common(struct create_entry_s *ce)
 	    } else {
 
 		/* another error */
-
-		logoutput("_create_entry_extended_common: error add entry %.*s", ce->name->len, ce->name->name);
 
 		destroy_entry(entry);
 		free(inode);

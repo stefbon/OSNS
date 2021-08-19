@@ -20,6 +20,6 @@
 #ifndef _SFTP_RECV_V05_H
 #define _SFTP_RECV_V05_H
 
-void use_sftp_recv_v05(struct sftp_client_s *sftp);
+struct sftp_recv_ops_s *get_sftp_recv_ops_v05();
 
 #endif

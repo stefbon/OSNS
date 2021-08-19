@@ -68,29 +68,29 @@ static gboolean glib_fd_cb(gpointer ptr)
     logoutput_debug("glib_fd_cb: fd %i", fd);
 
     event.events.glib_revents=bevent->ltype.glib.pollfd.revents;
-    event.loop=bevent->loop;
+    event.loop=get_eventloop_bevent(bevent);
 
     (* bevent->btype.fd.cb)(fd, bevent->ptr, &event);
     return G_SOURCE_CONTINUE;
 
 }
 
-static void close_bevent(struct bevent_s *bevent)
+static void close_bevent_glib(struct bevent_s *bevent)
 {
-    struct beventloop_s *eloop=bevent->loop;
+    int fd=get_bevent_unix_fd(bevent);
 
-    if (eloop->flags & BEVENTLOOP_FLAG_GLIB) {
-	int fd=get_bevent_unix_fd(bevent);
+    if (fd>=0) {
 
-	if (fd>=0) {
-
-	    close(fd);
-	    set_bevent_unix_fd(bevent, -1);
-
-	}
+	close(fd);
+	set_bevent_unix_fd(bevent, -1);
 
     }
 
+}
+
+static void close_bevent(struct bevent_s *bevent)
+{
+    (* bevent->close)(bevent);
 }
 
 struct bevent_s *create_fd_bevent(struct beventloop_s *eloop, void (* cb)(int fd, void *ptr, struct event_s *event), void *ptr)
@@ -108,12 +108,19 @@ struct bevent_s *create_fd_bevent(struct beventloop_s *eloop, void (* cb)(int fd
 	if (bevent) {
 
 	    bevent->flags=0;
-	    bevent->loop=eloop;
 	    bevent->btype.fd.cb=cb;
 	    bevent->ptr=ptr;
-	    bevent->close=close_bevent;
+	    bevent->close=close_bevent_glib;
+
+	    pthread_mutex_lock(&eloop->mutex);
+	    add_list_element_last(&eloop->bevents, &bevent->list);
+	    pthread_mutex_unlock(&eloop->mutex);
 
 	    g_source_ref((GSource *) &bevent->ltype.glib.source);
+	    bevent->ltype.glib.pollfd.events = G_IO_HUP | G_IO_ERR; /* defaults */
+	    bevent->ltype.glib.pollfd.fd=-1;
+
+	    bevent->flags |= BEVENT_FLAG_CREATE;
 
 	}
 
@@ -123,14 +130,50 @@ struct bevent_s *create_fd_bevent(struct beventloop_s *eloop, void (* cb)(int fd
 
 }
 
+struct beventloop_s *get_eventloop_bevent(struct bevent_s *bevent)
+{
+    struct list_header_s *h=bevent->list.h;
+    struct beventloop_s *loop=NULL;
+
+    loop=(h) ? ((struct beventloop_s *)((char *) h - offsetof(struct beventloop_s, bevents))) : NULL;
+    return loop;
+
+}
+
+struct bevent_s *get_next_bevent(struct beventloop_s *loop, struct bevent_s *bevent)
+{
+    struct list_element_s *list=NULL;
+
+    if (bevent) {
+
+	list=get_next_element(&bevent->list);
+
+    } else {
+
+	if (loop==NULL) loop=&beventloop_main;
+	list=get_list_head(&loop->bevents, 0);
+
+    }
+
+    return ((list) ? (struct bevent_s *)((char *) list - offsetof(struct bevent_s, list)) : NULL);
+}
+
 void set_bevent_unix_fd(struct bevent_s *bevent, int fd)
 {
+    struct beventloop_s *loop=get_eventloop_bevent(bevent);
 
-    if (bevent->loop->flags & BEVENTLOOP_FLAG_GLIB) {
+    if (loop) {
 
-	logoutput_debug("set_bevent_unix_fd: fd %i", fd);
+	if (loop->flags & BEVENTLOOP_FLAG_GLIB) {
 
-	bevent->ltype.glib.pollfd.fd= (gint) fd;
+	    logoutput_debug("set_bevent_unix_fd: fd %i", fd);
+	    bevent->ltype.glib.pollfd.fd = (gint) fd;
+
+	}
+
+    } else {
+
+	logoutput_warning("set_bevent_unix_fd: loop not set for bevent");
 
     }
 
@@ -138,11 +181,20 @@ void set_bevent_unix_fd(struct bevent_s *bevent, int fd)
 
 int get_bevent_unix_fd(struct bevent_s *bevent)
 {
+    struct beventloop_s *loop=get_eventloop_bevent(bevent);
     int fd=-1;
 
-    if (bevent->loop->flags & BEVENTLOOP_FLAG_GLIB) {
+    if (loop) {
 
-	fd=(int) bevent->ltype.glib.pollfd.fd;
+	if (loop->flags & BEVENTLOOP_FLAG_GLIB) {
+
+	    fd=(int) bevent->ltype.glib.pollfd.fd;
+
+	}
+
+    } else {
+
+	logoutput_warning("get_bevent_unix_fd: loop not set for bevent");
 
     }
 
@@ -150,30 +202,147 @@ int get_bevent_unix_fd(struct bevent_s *bevent)
 
 }
 
-void set_bevent_watch(struct bevent_s *bevent, const char *what)
+short get_bevent_events(struct bevent_s *bevent)
 {
+    struct beventloop_s *loop=get_eventloop_bevent(bevent);
+    short events=0;
 
-    if (bevent->loop->flags & BEVENTLOOP_FLAG_GLIB) {
+    if (loop) {
 
-	/* default flags */
+	if (loop->flags & BEVENTLOOP_FLAG_GLIB) {
 
-	bevent->ltype.glib.pollfd.events = G_IO_HUP | G_IO_ERR;
+	    events = (short ) bevent->ltype.glib.pollfd.events;
 
-	if (strcmp(what, "incoming data")==0) {
+	}
 
-	    bevent->ltype.glib.pollfd.events |= G_IO_IN | G_IO_PRI;
+    } else {
 
-	} else if (strcmp(what, "urgent data")==0) {
+	logoutput_warning("get_bevent_events: loop not set for bevent");
 
-	    bevent->ltype.glib.pollfd.events |= G_IO_PRI;
+    }
 
-	} else if (strcmp(what, "outgoing data")==0) {
+    return events;
+}
 
-	    bevent->ltype.glib.pollfd.events |= G_IO_OUT;
+static short get_glib_events_from_what(const char *what)
+{
+    short events=0;
+
+    for (unsigned int i=0; i<strlen(what); i++) {
+
+	if (strncmp(&what[i], "i", 1)==0) {
+
+	    /* listen to incoming data to read */
+
+	    events |= G_IO_IN | G_IO_PRI;
+
+	} else if (strncmp(&what[i], "u", 1)==0) {
+
+	    events |= G_IO_PRI;
+
+	} else if (strncmp(&what[i], "o", 1)==0) {
+
+	    events |= G_IO_OUT;
 
 	} else {
 
-	    logoutput_warning("set_bevent_watch: error what %s not supported", what);
+	    logoutput_warning("get_glib_events_from_what: error what %.*s not supported", 1, &what[i]);
+
+	}
+
+    }
+
+    return events;
+
+}
+
+int modify_bevent_watch(struct bevent_s *bevent, const char *what, short events)
+{
+    struct beventloop_s *loop=get_eventloop_bevent(bevent);
+    int result=-1;
+
+    if (loop) {
+	if (loop->flags & BEVENTLOOP_FLAG_GLIB) {
+
+	    if (what) events=get_glib_events_from_what(what);
+
+	    if (events==0) {
+
+		/* remove bevent */
+
+	    } else {
+
+		events |= (G_IO_HUP | G_IO_ERR);
+
+	        if (bevent->flags & BEVENT_FLAG_EVENTLOOP) {
+
+		    /* added to eventloop already: change */
+
+		    if (bevent->ltype.glib.pollfd.events != events) {
+
+			/* as far as I can tell no other way to remove and add again */
+
+			g_source_remove_poll((GSource *) &bevent->ltype.glib.source, &bevent->ltype.glib.pollfd);
+			bevent->ltype.glib.pollfd.events = events;
+			g_source_add_poll((GSource *) &bevent->ltype.glib.source, &bevent->ltype.glib.pollfd);
+			result=0;
+
+		    }
+
+		} else {
+
+		    /* not added to eventloop: */
+
+		    bevent->ltype.glib.pollfd.events = events;
+		    result=0;
+
+		}
+
+	    }
+
+	}
+
+    }
+
+    return result;
+
+}
+
+void set_bevent_watch(struct bevent_s *bevent, const char *what)
+{
+    struct beventloop_s *loop=get_eventloop_bevent(bevent);
+
+    if (loop) {
+
+	if (loop->flags & BEVENTLOOP_FLAG_GLIB) {
+
+	    /* default flags */
+
+	    bevent->ltype.glib.pollfd.events = G_IO_HUP | G_IO_ERR;
+
+	    for (unsigned int i=0; i<strlen(what); i++) {
+
+		if (strncmp(&what[i], "i", 1)==0) {
+
+		    /* listen to incoming data to read */
+
+		    bevent->ltype.glib.pollfd.events |= G_IO_IN | G_IO_PRI;
+
+		} else if (strncmp(&what[i], "u", 1)==0) {
+
+		    bevent->ltype.glib.pollfd.events |= G_IO_PRI;
+
+		} else if (strncmp(&what[i], "o", 1)==0) {
+
+		    bevent->ltype.glib.pollfd.events |= G_IO_OUT;
+
+		} else {
+
+		    logoutput_warning("set_bevent_watch: error what %.*s not supported", 1, &what[i]);
+
+		}
+
+	    }
 
 	}
 
@@ -187,16 +356,26 @@ int add_bevent_beventloop(struct bevent_s *bevent)
     struct beventloop_s *eloop=NULL;
     int fd=get_bevent_unix_fd(bevent);
 
-    logoutput_debug("add_bevent_beventloop: fd %i", fd);
+    logoutput("add_bevent_beventloop: fd %i", fd);
 
-    if (bevent==NULL || (bevent->flags & BEVENT_FLAG_EVENTLOOP)) return -1;
-
-    if (bevent->loop==NULL) bevent->loop=&beventloop_main;
-    eloop=bevent->loop;
+    if (bevent==NULL) return -1;
+    if ((bevent->flags & BEVENT_FLAG_EVENTLOOP)) return 0;
+    eloop=get_eventloop_bevent(bevent);
+    if (eloop==NULL) return -1;
 
     if (eloop->flags & BEVENTLOOP_FLAG_GLIB) {
 
-	if (bevent->ltype.glib.pollfd.fd<0 || bevent->ltype.glib.pollfd.events<=0) return -1;
+	if (bevent->ltype.glib.pollfd.fd<0) {
+
+	    logoutput_warning("add_bevent_beventloop: cannot add fd %i (less than zero)", fd);
+	    goto failed;
+
+	} else if (bevent->ltype.glib.pollfd.events<=0) {
+
+	    logoutput_warning("add_bevent_beventloop: poll events not positive (%i)", bevent->ltype.glib.pollfd.events);
+	    goto failed;
+
+	}
 
 	g_source_add_poll((GSource *) &bevent->ltype.glib.source, &bevent->ltype.glib.pollfd);
 	g_source_set_callback((GSource *) &bevent->ltype.glib.source, glib_fd_cb, (gpointer) bevent, NULL);
@@ -209,14 +388,47 @@ int add_bevent_beventloop(struct bevent_s *bevent)
     return result;
 
     failed:
-
     logoutput_warning("add_bevent_beventloop: failed to add event to eventloop");
     return -1;
 }
 
 void remove_bevent(struct bevent_s *bevent)
 {
-    g_source_destroy((GSource *) bevent);
+
+    if (bevent) {
+
+	if (bevent->flags |= BEVENT_FLAG_EVENTLOOP) {
+
+	    g_source_remove_poll((GSource *) &bevent->ltype.glib.source, &bevent->ltype.glib.pollfd);
+	    g_source_destroy((GSource *) bevent);
+	    bevent->flags &= ~BEVENT_FLAG_EVENTLOOP;
+
+	}
+
+    }
+
+}
+
+void free_bevent(struct bevent_s **p_bevent)
+{
+    struct bevent_s *bevent=*p_bevent;
+
+    if (bevent) {
+
+	remove_bevent(bevent);
+
+	if (bevent->flags & BEVENT_FLAG_CREATE) {
+
+	    remove_list_element(&bevent->list);
+	    bevent->flags &= ~BEVENT_FLAG_CREATE;
+
+	}
+
+	g_source_unref((GSource *) &bevent->ltype.glib.source);
+	*p_bevent=NULL;
+
+    }
+
 }
 
 static uint32_t event_is_error_glib(struct event_s *event)
@@ -231,7 +443,7 @@ static uint32_t event_is_close_glib(struct event_s *event)
 
 static uint32_t event_is_data_glib(struct event_s *event)
 {
-    return (uint32_t) (event->events.glib_revents & G_IO_IN);
+    return (uint32_t) (event->events.glib_revents & ( G_IO_IN | G_IO_PRI ));
 }
 
 static uint32_t event_is_buffer_glib(struct event_s *event)
@@ -250,7 +462,7 @@ static gboolean eloop_glib_check(GSource *source)
     struct bevent_s *bevent=(struct bevent_s *) source;
     gushort revents=bevent->ltype.glib.pollfd.revents;
 
-    if (revents & G_IO_IN || revents & G_IO_PRI || revents & G_IO_ERR || revents & G_IO_HUP) return TRUE;
+    if (revents & (G_IO_IN | G_IO_PRI | G_IO_ERR | G_IO_HUP)) return TRUE;
 
     return FALSE;
 }
@@ -290,7 +502,6 @@ unsigned int create_timer_eventloop(struct beventloop_s *eloop, struct timespec 
 
 	memset(timer, 0, sizeof(struct btimer_s));
 	init_list_element(&timer->list, NULL);
-
 
 	/* tv_nsec is nanoseconds: 10 ^ -9
 	    to get the milli seconds multiply divide that by 10 ^ 6 */
@@ -373,6 +584,7 @@ static int _init_beventloop(struct beventloop_s *eloop)
     }
 
     init_list_header(&eloop->timers, SIMPLE_LIST_TYPE_EMPTY, NULL);
+    init_list_header(&eloop->bevents, SIMPLE_LIST_TYPE_EMPTY, NULL);
     pthread_mutex_init(&eloop->mutex, NULL);
     pthread_cond_init(&eloop->cond, NULL);
 
@@ -430,8 +642,8 @@ int init_beventloop(struct beventloop_s *eloop)
 
 int start_beventloop(struct beventloop_s *eloop)
 {
-    if (eloop==NULL) eloop=&beventloop_main;
 
+    if (eloop==NULL) eloop=&beventloop_main;
     if (init_beventloop(eloop)==-1) goto error;
     if (eloop->flags & BEVENTLOOP_FLAG_RUNNING) return 0;
 
@@ -452,8 +664,8 @@ int start_beventloop(struct beventloop_s *eloop)
 
 void stop_beventloop(struct beventloop_s *eloop)
 {
-    if (!eloop) eloop=&beventloop_main;
 
+    if (!eloop) eloop=&beventloop_main;
     if (eloop->flags & BEVENTLOOP_FLAG_GLIB) {
 
 	g_main_loop_quit(eloop->type.glib.loop);
@@ -467,6 +679,18 @@ void clear_beventloop(struct beventloop_s *eloop)
 {
 
     if (!eloop) eloop=&beventloop_main;
+
+    if ((eloop->flags & BEVENTLOOP_FLAG_INIT)==0) {
+
+	/* not even initialized: there is nothing to clear ... */
+	return;
+
+    } else if ((eloop->flags & BEVENTLOOP_FLAG_RUNNING)) {
+
+	/* do not clear a running loop */
+	return;
+
+    }
 
     if (eloop->flags & BEVENTLOOP_FLAG_GLIB) {
 
@@ -507,11 +731,15 @@ void free_beventloop(struct beventloop_s **p_loop)
 {
     struct beventloop_s *eloop=*p_loop;
 
-    clear_beventloop(eloop);
-    if (eloop->flags & BEVENTLOOP_FLAG_ALLOC) {
+    if (eloop) {
 
-	free(eloop);
-	*p_loop=NULL;
+	clear_beventloop(eloop);
+	if (eloop->flags & BEVENTLOOP_FLAG_ALLOC) {
+
+	    free(eloop);
+	    *p_loop=NULL;
+
+	}
 
     }
 
@@ -548,5 +776,5 @@ uint32_t signal_is_buffer(struct event_s *event)
 
 unsigned int printf_event_uint(struct event_s *event)
 {
-    (unsigned int) (event->events.glib_revents);
+    return (unsigned int) (event->events.glib_revents);
 }

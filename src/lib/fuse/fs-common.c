@@ -110,8 +110,8 @@ void _fs_common_cached_lookup(struct service_context_s *context, struct fuse_req
     logoutput_debug("_fs_common_cached_lookup: ino %li name %.*s", inode->st.st_ino, inode->alias->name.len, inode->alias->name.name);
 
     context=get_root_context(context);
-    attr_timeout=get_fuse_attr_timeout(request->ptr);
-    entry_timeout=get_fuse_entry_timeout(request->ptr);
+    attr_timeout=get_fuse_attr_timeout(request->root);
+    entry_timeout=get_fuse_entry_timeout(request->root);
 
     memset(&entry_out, 0, sizeof(struct fuse_entry_out));
 
@@ -161,8 +161,8 @@ void _fs_common_cached_create(struct service_context_s *context, struct fuse_req
     struct timespec *entry_timeout=NULL;
 
     context=get_root_context(context);
-    attr_timeout=get_fuse_attr_timeout(request->ptr);
-    entry_timeout=get_fuse_entry_timeout(request->ptr);
+    attr_timeout=get_fuse_attr_timeout(request->root);
+    entry_timeout=get_fuse_entry_timeout(request->root);
     char buffer[size_entry_out + size_open_out];
 
     // inode->nlookup++;
@@ -288,7 +288,7 @@ void _fs_common_getattr(struct service_context_s *context, struct fuse_request_s
 
     memset(&attr_out, 0, sizeof(struct fuse_attr_out));
     context=get_root_context(context);
-    attr_timeout=get_fuse_attr_timeout(request->ptr);
+    attr_timeout=get_fuse_attr_timeout(request->root);
 
     attr_out.attr_valid=attr_timeout->tv_sec;
     attr_out.attr_valid_nsec=attr_timeout->tv_nsec;
@@ -383,7 +383,7 @@ static void _fs_common_virtual_readdir_common(struct fuse_opendir_s *opendir, st
     struct simple_lock_s rlock;
     uint64_t ino2keep=0;
 
-    logoutput("_fs_common_virtual_readdir_common: size %i off %i", (unsigned int) size, (unsigned int) offset);
+    logoutput("_fs_common_virtual_readdir_common: size %i off %i flags %i", (unsigned int) size, (unsigned int) offset, opendir->flags);
     directory=get_directory(opendir->inode);
 
     if (opendir->flags & _FUSE_OPENDIR_FLAG_READDIR_FINISH) {
@@ -419,12 +419,14 @@ static void _fs_common_virtual_readdir_common(struct fuse_opendir_s *opendir, st
 
     }
 
-    while (direntries.left>0 && (request->flags & FUSE_REQUEST_FLAG_INTERRUPTED)==0) {
+    while (direntries.left>0 && (request->flags & FUSE_REQUEST_FLAG_INTERRUPTED)==0 && (opendir->flags & (_FUSE_OPENDIR_FLAG_READDIR_FINISH | _FUSE_OPENDIR_FLAG_READDIR_INCOMPLETE | _FUSE_OPENDIR_FLAG_READDIR_ERROR))==0) {
 
 	entry=NULL;
 	xname=NULL;
 
 	if (direntries.offset==0) {
+
+	    opendir->count_keep=get_directory_count(directory);
 
 	    inode=opendir->inode;
 
@@ -472,7 +474,7 @@ static void _fs_common_virtual_readdir_common(struct fuse_opendir_s *opendir, st
 
 	/* add entry to the buffer to send to VFS: does it fit, if no keep the ino for adding later next batch */
 
-	if ((* opendir->add_direntry_buffer)(request->ptr, &direntries, xname, &inode->st)==-1) {
+	if ((* opendir->add_direntry_buffer)(request->root, &direntries, xname, &inode->st)==-1) {
 
 	    logoutput("_fs_common_virtual_readdir_common: %.*s does not fit in buffer", xname->len, xname->name);
 
@@ -487,7 +489,7 @@ static void _fs_common_virtual_readdir_common(struct fuse_opendir_s *opendir, st
 
     unlock_directory(directory, &rlock);
     reply_VFS_data(request, direntries.data, (size_t) (direntries.pos - direntries.data));
-    if (opendir->flags & _FUSE_OPENDIR_FLAG_QUEUE_READY) opendir->flags |= _FUSE_OPENDIR_FLAG_READDIR_FINISH;
+    // if (opendir->flags & _FUSE_OPENDIR_FLAG_QUEUE_READY) opendir->flags |= _FUSE_OPENDIR_FLAG_READDIR_FINISH;
 
 }
 
@@ -511,6 +513,57 @@ void _fs_common_virtual_releasedir(struct fuse_opendir_s *opendir, struct fuse_r
 void _fs_common_virtual_fsyncdir(struct fuse_opendir_s *opendir, struct fuse_request_s *request, unsigned char datasync)
 {
     reply_VFS_error(request, 0);
+}
+
+
+void _fs_common_remove_nonsynced_dentries(struct fuse_opendir_s *opendir)
+{
+    struct service_context_s *context=opendir->context;
+    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
+    struct directory_s *directory=get_directory(opendir->inode);
+    struct simple_lock_s wlock;
+
+    if (wlock_directory(directory, &wlock)==0) {
+
+	/*
+		only check when there are deleted entries:
+		- the entries found on server (opendir->created plus the already found opendir->count)
+		is not equal to the number of entries in this local directory
+	*/
+
+	if ((opendir->count_keep > opendir->count_found) || (opendir->count_created + opendir->count_found != get_directory_count(directory))) {
+	    struct sl_skiplist_s *sl=(struct sl_skiplist_s *) directory->buffer;
+	    struct inode_s *inode=NULL;
+	    struct entry_s *entry=NULL;
+	    struct list_element_s *next=NULL;
+	    struct list_element_s *list=get_list_head(&sl->header, 0);
+
+	    while (list) {
+
+		next=get_next_element(list);
+		entry=(struct entry_s *)((char *) list - offsetof(struct entry_s, list));
+
+		inode=entry->inode;
+		if (check_entry_special(inode)) goto next;
+
+		if (inode->stim.tv_sec < directory->synctime.tv_sec || (inode->stim.tv_sec == directory->synctime.tv_sec && inode->stim.tv_nsec < directory->synctime.tv_nsec)) {
+
+		    logoutput("_fs_common_remove_nonsynced_dentries: queue inode %li to remove", inode->st.st_ino);
+		    queue_inode_2forget(workspace, inode->st.st_ino, FORGET_INODE_FLAG_DELETED, 0);
+
+		}
+
+		next:
+		list=next;
+
+	    }
+
+	}
+
+	unlock_directory(directory, &wlock);
+
+    }
+
 }
 
 struct entry_s *_fs_common_create_entry(struct workspace_mount_s *workspace, struct entry_s *parent, struct name_s *xname, struct stat *st, unsigned int size, unsigned int flags, unsigned int *error)
@@ -636,7 +689,7 @@ void use_service_fs(struct service_context_s *context, struct inode_s *inode)
 
     } else {
 
-	use_virtual_fs(inode);
+	use_virtual_fs(context, inode);
 
     }
 

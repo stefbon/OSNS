@@ -191,7 +191,7 @@ int connect_ssh_connection(struct ssh_connection_s *connection, char *address, u
 
     if (fd<=0) goto error;
     set_bevent_unix_fd(c->io.socket.bevent, fd);
-    set_bevent_watch(c->io.socket.bevent, "incoming data");
+    set_bevent_watch(c->io.socket.bevent, "i");
 
     if (c->type==FS_CONNECTION_TYPE_TCP4 || c->type==FS_CONNECTION_TYPE_UDP4) {
 	struct sockaddr_in *sin=&c->io.socket.sockaddr.inet;
@@ -289,7 +289,7 @@ int add_ssh_connection_eventloop(struct ssh_connection_s *connection, unsigned i
 	    bevent=create_fd_bevent(NULL, read_ssh_connection_signal, (void *) connection);
 	    if (bevent==NULL) goto out;
 	    set_bevent_unix_fd(bevent, fd);
-	    set_bevent_watch(bevent, "incoming data");
+	    set_bevent_watch(bevent, "i");
 	    fs_c->io.socket.bevent=bevent;
 
 	}

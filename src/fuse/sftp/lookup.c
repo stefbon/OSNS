@@ -48,6 +48,7 @@
 #include "fuse.h"
 
 #include "sftp/common-protocol.h"
+#include "sftp/attr-context.h"
 #include "interface/sftp-attr.h"
 #include "interface/sftp-send.h"
 #include "interface/sftp-wait-response.h"
@@ -191,20 +192,10 @@ void _fs_sftp_lookup_new(struct service_context_s *context, struct fuse_request_
 
     logoutput("_fs_sftp_lookup_new: (%li) %i %s", inode->st.st_ino, pathinfo->len, pathinfo->path);
 
-    memset(&sftp_r, 0, sizeof(struct sftp_request_s));
-    sftp_r.id=0;
+    init_sftp_request(&sftp_r, interface, f_request);
+
     sftp_r.call.lstat.path=(unsigned char *) pathinfo->path;
     sftp_r.call.lstat.len=pathinfo->len;
-    sftp_r.status=SFTP_REQUEST_STATUS_WAITING;
-
-    set_sftp_request_fuse(&sftp_r, f_request);
-
-    if (f_request->flags & FUSE_REQUEST_FLAG_INTERRUPTED) {
-
-	reply_VFS_error(f_request, EINTR);
-	return;
-
-    }
 
     /* send lstat cause not interested in target when dealing with symlink */
 
@@ -236,6 +227,7 @@ void _fs_sftp_lookup_new(struct service_context_s *context, struct fuse_request_
 
 		free(reply->response.attr.buff);
 		reply->response.attr.buff=NULL;
+		unset_fuse_request_flags_cb(f_request);
 		return;
 
 	    } else if (reply->type==SSH_FXP_STATUS) {
@@ -259,6 +251,7 @@ void _fs_sftp_lookup_new(struct service_context_s *context, struct fuse_request_
     out:
 
     reply_VFS_error(f_request, error);
+    unset_fuse_request_flags_cb(f_request);
 
 }
 
@@ -276,20 +269,10 @@ void _fs_sftp_lookup_existing(struct service_context_s *context, struct fuse_req
 
     logoutput("_fs_sftp_lookup_existing: (ino=%li) %i %s", entry->inode->st.st_ino, pathinfo->len, pathinfo->path);
 
-    memset(&sftp_r, 0, sizeof(struct sftp_request_s));
-    sftp_r.id=0;
+    init_sftp_request(&sftp_r, interface, f_request);
+
     sftp_r.call.lstat.path=(unsigned char *) pathinfo->path;
     sftp_r.call.lstat.len=pathinfo->len;
-    sftp_r.status=SFTP_REQUEST_STATUS_WAITING;
-
-    set_sftp_request_fuse(&sftp_r, f_request);
-
-    if (f_request->flags & FUSE_REQUEST_FLAG_INTERRUPTED) {
-
-	reply_VFS_error(f_request, EINTR);
-	return;
-
-    }
 
     /* send lstat cause not interested in target when dealing with symlink */
 
@@ -341,6 +324,7 @@ void _fs_sftp_lookup_existing(struct service_context_s *context, struct fuse_req
 		_fs_common_cached_lookup(context, f_request, inode); /* reply FUSE/VFS*/
 		free(reply->response.attr.buff);
 		reply->response.attr.buff=NULL;
+		unset_fuse_request_flags_cb(f_request);
 		return;
 
 	    } else if (reply->type==SSH_FXP_STATUS) {
@@ -369,6 +353,7 @@ void _fs_sftp_lookup_existing(struct service_context_s *context, struct fuse_req
 
     out:
     reply_VFS_error(f_request, error);
+    unset_fuse_request_flags_cb(f_request);
 
 }
 

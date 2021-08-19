@@ -53,6 +53,7 @@
 #include "sftp/common-protocol.h"
 #include "sftp/common.h"
 #include "sftp/protocol-v05.h"
+#include "sftp/attr.h"
 #include "send-v03.h"
 #include "send-v04.h"
 #include "datatypes/ssh-uint.h"
@@ -169,7 +170,7 @@ int send_sftp_open_v05(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r
     data[pos]=(unsigned char) SSH_FILEXFER_TYPE_REGULAR;
     pos++;
 
-    return (* sftp->context.send_data)(sftp, data, pos, &sftp_r->reply.sequence);
+    return (* sftp_r->send)(sftp_r, data, pos, &sftp_r->reply.sequence, &sftp_r->slist);
 
 }
 
@@ -214,7 +215,7 @@ int send_sftp_create_v05(struct sftp_client_s *sftp, struct sftp_request_s *sftp
     memcpy((char *) &data[pos], sftp_r->call.create.buff, sftp_r->call.create.size);
     pos+=sftp_r->call.create.size;
 
-    return (* sftp->context.send_data)(sftp, data, pos, &sftp_r->reply.sequence);
+    return (* sftp_r->send)(sftp_r, data, pos, &sftp_r->reply.sequence, &sftp_r->slist);
 
 }
 
@@ -260,25 +261,25 @@ int send_sftp_rename_v05(struct sftp_client_s *sftp, struct sftp_request_s *sftp
     store_uint32(&data[pos], flags);
     pos+=4;
 
-    return (* sftp->context.send_data)(sftp, data, pos, &sftp_r->reply.sequence);
+    return (* sftp_r->send)(sftp_r, data, pos, &sftp_r->reply.sequence, &sftp_r->slist);
 
 }
 
 static int send_sftp_stat_v05(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r)
 {
-    unsigned int flags=(* sftp->attr_ops.get_attribute_mask)(sftp);
+    unsigned int flags=get_sftp_attribute_mask(sftp);
     return send_sftp_stat_v04_generic(sftp, sftp_r, flags & SSH_FILEXFER_STAT_VALUE);
 }
 
 static int send_sftp_lstat_v05(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r)
 {
-    unsigned int flags=(* sftp->attr_ops.get_attribute_mask)(sftp);
+    unsigned int flags=get_sftp_attribute_mask(sftp);
     return send_sftp_lstat_v04_generic(sftp, sftp_r, flags & SSH_FILEXFER_STAT_VALUE);
 }
 
 static int send_sftp_fstat_v05(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r)
 {
-    unsigned int flags=(* sftp->attr_ops.get_attribute_mask)(sftp);
+    unsigned int flags=get_sftp_attribute_mask(sftp);
     return send_sftp_fstat_v04_generic(sftp, sftp_r, flags & SSH_FILEXFER_STAT_VALUE);
 }
 
@@ -310,7 +311,7 @@ static struct sftp_send_ops_s send_ops_v05 = {
     .custom				= send_sftp_custom_v03,
 };
 
-void use_sftp_send_v05(struct sftp_client_s *sftp)
+struct sftp_send_ops_s *get_sftp_send_ops_v05()
 {
-    sftp->send_ops=&send_ops_v05;
+    return &send_ops_v05;
 }

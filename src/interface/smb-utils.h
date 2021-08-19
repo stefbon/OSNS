@@ -1,5 +1,5 @@
 /*
-  2010, 2011, 2012, 2013, 2014, 2015, 2016 Stef Bon <stefbon@gmail.com>
+  2010, 2011, 2012, 2013, 2014, 2015 Stef Bon <stefbon@gmail.com>
 
   This program is free software; you can redistribute it and/or
   modify it under the terms of the GNU General Public License
@@ -14,19 +14,15 @@
   You should have received a copy of the GNU General Public License
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
-
 */
 
-#ifndef _SFTP_ATTR_READ_ATTR_V05_H
-#define _SFTP_ATTR_READ_ATTR_V05_H
+#ifndef INTERFACE_SMB_UTILS_H
+#define INTERFACE_SMB_UTILS_H
+
 
 /* prototypes */
 
-void read_attr_bits_v05(struct sftp_client_s *sftp, struct attr_buffer_s *buffer, struct attr_version_s *av05, struct sftp_attr_s *attr);
-void read_attributes_v05(struct sftp_client_s *sftp, struct attr_buffer_s *buffer, struct sftp_attr_s *attr);
-
-void read_sftp_features_v05(struct sftp_client_s *sftp);
-unsigned int get_attribute_mask_v05(struct sftp_client_s *sftp);
-int get_attribute_info_v05(struct sftp_client_s *sftp, unsigned int valid, const char *what);
+void get_smb_request_timeout_ctx(struct context_interface_s *interface, struct timespec *timeout);
+void fill_inode_attr_smb(struct context_interface_s *interface, struct stat *st, void *ptr);
 
 #endif

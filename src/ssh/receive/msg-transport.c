@@ -40,6 +40,7 @@
 #include "main.h"
 
 #include "misc.h"
+#include "commonsignal.h"
 
 #include "ssh-utils.h"
 #include "ssh-common.h"
@@ -50,6 +51,7 @@
 #include "ssh-send.h"
 #include "ssh-keyexchange.h"
 #include "ssh-extensions.h"
+#include "ssh-signal.h"
 
 /* various callbacks for SSH transport */
 
@@ -144,11 +146,12 @@ static void receive_msg_unimplemented(struct ssh_connection_s *connection, struc
 
 	/* signal any waiting thread */
 
-	pthread_mutex_lock(signal->mutex);
+	ssh_signal_lock(signal);
 	signal->sequence_number_error=sequence;
 	signal->error=EOPNOTSUPP;
-	pthread_cond_broadcast(signal->cond);
-	pthread_mutex_unlock(signal->mutex);
+	ssh_signal_broadcast(signal);
+	ssh_signal_unlock(signal);
+
 	free_payload(&payload);
 	payload=NULL;
 
@@ -213,7 +216,7 @@ static void receive_msg_service_request(struct ssh_connection_s *connection, str
 
     if (session->flags & SSH_SESSION_FLAG_SERVER) {
 
-	pthread_mutex_lock(connection->setup.mutex);
+	signal_lock(connection->setup.signal);
 
 	if (connection->setup.flags & SSH_SETUP_FLAG_DISCONNECT) {
 
@@ -227,7 +230,7 @@ static void receive_msg_service_request(struct ssh_connection_s *connection, str
 
 	}
 
-	pthread_mutex_unlock(connection->setup.mutex);
+	signal_unlock(connection->setup.signal);
 
     } else {
 
@@ -247,7 +250,7 @@ static void receive_msg_service_accept(struct ssh_connection_s *connection, stru
 {
     logoutput("receive_msg_service_accept");
 
-    pthread_mutex_lock(connection->setup.mutex);
+    signal_lock(connection->setup.signal);
 
     if (connection->setup.flags & SSH_SETUP_FLAG_DISCONNECT) {
 
@@ -261,7 +264,7 @@ static void receive_msg_service_accept(struct ssh_connection_s *connection, stru
 
     }
 
-    pthread_mutex_unlock(connection->setup.mutex);
+    signal_unlock(connection->setup.signal);
 
     if (payload) {
 
@@ -277,7 +280,7 @@ static void receive_msg_ext_info(struct ssh_connection_s *connection, struct ssh
 
     logoutput("receive_msg_ext_info");
 
-    pthread_mutex_lock(connection->setup.mutex);
+    signal_lock(connection->setup.signal);
 
     if (connection->setup.flags & SSH_SETUP_FLAG_DISCONNECT) {
 
@@ -294,7 +297,7 @@ static void receive_msg_ext_info(struct ssh_connection_s *connection, struct ssh
 
     }
 
-    pthread_mutex_unlock(connection->setup.mutex);
+    signal_unlock(connection->setup.signal);
     if (payload) free_payload(&payload);
 
 }
@@ -315,7 +318,7 @@ static void receive_msg_kexinit(struct ssh_connection_s *connection, struct ssh_
 
     logoutput("receive_msg_kexinit");
 
-    pthread_mutex_lock(setup->mutex);
+    signal_lock(setup->signal);
 
     if (setup->flags & SSH_SETUP_FLAG_DISCONNECT)  {
 
@@ -331,7 +334,7 @@ static void receive_msg_kexinit(struct ssh_connection_s *connection, struct ssh_
 
 	    if ((setup->phase.transport.status==SSH_TRANSPORT_TYPE_KEX) && (setup->phase.transport.type.kex.flags & SSH_KEX_FLAG_KEXINIT_S2C)) {
 
-		pthread_mutex_unlock(setup->mutex);
+		signal_unlock(setup->signal);
 		goto disconnect;
 
 	    }
@@ -355,8 +358,8 @@ static void receive_msg_kexinit(struct ssh_connection_s *connection, struct ssh_
 	    init_ssh_connection_setup(connection, "transport", SSH_TRANSPORT_TYPE_KEX);
 	    queue_ssh_payload_locked(&setup->queue, payload);
 	    payload=NULL;
-	    pthread_cond_broadcast(setup->cond);
-	    pthread_mutex_unlock(setup->mutex);
+	    signal_broadcast(setup->signal);
+	    signal_unlock(setup->signal);
 
 	    result=key_exchange(connection);
 	    logoutput("receive_msg_kexinit: rekey exchange %s", (result==0) ? "success" : "failed");
@@ -377,7 +380,7 @@ static void receive_msg_kexinit(struct ssh_connection_s *connection, struct ssh_
 
     }
 
-    pthread_mutex_unlock(setup->mutex);
+    signal_unlock(setup->signal);
     if (payload) free_payload(&payload);
     return;
 
@@ -412,7 +415,7 @@ static void receive_msg_kexdh_reply(struct ssh_connection_s *connection, struct 
 
     logoutput("receive_msg_kexdh_reply");
 
-    pthread_mutex_lock(setup->mutex);
+    signal_lock(setup->signal);
 
     if (setup->flags & SSH_SETUP_FLAG_DISCONNECT) {
 
@@ -432,7 +435,7 @@ static void receive_msg_kexdh_reply(struct ssh_connection_s *connection, struct 
 
     }
 
-    pthread_mutex_unlock(setup->mutex);
+    signal_unlock(setup->signal);
 
     if (payload) {
 
@@ -466,7 +469,7 @@ static void receive_msg_global_request(struct ssh_connection_s *connection, stru
 
     }
 
-    pthread_mutex_lock(connection->setup.mutex);
+    signal_lock(connection->setup.signal);
 
     if (connection->setup.flags & SSH_SETUP_FLAG_DISCONNECT) {
 
@@ -480,7 +483,7 @@ static void receive_msg_global_request(struct ssh_connection_s *connection, stru
 
     }
 
-    pthread_mutex_unlock(connection->setup.mutex);
+    signal_unlock(connection->setup.signal);
 
     if (payload) {
 
@@ -496,7 +499,7 @@ static void receive_msg_request_common(struct ssh_connection_s *connection, stru
 {
     logoutput("receive_msg_request_common");
 
-    pthread_mutex_lock(connection->setup.mutex);
+    signal_lock(connection->setup.signal);
 
     if (connection->setup.flags & SSH_SETUP_FLAG_DISCONNECT) {
 
@@ -514,8 +517,8 @@ static void receive_msg_request_common(struct ssh_connection_s *connection, stru
 
     connection->flags &= ~SSH_CONNECTION_FLAG_GLOBAL_REQUEST;
 
-    pthread_cond_broadcast(connection->setup.cond);
-    pthread_mutex_unlock(connection->setup.mutex);
+    signal_broadcast(connection->setup.signal);
+    signal_unlock(connection->setup.signal);
 
     if (payload) {
 

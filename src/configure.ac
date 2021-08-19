@@ -40,6 +40,7 @@ AC_FUNC_REALLOC
 
 AC_CHECK_FUNCS([clock_gettime fdatasync ftruncate memmove memset mkdir realpath rmdir strchr strdup strerror strrchr strstr])
 AC_CHECK_FUNCS([inotify_init], [AC_DEFINE([HAVE_INOTIFY], [1], [Check for inotify])])
+AC_CHECK_FUNCS([statx],[AC_DEFINE([HAVE_STATX], [1], [Define if statx is available])], AC_MSG_NOTICE([Build without statx]))
 
 AC_CHECK_HEADERS(stdio.h sys/param.h linux/fuse.h)
 AC_CHECK_HEADER([librsync.h],[AC_DEFINE([HAVE_LIBRSYNC], [1], [Define if librsync is available])], [AC_MSG_WARN([header librsync not found. Not building with support of fast network delta synchronization])])
@@ -53,7 +54,10 @@ AC_SEARCH_LIBS(pthread_create, pthread,, AC_MSG_ERROR([Please install pthreads l
 PKG_CHECK_MODULES(GLIB, [ glib-2.0 ], [AC_DEFINE([HAVE_GLIB2], [1], [Define if Glib 2.0 is available])], AC_MSG_ERROR([Error: glib-2.0 not found.]))
 PKG_CHECK_MODULES(GOBJECT, [ gobject-2.0 ], [AC_DEFINE([HAVE_GOBJECT2], [1], [Define if Gobject 2.0 is available])], AC_MSG_ERROR([Error: gobject-2.0 not found.]))
 PKG_CHECK_MODULES(GIO, [ gio-2.0 ], [AC_DEFINE([HAVE_GIO2], [1], [Define if Gio 2.0 is available])], AC_MSG_ERROR([Error: gio-2.0 not found.]))
+
 #PKG_CHECK_MODULES([LIBGCRYPT], [gcrypt], [AC_DEFINE([HAVE_LIBGCRYPT], [1], [Check for libgcrypt])], AC_MSG_ERROR([Please install libgcrypt.]))
+
+PKG_CHECK_MODULES(LIBSMB2, [ libsmb2 ], [AC_DEFINE([HAVE_LIBSMB2], [1], [Define if libsmbs is available])], AC_MSG_WARN([Warning: libsmb2 not found.]))
 
 AM_PATH_LIBGCRYPT([1.7.0], [AC_DEFINE([HAVE_LIBGCRYPT], [1], [Check for libgcrypt])], AC_MSG_ERROR([Please install libgcrypt.]))
 
@@ -83,18 +87,17 @@ PKG_CHECK_MODULES([AVAHI_CORE], [avahi-core], [AC_DEFINE([HAVE_AVAHI_CORE], [1],
 PKG_CHECK_MODULES([AVAHI_CLIENT], [avahi-client], [AC_DEFINE([HAVE_AVAHI_CLIENT], [1], [Define Avahi client is available])], AC_MSG_ERROR([Error: avahi client not found.]))
 PKG_CHECK_MODULES([AVAHI_GLIB], [avahi-glib], [AC_DEFINE([HAVE_AVAHI_GLIB], [1], [Define Avahi glib is available])], AC_MSG_ERROR([Error: avahi glib not found.]))
 
-PKG_CHECK_MODULES(UDT, [ udt ], [AC_DEFINE([HAVE_UDT], [1], [Define if libudt is available])], AC_MSG_WARN([libudt not found. not able to add a udp channel for data transfer]))
-
 AM_CONDITIONAL([BUILD_SFTP_SUBSYSTEM], [ test "x$with_sftp_subsystem" = "xyes" ])
 AM_CONDITIONAL([BUILD_SSH_SERVER], [ test "x$with_ssh_server" = "xyes" ])
 
-AM_CONDITIONAL([LIBUDT_AVAIL], [ test HAVE_UDT ])
 AM_CONDITIONAL([LIBRSYNC_AVAIL], [ test HAVE_LIBRSYNC ])
 AM_CONDITIONAL([LIBMAGIC_AVAIL], [ test HAVE_LIBMAGIC ])
 AM_CONDITIONAL([LIBPAM_AVAIL], [ test HAVE_LIBPAM ])
 AM_CONDITIONAL([GLIB2_AVAIL], [ test HAVE_GLIB2 ])
 AM_CONDITIONAL([GOBJECT2_AVAIL], [ test HAVE_GOBJECT2 ])
 AM_CONDITIONAL([GIO2_AVAIL], [ test HAVE_GIO2 ])
+
+AM_CONDITIONAL([LIBSMB2_AVAIL], [ test HAVE_LIBSMB2 ])
 
 AC_CONFIG_FILES([Makefile])
 AC_OUTPUT

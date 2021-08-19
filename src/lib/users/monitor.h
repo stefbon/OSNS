@@ -20,6 +20,8 @@
 #ifndef _LIB_USERS_MONITOR_H
 #define _LIB_USERS_MONITOR_H
 
+#include "eventloop.h"
+
 /* prototypes */
 
 int create_user_monitor(void (* cb)(uid_t uid, int what, void *ptr), void *ptr, int (* filter)(uid_t uid, void *ptr));

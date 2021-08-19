@@ -102,7 +102,7 @@ int get_service_path_default(struct directory_s *directory, struct fuse_path_s *
     struct name_s *xname=NULL;
     struct data_link_s *link=NULL;
 
-    logoutput_info("get_service_path_default");
+    logoutput_debug("get_service_path_default");
 
     fs_get_data_link(inode, &link);
 
@@ -187,7 +187,7 @@ static void append_path_0(struct service_context_s *ctx, struct directory_s *d, 
     /* service context */
     fs_get_data_link(inode, &link);
     fpath->context=(struct service_context_s *)(link->link.ptr);
-    logoutput("append_path_0: parent entry . context %s", ((fpath->context) ? fpath->context->name : "NULL"));
+    logoutput_debug("append_path_0: parent entry . context %s", ((fpath->context) ? fpath->context->name : "NULL"));
 
 }
 
@@ -217,7 +217,7 @@ static void append_path_1(struct service_context_s *ctx, struct directory_s *dir
     fs_get_data_link(parent->inode, &link);
     fpath->context=(link->type==DATA_LINK_TYPE_CONTEXT) ? (struct service_context_s *)(link->link.ptr) : NULL;
     entry=parent->inode->alias;
-    logoutput("append_path_1: parent entry %.*s context %s", entry->name.len, entry->name.name, ((fpath->context) ? fpath->context->name : "NULL"));
+    logoutput_debug("append_path_1: parent entry %.*s context %s", entry->name.len, entry->name.name, ((fpath->context) ? fpath->context->name : "NULL"));
 
 }
 
@@ -238,7 +238,7 @@ static void append_path_x(struct service_context_s *ctx, struct directory_s *dir
     /* entry */
     fpath->pathstart-=entry->name.len;
     memcpy(fpath->pathstart, entry->name.name, entry->name.len);
-    logoutput("append_path_x: entry %.*s", entry->name.len, entry->name.name);
+    logoutput_debug("append_path_x: entry %.*s", entry->name.len, entry->name.name);
 
     /* (root) slash */
     fpath->pathstart--;
@@ -249,7 +249,7 @@ static void append_path_x(struct service_context_s *ctx, struct directory_s *dir
 
     entry=parent->inode->alias;
     fpath->context=(link->type==DATA_LINK_TYPE_CONTEXT) ? (struct service_context_s *)(link->link.ptr) : NULL;
-    logoutput("append_path_x: parent entry %.*s context %s", entry->name.len, entry->name.name, ((fpath->context) ? fpath->context->name : "NULL"));
+    logoutput_debug("append_path_x: parent entry %.*s context %s", entry->name.len, entry->name.name, ((fpath->context) ? fpath->context->name : "NULL"));
 
 }
 
@@ -282,7 +282,7 @@ void get_service_context_path(struct service_context_s *ctx, struct directory_s 
 
     }
 
-    logoutput("get_service_context_path: path %s ctx %s", fpath->pathstart, fpath->context->name);
+    logoutput_debug("get_service_context_path: path %s ctx %s", fpath->pathstart, fpath->context->name);
 
 }
 

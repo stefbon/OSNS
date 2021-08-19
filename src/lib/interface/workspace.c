@@ -104,6 +104,15 @@ static int _connect_interface(uid_t uid, struct context_interface_s *interface, 
     return -1;
 }
 
+static int _free_interface(struct context_interface_s *interface, const char *what)
+{
+    /* for default there is nothing extra to be freed and the interface is never occupied/used
+        so it's safe to free */
+
+    return 1;
+
+}
+
 static int _start_interface(struct context_interface_s *interface, int fd, struct ctx_option_s *option)
 {
     return -1;
@@ -128,6 +137,7 @@ int init_context_interface(struct context_interface_s *interface, struct interfa
 
     interface->connect=_connect_interface;
     interface->start=_start_interface;
+    interface->free=_free_interface;
     interface->signal_context=_signal_nothing;
     interface->signal_interface=_signal_nothing;
     interface->get_interface_buffer=_get_interface_buffer;

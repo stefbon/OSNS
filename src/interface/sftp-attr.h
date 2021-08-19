@@ -25,8 +25,8 @@
 
 void read_sftp_attributes_ctx(struct context_interface_s *interface, struct attr_response_s *response, struct sftp_attr_s *attr);
 
-void write_attributes_ctx(struct context_interface_s *interface, char *buffer, unsigned int len, struct sftp_attr_s *attr);
-unsigned int write_attributes_len_ctx(struct context_interface_s *interface, struct sftp_attr_s *attr);
+void write_attributes_ctx(struct context_interface_s *interface, char *buffer, unsigned int len, struct rw_attr_result_s *r, struct sftp_attr_s *attr);
+unsigned int write_attributes_len_ctx(struct context_interface_s *interface, struct rw_attr_result_s *r, struct sftp_attr_s *attr);
 
 void read_name_nameresponse_ctx(struct context_interface_s *interface, struct fuse_buffer_s *buffer, struct ssh_string_s *name);
 void read_attr_nameresponse_ctx(struct context_interface_s *interface, struct fuse_buffer_s *buffer, struct sftp_attr_s *attr);

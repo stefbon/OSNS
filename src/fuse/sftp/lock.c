@@ -48,6 +48,7 @@
 #include "fuse.h"
 
 #include "sftp/common-protocol.h"
+#include "sftp/attr-context.h"
 #include "interface/sftp-attr.h"
 #include "interface/sftp-send.h"
 #include "interface/sftp-wait-response.h"
@@ -62,23 +63,13 @@ static void _fs_sftp_flock_lock(struct fuse_openfile_s *openfile, struct fuse_re
 
     /* emulate file locks */
 
-    memset(&sftp_r, 0, sizeof(struct sftp_request_s));
-    sftp_r.id=0;
+    init_sftp_request(&sftp_r, interface, f_request);
+
     sftp_r.call.block.handle=(unsigned char *) openfile->handle.name.name;
     sftp_r.call.block.len=openfile->handle.name.len;
     sftp_r.call.block.offset=0;
     sftp_r.call.block.size=0;
     sftp_r.call.block.type=type;
-    sftp_r.status=SFTP_REQUEST_STATUS_WAITING;
-
-    set_sftp_request_fuse(&sftp_r, f_request);
-
-    if (f_request->flags & FUSE_REQUEST_FLAG_INTERRUPTED) {
-
-	reply_VFS_error(f_request, EINTR);
-	return;
-
-    }
 
     if (send_sftp_block_ctx(interface, &sftp_r)>0) {
 	struct timespec timeout;
@@ -94,6 +85,7 @@ static void _fs_sftp_flock_lock(struct fuse_openfile_s *openfile, struct fuse_re
 
 		    openfile->flock=type; /* lock successfull */
 		    reply_VFS_error(f_request, 0);
+		    unset_fuse_request_flags_cb(f_request);
 		    return;
 
 		}
@@ -118,6 +110,7 @@ static void _fs_sftp_flock_lock(struct fuse_openfile_s *openfile, struct fuse_re
     out:
 
     openfile->error=error;
+    unset_fuse_request_flags_cb(f_request);
     reply_VFS_error(f_request, error);
 
 }
@@ -131,22 +124,13 @@ static void _fs_sftp_flock_unlock(struct fuse_openfile_s *openfile, struct fuse_
 
     /* emulate file locks */
 
-    memset(&sftp_r, 0, sizeof(struct sftp_request_s));
+    init_sftp_request(&sftp_r, interface, f_request);
+
     sftp_r.id=0;
     sftp_r.call.unblock.handle=(unsigned char *) openfile->handle.name.name;
     sftp_r.call.unblock.len=openfile->handle.name.len;
     sftp_r.call.unblock.offset=0;
     sftp_r.call.unblock.size=0;
-    sftp_r.status=SFTP_REQUEST_STATUS_WAITING;
-
-    set_sftp_request_fuse(&sftp_r, f_request);
-
-    if (f_request->flags & FUSE_REQUEST_FLAG_INTERRUPTED) {
-
-	reply_VFS_error(f_request, EINTR);
-	return;
-
-    }
 
     if (send_sftp_unblock_ctx(interface, &sftp_r)>0) {
 	struct timespec timeout;
@@ -162,6 +146,7 @@ static void _fs_sftp_flock_unlock(struct fuse_openfile_s *openfile, struct fuse_
 
 		    openfile->flock=0; /* lock removed */
 		    reply_VFS_error(f_request, 0);
+		    unset_fuse_request_flags_cb(f_request);
 		    return;
 
 		}
@@ -186,6 +171,7 @@ static void _fs_sftp_flock_unlock(struct fuse_openfile_s *openfile, struct fuse_
     out:
 
     reply_VFS_error(f_request, error);
+    unset_fuse_request_flags_cb(f_request);
 
 }
 

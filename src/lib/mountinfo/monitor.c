@@ -153,7 +153,7 @@ struct bevent_s *open_mountmonitor()
     if (bevent==NULL) goto error;
 
     set_bevent_unix_fd(bevent, fd);
-    set_bevent_watch(bevent, "urgent data");
+    set_bevent_watch(bevent, "u");
     monitor.bevent=bevent;
 
     logoutput("open_mountmonitor: fd %i", fd);

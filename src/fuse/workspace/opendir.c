@@ -62,6 +62,10 @@ void _fs_workspace_opendir(struct fuse_opendir_s *opendir, struct fuse_request_s
     struct workspace_mount_s *workspace=get_workspace_mount_ctx(parent);
     struct service_context_lock_s ctxlock=SERVICE_CTX_LOCK_INIT;
 
+    open_out.fh=(uint64_t) opendir;
+    open_out.open_flags=0;
+    reply_VFS_data(request, (char *) &open_out, sizeof(open_out));
+
     logoutput("_fs_workspace_opendir: ino %li", opendir->inode->st.st_ino);
     directory=get_directory(opendir->inode);
 
@@ -150,10 +154,6 @@ void _fs_workspace_opendir(struct fuse_opendir_s *opendir, struct fuse_request_s
     logoutput("_fs_workspace_opendir: ino %li finish direntry", opendir->inode->st.st_ino);
 
     finish_get_fuse_direntry(opendir);
-
-    open_out.fh=(uint64_t) opendir;
-    open_out.open_flags=0;
-    reply_VFS_data(request, (char *) &open_out, sizeof(open_out));
 
     if (parent->type==SERVICE_CTX_TYPE_WORKSPACE) {
 
