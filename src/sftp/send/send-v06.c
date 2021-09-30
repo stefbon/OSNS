@@ -1,5 +1,5 @@
 /*
-  2010, 2011, 2012, 2103, 2014, 2015, 2016 Stef Bon <stefbon@gmail.com>
+  2021,2010, 2011, 2012, 2103, 2014, 2015, 2016 guanlong huang <gl041188@gmail.com>
 
   This program is free software; you can redistribute it and/or
   modify it under the terms of the GNU General Public License
