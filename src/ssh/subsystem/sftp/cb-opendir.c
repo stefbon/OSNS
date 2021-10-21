@@ -102,7 +102,7 @@ static void _sftp_op_opendir(struct sftp_subsystem_s *sftp, struct sftp_payload_
 
 	goto error;
 
-    } else if (! S_ISDIR(get_mode_system_stat(&st))) {
+    } else if (! S_ISDIR(get_type_system_stat(&st))) {
 
 	status=SSH_FX_NOT_A_DIRECTORY;
 	goto error;
