@@ -49,6 +49,7 @@
 #include "commonsignal.h"
 #include "ssh-common.h"
 #include "ssh-utils.h"
+#include "users/mapping.h"
 
 static void correct_time_none(struct ssh_session_s *session, struct timespec *time)
 {
@@ -133,6 +134,8 @@ void init_ssh_hostinfo(struct ssh_session_s *session)
     hostinfo->correct_time_s2c=correct_time_none;
     hostinfo->correct_time_c2s=correct_time_none;
 
+    init_ssh_usermapping(session, &session->identity.pwd);
+
 }
 
 void free_ssh_hostinfo(struct ssh_session_s *ssh_session)
@@ -179,7 +182,6 @@ static void set_time_delta(struct ssh_session_s *session, struct timespec *send,
     }
 
 }
-
 
 /*
     get basic info from server like:

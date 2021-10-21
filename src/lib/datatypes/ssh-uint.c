@@ -99,11 +99,11 @@ uint64_t get_uint64(char *buf)
 int64_t get_int64(char *buf)
 {
     unsigned char *tmp=(unsigned char *) buf;
-    uint64_t a;
+    int64_t a;
     uint32_t b;
 
-    a = (uint64_t) (((uint64_t) tmp[0] << 56) | ((uint64_t) tmp[1] << 48) | ((uint64_t) tmp[2] << 40) | ((uint64_t) tmp[3] << 32));
-    b = (uint32_t) (((uint32_t) tmp[4] << 24) | ((uint32_t) tmp[5] << 16) | ((uint32_t) tmp[6] << 8) | ((uint32_t) tmp[7]));
+    a = (int64_t) (((int64_t) tmp[0] << 56) | ((int64_t) tmp[1] << 48) | ((int64_t) tmp[2] << 40) | ((int64_t) tmp[3] << 32));
+    b = (int32_t) (((int32_t) tmp[4] << 24) | ((int32_t) tmp[5] << 16) | ((int32_t) tmp[6] << 8) | ((int32_t) tmp[7]));
 
     return (int64_t)(a | b);
 }

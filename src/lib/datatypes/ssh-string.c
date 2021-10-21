@@ -182,7 +182,7 @@ void clear_ssh_string(struct ssh_string_s *s)
 	    if (s->flags & SSH_STRING_FLAG_ALLOC) {
 
 		if (s->ptr) free(s->ptr);
-		s->flags -= SSH_STRING_FLAG_ALLOC;
+		s->flags &= ~SSH_STRING_FLAG_ALLOC;
 
 	    }
 
@@ -219,7 +219,7 @@ void free_ssh_string(struct ssh_string_s **p_s)
 
 unsigned char ssh_string_isempty(struct ssh_string_s *s)
 {
-    return (s->ptr ? 0 : 1);
+    return (s ? (((s->ptr && s->len>0) ? 0 : 1)) : 0);
 }
 
 int create_copy_ssh_string(struct ssh_string_s **p_t, struct ssh_string_s *s)

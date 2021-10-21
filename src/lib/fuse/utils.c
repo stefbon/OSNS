@@ -497,6 +497,7 @@ void init_create_entry(struct create_entry_s *ce, struct name_s *n, struct entry
     ce->flags=0;
     ce->ptr=ptr;
     ce->error=0;
+
     ce->cache_size=0;
     ce->cache.buffer=NULL;
 

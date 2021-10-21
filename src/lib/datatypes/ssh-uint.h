@@ -17,8 +17,8 @@
 
 */
 
-#ifndef _DATATYPES_SSH_DATATYPES_UINT_H
-#define _DATATYPES_SSH_DATATYPES_UINT_H
+#ifndef LIB_DATATYPES_SSH_UINT_H
+#define LIB_DATATYPES_SSH_UINT_H
 
 /* prototypes */
 

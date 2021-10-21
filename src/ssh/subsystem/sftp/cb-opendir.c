@@ -52,202 +52,45 @@
 
 #include "osns_sftp_subsystem.h"
 #include "init.h"
-#include "attributes-write.h"
+#include "attr.h"
 #include "send.h"
 #include "handle.h"
 #include "path.h"
 
-#define SFTP_READDIR_NAMES_SIZE		1024
+#define SFTP_READDIR_NAMES_SIZE		4096
 
-struct linux_dirent64 {
-    ino64_t			d_ino;
-    off64_t			d_off;
-    unsigned short		d_reclen;
-    unsigned char		d_type;
-    char			d_name[];
-};
+static unsigned int default_mask=(SYSTEM_STAT_TYPE | SYSTEM_STAT_MODE | SYSTEM_STAT_UID | SYSTEM_STAT_GID | SYSTEM_STAT_ATIME | SYSTEM_STAT_MTIME | SYSTEM_STAT_CTIME | SYSTEM_STAT_SIZE);
 
-static int open_direntries_from_system(struct commonhandle_s *handle, char *path)
+static int send_sftp_dirhandle(struct sftp_subsystem_s *sftp, struct sftp_payload_s *payload, struct commonhandle_s *handle)
 {
-    int fd=open(path, O_DIRECTORY);
-
-    if (fd==-1) {
-
-	logoutput("open_direntries_from_system: error %i open (%s)", errno, strerror(errno));
-
-    } else {
-
-	dirhandle->fd=fd;
-
-    }
-
-}
-
-static int get_direntries_from_system(struct commonhandle_s *handle, struct ssh_name_s *name)
-{
-    struct dirhandle_s *dirhandle=handle->type.dirhandle;
-
-    /* read a batch of dirents */
-
-    return syscall(SYS_getdents64, dirhandle->fd, (struct linux_dirent64 *) dirhandle->buffer, dirhandle->size);
-
-}
-
-static void close_direntries_from_system(struct commonhandle_s *handle)
-{
-    struct dirhandle_s *dirhandle=handle->type.dirhandle;
-
-    if (dirhandle->fd>=0) {
-
-	close(dirhandle->fd);
-	dirhandle->fd=-1;
-
-    }
-
-}
-
-static void _sftp_op_readdir(struct commonhandle_s *handle, struct sftp_payload_s *payload)
-{
-    struct sftp_subsystem_s *sftp=payload->sftp;
-    unsigned int status=SSH_FX_BAD_MESSAGE;
-    unsigned int valid=SSH_FILEXFER_ATTR_SIZE | SSH_FILEXFER_ATTR_PERMISSIONS | SSH_FILEXFER_ATTR_MODIFYTIME | SSH_FILEXFER_ATTR_SUBSECOND_TIMES | SSH_FILEXFER_ATTR_CTIME;
-    unsigned int error=0;
-    char buffer[SFTP_READDIR_NAMES_SIZE];
-    unsigned int pos=0;
-    unsigned int count=0;
-    struct linux_dirent64 *de=NULL;
-    unsigned char eof=0;
-    int left=0;
-
-    logoutput("_sftp_op_readdir (%i)", (int) gettid());
-
-    if (dirhandle->buffer==NULL) {
-
-	dirhandle->buffer=malloc(dirhandle->size);
-	if (dirhandle->buffer==NULL) {
-
-	    status=SSH_FX_FAILURE;
-	    goto out;
-
-	}
-
-	dirhandle->pos=0;
-
-    }
-
-    if (dirhandle->read==0) {
-	int read=0;
-
-	/* read a batch of dirents */
-
-	read =syscall(SYS_getdents64, dirhandle->handle.fd, (struct linux_dirent64 *) dirhandle->buffer, dirhandle->size);
-
-	if (read==-1) {
-
-	    status=SSH_FX_FAILURE;
-	    goto out;
-
-	} else if (read==0) {
-
-	    eof=1;
-	    goto finish;
-
-	}
-
-	dirhandle->read=(unsigned int) read;
-	left=dirhandle->read;
-
-    }
-
-    getdent:
-
-    if (left>0) {
-	struct stat st;
-
-	de=(struct linux_dirent64 *) &dirhandle->buffer[dirhandle->pos];
-
-	logoutput("sftp_op_readdir: found %s", de->d_name);
-
-	if (fstatat(dirhandle->handle.fd, de->d_name, &st, AT_SYMLINK_NOFOLLOW)==0) {
-	    unsigned int keep=pos;
-
-	    /* does it fit? */
-
-	    error=0;
-	    pos+=write_readdir_attr(sftp, &buffer[pos], SFTP_READDIR_NAMES_SIZE - pos, de->d_name, strlen(de->d_name), &st, valid, &error);
-
-	    if (error==0) {
-
-		logoutput_debug("sftp_op_readdir: name %s size attr %i at %i", de->d_name, (unsigned int)(pos - keep), keep);
-
-		count++;
-		dirhandle->pos += de->d_reclen;
-		left -= de->d_reclen;
-		if (dirhandle->pos < dirhandle->read) goto getdent;
-		dirhandle->pos=0;
-		dirhandle->read=0;
-
-	    }
-
-	} else {
-
-	    /* fstatat did not find this entry */
-
-	    dirhandle->pos += de->d_reclen;
-	    goto getdent;
-
-	}
-
-    } else {
-
-	eof=1;
-
-    }
-
-    finish:
-
-    logoutput_debug("sftp_op_readdir: reply count %i pos %i", count, pos);
-    if (reply_sftp_names(sftp, payload->id, count, buffer, pos, eof)==-1) logoutput_warning("sftp_op_readdir: error sending readdir names");
-
-    return;
-
-    out:
-
-    reply_sftp_status_simple(sftp, payload->id, status);
-    return;
-
-    disconnect:
-
-    finish_sftp_subsystem(sftp);
-
-}
-
-static int send_sftp_dirhandle(struct sftp_subsystem_s *sftp, struct sftp_payload_s *payload, struct sftp_dirhandle_s *dirhandle)
-{
-    char bytes[SFTP_HANDLE_SIZE];
+    unsigned int size=(unsigned int) get_sftp_handle_size();
+    char bytes[size];
 
     logoutput_info("send_sftp_dirhandle");
-    write_sftp_dirhandle(dirhandle, bytes);
-    return reply_sftp_handle(sftp, payload->id, bytes, SFTP_HANDLE_SIZE);
+    write_sftp_commonhandle(handle, bytes, size);
+    return reply_sftp_handle(sftp, payload->id, bytes, size);
 }
 
-static void _sftp_op_opendir(struct sftp_subsystem_s *sftp, struct sftp_payload_s *payload, char *path)
+static void _sftp_op_opendir(struct sftp_subsystem_s *sftp, struct sftp_payload_s *payload, struct fs_location_s *location)
 {
     struct sftp_identity_s *user=&sftp->identity;
     unsigned int status=0;
-    unsigned int error=0;
-    struct stat st;
+    int result=0;
+    struct system_stat_s st;
     struct commonhandle_s *handle=NULL;
+    struct fs_location_devino_s devino=FS_LOCATION_DEVINO_INIT;
 
-    logoutput("_sftp_op_opendir: path %s", path);
+    logoutput("_sftp_op_opendir: path %.*s", location->type.path.len, location->type.path.ptr);
 
-    memset(&st, 0, sizeof(struct stat));
+    memset(&st, 0, sizeof(struct system_stat_s));
 
-    if (lstat(path, &st)==-1) {
+    result=system_getstat(&location->type.path, SYSTEM_STAT_BASIC_STATS, &st);
 
-	error=errno;
+    if (result<0) {
 
-	if (error==ENOENT) {
+	result=abs(result);
+
+	if (result==ENOENT) {
 
 	    status=SSH_FX_NO_SUCH_FILE;
 
@@ -259,7 +102,7 @@ static void _sftp_op_opendir(struct sftp_subsystem_s *sftp, struct sftp_payload_
 
 	goto error;
 
-    } else if (! S_ISDIR(st.st_mode)) {
+    } else if (! S_ISDIR(get_mode_system_stat(&st))) {
 
 	status=SSH_FX_NOT_A_DIRECTORY;
 	goto error;
@@ -267,40 +110,33 @@ static void _sftp_op_opendir(struct sftp_subsystem_s *sftp, struct sftp_payload_
     }
 
     logoutput_debug("_sftp_op_opendir: insert dirhandle");
-
-    handle=create_sftp_dirhandle(sftp, st.st_dev, st.st_ino, 0);
+    get_devino_system_stat(&st, &devino);
+    handle=create_sftp_dirhandle(sftp, &devino);
 
     if (handle==NULL) {
 
 	status=SSH_FX_FAILURE;
 	goto error;
 
+    } else {
+	struct dirhandle_s *dh=&handle->type.dir;
+
+	if ((* dh->open)(dh, location, 0)==-1) {
+
+	    status=SSH_FX_FAILURE;
+	    goto error;
+
+	}
+
+	if (send_sftp_dirhandle(sftp, payload, handle)==-1) logoutput("_sftp_op_opendir: error sending handle reply");
+	return;
+
     }
-
-    if (open_direntries_from_system(handle, path)==-1) {
-
-	status=SSH_FX_FAILURE;
-	goto error;
-
-    }
-
-    handle.type.dirhandle->size=SFTP_READDIR_NAMES_SIZE;
-    dirhandle->flags=0;
-    dirhandle->readdir=_sftp_op_readdir;
-
-    if (send_sftp_dirhandle(sftp, payload, dirhandle)==-1) logoutput("_sftp_op_opendir: error sending handle reply");
-    return;
 
     error:
 
     logoutput("_sftp_op_opendir: status %i", status);
-    if (dirhandle) {
-	struct commonhandle_s *handle=&dirhandle->handle;
-
-	(* dirhandle->handle.free)(&handle);
-
-    }
-
+    free_commonhandle(&handle);
     reply_sftp_status_simple(sftp, payload->id, status);
 
 }
@@ -335,14 +171,20 @@ void sftp_op_opendir(struct sftp_payload_s *payload)
 
 	if (payload->len >= len + 4) {
 	    struct sftp_identity_s *user=&sftp->identity;
-	    unsigned int size=get_fullpath_len(user, len, &buffer[pos]); /* get size of buffer for path */
-	    char path[size+1];
+	    struct ssh_string_s path={.len=len, .ptr=&buffer[pos]};
+	    struct fs_location_s location;
+	    struct convert_sftp_path_s convert={NULL};
+	    unsigned int size=get_fullpath_size(user, &path, &convert); /* get size of buffer for path */
+	    char tmp[size+1];
 	    unsigned int error=0;
 
-	    get_fullpath(user, len, &buffer[pos], path);
+	    memset(&location, 0, sizeof(struct fs_location_s));
+	    location.flags=FS_LOCATION_FLAG_PATH;
+	    set_buffer_location_path(&location.type.path, tmp, size+1, 0);
+	    (* convert.complete)(user, &path, &location.type.path);
 	    pos+=len;
 
-	    _sftp_op_opendir(sftp, payload, path);
+	    _sftp_op_opendir(sftp, payload, &location);
 	    return;
 
 	}
@@ -356,12 +198,139 @@ void sftp_op_opendir(struct sftp_payload_s *payload)
 
 }
 
+static unsigned int get_write_max_buffersize(struct attr_context_s *actx, struct rw_attr_result_s *r, unsigned int valid)
+{
+    unsigned int size=0;
+    unsigned char version=(* actx->get_sftp_protocol_version)(actx);
+
+    /* filename as ssh string */
+
+    size = 4 + (* actx->maxlength_filename)(actx);
+
+    /* with version 3 a longname is written also (here empty string -> 4 bytes) */
+
+    if (version==3) size+=4;
+
+    /* attributes: valid (=4 bytes) plus max size attributes */
+
+    size += 4 + get_size_buffer_write_attributes(actx, r, valid);
+
+    return size;
+
+}
+
+static void _sftp_op_readdir(struct sftp_subsystem_s *sftp, struct commonhandle_s *handle, struct sftp_payload_s *payload)
+{
+    struct dirhandle_s *dh=&handle->type.dir;
+    unsigned int status=SSH_FX_BAD_MESSAGE;
+    unsigned int error=0;
+    char buffer[SFTP_READDIR_NAMES_SIZE]; 					/* make this configurable? -> desired buffer between client and server */
+    unsigned int pos=0;
+    unsigned int count=0;
+    unsigned char eof=0;
+    struct attr_context_s *actx=&sftp->attrctx;
+    struct rw_attr_result_s r=RW_ATTR_RESULT_INIT;
+    uint32_t valid=get_valid_sftp_dirhandle(handle);
+    unsigned int len=get_write_max_buffersize(actx, &r, valid);
+    unsigned int mask=r.stat_mask;
+    char tmp[len]; 								/* temporary buffer for writing filename and attributes */
+    struct attr_buffer_s abuff;
+    struct fs_dentry_s *dentry=NULL;
+    struct system_stat_s stat;
+    struct ssh_string_s name=SSH_STRING_INIT;
+
+    set_attr_buffer_write(&abuff, tmp, len);
+
+    logoutput("_sftp_op_readdir (tid %i) valid %i len write buffer %i", (int) gettid(), valid, len);
+
+    while (pos < SFTP_READDIR_NAMES_SIZE) {
+
+	dentry=(* dh->readdentry)(dh);
+
+	if (dentry) {
+
+	    logoutput("sftp_op_readdir: found %s", dentry->name);
+
+	    if ((* dh->fstatat)(dh, dentry->name, mask, &stat)==0) {
+
+		/* write name as ssh string to temporary buffer */
+
+		name.len=dentry->len;
+		name.ptr=dentry->name;
+
+		(* actx->ops.write_name_name_response)(actx, &abuff, &name);
+		(* actx->ops.write_attr_name_response)(actx, &abuff, &r, &stat);
+
+		/* does it fit? */
+
+		if (pos + abuff.len > SFTP_READDIR_NAMES_SIZE) {
+
+		    (* dh->set_keep_dentry)(dh);
+		    /* 20211020: also keep the buffer with attributes just written? (where?) or */
+		    break;
+
+		}
+
+		memcpy(&buffer[pos], abuff.buffer, abuff.len);
+		pos+=abuff.len;
+		count++;
+
+		/* reset abuff */
+
+		reset_attr_buffer_write(&abuff);
+
+	    } /* fstatat did not find dentry... ignore */
+
+	} else {
+
+	    /* no dentry caused by? */
+
+	    if (dh->flags & DIRHANDLE_FLAG_ERROR) {
+
+		status=SSH_FX_FAILURE; /* todo: match the error in dh to a sftp error better */
+		goto errorout;
+
+	    } else if (dh->flags & DIRHANDLE_FLAG_EOD) {
+
+		if (pos==0) {
+
+		    status=SSH_FX_EOF;
+		    goto errorout;
+
+		}
+
+		eof=1;
+		break;
+
+	    }
+
+	}
+
+    }
+
+    finish:
+
+    logoutput_debug("sftp_op_readdir: reply count %i pos %i", count, pos);
+    if (reply_sftp_names(sftp, payload->id, count, buffer, pos, eof)==-1) logoutput_warning("sftp_op_readdir: error sending readdir names");
+    return;
+
+    errorout:
+
+    reply_sftp_status_simple(sftp, payload->id, status);
+    return;
+
+    disconnect:
+
+    finish_sftp_subsystem(sftp);
+
+}
+
 /* SSH_FXP_READDIR
     message has the form:
     - byte 				SSH_FXP_READDIR
     - uint32				id
     - string				handle
-    */
+*/
 
 void sftp_op_readdir(struct sftp_payload_s *payload)
 {
@@ -372,19 +341,32 @@ void sftp_op_readdir(struct sftp_payload_s *payload)
 
     /* handle is 16 bytes long, so message is 4 + 16 = 20 bytes */
 
-    if (payload->len >= 4 + SFTP_HANDLE_SIZE) {
+    if (payload->len >= 4 + get_sftp_handle_size()) {
 	unsigned int len=0;
 	char *data=payload->data;
 
 	len=get_uint32(&data[0]);
 
-	if (len==SFTP_HANDLE_SIZE) {
+	if (len>=get_sftp_handle_size()) {
 	    unsigned int error=0;
-	    struct sftp_dirhandle_s *dirhandle=find_sftp_dirhandle_buffer(sftp, &data[4]);
+	    struct commonhandle_s *handle=find_sftp_commonhandle(sftp, &data[4], len, NULL);
 
-	    if (dirhandle) {
+	    if (handle) {
+		struct dirhandle_s *dh=&handle->type.dir;
 
-		(* dirhandle->readdir)(dirhandle, payload);
+		if (dh->flags & DIRHANDLE_FLAG_ERROR) {
+
+		    status=SSH_FX_FAILURE;
+		    goto out;
+
+		} else if (dh->flags & DIRHANDLE_FLAG_EOD) {
+
+		    status=SSH_FX_EOF;
+		    goto out;
+
+		}
+
+		_sftp_op_readdir(sftp, handle, payload);
 		return;
 
 	    } else {
@@ -409,8 +391,8 @@ void sftp_op_readdir(struct sftp_payload_s *payload)
 
     out:
     reply_sftp_status_simple(sftp, payload->id, status);
+    return;
 
     disconnect:
     finish_sftp_subsystem(sftp);
-
 }

@@ -26,13 +26,15 @@
 /* prototypes */
 
 void lock_local_userbase();
-void get_local_uid_byname(char *name, uid_t *uid);
-unsigned int get_local_user_byuid(uid_t uid, struct ssh_string_s *user);
+void get_local_uid_byname(char *name, uid_t *uid, unsigned int *error);
+void get_local_uid_byid(uid_t id, uid_t *uid, unsigned int *error);
+unsigned int get_local_user_byuid(uid_t uid, struct ssh_string_s *user, unsigned int *error);
 void unlock_local_userbase();
 
 void lock_local_groupbase();
-void get_local_gid_byname(char *name, gid_t *gid);
-unsigned int get_local_group_bygid(gid_t gid, struct ssh_string_s *group);
+void get_local_gid_byname(char *name, gid_t *gid, unsigned int *error);
+void get_local_gid_byid(gid_t id, gid_t *gid, unsigned int *error);
+unsigned int get_local_group_bygid(gid_t gid, struct ssh_string_s *group, unsigned int *error);
 void unlock_local_groupbase();
 
 unsigned char user_is_groupmember(char *username, struct group *grp);

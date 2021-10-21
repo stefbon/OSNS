@@ -17,8 +17,8 @@
 
 */
 
-#ifndef _SSH_DATATYPES_NAMELIST_H
-#define _SSH_DATATYPES_NAMELIST_H
+#ifndef LIB_DATATYPES_NAMELIST_SSH_H
+#define LIB_DATATYPES_NAMELIST_SSH_H
 
 struct commalist_s {
     char 				*list;

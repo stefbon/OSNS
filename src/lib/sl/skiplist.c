@@ -34,6 +34,7 @@
 #include <sys/stat.h>
 #include <sys/param.h>
 #include <pthread.h>
+#include <math.h>
 
 #ifndef ENOATTR
 #define ENOATTR ENODATA        /* No such attribute */
@@ -205,6 +206,8 @@ void clear_sl_skiplist(struct sl_skiplist_s *sl)
     while (dirnode) {
 	struct sl_dirnode_s *next=dirnode->junction[0].n; /* remind the next */
 
+	if (dirnode->flags & _DIRNODE_FLAG_START) break;
+	remove_sl_dirnode(sl, dirnode);
 	free(dirnode);
 	dirnode=next;
 
@@ -218,4 +221,16 @@ void free_sl_skiplist(struct sl_skiplist_s *sl)
     pthread_mutex_destroy(&sl->mutex);
     pthread_cond_destroy(&sl->cond);
     if (sl->flags & _SKIPLIST_FLAG_ALLOC) free(sl);
+}
+
+unsigned short get_default_sl_prob()
+{
+    return _SKIPLIST_PROB;
+}
+
+/* estimate the number of lanes given the number of elements */
+
+unsigned char estimate_sl_lanes(uint64_t count, unsigned prob)
+{
+    return (unsigned char)(logl(count)/logl(prob));
 }

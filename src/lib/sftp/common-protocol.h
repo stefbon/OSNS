@@ -23,24 +23,6 @@
 #include "list.h"
 #include "sftp/protocol.h"
 
-#define SFTP_ATTR_TYPE_INDEX			0
-#define SFTP_ATTR_TYPE_SIZE			1
-#define SFTP_ATTR_TYPE_PERMISSIONS		2
-#define SFTP_ATTR_TYPE_ATIME			3
-#define SFTP_ATTR_TYPE_MTIME			4
-#define SFTP_ATTR_TYPE_CTIME			5
-#define SFTP_ATTR_TYPE_USER			6
-#define SFTP_ATTR_TYPE_GROUP			7
-
-#define SFTP_ATTR_TYPE				1 << 0
-#define SFTP_ATTR_SIZE				1 << 1
-#define SFTP_ATTR_PERMISSIONS			1 << 2
-#define SFTP_ATTR_ATIME				1 << 3
-#define SFTP_ATTR_MTIME				1 << 4
-#define SFTP_ATTR_CTIME				1 << 5
-#define SFTP_ATTR_USER				1 << 6
-#define SFTP_ATTR_GROUP				1 << 7
-
 #define SFTP_REQUEST_STATUS_WAITING		1
 #define SFTP_REQUEST_STATUS_RESPONSE		2
 #define SFTP_REQUEST_STATUS_FINISH		6
@@ -55,55 +37,7 @@
 #define SFTP_EXTENSION_EVENT_SUPPORTED						1
 #define SFTP_EXTENSION_EVENT_DATA						2
 #define SFTP_EXTENSION_EVENT_MAPPED						3
-
 #define SFTP_EXTENSION_EVENT_ERROR						5
-
-struct network_user_s {
-    uid_t					uid;
-    unsigned int				domain;
-};
-
-struct network_group_s {
-    gid_t					gid;
-    unsigned int				domain;
-};
-
-struct sftp_string_s {
-    unsigned int				len;
-    char					*name;
-};
-
-struct sftp_user_s {
-    union {
-	struct ssh_string_s 				name;
-	unsigned int					id;
-    } remote;
-    uid_t						uid;
-};
-
-struct sftp_group_s {
-    union {
-	struct ssh_string_s 				name;
-	unsigned int					id;
-    } remote;
-    gid_t						gid;
-};
-
-struct sftp_attr_s {
-    unsigned int				asked;
-    unsigned int				received;
-    unsigned int				type;
-    uint64_t					size;
-    mode_t					permissions;
-    int64_t					atime;
-    unsigned long				atime_n;
-    int64_t					mtime;
-    unsigned long				mtime_n;
-    int64_t					ctime;
-    unsigned long				ctime_n;
-    struct network_user_s			user;
-    struct network_group_s			group;
-};
 
 /*
     responses from SFTP

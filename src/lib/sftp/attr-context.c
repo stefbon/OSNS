@@ -45,107 +45,17 @@
 #include "network.h"
 #include "users.h"
 #include "common-protocol.h"
+
 #include "attr-context.h"
 
-static void get_local_uid_bysftpid(struct attr_context_s *ctx, struct sftp_user_s *user)
+#include "attr-read.h"
+#include "attr-write.h"
+#include "attr-init.h"
+
+static unsigned int get_maxlength_filename(struct attr_context_s *ctx)
 {
-    user->uid=(uid_t) user->remote.id;
+    return 256;
 }
-
-static void get_local_gid_bysftpid(struct attr_context_s *ctx, struct sftp_group_s *group)
-{
-    group->gid=(gid_t) group->remote.id;
-}
-
-static void get_local_uid_bysftpname(struct attr_context_s *ctx, struct sftp_user_s *user)
-{
-    unsigned int len=user->remote.name.len;
-    char name[len + 2];
-    char *sep=NULL;
-
-    memcpy(name, user->remote.name.ptr, len);
-    *(name + len)='@';
-    *(name + len + 1)='\0';
-    sep=rawmemchr(name, '@');
-    *sep='\0';
-    *(name + len)='\0';
-
-    /* what to do with domain ?*/
-
-    // domain->ptr=sep+1;
-    // domain->len=(unsigned int)(name + len - sep);
-
-    lock_local_userbase();
-    get_local_uid_byname(name, &user->uid);
-    unlock_local_userbase();
-}
-
-static void get_local_gid_bysftpname(struct attr_context_s *ctx, struct sftp_group_s *group)
-{
-    unsigned int len=group->remote.name.len;
-    char name[len + 2];
-    char *sep=NULL;
-
-    memcpy(name, group->remote.name.ptr, len);
-    *(name + len)='@';
-    *(name + len + 1)='\0';
-    sep=rawmemchr(name, '@');
-    *sep='\0';
-    *(name + len)='\0';
-
-    /* what to do with domain ?*/
-
-    //domain->ptr=sep+1;
-    //domain->len=(unsigned int)(name + len - sep);
-
-    lock_local_groupbase();
-    get_local_gid_byname(name, &group->gid);
-    unlock_local_groupbase();
-}
-
-static void get_remote_uid_bysftpid(struct attr_context_s *ctx, struct sftp_user_s *user)
-{
-    user->remote.id=user->uid;
-}
-
-static void get_remote_gid_bysftpid(struct attr_context_s *ctx, struct sftp_group_s *group)
-{
-    group->remote.id=group->gid;
-}
-
-static void get_remote_username_bysftpid(struct attr_context_s *ctx, struct sftp_user_s *user)
-{
-    lock_local_userbase();
-    get_local_user_byuid(user->uid, &user->remote.name);
-    unlock_local_userbase();
-}
-
-static void get_remote_groupname_bysftpid(struct attr_context_s *ctx, struct sftp_group_s *group)
-{
-    lock_local_groupbase();
-    get_local_group_bygid(group->gid, &group->remote.name);
-    unlock_local_groupbase();
-}
-
-
-/* TODO: mapping based on username and (optional) domain */
-
-/*
-    base the domainname, if none then "localdomain"
-
-    example.org/{aname, bname, cname, anothername, etcname, etcetera}
-
-    rules:
-	- the user used to connect with the server
-	(which maybe different from the username on the client)
-	is mapped to the local user on the client
-	- root is mapped to root
-	- default users like nobody are mapped to their equivalents
-	- (optional) a list of usernames on server using a special command like:
-	    getent passwd | grep ".*:.*:.*:100:"
-	    where 100 is the gid of the group of desktopusers and users to connect to this srver
-
-*/
 
 static unsigned int get_maxlength_username(struct attr_context_s *ctx)
 {
@@ -172,28 +82,121 @@ static unsigned int get_sftp_flags(struct attr_context_s *ctx, const char *what)
     return 0;
 }
 
-void init_attr_context(struct attr_context_s *ctx, void *ptr)
+void init_attrcb_zero(struct _rw_attrcb_s *attrcb, unsigned int count)
 {
 
-    ctx->get_local_uid_byid=get_local_uid_bysftpid;
-    ctx->get_local_gid_byid=get_local_gid_bysftpid;
+    for (unsigned int i=0; i<count; i++) {
 
-    ctx->get_local_uid_byname=get_local_uid_bysftpname;
-    ctx->get_local_gid_byname=get_local_gid_bysftpname;
+	attrcb[i].code		= 0;
+	attrcb[i].shift		= 0;
+	attrcb[i].maxlength	= 0;
+	attrcb[i].stat_mask	= 0;
+	attrcb[i].w_cb		= NULL;
+	attrcb[i].r_cb		= NULL;
+	attrcb[i].name		="";
 
-    ctx->get_remote_uid_byid=get_remote_uid_bysftpid;
-    ctx->get_remote_gid_byid=get_remote_gid_bysftpid;
+    }
 
-    ctx->get_remote_username_byid=get_remote_username_bysftpid;
-    ctx->get_remote_groupname_byid=get_remote_groupname_bysftpid;
+}
 
-    ctx->maxlength_username=get_maxlength_username;
-    ctx->maxlength_groupname=get_maxlength_groupname;
-    ctx->maxlength_domainname=get_maxlength_domainname;
+void init_attr_context(struct attr_context_s *actx, unsigned int flags, void *ptr, struct net_idmapping_s *mapping)
+{
+    struct _rw_attrcb_s *attrcb=actx->attrcb;
 
-    ctx->get_sftp_protocol_version=get_sftp_protocol_version;
-    ctx->get_sftp_flags=get_sftp_flags;
+    actx->flags=flags;
+    actx->ptr=ptr;
+    actx->mapping=mapping;
 
-    ctx->ptr=ptr;
+    actx->w_valid=0;
+    actx->r_valid=0;
+
+    init_attrcb_zero(attrcb, 36);
+
+    actx->maxlength_filename=get_maxlength_filename;
+    actx->maxlength_username=get_maxlength_username;
+    actx->maxlength_groupname=get_maxlength_groupname;
+    actx->maxlength_domainname=get_maxlength_domainname;
+    actx->get_sftp_protocol_version=get_sftp_protocol_version;
+    actx->get_sftp_flags=get_sftp_flags;
+
+}
+
+/* does nothing, required for initialization */
+void parse_dummy(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat, unsigned char ctr)
+{
+}
+
+unsigned int get_supported_valid_flags(struct attr_context_s *actx, unsigned char what)
+{
+
+    if (what=='r') {
+
+	return actx->r_valid;
+
+    } else if (what=='w') {
+
+	return actx->w_valid;
+
+    }
+
+    return 0;
+
+}
+
+void set_sftp_attr_context(struct attr_context_s *actx)
+{
+    unsigned char version=(* actx->get_sftp_protocol_version)(actx);
+    struct attr_ops_s *ops=&actx->ops;
+
+    if (version<=3) {
+
+	ops->read_name_name_response		= read_name_name_response_v03;
+	ops->read_attr_name_response		= read_attr_name_response_v03;
+	ops->write_name_name_response		= write_name_name_response_v03;
+	ops->write_attr_name_response		= write_attr_name_response_v03;
+
+	ops->parse_attributes			= parse_attributes_v03;
+
+	init_attr_context_v03(actx);
+
+    } else if (version==4) {
+
+	ops->read_name_name_response		= read_name_name_response_v04;
+	ops->read_attr_name_response		= read_attr_name_response_v04;
+	ops->write_name_name_response		= write_name_name_response_v04;
+	ops->write_attr_name_response		= write_attr_name_response_v04;
+
+	ops->parse_attributes			= parse_attributes_v04;
+
+	init_attr_context_v04(actx);
+
+    } else if (version==5) {
+
+	ops->read_name_name_response		= read_name_name_response_v04;
+	ops->read_attr_name_response		= read_attr_name_response_v04;
+	ops->write_name_name_response		= write_name_name_response_v04;
+	ops->write_attr_name_response		= write_attr_name_response_v04;
+
+
+	ops->parse_attributes			= parse_attributes_v05;
+
+	init_attr_context_v05(actx);
+
+    } else if (version==6) {
+
+	ops->read_name_name_response		= read_name_name_response_v04;
+	ops->read_attr_name_response		= read_attr_name_response_v04;
+	ops->write_name_name_response		= write_name_name_response_v04;
+	ops->write_attr_name_response		= write_attr_name_response_v04;
+
+	ops->parse_attributes			= parse_attributes_v06;
+
+	init_attr_context_v06(actx);
+
+    } else {
+
+	logoutput_warning("set_sftp_attr_context: error sftp protocol version %i not supported", version);
+
+    }
 
 }

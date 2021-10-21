@@ -52,6 +52,7 @@
 #include "sftp/recv.h"
 #include "ssh/send/msg-channel.h"
 #include "ssh-utils.h"
+#include "sftp-attr.h"
 
 extern int send_channel_start_command_message(struct ssh_channel_s *channel, unsigned char reply, unsigned int *seq);
 
@@ -480,7 +481,7 @@ static int _init_interface_sftp_buffer(struct context_interface_s *interface, st
     sftp=(struct sftp_client_s *) interface->buffer;
     channel->context.ctx=(void *) sftp;
 
-    if (init_sftp_client(sftp, session->identity.pwd.pw_uid)==0) {
+    if (init_sftp_client(sftp, session->identity.pwd.pw_uid, &session->hostinfo.mapping)==0) {
 
 	interface->connect=_connect_interface_sftp_client;
 	interface->start=_start_interface_sftp_client;

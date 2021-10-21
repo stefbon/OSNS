@@ -50,11 +50,11 @@
 #include "protocol.h"
 
 #include "osns_sftp_subsystem.h"
-#include "attributes-write.h"
 #include "send.h"
 #include "path.h"
 #include "handle.h"
 #include "init.h"
+#include "attr.h"
 
 /* SSH_FXP_(L)STAT/
     message has the form:
@@ -64,7 +64,7 @@
     - uint32				flags
     */
 
-static void sftp_op_stat_generic(struct sftp_subsystem_s *sftp, struct sftp_payload_s *payload, int (* cb_stat)(char *path, unsigned int mask, struct system_stat_s *s))
+static void sftp_op_stat_generic(struct sftp_subsystem_s *sftp, struct sftp_payload_s *payload, int (* cb_stat)(struct fs_location_path_s *p, unsigned int mask, struct system_stat_s *s))
 {
     unsigned int status=SSH_FX_BAD_MESSAGE;
     char *data=payload->data;
@@ -76,86 +76,62 @@ static void sftp_op_stat_generic(struct sftp_subsystem_s *sftp, struct sftp_payl
 	char *data=payload->data;
 	struct sftp_identity_s *user=&sftp->identity;
 	unsigned int pos=0;
-	unsigned int len=0;
 	unsigned int valid=0;
-	char *path=NULL;
+	struct ssh_string_s path=SSH_STRING_INIT;
 
-	len=get_uint32(&data[pos]);
+	path.len=get_uint32(&data[pos]);
 	pos+=4;
-	path=&data[pos];
-	pos+=len;
-	valid=get_uint32(&data[pos]);
+	path.ptr=&data[pos];
+	pos+=path.len;
 
-	if (len + 8 == payload->len) {
-	    struct system_stat_s st;
+	if (path.len + 8 <= payload->len) {
+	    struct system_stat_s stat;
+	    struct fs_location_s location;
+	    struct convert_sftp_path_s convert;
+	    unsigned int size=get_fullpath_size(user, &path, &convert);
+	    char tmp[size+1];
 	    int result=0;
-	    unsigned int error=0;
-	    unsigned int mask=translate_sftp_valid_2_statx_mask(valid);
+	    unsigned int mask=0;
 
-	    if (len==0) {
+	    valid=get_uint32(&data[pos]);
 
-		/* empty path resolves to the users home */
+	    memset(&location, 0, sizeof(struct fs_location_s));
+	    location.flags=FS_LOCATION_FLAG_PATH;
+	    set_buffer_location_path(&location.type.path, tmp, size+1, 0);
+	    (* convert.complete)(user, &path, &location.type.path);
 
-		logoutput_debug("sftp_op_stat_generic: path %s", user->pwd.pw_dir);
-		result=(* cb_stat)(user->pwd.pw_dir, mask, &st);
-		error=errno;
-
-	    } else if (path[0]=='/') {
-		char tmp[len+1];
-
-		/* absolute path */
-		memcpy(tmp, &path[0], len);
-		tmp[len]='\0';
-		logoutput("sftp_op_stat_generic: path %s", tmp);
-		result=(* cb_stat)(tmp, mask, &st);
-		error=errno;
-
-	    } else {
-		char tmp[user->len_home + len + 2];
-		unsigned int index=0;
-
-		/* relative to users homedirectory */
-
-		memcpy(&tmp[index], user->pwd.pw_dir, user->len_home);
-		index+=user->len_home;
-		tmp[index]='/';
-		index++;
-		memcpy(&tmp[index], &path[0], len);
-		index+=len;
-		tmp[index]='\0';
-		logoutput("sftp_op_stat_generic: path %s", tmp);
-
-		result=(* cb_stat)(tmp, mask, &stx);
-		error=errno;
-
-	    }
+	    mask=translate_valid_2_stat_mask(&sftp->attrctx, valid, 'w');
+	    result=(* cb_stat)(&location.type.path, mask, &stat);
 
 	    logoutput("sftp_op_stat: result %i valid %i", result, valid);
 
 	    if (result==0) {
-		struct sftp_attr_s attr;
-		unsigned int size=write_attributes_len(sftp, &attr, &st, valid);
-		char buffer[size];
+		struct rw_attr_result_s r=RW_ATTR_RESULT_INIT;
+		unsigned int size=get_size_buffer_write_attributes(&sftp->attrctx, &r, valid);
+		char tmp[size];
+		struct attr_buffer_s abuff;
 
-		size=write_attributes(sftp, buffer, size, &attr, valid);
+		set_attr_buffer_write(&abuff, tmp, size);
+		(* abuff.ops->rw.write.write_uint32)(&abuff, r.valid);
+		write_attributes_generic(&sftp->attrctx, &abuff, &r, &stat, valid);
 
-		if (reply_sftp_attrs(sftp, payload->id, buffer, size)==-1) logoutput_warning("sftp_op_stat: error sending attr");
+		if (reply_sftp_attrs(sftp, payload->id, tmp, abuff.len)==-1) logoutput_warning("sftp_op_stat: error sending attr");
 		return;
 
 	    } else {
 
+		result=abs(result);
 		status=SSH_FX_FAILURE;
-		if (error==0) error=EIO;
 
-		if (error==ENOENT) {
+		if (result==ENOENT) {
 
 		    status=SSH_FX_NO_SUCH_FILE;
 
-		} else if (error==ENOTDIR) {
+		} else if (result==ENOTDIR) {
 
 		    status=SSH_FX_NO_SUCH_PATH;
 
-		} else if (error==EACCES) {
+		} else if (result==EACCES) {
 
 		    status=SSH_FX_PERMISSION_DENIED;
 
@@ -184,300 +160,3 @@ void sftp_op_lstat(struct sftp_payload_s *payload)
     sftp_op_stat_generic(sftp, payload, system_getlstat);
 }
 
-/* SSH_FXP_FSTAT/
-    message has the form:
-    - byte 				SSH_FXP_FSTAT
-    - uint32				id
-    - string				handle
-    - uint32				flags
-    */
-
-void sftp_op_fstat(struct sftp_payload_s *payload)
-{
-    struct sftp_subsystem_s *sftp=payload->sftp; 
-    unsigned int status=SSH_FX_BAD_MESSAGE;
-
-    logoutput("sftp_op_fstat");
-
-    /* message should at least have 4 bytes for the handle string, and 4 for the flags */
-
-    if (payload->len>8) {
-	char *data=payload->data;
-	unsigned int pos=0;
-	unsigned int len=0;
-	unsigned int valid=0;
-
-	len=get_uint32(&data[pos]);
-	pos+=4;
-
-	if (len + 8 <= payload->len && len==BUFFER_HANDLE_SIZE) {
-	    int result=0;
-	    unsigned int error=0;
-	    unsigned int count=0;
-	    struct commonhandle_s *handle=find_sftp_commonhandle_buffer(sftp, &data[pos], &count);
-
-	    if (handle) {
-		struct sftp_identity_s *user=&sftp->identity;
-		struct statx stx;
-		unsigned int mask=0;
-
-		pos+=count;
-		valid=get_uint32(&data[pos]);
-		mask=translate_sftp_valid_2_statx_mask(valid);
-
-		result=(* handle->type.filehandle.fstat)(handle, mask, &stx);
-
-		logoutput("sftp_op_fstat: result %i valid %i", result, valid);
-
-		if (result==0) {
-		    struct sftp_attr_s attr;
-		    unsigned int size=write_attributes_len(sftp, &attr, &stx, valid);
-		    char buffer[size];
-
-		    size=write_attributes(sftp, buffer, size, &attr, valid);
-		    if (reply_sftp_attrs(sftp, payload->id, buffer, size)==-1) logoutput_warning("sftp_op_fstat: error sending attr");
-
-		    return;
-
-		} else {
-
-		    status=SSH_FX_FAILURE;
-		    if (error==0) error=EIO;
-
-		    if (error==ENOENT) {
-
-			status=SSH_FX_NO_SUCH_FILE;
-
-		    } else if (error==ENOTDIR) {
-
-			status=SSH_FX_NO_SUCH_PATH;
-
-		    } else if (error==EBADF) {
-
-			status=SSH_FX_INVALID_HANDLE;
-
-		    } else if (error==EACCES) {
-
-			status=SSH_FX_PERMISSION_DENIED;
-
-		    }
-
-		}
-
-	    } else {
-
-		if (error==EPERM) {
-
-		    /* serious error: client wants to use a handle he has no permissions for */
-
-		    logoutput("sftp_op_fstat: client has no permissions to use handle");
-		    goto disconnect;
-
-		}
-
-		status=SSH_FX_INVALID_HANDLE;
-
-	    }
-
-	}
-
-    }
-
-    logoutput("sftp_op_fstat: status %i", status);
-    reply_sftp_status_simple(sftp, payload->id, status);
-    return;
-
-    disconnect:
-
-    finish_sftp_subsystem(sftp);
-
-}
-
-int sftp_read_setstat_attr(struct sftp_subsystem_s *sftp, char *buffer, unsigned int left, struct sftp_attr_s *attr, struct stat *st)
-{
-    struct sftp_identity_s *user=&sftp->identity;
-    unsigned int status=0;
-
-    /* read the attr */
-
-    if (read_attributes_v06(sftp, buffer, left, attr)==0) {
-
-	status=SSH_FX_INVALID_PARAMETER;
-	logoutput("sftp_read_setstat_attr: error reading attributes");
-	goto error;
-
-    }
-
-    if (attr->valid[SFTP_ATTR_INDEX_USERGROUP]==1) {
-
-	/* check the user and/or group are reckognized
-	    and if set to the connecting user they do not have to be set
-	    since they are set automatically */
-
-	if (attr->flags & SFTP_ATTR_FLAG_USERNOTFOUND) {
-
-	    status=SSH_FX_OWNER_INVALID;
-	    logoutput("sftp_read_setstat_attr: error user not found");
-	    goto error;
-
-	} else if (attr->flags & SFTP_ATTR_FLAG_VALIDUSER) {
-
-	    if (attr->uid==user->pwd.pw_uid) attr->flags -= SFTP_ATTR_FLAG_VALIDUSER;
-
-	}
-
-	if (attr->flags & SFTP_ATTR_FLAG_GROUPNOTFOUND) {
-
-	    status=SSH_FX_GROUP_INVALID;
-	    logoutput("sftp_read_setstat_attr: error group not found");
-	    goto error;
-
-	} else if (attr->flags & SFTP_ATTR_FLAG_VALIDGROUP) {
-
-	    if (attr->gid==user->pwd.pw_gid) attr->flags -= SFTP_ATTR_FLAG_VALIDGROUP;
-
-	}
-
-	if (!(attr->flags & (SFTP_ATTR_FLAG_VALIDGROUP | SFTP_ATTR_FLAG_VALIDUSER))) attr->valid[SFTP_ATTR_INDEX_USERGROUP]=0;
-
-    }
-
-    if (attr->valid[SFTP_ATTR_INDEX_PERMISSIONS]) {
-
-	st.st_mode=attr.type | attr.permissions;
-	attr.valid[SFTP_ATTR_INDEX_PERMISSIONS]=0; /* not needed futher afterwards by the setstat */
-
-	if (! S_ISREG(st.st_mode)) {
-
-	    status=(st.st_mode>0) ? SSH_FX_FILE_IS_A_DIRECTORY : SSH_FX_PERMISSION_DENIED;
-	    logoutput("sftp_read_setstat_attr: error type not file (%i)", (int) st.st_mode);
-	    goto error;
-
-	}
-
-    }
-
-/* SSH_FXP_FSETSTAT/
-    message has the form:
-    - byte 				SSH_FXP_FSETSTAT
-    - uint32				id
-    - string				handle
-    - ATTR				attrs
-    */
-
-void sftp_op_fsetstat(struct sftp_payload_s *payload)
-{
-    struct sftp_subsystem_s *sftp=payload->sftp; 
-    unsigned int status=SSH_FX_BAD_MESSAGE;
-
-    logoutput("sftp_op_fsetstat");
-
-    /* message should at least have 4 bytes for the handle string, and 4 for the attr */
-
-    if (payload->len>8) {
-	char *data=payload->data;
-	unsigned int pos=0;
-	unsigned int len=0;
-	unsigned int valid=0;
-
-	len=get_uint32(&data[pos]);
-	pos+=4;
-
-	if (len + 8 <= payload->len && len==BUFFER_HANDLE_SIZE) {
-	    int result=0;
-	    unsigned int error=0;
-	    unsigned int count=0;
-	    struct commonhandle_s *handle=find_sftp_commonhandle_buffer(sftp, &data[pos], &count);
-
-	    if (handle) {
-		struct sftp_identity_s *user=&sftp->identity;
-		struct system_stat_s st;
-		unsigned int mask=0;
-		struct sftp_attr_s attr;
-
-		pos+=count;
-
-		memset(&attr, 0, sizeof(struct sftp_attr_s));
-		memset(&st, 0, sizeof(struct system_stat_s));
-
-		/* read attributes */
-
-		if ((* sftp->attr_ops.read_attributes)(sftp, &data[pos], payload->len - pos, &attr)==0) {
-
-		    status=SSH_FX_INVALID_PARAMETER;
-		    logoutput("sftp_op_fsetstat: error reading attributes");
-		    goto out;
-
-		}
-
-
-		mask=translate_sftp_valid_2_statx_mask(valid);
-		result=(* handle->type.filehandle.fstat)(handle, mask, &stx);
-
-		logoutput("sftp_op_fstat: result %i valid %i", result, valid);
-
-		if (result==0) {
-		    struct sftp_attr_s attr;
-		    unsigned int size=write_attributes_len(sftp, &attr, &stx, valid);
-		    char buffer[size];
-
-		    size=write_attributes(sftp, buffer, size, &attr, valid);
-		    if (reply_sftp_attrs(sftp, payload->id, buffer, size)==-1) logoutput_warning("sftp_op_fstat: error sending attr");
-
-		    return;
-
-		} else {
-
-		    status=SSH_FX_FAILURE;
-		    if (error==0) error=EIO;
-
-		    if (error==ENOENT) {
-
-			status=SSH_FX_NO_SUCH_FILE;
-
-		    } else if (error==ENOTDIR) {
-
-			status=SSH_FX_NO_SUCH_PATH;
-
-		    } else if (error==EBADF) {
-
-			status=SSH_FX_INVALID_HANDLE;
-
-		    } else if (error==EACCES) {
-
-			status=SSH_FX_PERMISSION_DENIED;
-
-		    }
-
-		}
-
-	    } else {
-
-		if (error==EPERM) {
-
-		    /* serious error: client wants to use a handle he has no permissions for */
-
-		    logoutput("sftp_op_fstat: client has no permissions to use handle");
-		    goto disconnect;
-
-		}
-
-		status=SSH_FX_INVALID_HANDLE;
-
-	    }
-
-	}
-
-    }
-
-    out:
-
-    logoutput("sftp_op_fstat: status %i", status);
-    reply_sftp_status_simple(sftp, payload->id, status);
-    return;
-
-    disconnect:
-
-    finish_sftp_subsystem(sftp);
-
-}

@@ -22,13 +22,11 @@
 
 #include "attr/buffer.h"
 
-#include "attr/read-attr-generic.h"
+#include "attr/rw-attr-generic.h"
 #include "attr/read-attr-v03.h"
 #include "attr/read-attr-v04.h"
 #include "attr/read-attr-v05.h"
 #include "attr/read-attr-v06.h"
-
-#include "attr/read-name-v03.h"
 
 /* prototypes */
 

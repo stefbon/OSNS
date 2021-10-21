@@ -30,6 +30,7 @@ struct attr_buffer_ops_s {
 	    void 					(* write_uint32)(struct attr_buffer_s *ab, uint32_t i);
 	    void 					(* write_uint64)(struct attr_buffer_s *ab, uint64_t i);
 	    void					(* write_uint16)(struct attr_buffer_s *ab, uint16_t i);
+	    void					(* write_int64)(struct attr_buffer_s *ab, int64_t i);
 	    void					(* write_string)(struct attr_buffer_s *ab, struct ssh_string_s *s);
 	    void					(* write_skip)(struct attr_buffer_s *ab, unsigned int l);
 	} write;
@@ -38,6 +39,7 @@ struct attr_buffer_ops_s {
 	    uint32_t					(* read_string)(struct attr_buffer_s *ab, struct ssh_string_s *s, void (* cb)(struct attr_buffer_s *ab, struct ssh_string_s *s, void *ptr), void *ptr);
 	    uint32_t					(* read_uint32)(struct attr_buffer_s *ab);
 	    uint64_t					(* read_uint64)(struct attr_buffer_s *ab);
+	    int64_t					(* read_int64)(struct attr_buffer_s *ab);
 	    uint16_t					(* read_uint16)(struct attr_buffer_s *ab);
 	} read;
     } rw;
@@ -64,5 +66,7 @@ void set_attr_buffer_read(struct attr_buffer_s *ab, char *buffer, unsigned int l
 void set_attr_buffer_read_attr_response(struct attr_buffer_s *ab, struct attr_response_s *response);
 void set_attr_buffer_nowrite(struct attr_buffer_s *ab);
 void set_attr_buffer_write(struct attr_buffer_s *ab, char *buffer, unsigned int len);
+
+void reset_attr_buffer_write(struct attr_buffer_s *ab);
 
 #endif

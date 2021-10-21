@@ -55,13 +55,13 @@ struct list_element_s *get_element_default(struct list_element_s *e)
     return e;
 }
 
-static struct list_element_s *_get_next_element(struct list_element_s *e)
+struct list_element_s *_get_next_element(struct list_element_s *e)
 {
     struct list_element_s *next=e->n;
     return (* next->ops.get_element)(next);
 }
 
-static struct list_element_s *_get_prev_element(struct list_element_s *e)
+struct list_element_s *_get_prev_element(struct list_element_s *e)
 {
     struct list_element_s *prev=e->p;
     return (* prev->ops.get_element)(prev);

@@ -59,6 +59,7 @@
 #include "ssh/subsystem/sftp/receive.h"
 #include "ssh/subsystem/sftp/init.h"
 #include "ssh/subsystem/sftp/connect.h"
+#include "ssh/subsystem/sftp/payload.h"
 
 #define PIDFILE_PATH							"/run"
 
@@ -129,13 +130,14 @@ int main(int argc, char *argv[])
     char *pidfile=NULL;
 
     switch_logging_backend("std");
-    setlogmask(LOG_UPTO(LOG_DEBUG));
+    set_logging_level(LOG_DEBUG);
 
     logoutput("%s started", argv[0]);
 
     /* output to stdout/stderr is useless since daemonized */
 
     switch_logging_backend("syslog");
+    set_logging_level(LOG_DEBUG);
 
     if (init_beventloop(NULL)==-1) {
 
@@ -159,7 +161,7 @@ int main(int argc, char *argv[])
 
     }
 
-    if (init_commonhandles(&error)==0) {
+    if (init_hash_commonhandles(&error)==0) {
 
 	logoutput_info("MAIN: initializing common handles (open and opendir)");
 
@@ -236,7 +238,7 @@ int main(int argc, char *argv[])
 
     logoutput_info("MAIN: destroy eventloop");
     clear_beventloop(NULL);
-    free_commonhandles();
+    free_hash_commonhandles();
 
     if (pidfile) {
 

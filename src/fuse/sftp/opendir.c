@@ -413,8 +413,6 @@ static int _sftp_get_readdir_names(struct fuse_opendir_s *opendir, unsigned int 
 	    if (reply->type==SSH_FXP_NAME) {
 		struct name_response_s *names=&reply->response.names;
 
-		/* copy the pointers to the names, not the names (and attr) self */
-
 		init_fuse_buffer(&opendir->data.buffer, (char *) names->buff, names->size, names->count);
 
 		if (names->flags & SFTP_RESPONSE_FLAG_EOF_SUPPORTED) {
@@ -492,7 +490,7 @@ static void get_sftp_readdir_thread(void *ptr)
     opendir->flags |= _FUSE_OPENDIR_FLAG_THREAD;
     signal_unlock(opendir->signal);
 
-    init_create_entry(&ce, NULL, NULL, NULL, opendir, context, NULL, NULL);
+    init_create_entry(&ce, &xname, NULL, NULL, opendir, context, NULL, NULL);
 
     ce.cb_cache_size=_cb_cache_size;
     ce.cb_check=_cb_check;
@@ -503,11 +501,7 @@ static void get_sftp_readdir_thread(void *ptr)
     ce.cache.buffer=buffer;
 
     memset(&st, 0, sizeof(struct stat));
-    memset(&xname, 0, sizeof(struct name_s));
-
-    xname.name=NULL;
-    xname.len=0;
-    xname.index=0;
+    init_name(&xname);
 
     while ((opendir->flags & _FUSE_OPENDIR_FLAG_READDIR_FINISH)==0) {
 	char *keep=buffer->pos;
@@ -544,6 +538,7 @@ static void get_sftp_readdir_thread(void *ptr)
 	    }
 
 	    keep=buffer->pos;
+	    // logoutput_base64encoded(NULL, buffer->data, buffer->size, 1);
 
 	}
 
@@ -553,8 +548,11 @@ static void get_sftp_readdir_thread(void *ptr)
 	    /* extract name and attributes from names
 		only get the name, do the attr later */
 
+	    logoutput_base64encoded(NULL, buffer->pos, buffer->left, buffer->done + 1);
+
 	    read_name_nameresponse_ctx(&context->interface, buffer, &name);
 	    keep=buffer->pos;
+	    logoutput("get_sftp_readdir_thread: got name %.*s %i:%i left %i", name.len, name.ptr, buffer->count, buffer->done, buffer->left);
 
 	    if ((name.len==1 && strncmp(name.ptr, ".", 1)==0) || (name.len==2 && strncmp(name.ptr, "..", 2)==0)) {
 		struct sftp_attr_s attr;
@@ -562,14 +560,11 @@ static void get_sftp_readdir_thread(void *ptr)
 		/* skip the . and .. entries */
 
 		read_attr_nameresponse_ctx(&context->interface, buffer, &attr);
-		logoutput("get_sftp_readdir_thread: got name %.*s %i:%i left %i", name.len, name.ptr, buffer->count, buffer->done, buffer->left);
 
 	    } else {
 
-		xname.name=name.ptr;
-		xname.len=name.len;
+		set_name_from(&xname, 's', (void *) &name);
 		calculate_nameindex(&xname);
-		ce.name=&xname;
 
 		/* create the entry (if not exist already) */
 
@@ -590,8 +585,6 @@ static void get_sftp_readdir_thread(void *ptr)
 		    logoutput_warning("get_sftp_readdir_thread: entry %.*s not created", name.len, name.ptr);
 
 		}
-
-		logoutput("get_sftp_readdir_thread: got name %.*s %i:%i left %i", name.len, name.ptr, buffer->count, buffer->done, buffer->left);
 
 	    }
 
@@ -701,7 +694,7 @@ void _fs_sftp_opendir(struct fuse_opendir_s *opendir, struct fuse_request_s *f_r
 	    if (reply->type==SSH_FXP_HANDLE) {
 		struct fuse_open_out open_out;
 
-		logoutput_base64encoded("_fs_sftp_opendir_common:", (char *) reply->response.handle.name, reply->response.handle.len);
+		// logoutput_base64encoded("_fs_sftp_opendir_common:", (char *) reply->response.handle.name, reply->response.handle.len);
 
 		/* take over handle */
 		opendir->handle.name.name=(char *) reply->response.handle.name;

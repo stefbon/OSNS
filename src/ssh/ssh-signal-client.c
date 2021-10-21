@@ -43,6 +43,7 @@
 #include "main.h"
 #include "misc.h"
 #include "commonsignal.h"
+#include "interface.h"
 
 #include "ssh-common.h"
 #include "ssh-utils.h"
@@ -56,7 +57,16 @@
 #define REMOTE_COMMAND_GET_SERVERNAME			"getservername"
 #define REMOTE_COMMAND_ENUM_SERVICES			"enumservices"
 #define REMOTE_COMMAND_GET_SERVICE			"getservice"
+#define REMOTE_COMMAND_SYSTEM_GETENTS			"systemgetents"
 #define REMOTE_COMMAND_MAXLEN				256
+
+static int custom_strncmp(const char *s, char *t)
+{
+    unsigned int len=strlen(t);
+
+    if (strlen(s)>=len) return memcmp(s, t, len);
+    return -1;
+}
 
 static unsigned int get_ssh2remote_command(char *command, unsigned int size, const char *what, struct ctx_option_s *o, const char *how)
 {
@@ -82,11 +92,15 @@ static unsigned int get_ssh2remote_command(char *command, unsigned int size, con
 
 	} else if (strcmp(what, "info:service:")==0) {
 
-	    return snprintf(command, size, "%s%s %s", prefix, REMOTE_COMMAND_GET_SERVICE, o->value.name);
+	    return (o->type==_CTX_OPTION_TYPE_PCHAR) ? snprintf(command, size, "%s%s %s", prefix, REMOTE_COMMAND_GET_SERVICE, o->value.name) : -1;
 
 	} else if (strcmp(what, "info:getentuser:")==0) {
 
 	    return snprintf(command, size, "getent passwd $USER");
+
+	}  else if (strcmp(what, "info:system.getents:")==0) {
+
+	    return snprintf(command, size, "%s%s", prefix, REMOTE_COMMAND_SYSTEM_GETENTS);
 
 	} else if (strcmp(what, "info:username:")==0) {
 
@@ -353,10 +367,10 @@ static int _signal_ctx2ssh(void **p_ptr, const char *what, struct ctx_option_s *
     if (session==NULL) return -1;
     logoutput("signal_ctx2ssh: %s", what);
 
-    if (strncmp(what, "command:", 8)==0) {
+    if (custom_strncmp(what, "command:")==0) {
 	unsigned pos=8;
 
-	if (strncmp(&what[pos], "disconnect:", 11)==0 || strncmp(&what[pos], "close:", 6)==0) {
+	if (custom_strncmp(&what[pos], "disconnect:")==0 || custom_strncmp(&what[pos], "close:")==0) {
 
 	    /* what to lock and check here */
 
@@ -381,7 +395,7 @@ static int _signal_ctx2ssh(void **p_ptr, const char *what, struct ctx_option_s *
 	    session->connections.flags |= SSH_CONNECTIONS_FLAG_DISCONNECTED;
 	    signal_unlock(session->connections.signal);
 
-	} else if (strncmp(&what[pos], "free:", 5)==0 || strncmp(&what[pos], "clear:", 6)==0) {
+	} else if (custom_strncmp(&what[pos], "free:")==0 || custom_strncmp(&what[pos], "clear:")==0) {
 
 	    signal_lock(session->connections.signal);
 
@@ -408,15 +422,15 @@ static int _signal_ctx2ssh(void **p_ptr, const char *what, struct ctx_option_s *
 
 	}
 
-    } else if (strncmp(what, "info:", 5)==0) {
+    } else if (custom_strncmp(what, "info:")==0) {
 	unsigned pos=5;
 	struct ssh_session_ctx_s *context=&session->context;
 
-	if (strncmp(&what[pos], "enumservices:", 13)==0) {
+	if (custom_strncmp(&what[pos], "enumservices:")==0 || custom_strncmp(&what[pos], "system.getents:")==0) {
 
 	    return (* context->signal_ssh2remote)(session, what, option);
 
-	} else if (strncmp(&what[pos], "service:", 8)==0) {
+	} else if (custom_strncmp(&what[pos], "service:")==0) {
 
 	    if (!(option->type==_CTX_OPTION_TYPE_PCHAR) || option->value.name==NULL) {
 
@@ -439,39 +453,39 @@ static int _signal_ctx2ssh(void **p_ptr, const char *what, struct ctx_option_s *
 
 	    }
 
-	} else if (strncmp(&what[pos], "username:", 9)==0) {
+	} else if (custom_strncmp(&what[pos], "username:")==0) {
 
 	    return (* context->signal_ssh2remote)(session, what, option);
 
-	} else if (strncmp(&what[pos], "getentuser:", 11)==0) {
+	} else if (custom_strncmp(&what[pos], "getentuser:")==0) {
 
 	    return (* context->signal_ssh2remote)(session, what, option);
 
-	} else if (strncmp(&what[pos], "groupname:", 10)==0) {
+	} else if (custom_strncmp(&what[pos], "groupname:")==0) {
 
 	    return (* context->signal_ssh2remote)(session, what, option);
 
-	} else if (strncmp(&what[pos], "getentgroup:", 12)==0) {
+	} else if (custom_strncmp(&what[pos], "getentgroup:")==0) {
 
 	    return (* context->signal_ssh2remote)(session, what, option);
 
-	} else if (strncmp(&what[pos], "remotehome:", 11)==0) {
+	} else if (custom_strncmp(&what[pos], "remotehome:")==0) {
 
 	    return (* context->signal_ssh2remote)(session, what, option);
 
-	} else if (strncmp(&what[pos], "remotetime:", 11)==0) {
+	} else if (custom_strncmp(&what[pos], "remotetime:")==0) {
 
 	    return (* context->signal_ssh2remote)(session, what, option);
 
-	} else if (strncmp(&what[pos], "hostname:", 9)==0) {
+	} else if (custom_strncmp(&what[pos], "hostname:")==0) {
 
 	    return (* context->signal_ssh2remote)(session, what, option);
 
-	} else if (strncmp(&what[pos], "fqdn:", 5)==0) {
+	} else if (custom_strncmp(&what[pos], "fqdn:")==0) {
 
 	    return (* context->signal_ssh2remote)(session, what, option);
 
-	} else if (strncmp(&what[pos], "servername:", 11)==0) {
+	} else if (custom_strncmp(&what[pos], "servername:")==0) {
 
 	    return (* context->signal_ssh2remote)(session, what, option);
 

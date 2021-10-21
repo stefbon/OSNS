@@ -48,117 +48,127 @@
 #include "sftp/common.h"
 #include "sftp/protocol-v03.h"
 #include "sftp/attr-context.h"
-
-#include "read-attr-generic.h"
 #include "read-attr-v03.h"
 
 static unsigned int type_mapping[5]={0, S_IFREG, S_IFDIR, S_IFLNK, 0};
 
-void read_attr_zero(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct sftp_attr_s *attr)
+void read_attr_zero(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)
 {
 }
 
-void read_attr_size_v03(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct sftp_attr_s *attr)
+void read_attr_type_v03(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)
 {
-
-    attr->size=(* buffer->ops->rw.read.read_uint64)(buffer);
-
-    attr->received |= SFTP_ATTR_SIZE;
-    r->done |= SSH_FILEXFER_ATTR_SIZE;
-    r->todo &= ~SSH_FILEXFER_ATTR_SIZE;
-
+    unsigned char tmp=(* buffer->ops->rw.read.read_uchar)(buffer);
+    unsigned int type=(tmp<5) ? type_mapping[tmp] : 0;
+    set_type_system_stat(stat, type);
 }
 
-void read_attr_uidgid_v03(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct sftp_attr_s *attr)
+void read_attr_size_v03(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)
 {
-    struct sftp_user_s user;
-    struct sftp_group_s group;
+    uint64_t size=(* buffer->ops->rw.read.read_uint64)(buffer);
+    set_size_system_stat(stat, size);
+}
+
+void read_attr_uidgid_v03(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)
+{
+    struct net_entity_s user;
+    struct net_entity_s group;
 
     /* uid */
 
-    user.remote.id=(* buffer->ops->rw.read.read_uint32)(buffer);
-
-    (* ctx->get_local_uid_byid)(ctx, &user);
-    attr->user.uid=user.uid;
-    attr->received |= SFTP_ATTR_USER;
+    user.net.id=(* buffer->ops->rw.read.read_uint32)(buffer);
+    (* actx->mapping->mapcb.get_user_p2l)(actx->mapping, &user);
+    set_uid_system_stat(stat, user.local.uid);
 
     /* gid */
 
-    group.remote.id=(* buffer->ops->rw.read.read_uint32)(buffer);
-
-    (* ctx->get_local_gid_byid)(ctx, &group);
-    attr->group.gid=group.gid;
-    attr->received |= SFTP_ATTR_GROUP;
-
-    r->done |= SSH_FILEXFER_ATTR_UIDGID;
-    r->todo &= ~SSH_FILEXFER_ATTR_UIDGID;
-
-    logoutput("read_attr_uidgid_v03: remote %i:%i local %i:%i", user.remote.id, group.remote.id, attr->user.uid, attr->group.gid);
-}
-
-void read_attr_permissions_v03(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct sftp_attr_s *attr)
-{
-    unsigned int perm=(* buffer->ops->rw.read.read_uint32)(buffer);
-
-    attr->permissions=(S_IRWXU | S_IRWXG | S_IRWXO) & perm; /* sftp uses the same permission bits as Linux */
-    attr->received |= SFTP_ATTR_PERMISSIONS;
-
-    r->done |= SSH_FILEXFER_ATTR_PERMISSIONS;
-    r->todo &= ~SSH_FILEXFER_ATTR_PERMISSIONS;
-
-    logoutput("read_attr_permissions_v03");
+    group.net.id=(* buffer->ops->rw.read.read_uint32)(buffer);
+    (* actx->mapping->mapcb.get_group_p2l)(actx->mapping, &group);
+    set_gid_system_stat(stat, group.local.gid);
 
 }
 
-void read_attr_acmodtime_v03(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct sftp_attr_s *attr)
+void read_attr_permissions_v03(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)
 {
+    unsigned int mode=(* buffer->ops->rw.read.read_uint32)(buffer);
+    uint16_t type=(mode & S_IFMT);
+    uint16_t perm=(mode & (S_IRWXU | S_IRWXG | S_IRWXO));
+
+    set_type_system_stat(stat, type);
+    set_mode_system_stat(stat, perm); /* sftp uses the same permission bits as Linux */
+}
+
+void read_attr_acmodtime_v03(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)
+{
+    struct system_timespec_s time=SYSTEM_TIME_INIT;
 
     /* access time */
 
-    attr->atime=(* buffer->ops->rw.read.read_uint32)(buffer);
-    attr->received |= SFTP_ATTR_ATIME;
+    time.sec=(* buffer->ops->rw.read.read_uint32)(buffer);
+    set_atime_system_stat(stat, &time);
 
     /* modify time */
 
-    attr->mtime=(* buffer->ops->rw.read.read_uint32)(buffer);
-    attr->received |= SFTP_ATTR_MTIME;
-
-    r->done |= SSH_FILEXFER_ATTR_ACMODTIME;
-    r->todo &= ~SSH_FILEXFER_ATTR_ACMODTIME;
+    time.sec=(* buffer->ops->rw.read.read_uint32)(buffer);
+    set_mtime_system_stat(stat, &time);
 
 }
 
-void read_attr_extensions_v03(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct sftp_attr_s *attr)
+void read_attr_extensions_v03(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)
 {
     /* what to do here ? */
-    r->done |= SSH_FILEXFER_ATTR_EXTENDED;
-    r->todo &= ~SSH_FILEXFER_ATTR_EXTENDED;
 }
 
-static struct _rw_attrcb_s read_attr03[] = {
-		    {SSH_FILEXFER_ATTR_SIZE, 			0,				{read_attr_zero, read_attr_size_v03}},
-		    {SSH_FILEXFER_ATTR_UIDGID,			1,				{read_attr_zero, read_attr_uidgid_v03}},
-		    {SSH_FILEXFER_ATTR_PERMISSIONS, 		2,				{read_attr_zero, read_attr_permissions_v03}},
-		    {SSH_FILEXFER_ATTR_ACMODTIME, 		3,				{read_attr_zero, read_attr_acmodtime_v03}},
-		    {SSH_FILEXFER_ATTR_EXTENDED,		31,				{read_attr_zero, read_attr_extensions_v03}}};
+/* read the name of a NAME response
+    */
+
+/*
+    read a name and attributes from a name response
+    for version 4 a name response looks like:
+
+    uint32				id
+    uint32				count
+    repeats count times:
+	string				filename
+	string				longname
+	ATTRS				attr
 
 
-void read_sftp_attributes_v03(struct attr_context_s *ctx, unsigned int valid, struct attr_buffer_s *buffer, struct sftp_attr_s *attr)
+    longname is output of ls -l command like:
+
+    -rwxr-xr-x   1 mjos     staff      348911 Mar 25 14:29 t-filexfer
+    1234567890 123 12345678 12345678 12345678 123456789012
+    01234567890123456789012345678901234567890123456789012345
+    0         1         2         3         4         5
+
+    example:
+
+    -rw-------    1 sbon     sbon         1799 Nov 26 15:22 .bash_history
+
+
+*/
+
+static void _dummy_cb(struct attr_buffer_s *buffer, struct ssh_string_s *s, void *ptr)
 {
-    struct rw_attr_result_s r;
-
-    memset(&r, 0, sizeof(struct rw_attr_result_s));
-    r.valid=valid;
-    r.todo=valid;
-    r.attrcb=read_attr03;
-    r.count=5;
-
-    read_sftp_attributes_generic(ctx, buffer, &r, attr);
-
 }
 
-void read_attributes_v03(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct sftp_attr_s *attr)
+void read_name_name_response_v03(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct ssh_string_s *name)
 {
-    unsigned int valid=(* buffer->ops->rw.read.read_uint32)(buffer);
-    read_sftp_attributes_v03(ctx, valid, buffer, attr);
+    uint32_t len=(* buffer->ops->rw.read.read_string)(buffer, name, _dummy_cb, NULL);
+}
+
+void read_attr_name_response_v03(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)
+{
+    struct ssh_string_s longname=SSH_STRING_INIT;
+    unsigned int valid=0;
+
+    /* longname, ignore */
+
+    uint32_t len=(* buffer->ops->rw.read.read_string)(buffer, &longname, _dummy_cb, NULL);
+
+    /* attr */
+
+    valid=(* buffer->ops->rw.read.read_uint32)(buffer);
+    read_attributes_generic(actx, buffer, r, stat, valid);
+
 }

@@ -20,8 +20,11 @@
 #ifndef _LIB_USERS_H
 #define _LIB_USERS_H
 
+#include "users/getent.h"
 #include "users/check.h"
 #include "users/local.h"
 #include "users/monitor.h"
+#include "users/mapping.h"
+#include "users/mapcb.h"
 
 #endif

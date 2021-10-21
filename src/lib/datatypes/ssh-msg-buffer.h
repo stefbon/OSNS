@@ -17,8 +17,8 @@
 
 */
 
-#ifndef _SSH_DATATYPES_MSG_BUFFER_H
-#define _SSH_DATATYPES_MSG_BUFFER_H
+#ifndef LIB_DATATYPES_SSH_MSG_BUFFER_H
+#define LIB_DATATYPES_SSH_MSG_BUFFER_H
 
 struct msg_buffer_s {
     char				*data;

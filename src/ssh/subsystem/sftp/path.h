@@ -20,9 +20,14 @@
 #ifndef OSNS_SSH_SUBSYSTEM_SFTP_PATH_H
 #define OSNS_SSH_SUBSYSTEM_SFTP_PATH_H
 
+#include "system.h"
+
+struct convert_sftp_path_s {
+    void				(* complete)(struct sftp_identity_s *user, struct ssh_string_s *path, struct fs_location_path_s *localpath);
+};
+
 /* prototypes */
 
-unsigned int get_fullpath_len(struct sftp_identity_s *user, unsigned int len, char *buffer);
-void get_fullpath(struct sftp_identity_s *user, unsigned int len, char *buffer, char *path);
+unsigned int get_fullpath_size(struct sftp_identity_s *user, struct ssh_string_s *path, struct convert_sftp_path_s *convert_path);
 
 #endif

@@ -20,18 +20,23 @@
 #ifndef OSNS_SSH_SUBSYSTEM_SFTP_HANDLE_H
 #define OSNS_SSH_SUBSYSTEM_SFTP_HANDLE_H
 
-#include "ssh/subsystem/commonhandle.h"
+#include "lib/system/fshandle.h"
 
 /* prototypes */
 
-struct commonhandle_s *find_sftp_commonhandle_buffer(struct sftp_subsystem_s *sftp, char *buffer, unsigned int *p_count);
+unsigned char write_sftp_commonhandle(struct commonhandle_s *handle, char *buffer, unsigned int size);
+unsigned char get_sftp_handle_size();
 
 void set_sftp_handle_access(struct commonhandle_s *handle, unsigned int access);
 void set_sftp_handle_flags(struct commonhandle_s *handle, unsigned int flags);
 
-struct commonhandle_s *init_sftp_filehandle(struct sftp_subsystem_s *sftp, unsigned int inserttype, dev_t dev, uint64_t ino, char *name);
-int insert_sftp_filehandle(struct commonhandle_s *new, struct insert_filehandle_s *insert);
+struct commonhandle_s *create_sftp_filehandle(struct sftp_subsystem_s *sftp, unsigned int inserttype, dev_t dev, uint64_t ino, char *name, unsigned int flags, unsigned int access);
 
-void release_sftp_handle_buffer(struct sftp_subsystem_s *sftp, char *buffer);
+struct commonhandle_s *find_sftp_commonhandle(struct sftp_subsystem_s *sftp, char *buffer, unsigned int size, unsigned int *p_count);
+void release_sftp_handle(struct commonhandle_s **p_handle);
+
+struct commonhandle_s *create_sftp_dirhandle(struct sftp_subsystem_s *sftp, struct fs_location_devino_s *devino);
+
+uint32_t get_valid_sftp_dirhandle(struct commonhandle_s *handle);
 
 #endif

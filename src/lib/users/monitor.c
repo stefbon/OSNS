@@ -259,7 +259,7 @@ void read_user_monitor_event(int fd, void *data, struct event_s *event)
 
 	monitor_flags |= _MONITOR_FLAG_CHANGED;
 	pthread_mutex_unlock(&monitor_mutex);
-	return 0;
+	return;
 
     }
 
@@ -295,7 +295,5 @@ void read_user_monitor_event(int fd, void *data, struct event_s *event)
     pthread_mutex_unlock(&monitor_mutex);
 
     logoutput("read_user_monitor_event: finish");
-
-    return 0;
 
 }

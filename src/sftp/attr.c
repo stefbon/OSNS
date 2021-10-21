@@ -63,7 +63,7 @@ void set_sftp_attr_version(struct sftp_client_s *sftp)
 	ops->read_name_response			= read_name_nameresponse_v03;
 	ops->read_attr_response			= read_attr_nameresponse_v03;
 	ops->write_attributes			= write_attributes_v03;
-	ops->write_attributes_len		= write_attributes_len_v03;
+	ops->prepare_write_attribute		= prepare_write_attributes_v03;
 
     } else if (version==4) {
 
@@ -71,7 +71,7 @@ void set_sftp_attr_version(struct sftp_client_s *sftp)
 	ops->read_name_response			= read_name_nameresponse_v03;
 	ops->read_attr_response			= read_attributes_v04;
 	ops->write_attributes			= write_attributes_v04;
-	ops->write_attributes_len		= write_attributes_len_v04;
+	ops->prepare_write_attributes		= prepare_write_attributes_v04;
 
     } else if (version==5) {
 
@@ -79,7 +79,7 @@ void set_sftp_attr_version(struct sftp_client_s *sftp)
 	ops->read_name_response			= read_name_nameresponse_v03;
 	ops->read_attr_response			= read_attributes_v05;
 	ops->write_attributes			= write_attributes_v05;
-	ops->write_attributes_len		= write_attributes_len_v05;
+	ops->prepare_write_attributes		= prepare_write_attributes_v05;
 
     } else if (version==6) {
 
@@ -87,7 +87,7 @@ void set_sftp_attr_version(struct sftp_client_s *sftp)
 	ops->read_name_response			= read_name_nameresponse_v03;
 	ops->read_attr_response			= read_attributes_v06;
 	ops->write_attributes			= write_attributes_v06;
-	ops->write_attributes_len		= write_attributes_len_v06;
+	ops->prepare_write_attributes		= prepare_write_attributes_v06;
 
     } else {
 
@@ -121,7 +121,7 @@ static unsigned char get_sftp_client_protocol_version(struct attr_context_s *ctx
 void init_sftp_client_attr_context(struct sftp_client_s *sftp)
 {
 
-    init_attr_context(&sftp->attrctx, NULL);
+    init_attr_context(&sftp->attrctx, NULL, sftp->mapping);
 
     sftp->attrctx.get_sftp_flags=get_sftp_client_flags;
     sftp->attrctx.get_sftp_protocol_version=get_sftp_client_protocol_version;

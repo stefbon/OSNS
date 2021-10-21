@@ -52,31 +52,10 @@ extern void release_directory_pathcache(struct directory_s *d);
 
 static int compare_dentry(struct list_element_s *list, void *b)
 {
-    int result=0;
     struct name_s *name=(struct name_s *) b;
     struct entry_s *entry=(struct entry_s *)((char *) list - offsetof(struct entry_s, list));
 
-    logoutput_debug("compare_dentry: name %s - entry %s", name->name, entry->name.name);
-
-    if (entry->name.index==name->index) {
-
-	if (name->len > 6) {
-
-	    result=(entry->name.len > 6) ? strcmp(entry->name.name + 6, name->name + 6) : -1;
-
-	} else if (name->len==6) {
-
-	    result=(entry->name.len>6) ? 1 : 0;
-
-	}
-
-    } else {
-
-	result=(entry->name.index > name->index) ? 1 : -1;
-
-    }
-
-    return result;
+    return compare_names(&entry->name, name);
 
 }
 
@@ -173,13 +152,13 @@ int prelock_directory(struct directory_s *directory, struct simple_lock_s *lock)
 
 struct entry_s *get_next_entry(struct entry_s *entry)
 {
-    struct list_element_s *next=entry->list.n;
+    struct list_element_s *next=get_next_element(&entry->list);
     return (next) ? ((struct entry_s *)((char *)next - offsetof(struct entry_s, list))) : NULL;
 }
 
 struct entry_s *get_prev_entry(struct entry_s *entry)
 {
-    struct list_element_s *prev=entry->list.p;
+    struct list_element_s *prev=get_prev_element(&entry->list);
     return (prev) ? ((struct entry_s *)((char *)prev - offsetof(struct entry_s, list))) : NULL;
 }
 

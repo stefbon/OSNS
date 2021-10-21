@@ -22,9 +22,8 @@
 
 /* prototypes */
 
-void write_attr_changetime_v06(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct sftp_attr_s *attr);
-
-void write_attributes_v06(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct sftp_attr_s *attr);
-unsigned int write_attributes_len_v06(struct attr_context_s *ctx, struct rw_attr_result_s *r, struct sftp_attr_s *attr);
+void write_attr_type_v06(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat);
+void write_attr_changetime_v06(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat);
+void write_attr_changetime_n_v06(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat);
 
 #endif

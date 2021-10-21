@@ -39,16 +39,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
-#include <sys/statvfs.h>
-#include <sys/mount.h>
-
-#ifdef HAVE_SETXATTR
-#include <sys/xattr.h>
-#endif
-
-#ifndef ENOATTR
-#define ENOATTR ENODATA        /* No such attribute */
-#endif
 
 #include "log.h"
 
@@ -67,50 +57,6 @@
 #include "connect.h"
 #include "init.h"
 
-/* is this still required?? getting payload from a queue ... */
-
-static void process_sftp_payload_queue(struct sftp_subsystem_s *s)
-{
-    struct sftp_payload_queue_s *queue=&s->queue;
-    struct list_element_s *list=NULL;
-
-    readqueue:
-
-    pthread_mutex_lock(&queue->mutex);
-    queue->threads++;
-    list=get_list_head(&queue->header, SIMPLE_LIST_FLAG_REMOVE);
-    pthread_mutex_unlock(&queue->mutex);
-
-    if (list) {
-	struct sftp_payload_s *payload=(struct sftp_payload_s *) ((char *) list - offsetof(struct sftp_payload_s, list));
-
-	(* s->cb[payload->type])(payload);
-	if (s->flags & SFTP_SUBSYSTEM_FLAG_FINISH) goto finish;
-
-	pthread_mutex_lock(&queue->mutex);
-	queue->threads--;
-	pthread_mutex_unlock(&queue->mutex);
-
-	goto readqueue;
-
-    }
-
-    return;
-
-    finish:
-
-    pthread_mutex_lock(&queue->mutex);
-    queue->threads--;
-    if (queue->threads==0) {
-
-	/* last thread: cleanup and close */
-
-    }
-
-    pthread_mutex_unlock(&queue->mutex);
-
-}
-
 static void read_sftp_buffer(void *ptr)
 {
     struct sftp_subsystem_s *s=(struct sftp_subsystem_s *) ptr;
@@ -120,7 +66,7 @@ static void read_sftp_buffer(void *ptr)
     unsigned char headersize=9;
     uint32_t length=0;
 
-    logoutput("read_sftp_buffer: tid %i read %i", gettid(), receive->read);
+    logoutput_debug("read_sftp_buffer: tid %i read %i", gettid(), receive->read);
 
     pthread_mutex_lock(&receive->mutex);
 
@@ -192,7 +138,7 @@ static void read_sftp_buffer(void *ptr)
 
 	/* wait for data to arrive */
 
-	logoutput("read_sftp_buffer: tid %i read %i length %i", gettid(), receive->read, length);
+	logoutput_debug("read_sftp_buffer: tid %i read %i length %i", gettid(), receive->read, length);
 
 	while (receive->read < length + 4) {
 
@@ -231,15 +177,13 @@ static void read_sftp_buffer(void *ptr)
 	    pos++;
 
 	    memcpy(payload->data, &buffer[pos], length - 1);
-
-	    logoutput("read_sftp_buffer: process payload len %i id %i", payload->len, payload->id);
+	    logoutput_debug("read_sftp_buffer: process payload len %i id %i", payload->len, payload->id);
 
 	    (* receive->process_sftp_payload)(payload);
-	    logoutput("read_sftp_buffer: process payload ready");
 
 	} else {
 
-	    logoutput("read_sftp_buffer: tid %i unable to allocate payload %i bytes", gettid(), length);
+	    logoutput_warning("read_sftp_buffer: tid %i unable to allocate payload %i bytes", gettid(), length);
 	    pthread_mutex_unlock(&receive->mutex);
 	    goto disconnect;
 
@@ -251,8 +195,7 @@ static void read_sftp_buffer(void *ptr)
 
 	if (receive->read>0) {
 
-	    logoutput("read_sftp_buffer: %i bytes still in buffer", receive->read);
-
+	    logoutput_debug("read_sftp_buffer: %i bytes still in buffer", receive->read);
 	    memmove(receive->buffer, (char *)(receive->buffer + length + 4), receive->read);
 	    if (receive->threads==0) goto start; /* notice receive mutex is still locked here */
 
@@ -344,7 +287,7 @@ static int read_sftp_connection_socket(struct sftp_subsystem_s *s, int fd, struc
 
 	receive->read+=bytesread;
 
-	logoutput("read_sftp_connection_socket: read %i", receive->read);
+	logoutput_debug("read_sftp_connection_socket: read %i", receive->read);
 
 	if (receive->flags & SFTP_RECEIVE_STATUS_WAIT) {
 

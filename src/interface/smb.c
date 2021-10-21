@@ -126,6 +126,7 @@ static unsigned int get_username_for_smb_connection(struct context_interface_s *
 
     } else {
 	struct ssh_string_s user=SSH_STRING_INIT;
+	unsigned int error=0;
 
 	lock_local_userbase();
 
@@ -136,7 +137,7 @@ static unsigned int get_username_for_smb_connection(struct context_interface_s *
 
 	}
 
-	len=get_local_user_byuid(uid, &user);
+	len=get_local_user_byuid(uid, &user, &error);
 
 	unlock_local_userbase();
 

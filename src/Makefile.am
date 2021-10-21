@@ -1,4 +1,4 @@
-bin_PROGRAMS = osns_client
+bin_PROGRAMS =
 sbin_PROGRAMS =
 
 extra_CFLAGS = -fasynchronous-unwind-tables -fexceptions -fstack-clash-protection
@@ -7,6 +7,10 @@ debug_CFLAGS = -ggdb -Og
 osns_client_CFLAGS = $(CFLAGS) $(GLIB_CFLAGS) $(LIBGCRYPT_CFLAGS) $(SYSTEMD_CFLAGS) $(AVAHI_CORE_CFLAGS) $(AVAHI_CLIENT_CFLAGS) $(AVAHI_GLIB_CFLAGS) $(debug_CFLAGS) -D_FILE_OFFSET_BITS=64 -lz -lpthread -fPIC -lm -I . -I ./ssh -I ./lib -Wall -Wno-unused-but-set-variable -Wno-uninitialized -Wno-unused-variable -Wno-unused-label -Wno-unused-function
 osns_client_CPPFLAGS = $(CXXFLAGS) $(GLIB_CFLAGS) $(LIBGCRYPT_CFLAGS) $(SYSTEMD_CFLAGS)  $(AVAHI_CORE_CFLAGS) $(AVAHI_CLIENT_CFLAGS) $(AVAHI_GLIB_CFLAGS) $(debug_CFLAGS) -D_FILE_OFFSET_BITS=64 -lz -lpthread -fPIC -lm -I . -I ./ssh -I ./lib -Wall -Wno-unused-but-set-variable -Wno-uninitialized -Wno-unused-variable -Wno-unused-label -Wno-unused-function
 osns_client_LDADD = $(GLIB_LIBS) $(LIBGCRYPT_LIBS) $(SYSTEMD_LIBS) $(AVAHI_CORE_LIBS) $(AVAHI_CLIENT_LIBS) $(AVAHI_GLIB_LIBS) $(LDFLAGS)
+
+if BUILD_OSNS_CLIENT
+sbin_PROGRAMS += osns_client
+endif
 
 osns_client_SOURCES =  	lib/fuse/directory.c lib/fuse/dentry.c lib/fuse/dentry-ops.c lib/fuse/utils.c \
 			lib/fuse/fuse-interface.c lib/fuse/fs.c \
@@ -31,9 +35,12 @@ osns_client_SOURCES =  	lib/fuse/directory.c lib/fuse/dentry.c lib/fuse/dentry-o
 			lib/log/logging.c lib/mime/handlemime.c lib/misc/replaceandskip.c lib/commonsignal/lock.c \
 			options.c \
 			osns_client.c osns_socket.c \
+			lib/datatypes/name.c \
 			lib/datatypes/ssh-string.c lib/datatypes/ssh-uint.c \
 			lib/datatypes/ssh-namelist.c lib/datatypes/ssh-payload.c lib/datatypes/ssh-mpint.c lib/datatypes/ssh-msg-buffer.c \
-			lib/users/check.c lib/users/local.c lib/users/monitor.c \
+			lib/file/read.c \
+			lib/users/check.c lib/users/getent.c lib/users/local.c lib/users/lookup.c \
+			lib/users/mapcb.c lib/users/mapcb-c2s.c lib/users/mapcb-s2c.c lib/users/mapping.c lib/users/monitor.c \ 
 			fuse/network.c fuse/ssh.c fuse/sftp.c fuse/smb.c \
 			fuse/workspace-fs.c fuse/workspace/access.c fuse/workspace/getattr.c fuse/workspace/lookup.c fuse/workspace/opendir.c fuse/workspace/statfs.c fuse/workspace/xattr.c \
 			fuse/sftp-fs.c fuse/sftp/access.c fuse/sftp/inode-stat.c \
@@ -51,9 +58,8 @@ osns_client_SOURCES =  	lib/fuse/directory.c lib/fuse/dentry.c lib/fuse/dentry-o
 			lib/sftp/attr/read-name-v03.c \
 			sftp/recv.c sftp/recv/recv-v03.c sftp/recv/recv-v04.c sftp/recv/recv-v05.c sftp/recv/recv-v06.c \
 			sftp/send.c sftp/send/send-v03.c sftp/send/send-v04.c sftp/send/send-v05.c sftp/send/send-v06.c \
-			sftp/user/mapping.c \
 			sftp/attr.c sftp/context.c sftp/common.c sftp/extensions.c sftp/init.c   \
-			sftp/request-hash.c sftp/time.c sftp/usermapping.c \
+			sftp/request-hash.c sftp/time.c sftp/usermapping.c sftp/utils.c \
 			smb/send/stat.c smb/send/opendir.c smb/send/readlink.c \
 			ssh/channel/init.c ssh/channel/payload.c ssh/channel/shell.c ssh/channel/startclose.c \
 			ssh/channel/table.c ssh/channel/uri.c ssh/channel/utils.c \
@@ -70,6 +76,7 @@ osns_client_SOURCES =  	lib/fuse/directory.c lib/fuse/dentry.c lib/fuse/dentry-o
 			ssh/send/compress.c ssh/send/compress-none.c ssh/send/compressors.c ssh/send/encrypt.c ssh/send/encrypt-chacha20-poly1305.c ssh/send/encrypt-generic.c \
 			ssh/send/encryptors.c ssh/send/greeter.c ssh/send/init.c ssh/send/msg-channel.c ssh/send/msg-transport.c ssh/send/msg-userauth.c ssh/send/send.c ssh/send/write-socket.c \
 			ssh/ssh-userauth.c ssh/userauth/pubkey.c ssh/userauth/utils.c ssh/userauth/hostbased.c ssh/userauth/none.c ssh/userauth/password.c \
+			ssh/users/mapping.c \
 			ssh/ssh-common-protocol.c ssh/ssh-common.c ssh/ssh-common-client.c \
 			ssh/ssh-signal-client.c \
 			ssh/ssh-data.c \
@@ -219,15 +226,25 @@ osns_sftp_subsystem_LDADD = $(GLIB_LIBS) $(SYSTEMD_LIBS) $(LDFLAGS)
 
 
 osns_sftp_subsystem_SOURCES	=	osns_sftp_subsystem.c \
-					ssh/subsystem/sftp/attributes-read.c ssh/subsystem/sftp/attributes-write.c \
-					ssh/subsystem/sftp/cb-opendir.c ssh/subsystem/sftp/cb-open.c ssh/subsystem/sftp/cb-stat.c \
-					ssh/subsystem/sftp/cb-utils.c \
-					ssh/subsystem/sftp/path.c ssh/subsystem/sftp/payload.c \
-					ssh/subsystem/commonhandle\create.c ssh/subsystem/commonhandle\hash.c ssh/subsystem/commonhandle\init.c ssh/subsystem/commonhandle\utils.c \
+					ssh/subsystem/sftp/attr.c \
+					ssh/subsystem/sftp/cb-opendir.c ssh/subsystem/sftp/cb-stat.c \
+					ssh/subsystem/sftp/cb-close.c \
 					ssh/subsystem/sftp/connect.c \
+					ssh/subsystem/sftp/path.c ssh/subsystem/sftp/payload.c \
 					ssh/subsystem/sftp/handle.c ssh/subsystem/sftp/init.c \
-					ssh/subsystem/sftp/ownergroup.c ssh/subsystem/sftp/supported.c \
 					ssh/subsystem/sftp/receive.c ssh/subsystem/sftp/send.c \
+					ssh/subsystem/sftp/supported.c \
+					lib/sftp/attr-context.c lib/sftp/attr/buffer.c \
+					lib/sftp/attr/init-attr-v03.c lib/sftp/attr/init-attr-v04.c lib/sftp/attr/init-attr-v05.c lib/sftp/attr/init-attr-v06.c \
+					lib/sftp/attr/read-attr-v03.c lib/sftp/attr/read-attr-v04.c lib/sftp/attr/read-attr-v05.c lib/sftp/attr/read-attr-v06.c \
+					lib/sftp/attr/write-attr-v03.c lib/sftp/attr/write-attr-v04.c lib/sftp/attr/write-attr-v05.c lib/sftp/attr/write-attr-v06.c \
+					lib/sftp/attr/rw-attr-generic.c \
+					lib/users/getent.c \
+					lib/users/local.c lib/users/lookup.c lib/users/mapcb.c \
+					lib/users/mapcb_l2p.c lib/users/mapcb_p2l.c lib/users/mapping.c \
+					lib/system/directory.c lib/system/file.c lib/system/fshandle.c \
+					lib/system/hash.c lib/system/insert.c lib/system/location.c \
+					lib/system/open.c lib/system/path.c lib/system/stat.c \
 					lib/datatypes/ssh-string.c lib/datatypes/ssh-uint.c \
 					lib/eventloop/beventloop.c lib/eventloop/beventsignal.c \
 					lib/error/error-handling.c \

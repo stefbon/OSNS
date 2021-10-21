@@ -43,6 +43,7 @@
 #include "main.h"
 
 #include "misc.h"
+#include "system.h"
 
 #include "sftp/common-protocol.h"
 #include "sftp/common.h"
@@ -50,105 +51,72 @@
 
 #include "sftp/attr-context.h"
 
-#include "write-attr-generic.h"
+#include "rw-attr-generic.h"
 #include "write-attr-v03.h"
 
-static unsigned int type_reverse[13]={SSH_FILEXFER_TYPE_UNKNOWN, 0, 0, SSH_FILEXFER_TYPE_UNKNOWN, SSH_FILEXFER_TYPE_DIRECTORY, SSH_FILEXFER_TYPE_UNKNOWN, 0, SSH_FILEXFER_TYPE_UNKNOWN, SSH_FILEXFER_TYPE_REGULAR, SSH_FILEXFER_TYPE_UNKNOWN, SSH_FILEXFER_TYPE_SYMLINK, SSH_FILEXFER_TYPE_UNKNOWN, 0};
+void write_attr_zero(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)
+{}
 
-void write_attr_zero(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct sftp_attr_s *attr)
+void write_attr_size_v03(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)
 {
+    uint64_t size=get_size_system_stat(stat);
+    (* buffer->ops->rw.write.write_uint64)(buffer, size);
 }
 
-void write_attr_size_v03(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct sftp_attr_s *attr)
+void write_attr_uidgid_v03(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)
 {
+    struct net_entity_s user;
+    struct net_entity_s group;
 
-    (* buffer->ops->rw.write.write_uint64)(buffer, attr->size);
+    user.local.uid=get_uid_system_stat(stat);
+    (* ctx->mapping->mapcb.get_user_l2p)(ctx->mapping, &user);
+    (* buffer->ops->rw.write.write_uint32)(buffer, user.net.id);
 
-    r->done |= SSH_FILEXFER_ATTR_SIZE;
-    r->todo &= ~SSH_FILEXFER_ATTR_SIZE;
-}
-
-void write_attr_uidgid_v03(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct sftp_attr_s *attr)
-{
-    struct sftp_user_s user;
-    struct sftp_group_s group;
-
-    user.uid=attr->user.uid;
-    (* ctx->get_remote_uid_byid)(ctx, &user);
-    (* buffer->ops->rw.write.write_uint32)(buffer, user.remote.id);
-
-    group.gid=attr->group.gid;
-    (* ctx->get_remote_gid_byid)(ctx, &group);
-    (* buffer->ops->rw.write.write_uint32)(buffer, group.remote.id);
-
-    r->done |= SSH_FILEXFER_ATTR_UIDGID;
-    r->todo &= ~SSH_FILEXFER_ATTR_UIDGID;
+    group.local.gid=get_gid_system_stat(stat);
+    (* ctx->mapping->mapcb.get_group_l2p)(ctx->mapping, &group);
+    (* buffer->ops->rw.write.write_uint32)(buffer, group.net.id);
 
 }
 
-void write_attr_permissions_v03(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct sftp_attr_s *attr)
+void write_attr_permissions_v03(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)
 {
-    (* buffer->ops->rw.write.write_uint32)(buffer, attr->permissions & ( S_IRWXU | S_IRWXG | S_IRWXO ));
+    uint32_t perm=get_mode_system_stat(stat) & (S_IRWXU | S_IRWXG | S_IRWXO); /* only interested in permission bits */
+    uint32_t type=get_type_system_stat(stat);
 
-    r->done |= SSH_FILEXFER_ATTR_PERMISSIONS;
-    r->todo &= ~SSH_FILEXFER_ATTR_PERMISSIONS;
+    /* not documented: the permissions field in v03 containt the mode AND the type
+	where later it only holds the permissions */
+
+    (* buffer->ops->rw.write.write_uint32)(buffer, (uint32_t) (perm | type));
+
 }
 
-void write_attr_acmodtime_v03(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct sftp_attr_s *attr)
+void write_attr_acmodtime_v03(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)
 {
-    (* buffer->ops->rw.write.write_uint32)(buffer, attr->atime);
-    (* buffer->ops->rw.write.write_uint32)(buffer, attr->mtime);
+    struct system_timespec_s time=SYSTEM_TIME_INIT;
 
-    r->done |= SSH_FILEXFER_ATTR_ACMODTIME;
-    r->todo &= ~SSH_FILEXFER_ATTR_ACMODTIME;
+    get_atime_system_stat(stat, &time);
+    (* buffer->ops->rw.write.write_uint32)(buffer, time.sec);
+
+    get_mtime_system_stat(stat, &time);
+    (* buffer->ops->rw.write.write_uint32)(buffer, time.sec);
+
 }
 
-static struct _rw_attrcb_s write_attr_acb[] = {
-	{SSH_FILEXFER_ATTR_SIZE, 		0,		{write_attr_zero, write_attr_size_v03}},
-	{SSH_FILEXFER_ATTR_UIDGID, 		1,		{write_attr_zero, write_attr_uidgid_v03}},
-	{SSH_FILEXFER_ATTR_PERMISSIONS, 	2,		{write_attr_zero, write_attr_permissions_v03}},
-	{SSH_FILEXFER_ATTR_ACMODTIME, 		3,		{write_attr_zero, write_attr_acmodtime_v03}}};
-
-void write_attributes_v03(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct sftp_attr_s *attr)
+void write_name_name_response_v03(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct ssh_string_s *name)
 {
-    unsigned int type=0;
+    (* buffer->ops->rw.write.write_string)(buffer, name);
+}
 
-    r->attrcb=write_attr_acb;
-    r->count=4;
+void write_attr_name_response_v03(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)
+{
+
+    /* longname: an empty string, not important */
+
+    (* buffer->ops->rw.write.write_uint32)(buffer, 0);
+
+    /* attr */
 
     (* buffer->ops->rw.write.write_uint32)(buffer, r->valid);
-    type=IFTODT(attr->type);
-    (* buffer->ops->rw.write.write_uchar)(buffer, (type<13) ? type_reverse[type] : (unsigned char) SSH_FILEXFER_TYPE_UNKNOWN);
-
-    write_sftp_attributes_generic(ctx, buffer, r, attr);
-
-}
-
-unsigned int write_attributes_len_v03(struct attr_context_s *ctx, struct rw_attr_result_s *r, struct sftp_attr_s *attr)
-{
-    unsigned char *vb=r->vb;
-    unsigned int len=0;
-
-    memset(r, 0, sizeof(struct rw_attr_result_s));
-
-    vb[WRITE_ATTR_VB_SIZE] = (unsigned char) (attr->asked && SFTP_ATTR_SIZE);
-    vb[WRITE_ATTR_VB_UIDGID] = (unsigned char) (attr->asked && (SFTP_ATTR_USER | SFTP_ATTR_GROUP));
-    vb[WRITE_ATTR_VB_PERMISSIONS] = (unsigned char) (attr->asked && SFTP_ATTR_PERMISSIONS);
-    vb[WRITE_ATTR_VB_ACMODTIME] = (unsigned char) (attr->asked && (SFTP_ATTR_ATIME | SFTP_ATTR_MTIME));
-
-    len = 5; 		/* valid flag (32 bits) plus type byte */
-    len += 8 * vb[WRITE_ATTR_VB_SIZE]; 	/* size  (8 bytes) */
-    len += 8 * vb[WRITE_ATTR_VB_UIDGID]; 	/* user and/or group using uid and gid */
-    len += 4 * vb[WRITE_ATTR_VB_PERMISSIONS]; 	/* permissions */
-    len += 8 * vb[WRITE_ATTR_VB_ACMODTIME]; 	/* ac mod time */
-
-    r->todo = 	(vb[WRITE_ATTR_VB_SIZE] * SSH_FILEXFER_ATTR_SIZE +
-		vb[WRITE_ATTR_VB_UIDGID] * SSH_FILEXFER_ATTR_UIDGID +
-		vb[WRITE_ATTR_VB_PERMISSIONS] * SSH_FILEXFER_ATTR_PERMISSIONS +
-		vb[WRITE_ATTR_VB_ACMODTIME] * SSH_FILEXFER_ATTR_ACMODTIME);
-
-    r->valid = r->todo;
-
-    return len;
+    write_attributes_generic(actx, buffer, r, stat, r->valid);
 
 }

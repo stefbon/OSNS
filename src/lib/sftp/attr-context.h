@@ -20,75 +20,85 @@
 #ifndef LIB_SFTP_ATTR_CONTEXT_H
 #define LIB_SFTP_ATTR_CONTEXT_H
 
+#include "system.h"
 #include "attr/buffer.h"
+#include "lib/users/mapping.h"
 
-#define WRITE_ATTR_VB_SIZE				0
+#define SSH_FILEXFER_INDEX_NSEC_ATIME			32
+#define SSH_FILEXFER_INDEX_NSEC_MTIME			33
+#define SSH_FILEXFER_INDEX_NSEC_BTIME			34
+#define SSH_FILEXFER_INDEX_NSEC_CTIME			35
 
-#define WRITE_ATTR_VB_UIDGID				1
-#define WRITE_ATTR_VB_OWNERGROUP			1
+#define RW_ATTR_RESULT_FLAG_READ			1
+#define RW_ATTR_RESULT_FLAG_WRITE			2
+#define RW_ATTR_RESULT_FLAG_CACHED			4
 
-#define WRITE_ATTR_VB_PERMISSIONS			2
+struct attr_context_s;
+struct rw_attr_result_s;
 
-#define WRITE_ATTR_VB_ACMODTIME				3
-#define WRITE_ATTR_VB_ATIME				3
-#define WRITE_ATTR_VB_MTIME				4
-#define WRITE_ATTR_VB_BTIME				5
-#define WRITE_ATTR_VB_CTIME				6
-
-#define WRITE_ATTR_VB_MAX				6
-
-#define WRITE_ATTR_NT_ATIME				0
-#define WRITE_ATTR_NT_MTIME				1
-#define WRITE_ATTR_NT_BTIME				2
-#define WRITE_ATTR_NT_CTIME				3
-
-#define WRITE_ATTR_NT_MAX				3
-
-#define VALIDFLAGS_ATTR_MAX_COUNT				( WRITE_ATTR_VB_MAX + 1 )
-#define VALIDFLAGS_NTIME_MAX_COUNT				( WRITE_ATTR_NT_MAX + 1 )
+typedef void (* rw_attr_cb)(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat);
 
 struct rw_attr_result_s {
+    unsigned int					flags;
     unsigned int					valid;
     unsigned int					todo;
     unsigned int					done;
-    struct _rw_attrcb_s					*attrcb;
-    unsigned int					count;
-    unsigned char					vb[VALIDFLAGS_ATTR_MAX_COUNT];
-    struct _rw_attrcb_s					*ntimecb;
-    unsigned char					nt[VALIDFLAGS_NTIME_MAX_COUNT];
+    unsigned int					ignored;
+    unsigned int					stat_mask;
+    void 						(* parse_attribute)(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat, unsigned char ctr);
+    void						*ptr;
 };
 
-struct attr_context_s;
-typedef void (* rw_attr_cb)(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct sftp_attr_s *attr);
+void parse_dummy(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat, unsigned char ctr);
+
+
+#define RW_ATTR_RESULT_INIT				{0, 0, 0, 0, 0, 0, parse_dummy, NULL}
 
 struct _rw_attrcb_s {
     uint32_t						code;
     unsigned char					shift;
-    rw_attr_cb						cb[2];
+    unsigned int					stat_mask;
+    rw_attr_cb						r_cb;
+    rw_attr_cb						w_cb;
+    unsigned int					maxlength;
+    const char						*name;
 };
 
-struct sftp_user_s;
-struct sftp_group_s;
+struct attr_ops_s {
+    void						(* parse_attributes)(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *result, struct system_stat_s *stat);
+    void						(* read_name_name_response)(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct ssh_string_s *name);
+    void						(* read_attr_name_response)(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *result, struct system_stat_s *stat);
+    void						(* write_name_name_response)(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct ssh_string_s *name);
+    void						(* write_attr_name_response)(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *result, struct system_stat_s *stat);
+};
+
+#define ATTR_CONTEXT_FLAG_CLIENT			1
+#define ATTR_CONTEXT_FLAG_SERVER			2
 
 struct attr_context_s {
-    void		*ptr;
-    void		(* get_local_uid_byid)(struct attr_context_s *ctx, struct sftp_user_s *u);
-    void		(* get_local_gid_byid)(struct attr_context_s *ctx, struct sftp_group_s *g);
-    void		(* get_local_uid_byname)(struct attr_context_s *ctx, struct sftp_user_s *u);
-    void		(* get_local_gid_byname)(struct attr_context_s *ctx, struct sftp_group_s *g);
-    void		(* get_remote_uid_byid)(struct attr_context_s *ctx, struct sftp_user_s *u);
-    void		(* get_remote_gid_byid)(struct attr_context_s *ctx, struct sftp_group_s *g);
-    void		(* get_remote_username_byid)(struct attr_context_s *ctx, struct sftp_user_s *u);
-    void		(* get_remote_groupname_byid)(struct attr_context_s *ctx, struct sftp_group_s *g);
-    unsigned int	(* maxlength_username)(struct attr_context_s *ctx);
-    unsigned int	(* maxlength_groupname)(struct attr_context_s *ctx);
-    unsigned int	(* maxlength_domainname)(struct attr_context_s *ctx);
-    unsigned char 	(* get_sftp_protocol_version)(struct attr_context_s *ctx);
-    unsigned int	(* get_sftp_flags)(struct attr_context_s *ctx, const char *what);
+    unsigned int					flags;
+    void						*ptr;
+    struct net_idmapping_s 				*mapping;
+    struct attr_ops_s					ops;
+    unsigned int					w_valid;
+    unsigned int					w_count;
+    unsigned int					r_valid;
+    unsigned int					r_count;
+    struct _rw_attrcb_s					attrcb[36];
+    unsigned int					(* maxlength_filename)(struct attr_context_s *actx);
+    unsigned int					(* maxlength_username)(struct attr_context_s *actx);
+    unsigned int					(* maxlength_groupname)(struct attr_context_s *actx);
+    unsigned int					(* maxlength_domainname)(struct attr_context_s *actx);
+    unsigned char 					(* get_sftp_protocol_version)(struct attr_context_s *actx);
+    unsigned int					(* get_sftp_flags)(struct attr_context_s *actx, const char *what);
 };
 
 /* prototypes */
 
-void init_attr_context(struct attr_context_s *ctx, void *ptr);
+void init_attrcb_zero(struct _rw_attrcb_s *attrcb, unsigned int count);
+void init_attr_context(struct attr_context_s *actx, unsigned int flags, void *ptr, struct net_idmapping_s *m);
+void set_sftp_attr_context(struct attr_context_s *actx);
+
+unsigned int get_supported_valid_flags(struct attr_context_s *actx, unsigned char what);
 
 #endif

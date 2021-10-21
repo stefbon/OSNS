@@ -22,6 +22,5 @@
 
 /* prototypes */
 
-void sftp_op_close(struct sftp_payload_s *p);
 
 #endif

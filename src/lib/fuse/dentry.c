@@ -43,12 +43,6 @@
 #include "log.h"
 #include "datatypes.h"
 
-#define NAMEINDEX_ROOT1						92			/* number of valid chars*/
-#define NAMEINDEX_ROOT2						8464			/* 92 ^ 2 */
-#define NAMEINDEX_ROOT3						778688			/* 92 ^ 3 */
-#define NAMEINDEX_ROOT4						71639296		/* 92 ^ 4 */
-#define NAMEINDEX_ROOT5						6590815232		/* 92 ^ 5 */
-
 static struct list_header_s cacheheader=INIT_LIST_HEADER;
 static pthread_mutex_t cachemutex=PTHREAD_MUTEX_INITIALIZER;
 
@@ -56,25 +50,6 @@ void init_data_link(struct data_link_s *link)
 {
     memset(link, 0, sizeof(struct data_link_s));
     link->type=0;
-}
-
-void calculate_nameindex(struct name_s *name)
-{
-    char buffer[6];
-    unsigned char count=(name->len > 5) ? 6 : name->len;
-
-    memset(buffer, 32, 6);
-    memcpy(buffer, name->name, count);
-
-    unsigned char firstletter		= buffer[0] - 32;
-    unsigned char secondletter		= buffer[1] - 32;
-    unsigned char thirdletter		= buffer[2] - 32;
-    unsigned char fourthletter		= buffer[3] - 32;
-    unsigned char fifthletter		= buffer[4] - 32;
-    unsigned char sixthletter		= buffer[5] - 32;
-
-    name->index=(firstletter * NAMEINDEX_ROOT5) + (secondletter * NAMEINDEX_ROOT4) + (thirdletter * NAMEINDEX_ROOT3) + (fourthletter * NAMEINDEX_ROOT2) + (fifthletter * NAMEINDEX_ROOT1) + sixthletter;
-
 }
 
 void init_entry(struct entry_s *entry)

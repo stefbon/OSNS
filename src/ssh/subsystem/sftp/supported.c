@@ -135,7 +135,7 @@ unsigned int get_supported_max_readsize(struct sftp_subsystem_s *session)
     /*
 	max read size */
 
-    return 0;
+    return 8192;
 
 }
 

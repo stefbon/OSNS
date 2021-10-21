@@ -163,5 +163,7 @@ void clear_sl_skiplist(struct sl_skiplist_s *sl);
 void free_sl_skiplist(struct sl_skiplist_s *sl);
 
 void init_sl_searchresult(struct sl_searchresult_s *result, void *lookupdata, unsigned int flags);
+unsigned short get_default_sl_prob();
+unsigned char estimate_sl_lanes(uint64_t count, unsigned prob);
 
 #endif

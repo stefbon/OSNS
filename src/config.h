@@ -74,9 +74,6 @@
 /* Define to 1 if you have the `memmove' function. */
 #define HAVE_MEMMOVE 1
 
-/* Define to 1 if you have the <memory.h> header file. */
-#define HAVE_MEMORY_H 1
-
 /* Define to 1 if you have the `memset' function. */
 #define HAVE_MEMSET 1
 
@@ -206,14 +203,19 @@
 /* Define to the version of this package. */
 #define PACKAGE_VERSION "1.0a1"
 
-/* Define to 1 if you have the ANSI C header files. */
+/* Define to 1 if all of the C90 standard headers exist (not just the ones
+   required in a freestanding environment). This macro is provided for
+   backward compatibility; new code need not use it. */
 #define STDC_HEADERS 1
 
 /* Version number of package */
 #define VERSION "1.0a1"
 
+/* Define to build OSNS client */
+/* #undef WITH_OSNS_CLIENT */
+
 /* Define to build OSNS SSH Server */
-/* #undef WITH_OSNS_SFTP_SUBSYSTEM */
+#define WITH_OSNS_SFTP_SUBSYSTEM 1
 
 /* Define for Solaris 2.5.1 so the uint32_t typedef from <sys/synch.h>,
    <pthread.h>, or <semaphore.h> is not used. If the typedef were allowed, the
@@ -243,7 +245,7 @@
 /* Define to `long int' if <sys/types.h> does not define. */
 /* #undef off_t */
 
-/* Define to `int' if <sys/types.h> does not define. */
+/* Define as a signed integer type capable of holding a process identifier. */
 /* #undef pid_t */
 
 /* Define to rpl_realloc if the replacement function should be used. */

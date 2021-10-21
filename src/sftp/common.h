@@ -77,14 +77,6 @@ struct sftp_send_ops_s {
     int							(* custom)(struct sftp_client_s *sftp, struct sftp_request_s *r);
 };
 
-struct sftp_attr_ops_s {
-    void 						(* read_attributes)(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct sftp_attr_s *attr);
-    void 						(* write_attributes)(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *result, struct sftp_attr_s *attr);
-    unsigned int					(* write_attributes_len)(struct attr_context_s *ctx, struct rw_attr_result_s *result, struct sftp_attr_s *attr);
-    void						(* read_name_response)(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct ssh_string_s *name);
-    void						(* read_attr_response)(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct sftp_attr_s *attr);
-};
-
 struct sftp_recv_ops_s {
     void						(* status)(struct sftp_client_s *sftp, struct sftp_header_s *header);
     void						(* handle)(struct sftp_client_s *sftp, struct sftp_header_s *header);
@@ -153,51 +145,6 @@ struct sftp_supported_s {
     unsigned int					attr_supported;
 };
 
-#define _SFTP_USER_MAPPING_SHARED			1
-#define _SFTP_USER_MAPPING_NONSHARED			2
-
-#define _SFTP_USERMAP_LOCAL_GID				1
-#define _SFTP_USERMAP_REMOTE_IDS			2
-#define _SFTP_USERMAP_LOCAL_IDS_UNKNOWN			4
-
-#define GETENT_TYPE_USER				1
-#define GETENT_TYPE_GROUP				2
-
-struct getent_fields_s {
-    unsigned char					flags;
-    struct ssh_string_s					getent;
-    char 						*name;
-    unsigned int					len;
-    union {
-	struct _user_s {
-	    uid_t					uid;
-	    gid_t					gid;
-	    char 					*fullname;
-	    char 					*home;
-	} user;
-	struct _group_s {
-	    gid_t					gid;
-	} group;
-    } type;
-};
-
-struct sftp_usermapping_s {
-    unsigned char					type;
-    unsigned char					mapping;
-    uid_t						uid;
-    struct passwd					pwd;
-    char						*buffer;
-    unsigned int					size;
-    struct getent_fields_s				remote_user;
-    struct getent_fields_s				remote_group;
-    uid_t						unknown_uid;
-    gid_t						unknown_gid;
-    void						(* get_local_uid)(struct sftp_client_s *sftp, struct sftp_user_s *user);
-    void						(* get_local_gid)(struct sftp_client_s *sftp, struct sftp_group_s *group);
-    void						(* get_remote_user)(struct sftp_client_s *sftp, struct sftp_user_s *user);
-    void						(* get_remote_group)(struct sftp_client_s *sftp, struct sftp_group_s *group);
-};
-
 struct sftp_sendhash_s {
     uint32_t						id;
     pthread_mutex_t					mutex;
@@ -261,11 +208,10 @@ struct sftp_client_s {
     struct sftp_sendhash_s				sendhash;
     struct sftp_send_ops_s				*send_ops;
     struct sftp_recv_ops_s				*recv_ops;
-    struct sftp_attr_ops_s				attr_ops;
     struct sftp_time_ops_s				time_ops;
     struct sftp_supported_s				supported;
     struct sftp_extensions_s				extensions;
-    struct sftp_usermapping_s				usermapping;
+    struct net_usermapping_s				*mapping;
 };
 
 /* prototypes */
@@ -277,7 +223,7 @@ void clear_sftp_client(struct sftp_client_s *sftp);
 void free_sftp_client(struct sftp_client_s **p_sftp);
 
 struct sftp_client_s *create_sftp_client(struct generic_error_s *error);
-int init_sftp_client(struct sftp_client_s *sftp, uid_t uid);
+int init_sftp_client(struct sftp_client_s *sftp, uid_t uid, struct net_usermapping_s *m);
 int start_init_sftp_client(struct sftp_client_s *sftp);
 
 unsigned int get_sftp_features(struct sftp_client_s *sftp);

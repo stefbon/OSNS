@@ -43,6 +43,7 @@
 #include "misc.h"
 #include "threads.h"
 #include "error.h"
+#include "users.h"
 
 #include "sftp/common-protocol.h"
 #include "sftp/common.h"
@@ -95,7 +96,7 @@ struct sftp_client_s *create_sftp_client(struct generic_error_s *error)
     return sftp;
 }
 
-int init_sftp_client(struct sftp_client_s *sftp, uid_t uid)
+int init_sftp_client(struct sftp_client_s *sftp, uid_t uid, struct net_usermapping_s *mapping)
 {
 
     sftp->context.unique=0;
@@ -122,13 +123,13 @@ int init_sftp_client(struct sftp_client_s *sftp, uid_t uid)
     init_list_header(&sftp->pending, SIMPLE_LIST_TYPE_EMPTY, NULL);
 
     sftp->send_ops=NULL;
-    sftp->recv_ops=NULL;;
+    sftp->recv_ops=NULL;
 
     init_sftp_receive(sftp);
     init_sftp_timecorrection(sftp);
     init_sftp_extensions(sftp);
     init_sftp_sendhash();
-    init_sftp_usermapping(sftp, uid);
+    sftp->mapping=mapping;
     init_sftp_client_attr_context(sftp);
 
     /* here link the attr_context->get_remote_uid/get_local_uid... functions 
@@ -144,7 +145,6 @@ void clear_sftp_client(struct sftp_client_s *sftp)
 {
 
     clear_sftp_extensions(sftp);
-    free_sftp_usermapping(sftp);
 
     pthread_mutex_destroy(&sftp->sendhash.mutex);
 
@@ -253,19 +253,9 @@ int start_init_sftp_client(struct sftp_client_s *sftp)
     }
 
     enable_timecorrection(sftp);
-
-    if (set_sftp_usermapping(sftp)==0) {
-
-	logoutput("start_init_sftp_client: initialized sftp usermapping");
-
-    } else {
-
-	logoutput("start_init_sftp_client: failed initializing sftp usermapping");
-	goto error;
-
-    }
-
+    get_sftp_usermapping(sftp);
     complete_sftp_protocolextensions(sftp, NULL);
+
     return 0;
 
     error:

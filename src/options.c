@@ -112,6 +112,10 @@ static void parse_network_services_option_cb(char *name, void *ptr)
 
 	network->services |= _OPTIONS_NETWORK_ENABLE_SFTP;
 
+    // } else if (strcmp(name, "ssh")==0) {
+
+	//network->flags |= _OPTIONS_NETWORK_ENABLE_SSH;
+
     } else if (strcmp(name, "smb")==0) {
 
 	network->flags |= _OPTIONS_NETWORK_ENABLE_SMB;

@@ -58,8 +58,10 @@ extern struct logging_s *logging;
 #if __GLIBC__ < 2 || ( __GLIBC__ == 2 && __GLIBC_MINOR__ < 30) 
 unsigned int gettid();
 #endif
-void switch_logging_backend(const char *what);
 
-void logoutput_base64encoded(char *prefix, char *buffer, unsigned int size);
+void switch_logging_backend(const char *what);
+void set_logging_level(unsigned int level);
+
+void logoutput_base64encoded(char *prefix, char *buffer, unsigned int size, unsigned char tofile);
 
 #endif

@@ -61,6 +61,16 @@ PKG_CHECK_MODULES(LIBSMB2, [ libsmb2 ], [AC_DEFINE([HAVE_LIBSMB2], [1], [Define 
 
 AM_PATH_LIBGCRYPT([1.7.0], [AC_DEFINE([HAVE_LIBGCRYPT], [1], [Check for libgcrypt])], AC_MSG_ERROR([Please install libgcrypt.]))
 
+AC_ARG_WITH([osns-client], [AS_HELP_STRING([--with-osns-client], [Enable building OSNS osns client yes/mo.])])
+
+AS_IF([test "x$with_osns_client" = "xyes"], [
+    AC_DEFINE([WITH_OSNS_CLIENT], [1], [Define to build OSNS client])
+    AC_MSG_NOTICE([Build the osns client])
+    BUILD_OSNS_CLIENT=1
+], [
+    AC_MSG_NOTICE([Build WITHOUT the osns client])
+])
+
 AC_ARG_WITH([sftp-subsystem], [AS_HELP_STRING([--with-sftp-subsystem], [Enable building OSNS sftp subsystem yes/mo.])])
 
 AS_IF([test "x$with_sftp_subsystem" = "xyes"], [
@@ -87,6 +97,7 @@ PKG_CHECK_MODULES([AVAHI_CORE], [avahi-core], [AC_DEFINE([HAVE_AVAHI_CORE], [1],
 PKG_CHECK_MODULES([AVAHI_CLIENT], [avahi-client], [AC_DEFINE([HAVE_AVAHI_CLIENT], [1], [Define Avahi client is available])], AC_MSG_ERROR([Error: avahi client not found.]))
 PKG_CHECK_MODULES([AVAHI_GLIB], [avahi-glib], [AC_DEFINE([HAVE_AVAHI_GLIB], [1], [Define Avahi glib is available])], AC_MSG_ERROR([Error: avahi glib not found.]))
 
+AM_CONDITIONAL([BUILD_OSNS_CLIENT], [ test "x$with_osns_client" = "xyes" ])
 AM_CONDITIONAL([BUILD_SFTP_SUBSYSTEM], [ test "x$with_sftp_subsystem" = "xyes" ])
 AM_CONDITIONAL([BUILD_SSH_SERVER], [ test "x$with_ssh_server" = "xyes" ])
 

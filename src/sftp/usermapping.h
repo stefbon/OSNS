@@ -22,8 +22,6 @@
 
 /* prototypes */
 
-void init_sftp_usermapping(struct sftp_client_s *sftp, uid_t uid);
-int set_sftp_usermapping(struct sftp_client_s *sftp);
-void free_sftp_usermapping(struct sftp_client_s *sftp);
+void get_sftp_usermapping(struct sftp_client_s *sftp);
 
 #endif

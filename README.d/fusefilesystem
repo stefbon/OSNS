@@ -1,0 +1,82 @@
+03-06-2021
+
+
+Overview of various layers of FUSE calls
+----------------------------------------
+
+To make OSNS work I had to write my own fuse library to handle the incoming requests for the filesystem.
+The default library for Linux (libfuse) does not offer the integration with network filesystems by sharing
+signals.
+
+When a request arrives at the userspace service, the ino number on which it operates id included.
+OSNS uses this ino number to lookup the inode, and call the right handler of the requested operation.
+With OSNS these handlers may differ from inode to inode. OSNS does this cause the entries and inodes may present
+various backends which require different handling of a request. For example a lookup of a direntry in a SFTP shared 
+map requires a different set of handlers than a lookup of a domain name in the browseable network map of domains and hosts.
+
+
+Layer one: handle fs request on inode basis
+-------------------------------------------
+
+The matching inode is looked up in the cache:
+
+struct inode_s *inode
+
+using the uint64 inode number comin from the VFS.
+The right handler is called by (for example th getattr operation):
+
+inode->fs->getattr
+
+Depending on the context (in a SFTP shared directory, or in the browseable network map) the custom
+getattr handler is called. Available at this moment (20210603) are:
+
+- virtual: there is no backend, only the cache
+- path based: the backend is a remote server like sftp, smb and webdav, and it requires a path to do io
+- context based: the backend is the local cache of available domains, hosts, and services those hosts offer
+
+- not available yet but required to connect to Google Drive for exanple is id based: not a path is required but an unique id.
+
+
+
+Layer two: 1. virtual filesystem
+--------------------------------
+
+Already menyioned above, there is no backend, everything is on cache, and nothing else. Direntries are created by the system.
+
+
+
+Layer two: 2. path based service context based filesystem
+---------------------------------------------------------
+
+The path is determined by this filesystem to the root of the shared directory/resource from the backend.
+OSNS walks back from the entry up to the root of the FUSE mountpoint, and checks every dentry/inode it is
+the root of the shared resource. For example, suppose I'm working at home, having my domain bononline.nl, and one
+of the hosts in that domain is a server with the name admin1000, which offers two shared directories: public and home.
+This will look like:
+
+/Open Secure Network/bononline.nl/admin1000/{home,public}
+
+
+As the names already explain, the home directory is the own directory of the connecting user at the admin1000 server,
+and public is a shared one. With who is not relevent here.
+
+Now, take a file in the public folder, say in /Administration/doc/overview20202021.odt, so the full path becomes:
+
+/Open Secure Network/bononline.nl/admin1000/public/Administration/doc/overview20202021.odt
+
+OSNS walks back, starting from overview20202021.odt and checking it is the root of the shared directory, which
+is not the case. It then goes one level up, and does dit check again: step to doc, and this is also not the root,
+so again it goes one level up, up to the folder public, and yes, that is the root of the shared directory as point of view
+from the client.
+
+The service context structure, containing information about the connection to the sftp shared directory on server admin1000,
+is found and used to take the next step, and that is the protocol dependend filesystem, here sftp.
+
+
+Layer three: 3. protocol dependend filesystem
+---------------------------------------------
+
+Part of the service context structure is the service or protocol dependend filesystem. Path based filesystems like SFTP, SMB and NFS 
+take always step at layer 2, but then protocol specific calls are used.
+
+

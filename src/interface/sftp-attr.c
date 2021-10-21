@@ -49,6 +49,7 @@
 #include "sftp/common-protocol.h"
 #include "sftp/common.h"
 #include "sftp/attr.h"
+#include "sftp/init.h"
 #include "sftp-attr.h"
 
 void read_sftp_attributes_ctx(struct context_interface_s *interface, struct attr_response_s *response, struct sftp_attr_s *attr)
@@ -74,18 +75,20 @@ void read_name_nameresponse_ctx(struct context_interface_s *interface, struct fu
 {
     struct sftp_client_s *sftp=(struct sftp_client_s *) (* interface->get_interface_buffer)(interface);
     struct attr_buffer_s ab;
+    logoutput("read_name_nameresponse_ctx: pos %i", (unsigned int)(buffer->pos - buffer->data));
     set_attr_buffer_read(&ab, buffer->pos, buffer->left);
     (*sftp->attr_ops.read_name_response)(&sftp->attrctx, &ab, name);
-    buffer->pos = ab.pos;
+    buffer->pos = (char *) ab.pos;
     buffer->left = ab.left;
 }
 void read_attr_nameresponse_ctx(struct context_interface_s *interface, struct fuse_buffer_s *buffer, struct sftp_attr_s *attr)
 {
     struct sftp_client_s *sftp=(struct sftp_client_s *) (* interface->get_interface_buffer)(interface);
     struct attr_buffer_s ab;
+    logoutput("read_attr_nameresponse_ctx: pos %i", (unsigned int)(buffer->pos - buffer->data));
     set_attr_buffer_read(&ab, buffer->pos, buffer->left);
     (*sftp->attr_ops.read_attr_response)(&sftp->attrctx, &ab, attr);
-    buffer->pos = ab.pos;
+    buffer->pos = (char *) ab.pos;
     buffer->left = ab.left;
     buffer->done++;
 }

@@ -26,6 +26,11 @@
 
 int send_sftp_init(struct sftp_subsystem_s *sftp);
 
+unsigned char get_sftp_protocol_version(struct sftp_subsystem_s *sftp);
+void set_sftp_protocol_version(struct sftp_subsystem_s *sftp, unsigned char version);
+
+void setup_sftp_idmapping(struct sftp_subsystem_s *sftp);
+
 int init_sftp_subsystem(struct sftp_subsystem_s *sftp);
 void free_sftp_subsystem(struct sftp_subsystem_s *sftp);
 void finish_sftp_subsystem(struct sftp_subsystem_s *sftp);

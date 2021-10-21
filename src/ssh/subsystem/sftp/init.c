@@ -59,9 +59,11 @@
 #include "payload.h"
 #include "protocol.h"
 
-#include "cb-open.h"
+#include "cb-close.h"
 #include "cb-opendir.h"
 #include "cb-stat.h"
+
+#include "init.h"
 
 /*
     for sftp init data looks like:
@@ -103,7 +105,7 @@ int send_sftp_init(struct sftp_subsystem_s *sftp)
     data[pos]=SSH_FXP_VERSION;
     pos++;
 
-    store_uint32(&data[pos], sftp->version);
+    store_uint32(&data[pos], get_sftp_protocol_version(sftp));
     pos+=4;
 
     /* header supported2 */
@@ -282,28 +284,67 @@ static void free_sftp_payload_queue(struct sftp_payload_queue_s *queue)
     memset(queue, 0, sizeof(struct sftp_payload_queue_s));
 }
 
+unsigned char get_sftp_protocol_version(struct sftp_subsystem_s *sftp)
+{
+    unsigned char version = (sftp) ? sftp->protocol.version : 0;
+
+    /* TODO ... */
+
+    return (unsigned char) ((version>0) ? version : 6);
+
+}
+
+void set_sftp_protocol_version(struct sftp_subsystem_s *sftp, unsigned char version)
+{
+    sftp->protocol.version=version;
+}
+
+void setup_sftp_idmapping(struct sftp_subsystem_s *sftp)
+{
+    struct net_idmapping_s *mapping=&sftp->mapping;
+    unsigned int flags=0;
+    unsigned int version=get_sftp_protocol_version(sftp);
+
+    if (version > 3) {
+
+	flags |= NET_IDMAPPING_FLAG_MAPBYNAME;
+
+    } else {
+
+	flags |= NET_IDMAPPING_FLAG_MAPBYID;
+
+    }
+
+    set_net_entity_map_func(mapping, flags);
+
+}
+
 int init_sftp_subsystem(struct sftp_subsystem_s *sftp)
 {
 
     memset(sftp, 0, sizeof(struct sftp_subsystem_s));
     sftp->flags = SFTP_SUBSYSTEM_FLAG_INIT;
-    sftp->version = SFTP_PROTOCOL_VERSION_DEFAULT;
 
     init_sftp_identity(&sftp->identity);
     init_sftp_connection(&sftp->connection, 0);
     init_sftp_receive(&sftp->receive);
     init_sftp_payload_queue(&sftp->queue);
 
+    set_sftp_protocol_version(sftp, 6);
+    init_attr_context(&sftp->attrctx, ATTR_CONTEXT_FLAG_SERVER, (void *) sftp, &sftp->mapping);
+    init_net_idmapping(&sftp->mapping, &sftp->identity.pwd);
+
     set_process_sftp_payload_notsupp(sftp);
     for (unsigned int i=0; i<256; i++) sftp->cb[i]=reply_sftp_notsupported;
 
     sftp->cb[SSH_FXP_OPENDIR]=sftp_op_opendir;
     sftp->cb[SSH_FXP_READDIR]=sftp_op_readdir;
-
     sftp->cb[SSH_FXP_CLOSE]=sftp_op_close;
+
     sftp->cb[SSH_FXP_LSTAT]=sftp_op_lstat;
     sftp->cb[SSH_FXP_STAT]=sftp_op_stat;
-    sftp->cb[SSH_FXP_FSTAT]=sftp_op_fstat;
+
+    /* sftp->cb[SSH_FXP_FSTAT]=sftp_op_fstat; */
 
     return 0;
 
@@ -311,7 +352,7 @@ int init_sftp_subsystem(struct sftp_subsystem_s *sftp)
 
 void free_sftp_subsystem(struct sftp_subsystem_s *sftp)
 {
-
+    free_net_idmapping(&sftp->mapping);
     free_sftp_identity(&sftp->identity);
     free_sftp_payload_queue(&sftp->queue);
     free_sftp_receive(&sftp->receive);

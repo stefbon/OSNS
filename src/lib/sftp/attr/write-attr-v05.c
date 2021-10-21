@@ -45,20 +45,21 @@
 
 #include "sftp/common-protocol.h"
 #include "sftp/common.h"
-#include "sftp/protocol-v06.h"
+#include "sftp/protocol-v05.h"
 #include "sftp/attr-context.h"
 
-#include "write-attr-generic.h"
+#include "rw-attr-generic.h"
 #include "write-attr-v03.h"
 #include "write-attr-v04.h"
 #include "write-attr-v05.h"
 
-void write_attributes_v05(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct sftp_attr_s *attr)
+static unsigned int type_reverse[13]={SSH_FILEXFER_TYPE_UNKNOWN, SSH_FILEXFER_TYPE_FIFO, SSH_FILEXFER_TYPE_CHAR_DEVICE, SSH_FILEXFER_TYPE_UNKNOWN, SSH_FILEXFER_TYPE_DIRECTORY, SSH_FILEXFER_TYPE_UNKNOWN, SSH_FILEXFER_TYPE_BLOCK_DEVICE, SSH_FILEXFER_TYPE_UNKNOWN, SSH_FILEXFER_TYPE_REGULAR, SSH_FILEXFER_TYPE_UNKNOWN, SSH_FILEXFER_TYPE_SYMLINK, SSH_FILEXFER_TYPE_UNKNOWN, SSH_FILEXFER_TYPE_SOCKET};
+
+void write_attr_type_v05(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)
 {
-    write_attributes_v04(ctx, buffer, r, attr);
+    unsigned int type=IFTODT(get_type_system_stat(stat));
+
+    type=((type<13) ? type_reverse[type] : SSH_FILEXFER_TYPE_UNKNOWN);
+    (* buffer->ops->rw.write.write_uchar)(buffer, type);
 }
 
-unsigned int write_attributes_len_v05(struct attr_context_s *ctx, struct rw_attr_result_s *r ,struct sftp_attr_s *attr)
-{
-    return write_attributes_len_v04(ctx, r, attr);
-}

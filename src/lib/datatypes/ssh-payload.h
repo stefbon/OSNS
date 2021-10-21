@@ -17,8 +17,8 @@
 
 */
 
-#ifndef _SSH_DATATYPES_PAYLOAD_H
-#define _SSH_DATATYPES_PAYLOAD_H
+#ifndef LIB_DATATYPES_SSH_PAYLOAD_H
+#define LIB_DATATYPES_SSH_PAYLOAD_H
 
 #include "list.h"
 

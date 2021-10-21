@@ -45,44 +45,52 @@
 #include "log.h"
 #include "misc.h"
 #include "datatypes.h"
-#include "network.h"
+#include "system.h"
 
 #include "protocol.h"
 
 #include "osns_sftp_subsystem.h"
-#include "attributes-write.h"
-#include "send.h"
 #include "path.h"
-#include "handle.h"
-#include "init.h"
 
-unsigned int get_fullpath_len(struct sftp_identity_s *user, unsigned int len, char *buffer)
+void path_append_home_directory(struct sftp_identity_s *user, struct ssh_string_s *path, struct fs_location_path_s *localpath)
 {
-    if (len==0 || buffer[0]!='/') return len + 1 + user->len_home;
-    return len;
+    char *ptr=localpath->ptr;
+
+    memcpy(ptr, user->pwd.pw_dir, user->len_home);
+    ptr+=user->len_home;
+    *ptr='/';
+    ptr++;
+
+    /* TODO: add convert from UTF-8 to local encoding */
+
+    memcpy(ptr, path->ptr, path->len);
+    ptr+=path->len;
+    *ptr='\0';
+
 }
 
-/* note: this does not handle UTF encoding/decoding */
-
-void get_fullpath(struct sftp_identity_s *user, unsigned int len, char *buffer, char *path)
+void path_append_none(struct sftp_identity_s *user, struct ssh_string_s *path, struct fs_location_path_s *localpath)
 {
+    char *ptr=localpath->ptr;
 
-    if (len==0 || buffer[0]!='/') {
-	unsigned int index=0;
+    memcpy(ptr, path->ptr, path->len);
+    ptr+=path->len;
+    *ptr='\0';
 
-	memcpy(&path[index], user->pwd.pw_dir, user->len_home);
-	index+=user->len_home;
-	path[index]='/';
-	index++;
-	memcpy(&path[index], buffer, len); /* this works also when len==0 */
-	index+=len;
-	path[index]='\0';
+}
 
-    } else {
+unsigned int get_fullpath_size(struct sftp_identity_s *user, struct ssh_string_s *path, struct convert_sftp_path_s *convert)
+{
+    char *ptr=path->ptr;
 
-	memcpy(path, &buffer[0], len);
-	path[len]='\0';
+    if (path->len>0 && ptr[0]=='/') {
+
+	convert->complete=&path_append_none;
+	return path->len;
 
     }
+
+    convert->complete=&path_append_home_directory;
+    return path->len + 1 + user->len_home;
 
 }

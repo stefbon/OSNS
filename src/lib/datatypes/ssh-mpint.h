@@ -17,8 +17,8 @@
 
 */
 
-#ifndef _SSH_DATATYPES_MPINT_H
-#define _SSH_DATATYPES_MPINT_H
+#ifndef LIB_DATATYPES_SSH_MPINT_H
+#define LIB_DATATYPES_SSH_MPINT_H
 
 #include "ssh-uint.h"
 #include "ssh-string.h"

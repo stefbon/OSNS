@@ -151,7 +151,8 @@ static int signal_ctx2channel_default(struct ssh_channel_s **p_channel, const ch
     } else if (strncmp(what, "info:", 5)==0) {
 	unsigned int pos=5;
 
-	if (strncmp(&what[pos], "getentuser:", 11)==0 || strncmp(&what[pos], "getentgroup:", 12)==0) {
+	if (strncmp(&what[pos], "getentuser:", 11)==0 || strncmp(&what[pos], "getentgroup:", 12)==0 ||
+	    strncmp(&what[pos], "system.getents:", 15)==0 || strncmp(&what[pos], "net.usermapping.sharemodus:", 27)==0) {
 	    struct ssh_session_s *session=channel->session;
 	    void *ptr=(void *) session;
 

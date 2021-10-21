@@ -1,0 +1,30 @@
+06 August 2021
+
+
+   USERMAPPING
+   ===========
+
+1. Intro
+
+When working with network filesystems, the system by definition is confronted by different
+user and group subsystems on client and server. In special cases network filesystems can assume
+they are the same, when for example a shared database is used like Active Directory and OpenLDAP.
+In these cases usermapping is not required since users on both client and server are the same.
+
+In the general case when a osns client connects with a server, there is at this moment no way
+it can determine easy the users/groups are shared and the same, and no mapping is required.
+
+Here are some facts which are important when it comes to users and groups in SFTP and other
+network filesystems.
+
+A. Since some years uid's and gid's for human users are starting at a default.
+For most systems the minumum is 1000, for both the uid as the gid.
+Om Linux systems these are defined in /etc/login.defs.
+
+B. SFTP uses the attr struct to communicate the properties of files between server and client.
+Unfortunatly the way this is done changed between the different protocol versions:
+- version 3, owner and group are communicated via the uid and gid resp.
+- version > 3, owner and group are communicated as user@domain and group@domain resp.
+
+
+

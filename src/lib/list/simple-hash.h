@@ -43,7 +43,7 @@ struct simple_hash_s {
 /* prototypes */
 
 int initialize_group(struct simple_hash_s *group, unsigned int (*hashfunction) (void *data), unsigned int len, unsigned int *error);
-void free_discover_records();
+void free_group(struct simple_hash_s *group, void (*free_data) (void *data));
 
 void init_rlock_hashtable(struct simple_hash_s *group, struct simple_lock_s *lock);
 void init_wlock_hashtable(struct simple_hash_s *group, struct simple_lock_s *lock);

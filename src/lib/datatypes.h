@@ -20,6 +20,7 @@
 #ifndef _LIB_DATATYPES_H
 #define _LIB_DATATYPES_H
 
+#include "datatypes/name.h"
 #include "datatypes/ssh-uint.h"
 #include "datatypes/ssh-string.h"
 #include "datatypes/ssh-payload.h"

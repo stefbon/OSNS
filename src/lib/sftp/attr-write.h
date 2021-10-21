@@ -21,7 +21,7 @@
 #define LIB_SFTP_ATTR_WRITE_H
 
 #include "attr/buffer.h"
-#include "attr/write-attr-generic.h"
+
 #include "attr/write-attr-v03.h"
 #include "attr/write-attr-v04.h"
 #include "attr/write-attr-v05.h"

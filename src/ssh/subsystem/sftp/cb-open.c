@@ -268,8 +268,9 @@ static unsigned int translate_write_error(unsigned int error)
 
 static int send_sftp_handle(struct sftp_subsystem_s *sftp, uint32_t id, struct sftp_filehandle_s *filehandle)
 {
-    char bytes[SFTP_HANDLE_SIZE];
-    write_sftp_filehandle(filehandle, bytes);
+    unsigned int size=(unsigned int) get_sftp_handlesize();
+    char bytes[size];
+    write_sftp_commonhandle(filehandle, bytes, size);
     return reply_sftp_handle(sftp, id, bytes, SFTP_HANDLE_SIZE);
 }
 
@@ -859,70 +860,3 @@ void sftp_op_write(struct sftp_payload_s *payload)
 
 }
 
-/* SSH_FXP_CLOSE
-    message has the form:
-    - byte 				SSH_FXP_CLOSE
-    - uint32				id
-    - string				handle
-
-    NOTE: handle can be a handle used to open a file, but also a directory
-    */
-
-void sftp_op_close(struct sftp_payload_s *payload)
-{
-    struct sftp_subsystem_s *sftp=payload->sftp; 
-    unsigned int status=SSH_FX_BAD_MESSAGE;
-
-    logoutput("sftp_op_close (%i)", (int) gettid());
-
-    if (payload->len>=4 + SFTP_HANDLE_SIZE) {
-	char *data=payload->data;
-	unsigned int len=0;
-
-	len=get_uint32(&data[0]);
-
-	if (len==SFTP_HANDLE_SIZE) {
-	    unsigned int error=0;
-	    unsigned int count=0;
-	    struct commonhandle_s *handle=find_sftp_commonhandle(sftp, &data[pos], &count);
-
-	    if (handle==NULL) {
-
-		status=SSH_FX_INVALID_HANDLE;
-		logoutput_warning("sftp_op_close: handle not found");
-
-	    } else if ((handle->flags & COMMONHANDLE_FLAG_FILE)==0) {
-
-		status=SSH_FX_INVALID_HANDLE;
-		logoutput_warning("sftp_op_close: handle not a file handle");
-
-	    } else if (handle->pid != getpid()) {
-
-		status=SSH_FX_INVALID_HANDLE;
-		logoutput_warning("sftp_op_close: handle owned by another process");
-
-	    } else {
-
-		(* handle->close)(handle);
-		reply_sftp_status_simple(sftp, payload->id, SSH_FX_OK);
-		return;
-
-	    }
-
-	} else {
-
-	    logoutput_warning("sftp_op_close: invalid handle size %i", len);
-
-	}
-
-    }
-
-    logoutput("sftp_op_close: status %i", status);
-    reply_sftp_status_simple(sftp, payload->id, status);
-    return;
-
-    disconnect:
-
-    finish_sftp_subsystem(sftp);
-
-}

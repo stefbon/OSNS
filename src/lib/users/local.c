@@ -55,19 +55,47 @@ void lock_local_userbase()
     int result=pthread_mutex_lock(&pwd_mutex);
 }
 
-void get_local_uid_byname(char *name, uid_t *uid)
+void get_local_uid_byname(char *name, uid_t *uid, unsigned int *error)
 {
     struct passwd *pwd=getpwnam(name);
-    if (pwd) *uid=pwd->pw_uid;
+
+    if (pwd) {
+
+	*error=0;
+	*uid=pwd->pw_uid;
+
+    } else {
+
+	*error=ENOENT;
+
+    }
+
 }
 
-unsigned int get_local_user_byuid(uid_t uid, struct ssh_string_s *user)
+void get_local_uid_byid(uid_t id, uid_t *uid, unsigned int *error)
+{
+    struct passwd *pwd=getpwuid(id);
+
+    if (pwd) {
+
+	*uid=id;
+
+    } else {
+
+	*error=ENOENT;
+
+    }
+
+}
+
+unsigned int get_local_user_byuid(uid_t uid, struct ssh_string_s *user, unsigned int *error)
 {
     struct passwd *pwd=getpwuid(uid);
     unsigned int len=0;
 
     if (pwd) {
 
+	*error=0;
 	len=strlen(pwd->pw_name);
 
 	if (user && user->ptr) {
@@ -81,6 +109,7 @@ unsigned int get_local_user_byuid(uid_t uid, struct ssh_string_s *user)
 
     } else {
 
+	*error=ENOENT;
 	if (user && user->ptr) memset(user->ptr, '\0', user->len);
 
     }
@@ -99,19 +128,47 @@ void lock_local_groupbase()
     int result=pthread_mutex_lock(&grp_mutex);
 }
 
-void get_local_gid_byname(char *name, gid_t *gid)
+void get_local_gid_byname(char *name, gid_t *gid, unsigned int *error)
 {
     struct group *grp=getgrnam(name);
-    if (grp) *gid=grp->gr_gid;
+
+    if (grp) {
+
+	*error=0;
+	*gid=grp->gr_gid;
+
+    } else {
+
+	*error=ENOENT;
+
+    }
+
 }
 
-unsigned int get_local_group_bygid(gid_t gid, struct ssh_string_s *group)
+void get_local_gid_byid(gid_t id, gid_t *gid, unsigned int *error)
+{
+    struct group *grp=getgrgid(id);
+
+    if (grp) {
+
+	*gid=id;
+
+    } else {
+
+	*error=ENOENT;
+
+    }
+
+}
+
+unsigned int get_local_group_bygid(gid_t gid, struct ssh_string_s *group, unsigned int *error)
 {
     struct group *grp=getgrgid(gid);
     unsigned int len=0;
 
     if (grp) {
 
+	*error=0;
 	len=strlen(grp->gr_name);
 
 	if (group->ptr) {
@@ -125,6 +182,7 @@ unsigned int get_local_group_bygid(gid_t gid, struct ssh_string_s *group)
 
     } else {
 
+	*error=ENOENT;
 	if (group->ptr) memset(group->ptr, '\0', group->len);
 
     }

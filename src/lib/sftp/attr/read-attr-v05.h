@@ -22,7 +22,7 @@
 
 /* prototypes */
 
-void read_attr_bits_v05(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct sftp_attr_s *attr);
-void read_attributes_v05(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct sftp_attr_s *attr);
+void read_attr_type_v05(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat);
+void read_attr_bits_v05(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat);
 
 #endif

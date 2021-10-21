@@ -237,31 +237,68 @@ void switch_logging_backend(const char *what)
 
 }
 
-#if HAVE_GLIB2
-
-#include <glib.h>
-
-void logoutput_base64encoded(char *prefix, char *buffer, unsigned int size)
+void set_logging_level(unsigned int level)
 {
-    gchar *encoded=g_base64_encode((const unsigned char *)buffer, size);
 
-    if (encoded) {
+    if (logging) {
 
-        logoutput("%s : %s", prefix, encoded);
-        g_free(encoded);
+	if (level>=0 && level<=LOG_DEBUG) {
 
-    } else {
+	    logging->level=level;
+	    setlogmask(LOG_UPTO(level));
 
-	logoutput("%s : not encoded", prefix);
+	}
 
     }
 
 }
 
-#else
+// #ifdef HAVE_GLIB2
 
-void logoutput_base64encoded(char *prefix, char *buffer, unsigned int size)
+#include <glib.h>
+
+void logoutput_base64encoded(char *prefix, char *buffer, unsigned int size, unsigned char tofile)
 {
+
+    if (tofile) {
+	char path[64];
+
+	if (snprintf(path, 64, "/tmp/log-%i", getpid())>0) {
+	    FILE *fp=fopen(path, "a");
+
+	    if (fp) {
+		unsigned int count=(size<40) ? size : 40;
+		size_t written=0;
+		written=fwrite(buffer, count, 1, fp);
+		written=fwrite("\n", 1, 1, fp);
+		fclose(fp);
+
+	    }
+
+	}
+
+    } else {
+	gchar *encoded=g_base64_encode((const unsigned char *)buffer, size);
+
+	if (encoded) {
+
+    	    logoutput("%s : %s", prefix, encoded);
+    	    g_free(encoded);
+
+	} else {
+
+	    logoutput("%s : not encoded", prefix);
+
+	}
+
+    }
+
 }
 
-#endif
+// #else
+
+//void logoutput_base64encoded(char *prefix, char *buffer, unsigned int size, unsigned char tofile)
+//{
+//}
+
+//#endif

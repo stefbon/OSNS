@@ -856,7 +856,7 @@ int main(int argc, char *argv[])
     char *pidfile=NULL;
 
     switch_logging_backend("std");
-    setlogmask(LOG_UPTO(LOG_DEBUG));
+    set_logging_level(LOG_DEBUG);
 
     logoutput("%s started", argv[0]);
 
@@ -895,6 +895,7 @@ int main(int argc, char *argv[])
     /* output to stdout/stderr is useless since daemonized */
 
     switch_logging_backend("syslog");
+    set_logging_level(LOG_DEBUG);
 
     logoutput_info("MAIN: initializing interfaces");
 

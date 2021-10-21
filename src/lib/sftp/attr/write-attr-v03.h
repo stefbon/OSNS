@@ -22,14 +22,15 @@
 
 /* prototypes */
 
-void write_attr_zero(struct attr_context_s *ctx, struct attr_buffer_s *b, struct rw_attr_result_s *r, struct sftp_attr_s *a);
+void write_attr_zero(struct attr_context_s *ctx, struct attr_buffer_s *b, struct rw_attr_result_s *r, struct system_stat_s *stat);
 
-void write_attr_size_v03(struct attr_context_s *ctx, struct attr_buffer_s *b, struct rw_attr_result_s *r, struct sftp_attr_s *attr);
-void write_attr_uidgid_v03(struct attr_context_s *ctx, struct attr_buffer_s *b, struct rw_attr_result_s *r, struct sftp_attr_s *a);
-void write_attr_permissions_v03(struct attr_context_s *ctx, struct attr_buffer_s *b, struct rw_attr_result_s *r, struct sftp_attr_s *a);
-void write_attr_acmodtime_v03(struct attr_context_s *ctx, struct attr_buffer_s *b, struct rw_attr_result_s *r, struct sftp_attr_s *a);
+void write_attr_type_v03(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat);
+void write_attr_size_v03(struct attr_context_s *ctx, struct attr_buffer_s *b, struct rw_attr_result_s *r, struct system_stat_s *stat);
+void write_attr_uidgid_v03(struct attr_context_s *ctx, struct attr_buffer_s *b, struct rw_attr_result_s *r, struct system_stat_s *stat);
+void write_attr_permissions_v03(struct attr_context_s *ctx, struct attr_buffer_s *b, struct rw_attr_result_s *r, struct system_stat_s *stat);
+void write_attr_acmodtime_v03(struct attr_context_s *ctx, struct attr_buffer_s *b, struct rw_attr_result_s *r, struct system_stat_s *stat);
 
-void write_attributes_v03(struct attr_context_s *ctx, struct attr_buffer_s *b, struct rw_attr_result_s *r, struct sftp_attr_s *a);
-unsigned int write_attributes_len_v03(struct attr_context_s *ctx, struct rw_attr_result_s *r, struct sftp_attr_s *a);
+void write_name_name_response_v03(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct ssh_string_s *name);
+void write_attr_name_response_v03(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat);
 
 #endif

@@ -38,17 +38,6 @@
 #include <sys/param.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <sys/syscall.h>
-#include <sys/statvfs.h>
-#include <sys/mount.h>
-
-#ifdef HAVE_SETXATTR
-#include <sys/xattr.h>
-#endif
-
-#ifndef ENOATTR
-#define ENOATTR ENODATA        /* No such attribute */
-#endif
 
 #include "log.h"
 
@@ -175,14 +164,11 @@ static void process_sftp_payload_init(struct sftp_payload_s *payload)
     struct sftp_subsystem_s *sftp=payload->sftp;
     struct sftp_receive_s *receive=&sftp->receive;
 
-    // pthread_mutex_lock(&receive->mutex);
-
     if (sftp->flags & SFTP_SUBSYSTEM_FLAG_VERSION_RECEIVED) {
 
 	/* error: version already received */
 
 	logoutput_warning("process_sftp_init: init version message already received from client");
-	// pthread_mutex_unlock(&receive->mutex);
 	goto disconnect;
 
     }
@@ -194,7 +180,6 @@ static void process_sftp_payload_init(struct sftp_payload_s *payload)
 	the client has to wait for reply! */
 
     set_process_sftp_payload_disconnect(sftp);
-    // pthread_mutex_unlock(&receive->mutex);
 
     if (payload->type != SSH_FXP_INIT) {
 
@@ -222,7 +207,8 @@ static void process_sftp_payload_init(struct sftp_payload_s *payload)
 
 	set_process_sftp_payload_session(sftp);
 	sftp->flags |= SFTP_SUBSYSTEM_FLAG_VERSION_SEND;
-	sftp->version=clientversion;
+	set_sftp_protocol_version(sftp, clientversion);
+	setup_sftp_idmapping(sftp);
 
     } else {
 

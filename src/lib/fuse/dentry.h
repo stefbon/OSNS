@@ -83,12 +83,6 @@ struct inode_s {
     struct inodecache_s			*cache;
 };
 
-struct name_s {
-    char 				*name;
-    size_t				len;
-    unsigned long long			index;
-};
-
 struct entry_s {
     struct name_s			name;
     struct inode_s 			*inode;
@@ -100,8 +94,6 @@ struct entry_s {
 };
 
 // Prototypes
-
-void calculate_nameindex(struct name_s *name);
 
 void init_entry(struct entry_s *entry);
 struct entry_s *create_entry(struct name_s *xname);

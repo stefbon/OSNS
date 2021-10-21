@@ -46,6 +46,7 @@
 #include "workspace-interface.h"
 #include "sftp/common-protocol.h"
 #include "sftp/common.h"
+#include "lib/users.h"
 
 /*
     various functions to complete the path of a sftp shared map
@@ -166,7 +167,7 @@ int issubdir_prefix_sftp_client(struct context_interface_s *interface, char *pat
 	} else {
 	    char *buffer=(* interface->get_interface_buffer)(interface);
 	    struct sftp_client_s *sftp=(struct sftp_client_s *) buffer;
-	    struct sftp_usermapping_s *um=&sftp->usermapping;
+	    struct net_usermapping_s *um=sftp->mapping;
 	    struct getent_fields_s *ru=&um->remote_user;
 
 	    prefix=ru->type.user.home;

@@ -93,6 +93,9 @@ struct list_element_s *search_list_element_back(struct list_header_s *h, int (* 
 signed char list_element_is_first(struct list_element_s *e);
 signed char list_element_is_last(struct list_element_s *e);
 
+struct list_element_s *_get_next_element(struct list_element_s *e);
+struct list_element_s *_get_prev_element(struct list_element_s *e);
+
 struct list_element_s *get_next_element(struct list_element_s *e);
 struct list_element_s *get_prev_element(struct list_element_s *e);
 

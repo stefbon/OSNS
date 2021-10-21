@@ -38,9 +38,102 @@
 
 #include "list.h"
 #include "log.h"
+#include "datatypes.h"
 
 #include "sftp/common-protocol.h"
 #include "buffer.h"
+
+#if __BIG_ENDIAN__
+
+# define htonll(x) (x)
+# define ntohll(x) (x)
+
+#else
+
+# define htonll(x) ((uint64_t)htonl((x) & 0xFFFFFFFF) << 32) | htonl((x) >> 32))
+# define ntohll(x) ((uint64_t)ntohl((x) & 0xFFFFFFFF) << 32) | ntohl((x) >> 32))
+
+#endif
+
+static uint32_t convert_int32_2c(int32_t value)
+{
+    uint32_t result=0;
+
+    if (value >= 0) {
+
+	result=(uint32_t) value;
+
+    } else {
+
+	result = ~(-value);
+	result++;
+
+    }
+
+    return result;
+}
+
+#define HIGHEST_BIT_32		0x80000000
+
+static int32_t convert_2c_int32(uint32_t value)
+{
+    int32_t result=0;
+
+    if (value & HIGHEST_BIT_32) {
+
+	/* negative */
+
+	value--;
+	result = -(~value); /* does the compiler accept this ?? */
+
+    } else {
+
+	result = value;
+
+    }
+
+    return result;
+}
+
+static uint64_t convert_int64_2c(int64_t value)
+{
+    uint64_t result=0;
+
+    if (value >= 0) {
+
+	result=(uint64_t) value;
+
+    } else {
+
+	result = ~((uint64_t) -value);
+	result++;
+
+    }
+
+    return result;
+}
+
+#define HIGHEST_BIT_64		0x8000000000000000
+
+static int64_t convert_2c_int64(uint64_t value)
+{
+    int64_t result=0;
+
+    if (value & HIGHEST_BIT_64) {
+
+	/* negative */
+
+	value--;
+	result = -(~value); /* does the compiler accept this ?? */
+
+    } else {
+
+	result = value;
+
+    }
+
+    return result;
+}
 
 static void nowrite_uchar(struct attr_buffer_s *ab, unsigned char b)
 {
@@ -108,6 +201,29 @@ static void write_uint64(struct attr_buffer_s *ab, uint64_t value)
     ab->left -= 8;
 }
 
+static void nowrite_int64(struct attr_buffer_s *ab, int64_t value)
+{
+    ab->pos += 8;
+    ab->left -= 8;
+}
+
+static void write_int64(struct attr_buffer_s *ab, int64_t value)
+{
+    uint64_t tc_value=convert_int64_2c(value);
+    unsigned char *eight=(unsigned char *) ab->pos;
+
+    eight[0] = (tc_value >> 56) & 0xFF;
+    eight[1] = (tc_value >> 48) & 0xFF;
+    eight[2] = (tc_value >> 40) & 0xFF;
+    eight[3] = (tc_value >> 32) & 0xFF;
+    eight[4] = (tc_value >> 24) & 0xFF;
+    eight[5] = (tc_value >> 16) & 0xFF;
+    eight[6] = (tc_value >> 8) & 0xFF;
+    eight[7] = (tc_value & 0xFF);
+    ab->pos += 8;
+    ab->left -= 8;
+}
+
 static void nowrite_uint16(struct attr_buffer_s *ab, uint16_t value)
 {
     ab->pos += 2;
@@ -148,7 +264,7 @@ static uint32_t read_string(struct attr_buffer_s *ab, struct ssh_string_s *s, vo
 {
     s->len=(* ab->ops->rw.read.read_uint32)(ab);
 
-    // logoutput("read_string");
+    logoutput("read_string: s->len %i left %i", s->len, ab->left);
 
     if (s->len>0 && ab->left>= s->len) {
 
@@ -160,7 +276,7 @@ static uint32_t read_string(struct attr_buffer_s *ab, struct ssh_string_s *s, vo
 
     }
 
-    return 0;
+    return 4;
 
 }
 
@@ -174,18 +290,33 @@ static uint16_t read_uint16(struct attr_buffer_s *ab)
 
 static uint32_t read_uint32(struct attr_buffer_s *ab)
 {
-    unsigned char *four=(unsigned char *) ab->pos;
+    uint32_t result=get_uint32((char *) ab->pos);
+    logoutput_debug("read_uint32: %i", result);
     ab->pos+=4;
     ab->left-=4;
-    return (uint32_t) ((four[0] << 24)  | (four[1] << 16) | (four[2] << 8) | four[3]);
+    return result;
 }
 
 static uint64_t read_uint64(struct attr_buffer_s *ab)
 {
-    unsigned char *eight=(unsigned char *) ab->pos;
+    uint64_t result=get_uint64((char *) ab->pos);
     ab->pos+=8;
     ab->left-=8;
-    return (uint64_t) ((((uint64_t) eight[0]) << 56)  | (((uint64_t) eight[1]) << 48) | (((uint64_t) eight[2]) << 40) | (((uint64_t) eight[3]) << 32) | (((uint64_t) eight[4]) << 24)  | (((uint64_t) eight[5]) << 16) | (((uint64_t) eight[6]) << 8) | eight[7] );
+    return result;
+}
+
+static int64_t read_int64(struct attr_buffer_s *ab)
+{
+    unsigned char *tmp=(unsigned char *) ab->pos;
+    uint64_t a;
+
+    a = (uint64_t) ((tmp[0] << 56) | (tmp[1] << 48) | (tmp[2] << 40) | (tmp[3] << 32));
+    a |= (uint32_t) ((tmp[4] << 24) | (tmp[5] << 16) | (tmp[6] << 8) | tmp[7]);
+
+    ab->pos+=8;
+    ab->left-=8;
+
+    return convert_2c_int64(a);
 }
 
 static struct attr_buffer_ops_s ab_nowrite = {
@@ -193,6 +324,7 @@ static struct attr_buffer_ops_s ab_nowrite = {
     .rw.write.write_uchars		= nowrite_uchars,
     .rw.write.write_uint32		= nowrite_uint32,
     .rw.write.write_uint64		= nowrite_uint64,
+    .rw.write.write_int64		= nowrite_int64,
     .rw.write.write_uint16		= nowrite_uint16,
     .rw.write.write_string		= write_string,
     .rw.write.write_skip		= write_skip,
@@ -203,6 +335,7 @@ static struct attr_buffer_ops_s ab_write = {
     .rw.write.write_uchars		= write_uchars,
     .rw.write.write_uint32		= write_uint32,
     .rw.write.write_uint64		= write_uint64,
+    .rw.write.write_int64		= write_int64,
     .rw.write.write_uint16		= write_uint16,
     .rw.write.write_string		= write_string,
     .rw.write.write_skip		= write_skip,
@@ -213,6 +346,7 @@ static struct attr_buffer_ops_s ab_read = {
     .rw.read.read_string		= read_string,
     .rw.read.read_uint32		= read_uint32,
     .rw.read.read_uint64		= read_uint64,
+    .rw.read.read_int64			= read_int64,
     .rw.read.read_uint16		= read_uint16,
 };
 
@@ -247,6 +381,12 @@ void set_attr_buffer_write(struct attr_buffer_s *ab, char *buffer, unsigned int 
     ab->left=(int) len;
     ab->len=len;
     ab->ops=&ab_write;
+}
+
+void reset_attr_buffer_write(struct attr_buffer_s *ab)
+{
+    ab->pos=ab->buffer;
+    ab->left=(int) ab->len;
 }
 
 struct attr_buffer_s init_read_attr_buffer = {

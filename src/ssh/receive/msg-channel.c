@@ -570,8 +570,31 @@ static void receive_msg_channel_request_c(struct ssh_connection_s *connection, s
 	if (connection->connection.io.socket.bevent) fd=get_bevent_unix_fd(connection->connection.io.socket.bevent);
 
 	if (len + pos <= payload->len) {
+	    struct ssh_string_s request=SSH_STRING_SET(len, &payload->buffer[pos]);
 
-	    logoutput("receive_msg_channel_request_c: ssh fd %i received request %.*s local channel %i", fd, len, &payload->buffer[pos], local_channel);
+	    pos+=len;
+	    logoutput("receive_msg_channel_request_c: ssh fd %i received request %.*s local channel %i", fd, request.len, request.ptr, local_channel);
+
+	    if (compare_ssh_string(&request, 'c', "exit-status")==0) {
+		unsigned int exitstatus=0;
+
+		pos++;
+		exitstatus=get_uint32(&payload->buffer[pos]);
+		logoutput("receive_msg_channel_request_c: local channel %i exit status %i", local_channel, exitstatus);
+
+	    } else if (compare_ssh_string(&request, 'c', "exit-signal")==0) {
+		struct ssh_string_s signal=SSH_STRING_INIT;
+		struct ssh_string_s message=SSH_STRING_INIT;
+
+		pos++;
+		pos += read_ssh_string(&payload->buffer[pos], payload->len - pos, &signal);
+		pos++;
+		pos += read_ssh_string(&payload->buffer[pos], payload->len - pos, &message);
+
+		logoutput("receive_msg_channel_request_c: local channel %i exit signal %.*s message %.*s", local_channel, signal.len, signal.ptr, message.len, message.ptr);
+
+
+	    }
 
 	} else {
 
