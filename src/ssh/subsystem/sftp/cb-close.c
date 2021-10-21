@@ -53,7 +53,6 @@
 #include "send.h"
 #include "handle.h"
 #include "path.h"
-#include "cb-utils.h"
 
 /* SSH_FXP_CLOSE
     message has the form:
