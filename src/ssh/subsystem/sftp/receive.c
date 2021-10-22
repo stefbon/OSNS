@@ -250,8 +250,7 @@ static int read_sftp_connection_socket(struct sftp_subsystem_s *s, int fd, struc
 
 	    /* peer has performed an orderly shutdown */
 
-	    s->flags |= SFTP_SUBSYSTEM_FLAG_TROUBLE;
-	    c->flags |= SFTP_CONNECTION_FLAG_RECV_EMPTY;
+	    c->flags |= (SFTP_CONNECTION_FLAG_TROUBLE | SFTP_CONNECTION_FLAG_RECV_EMPTY);
 
 	    if (error>0) {
 
@@ -270,9 +269,8 @@ static int read_sftp_connection_socket(struct sftp_subsystem_s *s, int fd, struc
 	} else if (socket_network_connection_error(error)) {
 
 	    logoutput_warning("read_sftp_connection_socket: socket is not connected? error %i:%s", error, strerror(error));
-	    s->flags |= SFTP_SUBSYSTEM_FLAG_TROUBLE;
 	    c->error=error;
-	    c->flags |= SFTP_CONNECTION_FLAG_RECV_ERROR;
+	    c->flags |= (SFTP_CONNECTION_FLAG_TROUBLE | SFTP_CONNECTION_FLAG_RECV_ERROR);
 	    start_thread_sftp_connection_problem(c);
 
 	} else {
@@ -318,7 +316,7 @@ void read_sftp_connection_signal(int fd, void *ptr, struct event_s *event)
 
     if (signal_is_error(event) || signal_is_close(event)) {
 
-	s->flags |= SFTP_SUBSYSTEM_FLAG_TROUBLE;
+	s->connection.flags |= SFTP_CONNECTION_FLAG_TROUBLE;
 	start_thread_sftp_connection_problem(&s->connection);
 
     } else if (signal_is_data(event)) {

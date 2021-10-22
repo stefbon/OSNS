@@ -305,7 +305,9 @@ void remove_sftp_connection_eventloop(struct sftp_connection_s *connection)
 
 void disconnect_sftp_connection(struct sftp_connection_s *connection, unsigned char senddisconnect)
 {
+    connection->flags |= SFTP_CONNECTION_FLAG_DISCONNECTING;
     (* connection->close)(connection);
+    connection->flags |= SFTP_CONNECTION_FLAG_DISCONNECTED;
 }
 
 void free_sftp_connection(struct sftp_connection_s *connection)
@@ -321,6 +323,138 @@ void free_sftp_connection(struct sftp_connection_s *connection)
 
 }
 
-int start_thread_sftp_connection_problem(struct sftp_connection_s *c)
+unsigned int get_status_socket_connection(struct fs_connection_s *sc)
 {
+    int error=0;
+    int fd=-1;
+
+    if (sc->io.socket.bevent) fd=get_bevent_unix_fd(sc->io.socket.bevent);
+
+    if (fd>=0) {
+	socklen_t len=sizeof(int);
+	struct socket_ops_s *sops=sc->io.socket.sops;
+
+	if ((* sops->getsockopt)(fd, SOL_SOCKET, SO_ERROR, (void *) &error, &len)==0) {
+
+	    logoutput("get_status_socket_connection: got error %i (%s)", error, strerror(error));
+
+	} else {
+
+	    error=errno;
+	    logoutput("get_status_socket_connection: error %i (%s)", errno, strerror(errno));
+
+	}
+
+    } else {
+
+	error=ENOTCONN;
+
+    }
+
+    return abs(error);
+
+}
+
+static void analyze_sftp_connection_problem(void *ptr)
+{
+    struct sftp_connection_s *connection=(struct sftp_connection_s *) ptr;
+    unsigned int error=0;
+
+    if (connection->flags & SFTP_CONNECTION_FLAG_DISCONNECT) return; /* already disconnect(ing/ed)*/
+
+    if ((connection->flags & SFTP_CONNECTION_FLAG_TROUBLE)==0) {
+
+	/* this flag should be set */
+	logoutput("analyze_sftp_connection_problem: flag SFTP_CONNECTION_FLAG_TROUBLE not set as it should be ... warning");
+
+    }
+
+    if (connection->error>0) {
+
+	error=connection->error;
+	logoutput("analyze_sftp_connection_problem: found error %i:%s", error, strerror(error));
+
+    } else {
+
+	logoutput("analyze_sftp_connection_problem: errorcode unknown, trying to find it");
+
+    }
+
+    if (error==0) {
+	struct fs_connection_s *sc=NULL;
+
+        if (connection->flags & SFTP_CONNECTION_FLAG_STD) {
+
+	    /* take the connection to read: stdin */
+
+	    sc=&connection->type.std.stdin;
+
+	}
+
+	if (sc) {
+
+	    error=get_status_socket_connection(sc);
+
+	    if (error==0) {
+		struct socket_ops_s *sops=sc->io.socket.sops;
+
+		/* error==0 -> maybe a normal shutdown */
+
+		size_t size=10; /* arbitrary size */
+		char tmp[size];
+		int bytesread=0;
+
+		bytesread=(* sops->recv)(&sc->io.socket, (void *) tmp, size, MSG_PEEK);
+		error=errno;
+
+	    }
+
+	}
+
+    }
+
+    if (error==0) {
+
+	if (connection->flags & SFTP_CONNECTION_FLAG_RECV_EMPTY) error=ESHUTDOWN;
+
+    }
+
+    if (error>0) {
+
+	switch (error) {
+
+	    case EBADF:
+	    case ENETDOWN:
+	    case ENETUNREACH:
+	    case ENETRESET:
+	    case ECONNABORTED:
+	    case ECONNRESET:
+	    case ENOBUFS:
+	    case ENOTCONN:
+	    case ESHUTDOWN:
+	    case ECONNREFUSED:
+	    case EHOSTDOWN:
+	    case EHOSTUNREACH:
+
+		logoutput("analyze_sftp_connection_problem: error %i (%s): disconnecting", error, strerror(error));
+
+		remove_sftp_connection_eventloop(connection);
+		disconnect_sftp_connection(connection, 0);
+		break;
+
+	    default:
+
+		logoutput("analyze_connection_problem: ignoring error %i (%s) : not reckognized", error, strerror(error));
+
+	}
+
+    }
+
+}
+
+int start_thread_sftp_connection_problem(struct sftp_connection_s *connection)
+{
+    struct generic_error_s error=GENERIC_ERROR_INIT;
+    work_workerthread(NULL, 0, analyze_sftp_connection_problem, (void *) connection, &error);
+    return 0;
 }

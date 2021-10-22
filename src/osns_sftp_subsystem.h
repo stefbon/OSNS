@@ -87,13 +87,16 @@ struct sftp_identity_s {
 #define SFTP_SUBSYSTEM_FLAG_SESSION			(1 << 3)
 
 #define SFTP_SUBSYSTEM_FLAG_FINISH			(1 << 27)
-#define SFTP_SUBSYSTEM_FLAG_TROUBLE			(1 << 28)
-#define SFTP_SUBSYSTEM_FLAG_DISCONNECTING		(1 << 30)
-#define SFTP_SUBSYSTEM_FLAG_DISCONNECTED		(1 << 31)
 
 #define SFTP_CONNECTION_FLAG_STD			(1 << 0)
 #define SFTP_CONNECTION_FLAG_RECV_EMPTY			(1 << 1)
 #define SFTP_CONNECTION_FLAG_RECV_ERROR			(1 << 2)
+
+#define SFTP_CONNECTION_FLAG_TROUBLE			(1 << 28)
+#define SFTP_CONNECTION_FLAG_DISCONNECTING		(1 << 30)
+#define SFTP_CONNECTION_FLAG_DISCONNECTED		(1 << 31)
+
+#define SFTP_CONNECTION_FLAG_DISCONNECT			( SFTP_CONNECTION_FLAG_DISCONNECTING | SFTP_CONNECTION_FLAG_DISCONNECTED )
 
 struct sftp_std_connection_s {
     struct fs_connection_s				stdin;
@@ -102,7 +105,7 @@ struct sftp_std_connection_s {
 };
 
 struct sftp_connection_s {
-    unsigned char					flags;
+    unsigned int					flags;
     unsigned int					error;
     union {
 	struct sftp_std_connection_s			std;
