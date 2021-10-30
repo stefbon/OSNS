@@ -154,8 +154,12 @@ static unsigned int translate_sftp_access_2_commonshared(unsigned int sftpaccess
 struct sftp_subsystem_s *get_sftp_subsystem_commonhandle(struct commonhandle_s *handle)
 {
 
+    logoutput_debug("get_sftp_subsystem_commonhandle: handle flags %i", handle->flags);
+
     if (handle->flags & COMMONHANDLE_FLAG_SFTP) {
 	struct sftp_handle_s *sftp_handle=(struct sftp_handle_s *) handle->buffer;
+
+	logoutput_debug("get_sftp_subsystem_commonhandle: is sftp");
 
 	return sftp_handle->sftp;
 

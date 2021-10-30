@@ -115,7 +115,7 @@ struct commonhandle_s *find_commonhandle(dev_t dev, uint64_t ino, unsigned int p
     void *index=NULL;
     struct simple_lock_s lock;
 
-    logoutput_debug("find_commonhandle: handle dev %i ino %i pid %i fd %i", dev, ino, pid, fd);
+    logoutput_debug("find_commonhandle: look for dev %i ino %i pid %i fd %i flag %i", dev, ino, pid, fd, flag);
 
     hashvalue=calculate_ino_hash(ino);
     readlock_commonhandles(&lock);
@@ -123,14 +123,14 @@ struct commonhandle_s *find_commonhandle(dev_t dev, uint64_t ino, unsigned int p
 
     while (handle) {
 
-	logoutput_debug("find_commonhandle: handle dev %i ino %i pid %i fd %i", handle->location.type.devino.dev, handle->location.type.devino.ino, get_pid_commonhandle(handle), get_fd_commonhandle(handle));
+	logoutput_debug("find_commonhandle: handle dev %i ino %i pid %i fd %i flags %i", handle->location.type.devino.dev, handle->location.type.devino.ino, get_pid_commonhandle(handle), get_fd_commonhandle(handle), handle->flags);
 
 	if ((handle->flags & FS_LOCATION_FLAG_DEVINO)) {
 
 	    if (handle->location.type.devino.ino==ino && handle->location.type.devino.dev==dev &&
 		get_pid_commonhandle(handle)==pid &&
 		get_fd_commonhandle(handle)==fd &&
-		(handle->flags & flag) &&
+		(flag==0 || (handle->flags & flag)) &&
 		compare_subsystem(handle, ptr)==0) break;
 
 	}
