@@ -108,7 +108,7 @@ void free_hash_commonhandles()
     free_group(&ino_group, NULL);
 }
 
-struct commonhandle_s *find_commonhandle(dev_t dev, uint64_t ino, unsigned int pid, unsigned int fd, unsigned char flag, int (* compare_subsystem)(struct commonhandle_s *h, void *ptr), void *ptr)
+struct commonhandle_s *find_commonhandle(dev_t dev, uint64_t ino, unsigned int pid, unsigned int fd, unsigned int flag, int (* compare_subsystem)(struct commonhandle_s *h, void *ptr), void *ptr)
 {
     struct commonhandle_s *handle=NULL;
     unsigned int hashvalue=0;

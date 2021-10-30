@@ -38,6 +38,6 @@ struct commonhandle_s *get_next_commonhandle(void **index, unsigned int hashvalu
 int init_hash_commonhandles(unsigned int *error);
 void free_hash_commonhandles();
 
-struct commonhandle_s *find_commonhandle(dev_t dev, uint64_t ino, unsigned int pid, unsigned int fd, unsigned char flag, int (* compare_subsystem)(struct commonhandle_s *h, void *ptr), void *ptr);
+struct commonhandle_s *find_commonhandle(dev_t dev, uint64_t ino, unsigned int pid, unsigned int fd, unsigned int flag, int (* compare_subsystem)(struct commonhandle_s *h, void *ptr), void *ptr);
 
 #endif
