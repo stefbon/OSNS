@@ -335,6 +335,7 @@ int init_sftp_subsystem(struct sftp_subsystem_s *sftp)
     set_sftp_protocol_version(sftp, 6);
     init_attr_context(&sftp->attrctx, ATTR_CONTEXT_FLAG_SERVER, (void *) sftp, &sftp->mapping);
     init_net_idmapping(&sftp->mapping, &sftp->identity.pwd);
+    set_sftp_attr_context(&sftp->attrctx);
 
     set_process_sftp_payload_notsupp(sftp);
     for (unsigned int i=0; i<256; i++) sftp->cb[i]=reply_sftp_notsupported;
