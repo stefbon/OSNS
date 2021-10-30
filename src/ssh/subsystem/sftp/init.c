@@ -322,6 +322,8 @@ void setup_sftp_idmapping(struct sftp_subsystem_s *sftp)
 int init_sftp_subsystem(struct sftp_subsystem_s *sftp)
 {
 
+    init_hashattr_generic();
+
     memset(sftp, 0, sizeof(struct sftp_subsystem_s));
     sftp->flags = SFTP_SUBSYSTEM_FLAG_INIT;
 
@@ -357,6 +359,8 @@ void free_sftp_subsystem(struct sftp_subsystem_s *sftp)
     free_sftp_payload_queue(&sftp->queue);
     free_sftp_receive(&sftp->receive);
     free_sftp_connection(&sftp->connection);
+
+    clear_hashattr_generic(0);
 }
 
 void finish_sftp_subsystem(struct sftp_subsystem_s *sftp)
