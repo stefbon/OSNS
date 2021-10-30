@@ -179,6 +179,8 @@ struct commonhandle_s *find_sftp_commonhandle(struct sftp_subsystem_s *sftp, cha
     unsigned int fd=0;
     unsigned char type=0;
 
+    logoutput_debug("find_commonhandle_buffer: size %i", size);
+
     if (size < BUFFER_HANDLE_SIZE) return NULL;
 
     /* read the buffer, assume it's big enough */

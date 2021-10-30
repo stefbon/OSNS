@@ -351,6 +351,7 @@ void sftp_op_readdir(struct sftp_payload_s *payload)
 	char *data=payload->data;
 
 	len=get_uint32(&data[0]);
+	logoutput("sftp_op_readdir (%i) len %i", (int) gettid(), len);
 
 	if (len>=get_sftp_handle_size()) {
 	    unsigned int error=0;
