@@ -115,7 +115,7 @@ struct dirhandle_s {
 };
 
 struct commonhandle_s {
-    unsigned char					flags;
+    unsigned int					flags;
     struct fs_location_s				location;
     union fs_handle_u {
 	struct dirhandle_s				dir;
