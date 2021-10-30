@@ -23,6 +23,7 @@
 #include "lib/sftp/attr-context.h"
 #include "lib/sftp/attr-read.h"
 #include "lib/sftp/attr-write.h"
+#include "lib/sftp/rw-attr-generic.h"
 
 /* prototypes */
 

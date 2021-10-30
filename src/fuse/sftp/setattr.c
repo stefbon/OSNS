@@ -54,32 +54,54 @@
 #include "interface/sftp-wait-response.h"
 #include "inode-stat.h"
 
-static void set_local_attributes(struct inode_s *inode, struct sftp_attr_s *attr)
+void filter_setting_attributes(struct inode_s *inode, struct system_stat_s *stat)
 {
 
-    if (attr->asked & SFTP_ATTR_SIZE) inode->st.st_size=attr->size;
-    if (attr->asked & SFTP_ATTR_USER) inode->st.st_uid=attr->user.uid;
-    if (attr->asked & SFTP_ATTR_GROUP) inode->st.st_gid=attr->group.gid;
-    if (attr->asked & SFTP_ATTR_PERMISSIONS) inode->st.st_mode=(attr->permissions & attr->type);
+    if (stat->mask & SYSTEM_STAT_MODE) {
 
-    if (attr->asked & SFTP_ATTR_ATIME) {
-
-	inode->st.st_atim.tv_sec=attr->atime;
-	inode->st.st_atim.tv_nsec=attr->atime_n;
+	if (get_mode_system_stat(&inode->stat) == get_mode_system_stat(stat)) stat->mask &= ~SYSTEM_STAT_MODE;
 
     }
 
-    if (attr->asked & SFTP_ATTR_MTIME) {
+    if (stat->mask & SYSTEM_STAT_SIZE) {
 
-	inode->st.st_mtim.tv_sec=attr->mtime;
-	inode->st.st_mtim.tv_nsec=attr->mtime_n;
+	if (get_size_system_stat(&inode->stat) == get_size_system_stat(stat)) stat->mask &= ~SYSTEM_STAT_SIZE;
 
     }
 
-    if (attr->asked & SFTP_ATTR_CTIME) {
+    if (stat->mask & SYSTEM_STAT_UID) {
 
-	inode->st.st_ctim.tv_sec=attr->ctime;
-	inode->st.st_ctim.tv_nsec=attr->ctime_n;
+	if (get_uid_system_stat(&inode->stat) == get_uid_system_stat(stat)) stat->mask &= ~SYSTEM_STAT_UID;
+
+    }
+
+    if (stat->mask & SYSTEM_STAT_GID) {
+
+	if (get_gid_system_stat(&inode->stat) == get_gid_system_stat(stat)) stat->mask &= ~SYSTEM_STAT_GID;
+
+    }
+
+    if (stat->mask & SYSTEM_STAT_ATIME) {
+
+	if ((get_atime_sec_system_stat(&inode->stat) == get_atime_sec_system_stat(stat)) && (get_atime_nsec_system_stat(&inode->stat) == get_atime_nsec_system_stat(stat))) stat->mask &= ~SYSTEM_STAT_ATIME;
+
+    }
+
+    if (stat->mask & SYSTEM_STAT_MTIME) {
+
+	if ((get_mtime_sec_system_stat(&inode->stat) == get_mtime_sec_system_stat(stat)) && (get_mtime_nsec_system_stat(&inode->stat) == get_mtime_nsec_system_stat(stat))) stat->mask &= ~SYSTEM_STAT_MTIME;
+
+    }
+
+    if (stat->mask & SYSTEM_STAT_CTIME) {
+
+	if ((get_ctime_sec_system_stat(&inode->stat) == get_ctime_sec_system_stat(stat)) && (get_ctime_nsec_system_stat(&inode->stat) == get_ctime_nsec_system_stat(stat))) stat->mask &= ~SYSTEM_STAT_CTIME;
+
+    }
+
+    if (stat->mask & SYSTEM_STAT_BTIME) {
+
+	if ((get_btime_sec_system_stat(&inode->stat) == get_btime_sec_system_stat(stat)) && (get_btime_nsec_system_stat(&inode->stat) == get_btime_nsec_system_stat(stat))) stat->mask &= ~SYSTEM_STAT_BTIME;
 
     }
 
@@ -87,27 +109,41 @@ static void set_local_attributes(struct inode_s *inode, struct sftp_attr_s *attr
 
 /* SETATTR */
 
-void _fs_sftp_setattr(struct service_context_s *context, struct fuse_request_s *f_request, struct inode_s *inode, struct pathinfo_s *pathinfo, struct stat *st, unsigned int set)
+void _fs_sftp_setattr(struct service_context_s *context, struct fuse_request_s *f_request, struct inode_s *inode, struct pathinfo_s *pathinfo, struct system_stat_s *stat)
 {
     struct context_interface_s *interface=&context->interface;
     struct sftp_request_s sftp_r;
     unsigned int error=EIO;
-    struct sftp_attr_s attr;
-    struct rw_attr_result_s r;
-    unsigned int size=get_attr_buffer_size(interface, st, set, &r, &attr, 0);
+    struct rw_attr_result_s r=RW_ATTR_RESULT_INIT;
+    struct get_supported_sftp_attr_s gssa=GSSA_INIT;
+    unsigned int size=get_attr_buffer_size(interface, &r, stat, &gssa) + 5;
     char buffer[size];
     unsigned int pathlen=(* interface->backend.sftp.get_complete_pathlen)(interface, pathinfo->len);
     char path[pathlen];
+    struct attr_buffer_s abuff;
+
+    /* test attributes really differ from the current */
+
+    filter_setting_attributes(inode, stat);
+    if (stat->mask==0) {
+
+	error=0;
+	goto out;
+
+    }
 
     pathinfo->len += (* interface->backend.sftp.complete_path)(interface, path, pathinfo);
-    write_attributes_ctx(interface, buffer, size, &r, &attr);
+
+    set_attr_buffer_write(&abuff, buffer, size);
+    (* abuff.ops->rw.write.write_uint32)(&abuff, gssa.valid);
+    write_attributes_ctx(interface, &abuff, &r, stat, gssa.valid);
 
     init_sftp_request(&sftp_r, interface, f_request);
 
-    sftp_r.call.setstat.path=(unsigned char *)pathinfo->path;
+    sftp_r.call.setstat.path=(unsigned char *) pathinfo->path;
     sftp_r.call.setstat.len=pathinfo->len;
-    sftp_r.call.setstat.size=size;
-    sftp_r.call.setstat.buff=(unsigned char *)buffer;
+    sftp_r.call.setstat.size=(unsigned int)(abuff.pos - abuff.buffer);
+    sftp_r.call.setstat.buff=(unsigned char *)abuff.buffer;
 
     if (send_sftp_setstat_ctx(interface, &sftp_r)>0) {
 	struct timespec timeout;
@@ -126,7 +162,7 @@ void _fs_sftp_setattr(struct service_context_s *context, struct fuse_request_s *
 		    /* TODO: do a getattr to the server to check which attributes are set
 			now is assumed that this status code == 0 means that everythis is set as asked */
 
-		    set_local_attributes(inode, &attr);
+		    set_local_attributes(interface, inode, stat);
 		    _fs_common_getattr(get_root_context(context), f_request, inode);
 		    unset_fuse_request_flags_cb(f_request);
 		    return;
@@ -159,25 +195,38 @@ void _fs_sftp_setattr(struct service_context_s *context, struct fuse_request_s *
 
 /* FSETATTR */
 
-void _fs_sftp_fsetattr(struct fuse_openfile_s *openfile, struct fuse_request_s *f_request, struct stat *st, unsigned int set)
+void _fs_sftp_fsetattr(struct fuse_openfile_s *openfile, struct fuse_request_s *f_request, struct system_stat_s *stat)
 {
     struct service_context_s *context=(struct service_context_s *) openfile->context;
     struct context_interface_s *interface=&context->interface;
     struct sftp_request_s sftp_r;
     unsigned int error=EIO;
-    struct sftp_attr_s attr;
-    struct rw_attr_result_s r;
-    unsigned int size=get_attr_buffer_size(interface, st, set, &r, &attr, 0);
+    struct rw_attr_result_s r=RW_ATTR_RESULT_INIT;
+    struct get_supported_sftp_attr_s gssa=GSSA_INIT;
+    unsigned int size=get_attr_buffer_size(interface, &r, stat, &gssa) + 5;
     char buffer[size];
+    struct attr_buffer_s abuff;
 
-    write_attributes_ctx(interface, buffer, size, &r, &attr);
+    /* test attributes really differ from the current */
+
+    filter_setting_attributes(openfile->inode, stat);
+    if (stat->mask==0) {
+
+	error=0;
+	goto out;
+
+    }
+
+    set_attr_buffer_write(&abuff, buffer, size);
+    (* abuff.ops->rw.write.write_uint32)(&abuff, gssa.valid);
+    write_attributes_ctx(interface, &abuff, &r, stat, gssa.valid);
 
     init_sftp_request(&sftp_r, interface, f_request);
 
     sftp_r.call.fsetstat.handle=(unsigned char *) openfile->handle.name.name;
     sftp_r.call.fsetstat.len=openfile->handle.name.len;
-    sftp_r.call.fsetstat.size=size;
-    sftp_r.call.fsetstat.buff=(unsigned char *)buffer;
+    sftp_r.call.fsetstat.size=(unsigned int)(abuff.pos - abuff.buffer);
+    sftp_r.call.fsetstat.buff=(unsigned char *) abuff.buffer;
 
     /* send fsetstat cause a handle is available */
 
@@ -195,7 +244,7 @@ void _fs_sftp_fsetattr(struct fuse_openfile_s *openfile, struct fuse_request_s *
 
 		    /* TODO: do a getattr to the server to check which attributes are set */
 
-		    set_local_attributes(openfile->inode, &attr);
+		    set_local_attributes(interface, openfile->inode, stat);
 		    _fs_common_getattr(get_root_context(context), f_request, openfile->inode);
 		    unset_fuse_request_flags_cb(f_request);
 		    return;
@@ -225,13 +274,12 @@ void _fs_sftp_fsetattr(struct fuse_openfile_s *openfile, struct fuse_request_s *
 
 }
 
-void _fs_sftp_setattr_disconnected(struct service_context_s *context, struct fuse_request_s *f_request, struct inode_s *inode, struct pathinfo_s *pathinfo, struct stat *st, unsigned int set)
+void _fs_sftp_setattr_disconnected(struct service_context_s *context, struct fuse_request_s *f_request, struct inode_s *inode, struct pathinfo_s *pathinfo, struct system_stat_s *stat)
 {
     reply_VFS_error(f_request, ENOTCONN);
 }
 
-void _fs_sftp_fsetattr_disconnected(struct fuse_openfile_s *openfile, struct fuse_request_s *f_request, struct stat *st, unsigned int set)
+void _fs_sftp_fsetattr_disconnected(struct fuse_openfile_s *openfile, struct fuse_request_s *f_request, struct system_stat_s *stat)
 {
     reply_VFS_error(f_request, ENOTCONN);
 }
-

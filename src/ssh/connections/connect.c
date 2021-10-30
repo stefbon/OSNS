@@ -265,7 +265,7 @@ void disconnect_ssh_connection(struct ssh_connection_s *connection)
 
 	}
 
-	c->status-=FS_CONNECTION_FLAG_CONNECTED;
+	c->status&=~FS_CONNECTION_FLAG_CONNECTED;
 	c->status|=FS_CONNECTION_FLAG_DISCONNECTED;
 
     }

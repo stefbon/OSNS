@@ -17,12 +17,20 @@
 
 */
 
-#ifndef FUSE_SFTP_COMMON_H
-#define FUSE_SFTP_COMMON_H
+#ifndef FUSE_SFTP_INODE_STAT_H
+#define FUSE_SFTP_INODE_STAT_H
+
+struct get_supported_sftp_attr_s {
+    unsigned int				stat_mask;
+    unsigned int				len;
+    unsigned int				valid;
+};
+
+#define GSSA_INIT				{0, 0, 0}
 
 /* prototypes */
 
-void fill_inode_attr_sftp(void *ptr, struct stat *st, struct sftp_attr_s *attr);
-unsigned int get_attr_buffer_size(void *ptr, struct stat *st, unsigned int set, struct rw_attr_result_s *r, struct sftp_attr_s *attr, unsigned char raw);
+void set_local_attributes(struct context_interface_s *interface, struct inode_s *inode, struct system_stat_s *stat);
+unsigned int get_attr_buffer_size(struct context_interface_s *interface, struct rw_attr_result_s *r, struct system_stat_s *stat, struct get_supported_sftp_attr_s *gssa);
 
 #endif

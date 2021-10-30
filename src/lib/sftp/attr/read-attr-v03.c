@@ -104,12 +104,12 @@ void read_attr_acmodtime_v03(struct attr_context_s *actx, struct attr_buffer_s *
 
     /* access time */
 
-    time.sec=(* buffer->ops->rw.read.read_uint32)(buffer);
+    time.tv_sec=(* buffer->ops->rw.read.read_uint32)(buffer);
     set_atime_system_stat(stat, &time);
 
     /* modify time */
 
-    time.sec=(* buffer->ops->rw.read.read_uint32)(buffer);
+    time.tv_sec=(* buffer->ops->rw.read.read_uint32)(buffer);
     set_mtime_system_stat(stat, &time);
 
 }
@@ -154,21 +154,13 @@ static void _dummy_cb(struct attr_buffer_s *buffer, struct ssh_string_s *s, void
 
 void read_name_name_response_v03(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct ssh_string_s *name)
 {
-    uint32_t len=(* buffer->ops->rw.read.read_string)(buffer, name, _dummy_cb, NULL);
-}
-
-void read_attr_name_response_v03(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)
-{
     struct ssh_string_s longname=SSH_STRING_INIT;
-    unsigned int valid=0;
+    uint32_t len=0;
+
+    len=(* buffer->ops->rw.read.read_string)(buffer, name, _dummy_cb, NULL);
 
     /* longname, ignore */
 
-    uint32_t len=(* buffer->ops->rw.read.read_string)(buffer, &longname, _dummy_cb, NULL);
-
-    /* attr */
-
-    valid=(* buffer->ops->rw.read.read_uint32)(buffer);
-    read_attributes_generic(actx, buffer, r, stat, valid);
-
+    len=(* buffer->ops->rw.read.read_string)(buffer, &longname, _dummy_cb, NULL);
 }
+

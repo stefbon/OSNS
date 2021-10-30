@@ -63,7 +63,7 @@ static unsigned int _smb_lookup_cb_cache_size(struct create_entry_s *ce)
 {
     struct context_interface_s *interface=&ce->context->interface;
 
-    fill_inode_attr_smb(interface, &ce->cache.st, ce->cache.link.link.ptr);
+    fill_inode_attr_smb(interface, &ce->cache.stat, ce->cache.link.link.ptr);
     return 0;
 }
 

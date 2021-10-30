@@ -38,7 +38,7 @@ struct dops_s {
 
 struct directory_s {
     unsigned char 			flags;
-    struct timespec 			synctime;
+    struct system_timespec_s 		synctime;
     struct inode_s 			*inode;
     struct simple_locking_s		locking;
     struct dops_s 			*dops;

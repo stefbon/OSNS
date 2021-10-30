@@ -48,82 +48,49 @@
 #include "fuse.h"
 #include "sftp/common-protocol.h"
 #include "sftp/common.h"
+#include "sftp/rw-attr-generic.h"
 #include "sftp/attr.h"
 #include "sftp/init.h"
 #include "sftp-attr.h"
 
-void read_sftp_attributes_ctx(struct context_interface_s *interface, struct attr_response_s *response, struct sftp_attr_s *attr)
+void parse_attributes_generic_ctx(struct context_interface_s *interface, struct rw_attr_result_s *r, struct system_stat_s *stat, unsigned char what, void (* cb)(unsigned int stat_mask, unsigned int len, unsigned int valid, unsigned int fattr, void *ptr), void *ptr)
 {
     struct sftp_client_s *sftp=(struct sftp_client_s *) (* interface->get_interface_buffer)(interface);
-    struct attr_buffer_s ab;
-    set_attr_buffer_read_attr_response(&ab, response);
-    (*sftp->attr_ops.read_attributes)(&sftp->attrctx, &ab, attr);
+
+    parse_sftp_attributes_stat_mask(&sftp->attrctx, r, stat, what, cb, ptr);
 }
-void write_attributes_ctx(struct context_interface_s *interface, char *buffer, unsigned int len, struct rw_attr_result_s *r, struct sftp_attr_s *attr)
+
+void read_sftp_attributes_ctx(struct context_interface_s *interface, struct attr_buffer_s *abuff, struct system_stat_s *stat)
 {
     struct sftp_client_s *sftp=(struct sftp_client_s *) (* interface->get_interface_buffer)(interface);
-    struct attr_buffer_s ab;
-    set_attr_buffer_write(&ab, buffer, len);
-    (*sftp->attr_ops.write_attributes)(&sftp->attrctx, &ab, r, attr);
+    unsigned int valid=(* abuff->ops->rw.read.read_uint32)(abuff);
+    struct rw_attr_result_s r=RW_ATTR_RESULT_INIT;
+
+    read_attributes_generic(&sftp->attrctx, abuff, &r, stat, valid);
 }
-unsigned int write_attributes_len_ctx(struct context_interface_s *interface, struct rw_attr_result_s *r, struct sftp_attr_s *attr)
+
+void write_attributes_ctx(struct context_interface_s *interface, struct attr_buffer_s *abuff, struct rw_attr_result_s *r, struct system_stat_s *stat, unsigned int valid)
 {
     struct sftp_client_s *sftp=(struct sftp_client_s *) (* interface->get_interface_buffer)(interface);
-    return (*sftp->attr_ops.write_attributes_len)(&sftp->attrctx, r, attr);
+
+    write_attributes_generic(&sftp->attrctx, abuff, r, stat, valid);
 }
-void read_name_nameresponse_ctx(struct context_interface_s *interface, struct fuse_buffer_s *buffer, struct ssh_string_s *name)
+
+void read_name_name_response_ctx(struct context_interface_s *interface, struct attr_buffer_s *abuff, struct ssh_string_s *name)
 {
     struct sftp_client_s *sftp=(struct sftp_client_s *) (* interface->get_interface_buffer)(interface);
-    struct attr_buffer_s ab;
-    logoutput("read_name_nameresponse_ctx: pos %i", (unsigned int)(buffer->pos - buffer->data));
-    set_attr_buffer_read(&ab, buffer->pos, buffer->left);
-    (*sftp->attr_ops.read_name_response)(&sftp->attrctx, &ab, name);
-    buffer->pos = (char *) ab.pos;
-    buffer->left = ab.left;
+    (* sftp->attrctx.ops.read_name_name_response)(&sftp->attrctx, abuff, name);
 }
-void read_attr_nameresponse_ctx(struct context_interface_s *interface, struct fuse_buffer_s *buffer, struct sftp_attr_s *attr)
-{
-    struct sftp_client_s *sftp=(struct sftp_client_s *) (* interface->get_interface_buffer)(interface);
-    struct attr_buffer_s ab;
-    logoutput("read_attr_nameresponse_ctx: pos %i", (unsigned int)(buffer->pos - buffer->data));
-    set_attr_buffer_read(&ab, buffer->pos, buffer->left);
-    (*sftp->attr_ops.read_attr_response)(&sftp->attrctx, &ab, attr);
-    buffer->pos = (char *) ab.pos;
-    buffer->left = ab.left;
-    buffer->done++;
-}
-int get_attribute_info_ctx(struct context_interface_s *interface, unsigned int valid, const char *what)
-{
-    struct sftp_client_s *sftp=(struct sftp_client_s *) (* interface->get_interface_buffer)(interface);
-    unsigned char version=get_sftp_protocol_version(sftp);
-    return get_sftp_attribute_info(version, valid, what);
-}
+
 void correct_time_s2c_ctx(struct context_interface_s *interface, struct timespec *t)
 {
     struct sftp_client_s *sftp=(struct sftp_client_s *) (* interface->get_interface_buffer)(interface);
     (* sftp->time_ops.correct_time_s2c)(sftp, t);
 }
+
 void correct_time_c2s_ctx(struct context_interface_s *interface, struct timespec *t)
 {
     struct sftp_client_s *sftp=(struct sftp_client_s *) (* interface->get_interface_buffer)(interface);
     (* sftp->time_ops.correct_time_c2s)(sftp, t);
 }
 
-void translate_sftp_attr_fattr(struct context_interface_s *interface)
-{
-    struct sftp_client_s *sftp=(struct sftp_client_s *) (* interface->get_interface_buffer)(interface);
-
-    unsigned int sftpattr=get_sftp_features(sftp);
-    unsigned int fuseattr=0;
-
-    if (sftpattr & SFTP_ATTR_PERMISSIONS) fuseattr |= FATTR_MODE;
-    if (sftpattr & SFTP_ATTR_SIZE) fuseattr |= FATTR_SIZE;
-    if (sftpattr & SFTP_ATTR_ATIME) fuseattr |= FATTR_ATIME;
-    if (sftpattr & SFTP_ATTR_MTIME) fuseattr |= FATTR_MTIME;
-    if (sftpattr & SFTP_ATTR_CTIME) fuseattr |= FATTR_CTIME;
-    if (sftpattr & SFTP_ATTR_USER) fuseattr |= FATTR_UID;
-    if (sftpattr & SFTP_ATTR_GROUP) fuseattr |= FATTR_GID;
-
-    interface->backend.sftp.fattr_supported=fuseattr;
-
-}

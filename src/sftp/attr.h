@@ -25,9 +25,4 @@
 void set_sftp_attr_version(struct sftp_client_s *sftp);
 void init_sftp_client_attr_context(struct sftp_client_s *sftp);
 
-void read_sftp_features(struct sftp_client_s *sftp);
-
-unsigned int get_sftp_attribute_mask(struct sftp_client_s *sftp);
-int get_sftp_attribute_info(unsigned char version, unsigned int valid, const char *what);
-
 #endif

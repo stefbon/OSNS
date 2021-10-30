@@ -48,10 +48,8 @@
 #include "sftp/common-protocol.h"
 #include "sftp/common.h"
 #include "sftp/protocol-v03.h"
-
 #include "sftp/attr-context.h"
 
-#include "rw-attr-generic.h"
 #include "write-attr-v03.h"
 
 void write_attr_zero(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)
@@ -95,28 +93,17 @@ void write_attr_acmodtime_v03(struct attr_context_s *ctx, struct attr_buffer_s *
     struct system_timespec_s time=SYSTEM_TIME_INIT;
 
     get_atime_system_stat(stat, &time);
-    (* buffer->ops->rw.write.write_uint32)(buffer, time.sec);
+    (* buffer->ops->rw.write.write_uint32)(buffer, time.tv_sec);
 
     get_mtime_system_stat(stat, &time);
-    (* buffer->ops->rw.write.write_uint32)(buffer, time.sec);
+    (* buffer->ops->rw.write.write_uint32)(buffer, time.tv_sec);
 
 }
 
 void write_name_name_response_v03(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct ssh_string_s *name)
 {
-    (* buffer->ops->rw.write.write_string)(buffer, name);
-}
-
-void write_attr_name_response_v03(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)
-{
-
     /* longname: an empty string, not important */
-
     (* buffer->ops->rw.write.write_uint32)(buffer, 0);
 
-    /* attr */
-
-    (* buffer->ops->rw.write.write_uint32)(buffer, r->valid);
-    write_attributes_generic(actx, buffer, r, stat, r->valid);
-
+    (* buffer->ops->rw.write.write_string)(buffer, name);
 }

@@ -167,10 +167,10 @@ int issubdir_prefix_sftp_client(struct context_interface_s *interface, char *pat
 	} else {
 	    char *buffer=(* interface->get_interface_buffer)(interface);
 	    struct sftp_client_s *sftp=(struct sftp_client_s *) buffer;
-	    struct net_usermapping_s *um=sftp->mapping;
-	    struct getent_fields_s *ru=&um->remote_user;
+	    struct net_idmapping_s *im=sftp->mapping;
+	    struct getent_fields_s *su=&im->sg;
 
-	    prefix=ru->type.user.home;
+	    prefix=su->type.user.home;
 	    len=strlen(prefix);
 
 	}

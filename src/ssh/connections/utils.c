@@ -153,7 +153,17 @@ static void common_refcount_ssh_connection(struct ssh_connection_s *connection, 
     /* signal any waiting thread for a payload (this is done via signal) */
 
     signal_lock(connections->signal);
-    connection->refcount+=step;
+
+    if (step<0 && connection->refcount <= abs(step)) {
+
+	connection->refcount=0;
+
+    } else {
+
+	connection->refcount+=step;
+
+    }
+
     signal_unlock(connections->signal);
 }
 

@@ -219,7 +219,7 @@ struct directory_s *_create_directory(struct inode_s *inode, void (* init_cb)(st
     unsigned char maxlanes=0;
     unsigned int size=get_size_sl_skiplist(&maxlanes);
 
-    logoutput("_create_directory: inode %li size %li", inode->st.st_ino, size);
+    logoutput("_create_directory: inode %li size %li", inode->stat.sst_ino, size);
 
     directory=malloc(sizeof(struct directory_s) + size);
     if (directory==NULL) return NULL;

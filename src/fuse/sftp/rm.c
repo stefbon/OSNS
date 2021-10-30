@@ -89,7 +89,7 @@ void _fs_sftp_unlink(struct service_context_s *context, struct fuse_request_s *f
 		    struct entry_s *entry=*pentry;
 		    struct inode_s *inode=entry->inode;
 
-		    queue_inode_2forget(workspace, inode->st.st_ino, 0, 0);
+		    queue_inode_2forget(workspace, get_ino_system_stat(&inode->stat), 0, 0);
 		    *pentry=NULL;
 
 		    reply_VFS_error(f_request, 0);
@@ -148,7 +148,7 @@ void _fs_sftp_rmdir(struct service_context_s *context, struct fuse_request_s *f_
 		    struct entry_s *entry=*pentry;
 		    struct inode_s *inode=entry->inode;
 
-		    queue_inode_2forget(workspace, inode->st.st_ino, 0, 0);
+		    queue_inode_2forget(workspace, get_ino_system_stat(&inode->stat), 0, 0);
 		    *pentry=NULL;
 
 		    reply_VFS_error(f_request, 0);

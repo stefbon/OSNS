@@ -91,7 +91,7 @@ static void _fs_getattr(struct service_context_s *context, struct fuse_request_s
     _fs_common_getattr(context, request, inode);
 }
 
-static void _fs_setattr(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, struct stat *st, unsigned int set)
+static void _fs_setattr(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, struct system_stat_s *stat)
 {
     _fs_common_getattr(context, request, inode);
 }
@@ -197,7 +197,7 @@ static void _fs_fgetattr(struct fuse_openfile_s *openfile, struct fuse_request_s
     _fs_common_getattr(openfile->context, request, openfile->inode);
 }
 
-static void _fs_fsetattr(struct fuse_openfile_s *openfile, struct fuse_request_s *request, struct stat *st, int fuse_set)
+static void _fs_fsetattr(struct fuse_openfile_s *openfile, struct fuse_request_s *request, struct system_stat_s *stat)
 {
     _fs_common_getattr(openfile->context, request, openfile->inode);
 }
@@ -266,7 +266,7 @@ void use_virtual_fs(struct service_context_s *context, struct inode_s *inode)
 
     logoutput("use_virtual_fs");
 
-    if (S_ISDIR(inode->st.st_mode)) {
+    if (S_ISDIR(inode->stat.sst_mode)) {
 
 	inode->fs=&virtual_dir_fs;
 

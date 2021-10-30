@@ -145,32 +145,35 @@ void _fs_sftp_open(struct fuse_openfile_s *openfile, struct fuse_request_s *f_re
 
 /* CREATE a file */
 
-void _fs_sftp_create(struct fuse_openfile_s *openfile, struct fuse_request_s *f_request, struct pathinfo_s *pathinfo, struct stat *st, unsigned int flags)
+void _fs_sftp_create(struct fuse_openfile_s *openfile, struct fuse_request_s *f_request, struct pathinfo_s *pathinfo, struct system_stat_s *stat, unsigned int flags)
 {
     struct service_context_s *context=(struct service_context_s *) openfile->context;
     struct context_interface_s *interface=&context->interface;
     struct sftp_request_s sftp_r;
     unsigned int error=EIO;
-    struct sftp_attr_s attr;
-    struct rw_attr_result_s r;
-    unsigned int size=get_attr_buffer_size(interface, st, FATTR_MODE | FATTR_SIZE | FATTR_UID | FATTR_GID, &r, &attr, 0); /* uid and gid by server ?*/
+    struct rw_attr_result_s r=RW_ATTR_RESULT_INIT;
+    struct get_supported_sftp_attr_s gssa=GSSA_INIT;
+    unsigned int size=get_attr_buffer_size(interface, &r, stat, &gssa) + 5;
     char buffer[size];
     unsigned int pathlen=(* interface->backend.sftp.get_complete_pathlen)(interface, pathinfo->len);
     char path[pathlen];
+    struct attr_buffer_s abuff;
 
     pathinfo->len += (* interface->backend.sftp.complete_path)(interface, path, pathinfo);
 
     logoutput("_fs_sftp_create: path %s len %i", pathinfo->path, pathinfo->len);
 
-    write_attributes_ctx(interface, buffer, size, &r, &attr);
+    set_attr_buffer_write(&abuff, buffer, size);
+    (* abuff.ops->rw.write.write_uint32)(&abuff, gssa.valid);
+    write_attributes_ctx(interface, &abuff, &r, stat, gssa.valid);
 
     init_sftp_request(&sftp_r, interface, f_request);
 
     sftp_r.call.create.path=(unsigned char *) pathinfo->path;
     sftp_r.call.create.len=pathinfo->len;
     sftp_r.call.create.posix_flags=flags;
-    sftp_r.call.create.size=size;
-    sftp_r.call.create.buff=(unsigned char *)buffer;
+    sftp_r.call.create.size=(unsigned int)(abuff.pos - abuff.buffer);
+    sftp_r.call.create.buff=(unsigned char *)abuff.buffer;
 
     if (send_sftp_create_ctx(interface, &sftp_r)>0) {
 	struct timespec timeout;
@@ -188,7 +191,7 @@ void _fs_sftp_create(struct fuse_openfile_s *openfile, struct fuse_request_s *f_
 		openfile->handle.name.len=reply->response.handle.len;
 		reply->response.handle.name=NULL;
 		reply->response.handle.len=0;
-		fill_inode_attr_sftp(interface, &openfile->inode->st, &attr);
+
 		add_inode_context(context, openfile->inode);
 		set_directory_dump(openfile->inode, get_dummy_directory());
 

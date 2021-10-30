@@ -54,33 +54,37 @@
 #include "interface/sftp-wait-response.h"
 #include "inode-stat.h"
 
+
 /* CREATE a directory */
 
-void _fs_sftp_mkdir(struct service_context_s *context, struct fuse_request_s *f_request, struct entry_s *entry, struct pathinfo_s *pathinfo, struct stat *st)
+void _fs_sftp_mkdir(struct service_context_s *context, struct fuse_request_s *f_request, struct entry_s *entry, struct pathinfo_s *pathinfo, struct system_stat_s *stat)
 {
     struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
     struct service_context_s *rootcontext=get_root_context(context);
     struct context_interface_s *interface=&context->interface;
     struct inode_s *inode=entry->inode;
     struct sftp_request_s sftp_r;
-    struct sftp_attr_s attr;
-    struct rw_attr_result_s r;
-    unsigned int size=get_attr_buffer_size(interface, st, FATTR_MODE | FATTR_UID | FATTR_GID, &r, &attr, 0); /* uid and gid by server ?*/
+    struct rw_attr_result_s r=RW_ATTR_RESULT_INIT;
+    struct get_supported_sftp_attr_s gssa=GSSA_INIT;
+    unsigned int size=get_attr_buffer_size(interface, &r, stat, &gssa) + 5; /* uid and gid by server ?*/
     char buffer[size];
     unsigned int error=EIO;
     unsigned int pathlen=(* interface->backend.sftp.get_complete_pathlen)(interface, pathinfo->len);
     char path[pathlen];
+    struct attr_buffer_s abuff;
 
     pathinfo->len += (* interface->backend.sftp.complete_path)(interface, path, pathinfo);
 
-    write_attributes_ctx(interface, buffer, size, &r, &attr);
+    set_attr_buffer_write(&abuff, buffer, size);
+    (* abuff.ops->rw.write.write_uint32)(&abuff, gssa.valid);
+    write_attributes_ctx(interface, &abuff, &r, stat, gssa.valid);
 
     init_sftp_request(&sftp_r, interface, f_request);
 
     sftp_r.call.mkdir.path=(unsigned char *) pathinfo->path;
     sftp_r.call.mkdir.len=pathinfo->len;
-    sftp_r.call.mkdir.size=size;
-    sftp_r.call.mkdir.buff=(unsigned char *) buffer;
+    sftp_r.call.mkdir.size=(unsigned int)(abuff.pos - abuff.buffer);
+    sftp_r.call.mkdir.buff=(unsigned char *) abuff.buffer;
 
     if (send_sftp_mkdir_ctx(interface, &sftp_r)>0) {
 	struct timespec timeout;
@@ -95,9 +99,9 @@ void _fs_sftp_mkdir(struct service_context_s *context, struct fuse_request_s *f_
 		if (reply->response.status.code==0) {
 
 		    inode->nlookup++;
-		    inode->st.st_nlink=2;
+		    set_nlink_system_stat(&inode->stat, 2);
 
-		    get_current_time(&inode->stim);
+		    get_current_time_system_time(&inode->stime);
 		    add_inode_context(context, inode);
 		    _fs_common_cached_lookup(context, f_request, inode);
 		    adjust_pathmax(workspace, pathinfo->len);
@@ -124,7 +128,7 @@ void _fs_sftp_mkdir(struct service_context_s *context, struct fuse_request_s *f_
 
     }
 
-    queue_inode_2forget(workspace, inode->st.st_ino, 0, 0);
+    queue_inode_2forget(workspace, get_ino_system_stat(&inode->stat), 0, 0);
 
     out:
 

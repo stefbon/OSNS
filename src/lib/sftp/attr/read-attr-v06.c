@@ -47,7 +47,6 @@
 #include "sftp/protocol-v06.h"
 #include "sftp/attr-context.h"
 
-#include "rw-attr-generic.h"
 #include "read-attr-v03.h"
 #include "read-attr-v04.h"
 #include "read-attr-v05.h"

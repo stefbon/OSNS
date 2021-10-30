@@ -48,7 +48,6 @@
 #include "sftp/protocol-v06.h"
 #include "sftp/attr-context.h"
 
-#include "rw-attr-generic.h"
 #include "write-attr-v03.h"
 #include "write-attr-v04.h"
 #include "write-attr-v05.h"

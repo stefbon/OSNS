@@ -66,6 +66,9 @@ void path_append_home_directory(struct sftp_identity_s *user, struct ssh_string_
     memcpy(ptr, path->ptr, path->len);
     ptr+=path->len;
     *ptr='\0';
+    localpath->len+=path->len + user->len_home + 1;
+
+    logoutput("path_append_home_directory: ");
 
 }
 
@@ -76,6 +79,7 @@ void path_append_none(struct sftp_identity_s *user, struct ssh_string_s *path, s
     memcpy(ptr, path->ptr, path->len);
     ptr+=path->len;
     *ptr='\0';
+    localpath->len+=path->len;
 
 }
 

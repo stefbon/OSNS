@@ -172,26 +172,30 @@ struct service_context_s *create_network_browse_context(struct workspace_mount_s
 struct entry_s *create_network_map_entry(struct service_context_s *context, struct directory_s *directory, struct name_s *xname, unsigned int *error)
 {
     struct create_entry_s ce;
-    struct stat st;
+    struct system_stat_s stat;
+    struct system_timespec_s tmp=SYSTEM_TIME_INIT;
 
     /* stat values for a network map */
 
-    st.st_mode=S_IFDIR | S_IRUSR | S_IXUSR | S_IWUSR | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH;
-    st.st_uid=0;
-    st.st_gid=0;
-    st.st_ino=0;
-    st.st_dev=0;
-    st.st_nlink=2;
-    st.st_rdev=0;
-    st.st_size=_INODE_DIRECTORY_SIZE;
-    st.st_blksize=1024;
-    st.st_blocks=(unsigned int) (st.st_size / st.st_blksize) + ((st.st_size % st.st_blksize)==0) ? 1 : 0;
+    memset(&stat, 0, sizeof(struct system_stat_s));
 
-    get_current_time(&st.st_mtim);
-    memcpy(&st.st_ctim, &st.st_mtim, sizeof(struct timespec));
-    memcpy(&st.st_atim, &st.st_mtim, sizeof(struct timespec));
+    set_type_system_stat(&stat, S_IFDIR);
+    set_mode_system_stat(&stat, S_IRUSR | S_IXUSR | S_IWUSR | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
+    set_uid_system_stat(&stat, 0);
+    set_gid_system_stat(&stat, 0);
+    set_ino_system_stat(&stat, 0);
+    set_nlink_system_stat(&stat, 2);
+    set_size_system_stat(&stat, _INODE_DIRECTORY_SIZE);
+    set_blksize_system_stat(&stat, 4096);
+    calc_blocks_system_stat(&stat);
 
-    init_create_entry(&ce, xname, NULL, directory, NULL, context, &st, NULL);
+    get_current_time_system_time(&tmp);
+    set_atime_system_stat(&stat, &tmp);
+    set_mtime_system_stat(&stat, &tmp);
+    set_ctime_system_stat(&stat, &tmp);
+    set_btime_system_stat(&stat, &tmp);
+
+    init_create_entry(&ce, xname, NULL, directory, NULL, context, &stat, NULL);
     return create_entry_extended_batch(&ce);
 
 }
@@ -586,7 +590,7 @@ static struct service_context_s *connect_resource_via_host(struct discover_resou
 
 	} else if (itype==_INTERFACE_TYPE_SMB_SERVER) {
 
-	    hostctx=create_smb_server_service_context(networkctx, ilist, nethost->unique);
+	    // hostctx=create_smb_server_service_context(networkctx, ilist, nethost->unique);
 
 	}
 
@@ -923,7 +927,7 @@ static void network_service_context_connect_thread(void *ptr)
 
 	    } else if (hostctx->interface.type==_INTERFACE_TYPE_SMB_SERVER) {
 
-		get_remote_shares_smb_server(hostctx, discover);
+		// get_remote_shares_smb_server(hostctx, discover);
 
 	    }
 

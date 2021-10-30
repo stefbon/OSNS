@@ -142,7 +142,7 @@ struct sftp_supported_s {
 	    unsigned int				max_read_size;
 	} v05;
     } version;
-    unsigned int					attr_supported;
+    unsigned int					stat_mask;
 };
 
 struct sftp_sendhash_s {
@@ -211,7 +211,7 @@ struct sftp_client_s {
     struct sftp_time_ops_s				time_ops;
     struct sftp_supported_s				supported;
     struct sftp_extensions_s				extensions;
-    struct net_usermapping_s				*mapping;
+    struct net_idmapping_s				*mapping;
 };
 
 /* prototypes */
@@ -223,10 +223,9 @@ void clear_sftp_client(struct sftp_client_s *sftp);
 void free_sftp_client(struct sftp_client_s **p_sftp);
 
 struct sftp_client_s *create_sftp_client(struct generic_error_s *error);
-int init_sftp_client(struct sftp_client_s *sftp, uid_t uid, struct net_usermapping_s *m);
+int init_sftp_client(struct sftp_client_s *sftp, uid_t uid, struct net_idmapping_s *m);
 int start_init_sftp_client(struct sftp_client_s *sftp);
 
-unsigned int get_sftp_features(struct sftp_client_s *sftp);
 unsigned int get_sftp_buffer_size();
 
 #endif

@@ -21,6 +21,7 @@
 #define LIB_MOUNTINFO_MOUNTINFO_H
 
 #include "list.h"
+#include "system.h"
 
 #define MOUNTLIST_CURRENT		0
 #define MOUNTLIST_ADDED			1
@@ -42,8 +43,7 @@ struct mountentry_s {
     char 				*fs;
     char 				*source;
     char 				*options;
-    int 				minor;
-    int 				major;
+    struct system_dev_s			dev;
     unsigned char 			flags;
     struct list_element_s		list_m;
     struct list_element_s		list_d;
@@ -59,6 +59,5 @@ uint64_t generation_id();
 
 int compare_mount_entries(struct mountentry_s *a, struct mountentry_s *b);
 void check_mounted_by_autofs(struct mountentry_s *mountentry);
-
 
 #endif

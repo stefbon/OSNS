@@ -258,7 +258,7 @@ int check_create_inodecache(struct inode_s *inode, unsigned int size, char *buff
 
 	    memset(cache, 0, sizeof(struct inodecache_s));
 
-	    cache->ino=inode->st.st_ino;
+	    cache->ino=inode->stat.sst_ino;
 	    init_list_element(&cache->list, NULL);
 	    add_list_element_first(&cacheheader, &cache->list);
 	    inode->cache=cache;
@@ -287,7 +287,9 @@ int check_create_inodecache(struct inode_s *inode, unsigned int size, char *buff
 
 void init_inode(struct inode_s *inode)
 {
-    struct stat *st=&inode->st;
+    struct system_stat_s *stat=&inode->stat;
+    struct system_dev_s dev=SYSTEM_DEV_INIT;
+    struct system_timespec_s time=SYSTEM_TIME_INIT;
 
     inode->flags=0;
     init_list_element(&inode->list, NULL);
@@ -295,30 +297,26 @@ void init_inode(struct inode_s *inode)
     inode->alias=NULL;
     inode->nlookup=0;
 
-    st->st_ino=0;
-    st->st_mode=0;
-    st->st_nlink=0;
-    st->st_uid=(uid_t) -1;
-    st->st_gid=(gid_t) -1;
-    st->st_size=0;
+    stat->sst_ino=0;
+    stat->sst_mode=0;
+    stat->sst_nlink=0;
+    stat->sst_uid=(uid_t) -1;
+    stat->sst_gid=(gid_t) -1;
+    stat->sst_size=0;
 
-    /* used for context->unique */
-    st->st_rdev=0;
-    st->st_dev=0;
+    stat->sst_blksize=0;
+    stat->sst_blocks=0;
 
-    st->st_blksize=0;
-    st->st_blocks=0;
-
-    st->st_mtim.tv_sec=0;
-    st->st_mtim.tv_nsec=0;
-    st->st_ctim.tv_sec=0;
-    st->st_ctim.tv_nsec=0;
-    st->st_atim.tv_sec=0;
-    st->st_atim.tv_nsec=0;
+    set_dev_system_stat(stat, &dev);
+    set_rdev_system_stat(stat, &dev);
+    set_atime_system_stat(stat, &time);
+    set_mtime_system_stat(stat, &time);
+    set_btime_system_stat(stat, &time);
+    set_ctime_system_stat(stat, &time);
 
     /* synctime */
-    inode->stim.tv_sec=0;
-    inode->stim.tv_nsec=0;
+    inode->stime.tv_sec=0;
+    inode->stime.tv_nsec=0;
 
     /* data link */
     init_data_link(&inode->link);
@@ -328,29 +326,22 @@ void init_inode(struct inode_s *inode)
 
 }
 
-void get_inode_stat(struct inode_s *inode, struct stat *st)
+void copy_inode_stat(struct inode_s *inode, struct system_stat_s *stat)
 {
-    memcpy(st, &inode->st, sizeof(struct stat));
+    memcpy(stat, &inode->stat, sizeof(struct system_stat_s));
 }
 
-void fill_inode_stat(struct inode_s *inode, struct stat *st)
+void fill_inode_stat(struct inode_s *inode, struct system_stat_s *stat)
 {
-    //inode->mode=st->st_mode;
-    //inode->nlink=st->st_nlink;
+    struct system_timespec_s time;
 
-    inode->st.st_uid=st->st_uid;
-    inode->st.st_gid=st->st_gid;
+    inode->stat.sst_uid=stat->sst_uid;
+    inode->stat.sst_gid=stat->sst_gid;
 
-    //inode->size=st->st_size;
-
-    inode->st.st_mtim.tv_sec=st->st_mtim.tv_sec;
-    inode->st.st_mtim.tv_nsec=st->st_mtim.tv_nsec;
-
-    inode->st.st_ctim.tv_sec=st->st_ctim.tv_sec;
-    inode->st.st_ctim.tv_nsec=st->st_ctim.tv_nsec;
-
-    inode->st.st_atim.tv_sec=st->st_atim.tv_sec;
-    inode->st.st_atim.tv_nsec=st->st_atim.tv_nsec;
+    copy_atime_system_stat(&inode->stat, stat);
+    copy_btime_system_stat(&inode->stat, stat);
+    copy_ctime_system_stat(&inode->stat, stat);
+    copy_mtime_system_stat(&inode->stat, stat);
 
 }
 
@@ -376,8 +367,10 @@ void free_inode(struct inode_s *inode)
 
 void log_inode_information(struct inode_s *inode, uint64_t what)
 {
-    if (what & INODE_INFORMATION_OWNER) logoutput("log_inode_information: owner :%i", inode->st.st_uid);
-    if (what & INODE_INFORMATION_GROUP) logoutput("log_inode_information: owner :%i", inode->st.st_gid);
+
+    if (what & INODE_INFORMATION_OWNER) logoutput("log_inode_information: owner :%i", get_uid_system_stat(&inode->stat));
+    if (what & INODE_INFORMATION_GROUP) logoutput("log_inode_information: owner :%i", get_gid_system_stat(&inode->stat));
+
     if (what & INODE_INFORMATION_NAME) {
 	struct entry_s *entry=inode->alias;
 
@@ -393,13 +386,13 @@ void log_inode_information(struct inode_s *inode, uint64_t what)
 
     }
     if (what & INODE_INFORMATION_NLOOKUP) logoutput("log_inode_information: nlookup :%li", inode->nlookup);
-    if (what & INODE_INFORMATION_MODE) logoutput("log_inode_information: mode :%i", inode->st.st_mode);
-    if (what & INODE_INFORMATION_NLINK) logoutput("log_inode_information: nlink :%i", inode->st.st_nlink);
-    if (what & INODE_INFORMATION_SIZE) logoutput("log_inode_information: size :%i", inode->st.st_size);
-    if (what & INODE_INFORMATION_MTIM) logoutput("log_inode_information: mtim %li.%li", inode->st.st_mtim.tv_sec, inode->st.st_mtim.tv_nsec);
-    if (what & INODE_INFORMATION_CTIM) logoutput("log_inode_information: ctim %li.%li", inode->st.st_ctim.tv_sec, inode->st.st_ctim.tv_nsec);
-    if (what & INODE_INFORMATION_ATIM) logoutput("log_inode_information: atim %li.%li", inode->st.st_atim.tv_sec, inode->st.st_atim.tv_nsec);
-    if (what & INODE_INFORMATION_STIM) logoutput("log_inode_information: stim %li.%li", inode->stim.tv_sec, inode->stim.tv_nsec);
+    if (what & INODE_INFORMATION_MODE) logoutput("log_inode_information: mode :%i", get_mode_system_stat(&inode->stat));
+    if (what & INODE_INFORMATION_NLINK) logoutput("log_inode_information: nlink :%i", get_nlink_system_stat(&inode->stat));
+    if (what & INODE_INFORMATION_SIZE) logoutput("log_inode_information: size :%i", get_size_system_stat(&inode->stat));
+    if (what & INODE_INFORMATION_MTIM) logoutput("log_inode_information: mtim %li.%li", get_mtime_sec_system_stat(&inode->stat), get_mtime_nsec_system_stat(&inode->stat));
+    if (what & INODE_INFORMATION_CTIM) logoutput("log_inode_information: ctim %li.%li", get_ctime_sec_system_stat(&inode->stat), get_ctime_nsec_system_stat(&inode->stat));
+    if (what & INODE_INFORMATION_ATIM) logoutput("log_inode_information: atim %li.%li", get_atime_sec_system_stat(&inode->stat), get_atime_nsec_system_stat(&inode->stat));
+    if (what & INODE_INFORMATION_STIM) logoutput("log_inode_information: stim %li.%li", inode->stime.tv_sec, inode->stime.tv_nsec);
 
 }
 

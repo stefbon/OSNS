@@ -257,6 +257,8 @@ int change_ssh_connection_setup(struct ssh_connection_s *connection, const char 
     struct ssh_setup_s *setup=&connection->setup;
     int result=0;
 
+    logoutput_debug("change_ssh_connection_setup: phase %s type %i flag %i option %i", phase, type, flag, option);
+
     signal_lock(setup->signal);
 
     if (phase==NULL || strlen(phase)==0) {

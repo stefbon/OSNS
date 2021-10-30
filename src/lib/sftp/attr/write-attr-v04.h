@@ -31,6 +31,5 @@ void write_attr_modifytime_v04(struct attr_context_s *actx, struct attr_buffer_s
 void write_attr_modifytime_n_v04(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat);
 
 void write_name_name_response_v04(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct ssh_string_s *name);
-void write_attr_name_response_v04(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat);
 
 #endif

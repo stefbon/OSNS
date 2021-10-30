@@ -66,7 +66,7 @@ void _fs_workspace_opendir(struct fuse_opendir_s *opendir, struct fuse_request_s
     open_out.open_flags=0;
     reply_VFS_data(request, (char *) &open_out, sizeof(open_out));
 
-    logoutput("_fs_workspace_opendir: ino %li", opendir->inode->st.st_ino);
+    logoutput("_fs_workspace_opendir: ino %li", get_ino_system_stat(&opendir->inode->stat));
     directory=get_directory(opendir->inode);
 
     /* here build the list of direntries */
@@ -151,13 +151,13 @@ void _fs_workspace_opendir(struct fuse_opendir_s *opendir, struct fuse_request_s
 
     }
 
-    logoutput("_fs_workspace_opendir: ino %li finish direntry", opendir->inode->st.st_ino);
+    logoutput("_fs_workspace_opendir: ino %li finish direntry", get_ino_system_stat(&opendir->inode->stat));
 
     finish_get_fuse_direntry(opendir);
 
     if (parent->type==SERVICE_CTX_TYPE_WORKSPACE) {
 
-	logoutput("_fs_workspace_opendir: ino %li starting discover services thread", opendir->inode->st.st_ino);
+	logoutput("_fs_workspace_opendir: ino %li starting discover services thread", get_ino_system_stat(&opendir->inode->stat));
 	start_discover_service_context_connect(workspace);
 
     }

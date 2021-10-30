@@ -392,39 +392,48 @@ int system_fgetstatat(struct fs_socket_s *socket, char *name, unsigned int mask,
     return 0;
 }
 
-uint16_t get_type_system_stat(struct system_stat_s *stat)
-{
-    return stat->stx.stx_mode & S_IFMT;
-}
-uint16_t get_mode_system_stat(struct system_stat_s *stat)
-{
-    return stat->stx.stx_mode & ~S_IFMT;
-}
-uint32_t get_nlink_system_stat(struct system_stat_s *stat)
-{
-    return stat->stx.stx_nlink;
-}
-uint32_t get_uid_system_stat(struct system_stat_s *stat)
-{
-    return stat->stx.stx_uid;
-}
-uint32_t get_gid_system_stat(struct system_stat_s *stat)
-{
-    return stat->stx.stx_gid;
-}
+/* GET statx values */
+
 uint64_t get_ino_system_stat(struct system_stat_s *stat)
 {
     return stat->stx.stx_ino;
 }
+
+uint16_t get_type_system_stat(struct system_stat_s *stat)
+{
+    return stat->stx.stx_mode & S_IFMT;
+}
+
+uint16_t get_mode_system_stat(struct system_stat_s *stat)
+{
+    return stat->stx.stx_mode & ~S_IFMT;
+}
+
+uint32_t get_nlink_system_stat(struct system_stat_s *stat)
+{
+    return stat->stx.stx_nlink;
+}
+
+uint32_t get_uid_system_stat(struct system_stat_s *stat)
+{
+    return stat->stx.stx_uid;
+}
+
+uint32_t get_gid_system_stat(struct system_stat_s *stat)
+{
+    return stat->stx.stx_gid;
+}
+
 uint32_t get_size_system_stat(struct system_stat_s *stat)
 {
     return stat->stx.stx_size;
 
 }
+
 void get_atime_system_stat(struct system_stat_s *stat, struct system_timespec_s *atime)
 {
-    atime->sec=(int64_t) stat->stx.stx_atime.tv_sec;
-    atime->nsec=(uint32_t) stat->stx.stx_atime.tv_nsec;
+    atime->tv_sec=(int64_t) stat->stx.stx_atime.tv_sec;
+    atime->tv_nsec=(uint32_t) stat->stx.stx_atime.tv_nsec;
 }
 
 int64_t get_atime_sec_system_stat(struct system_stat_s *stat)
@@ -439,14 +448,15 @@ uint32_t get_atime_nsec_system_stat(struct system_stat_s *stat)
 
 void get_mtime_system_stat(struct system_stat_s *stat, struct system_timespec_s *mtime)
 {
-    mtime->sec=(int64_t) stat->stx.stx_mtime.tv_sec;
-    mtime->nsec=(uint32_t) stat->stx.stx_mtime.tv_nsec;
+    mtime->tv_sec=(int64_t) stat->stx.stx_mtime.tv_sec;
+    mtime->tv_nsec=(uint32_t) stat->stx.stx_mtime.tv_nsec;
 }
 
 int64_t get_mtime_sec_system_stat(struct system_stat_s *stat)
 {
     return (int64_t) stat->stx.stx_mtime.tv_sec;
 }
+
 uint32_t get_mtime_nsec_system_stat(struct system_stat_s *stat)
 {
     return stat->stx.stx_mtime.tv_nsec;
@@ -454,13 +464,15 @@ uint32_t get_mtime_nsec_system_stat(struct system_stat_s *stat)
 
 void get_ctime_system_stat(struct system_stat_s *stat, struct system_timespec_s *ctime)
 {
-    ctime->sec=(int64_t) stat->stx.stx_ctime.tv_sec;
-    ctime->nsec=(uint32_t) stat->stx.stx_ctime.tv_nsec;
+    ctime->tv_sec=(int64_t) stat->stx.stx_ctime.tv_sec;
+    ctime->tv_nsec=(uint32_t) stat->stx.stx_ctime.tv_nsec;
 }
+
 int64_t get_ctime_sec_system_stat(struct system_stat_s *stat)
 {
     return (int64_t) stat->stx.stx_ctime.tv_sec;
 }
+
 uint32_t get_ctime_nsec_system_stat(struct system_stat_s *stat)
 {
     return stat->stx.stx_ctime.tv_nsec;
@@ -468,26 +480,31 @@ uint32_t get_ctime_nsec_system_stat(struct system_stat_s *stat)
 
 void get_btime_system_stat(struct system_stat_s *stat, struct system_timespec_s *btime)
 {
-    btime->sec=(int64_t) stat->stx.stx_btime.tv_sec;
-    btime->nsec=(uint32_t) stat->stx.stx_btime.tv_nsec;
+    btime->tv_sec=(int64_t) stat->stx.stx_btime.tv_sec;
+    btime->tv_nsec=(uint32_t) stat->stx.stx_btime.tv_nsec;
 }
+
 int64_t get_btime_sec_system_stat(struct system_stat_s *stat)
 {
     return (int64_t) stat->stx.stx_btime.tv_sec;
 }
+
 uint32_t get_btime_nsec_system_stat(struct system_stat_s *stat)
 {
     return stat->stx.stx_btime.tv_nsec;
 }
 
-uint32_t get_dev_major_system_stat(struct system_stat_s *stat)
+void get_dev_system_stat(struct system_stat_s *stat, struct system_dev_s *dev)
 {
-    return stat->stx.stx_dev_major;
+    dev->major=stat->stx.stx_dev_major;
+    dev->minor=stat->stx.stx_dev_minor;
 }
 
-uint32_t get_dev_minor_system_stat(struct system_stat_s *stat)
+void get_rdev_system_stat(struct system_stat_s *stat, struct system_dev_s *dev)
 {
-    return stat->stx.stx_dev_minor;
+    dev->major=stat->stx.stx_rdev_major;
+    dev->minor=stat->stx.stx_rdev_minor;
+
 }
 
 uint32_t get_blocks_system_stat(struct system_stat_s *stat)
@@ -495,22 +512,58 @@ uint32_t get_blocks_system_stat(struct system_stat_s *stat)
     return stat->stx.stx_blocks;
 }
 
-void get_devino_system_stat(struct system_stat_s *stat, struct fs_location_devino_s *devino)
+uint32_t get_blksize_system_stat(struct system_stat_s *stat)
 {
-    devino->dev=makedev(stat->stx.stx_dev_major, stat->stx.stx_dev_minor);
-    devino->ino=stat->stx.stx_ino;
+    return stat->stx.stx_blksize;
+}
+
+/* SET statx values */
+
+void set_ino_system_stat(struct system_stat_s *stat, uint64_t ino)
+{
+    stat->stx.stx_ino=ino;
 }
 
 void set_type_system_stat(struct system_stat_s *stat, uint16_t type)
 {
-    stat->stx.stx_mode |= (type & S_IFMT);
+    uint16_t perm=(stat->stx.stx_mode & ~S_IFMT);
+
+    stat->stx.stx_mode = (type & S_IFMT) | perm;
     stat->mask |= SYSTEM_STAT_TYPE;
 }
 
 void set_mode_system_stat(struct system_stat_s *stat, uint16_t mode)
 {
-    stat->stx.stx_mode |= (mode & ~S_IFMT);
+    uint16_t type=(stat->stx.stx_mode & S_IFMT);
+
+    stat->stx.stx_mode = type | (mode & ~S_IFMT);
     stat->mask |= SYSTEM_STAT_MODE;
+}
+
+void set_nlink_system_stat(struct system_stat_s *stat, uint32_t nlink)
+{
+    stat->stx.stx_nlink=nlink;
+    stat->mask |= SYSTEM_STAT_NLINK;
+}
+
+void increase_nlink_system_stat(struct system_stat_s *stat, uint32_t count)
+{
+    stat->stx.stx_nlink+=count;
+}
+
+void decrease_nlink_system_stat(struct system_stat_s *stat, uint32_t count)
+{
+
+    if (count > stat->stx.stx_nlink) {
+
+	stat->stx.stx_nlink=0;
+
+    } else {
+
+	stat->stx.stx_nlink-=count;
+
+    }
+
 }
 
 void set_uid_system_stat(struct system_stat_s *stat, uint32_t uid)
@@ -535,8 +588,8 @@ void set_size_system_stat(struct system_stat_s *stat, uint64_t size)
 
 void set_atime_system_stat(struct system_stat_s *stat, struct system_timespec_s *time)
 {
-    stat->stx.stx_atime.tv_sec=(int64_t) time->sec;
-    stat->stx.stx_atime.tv_nsec=(uint32_t) time->nsec;
+    stat->stx.stx_atime.tv_sec=(int64_t) time->tv_sec;
+    stat->stx.stx_atime.tv_nsec=(uint32_t) time->tv_nsec;
     stat->mask |= SYSTEM_STAT_ATIME;
 }
 
@@ -552,8 +605,8 @@ void set_atime_nsec_system_stat(struct system_stat_s *stat, uint32_t nsec)
 
 void set_mtime_system_stat(struct system_stat_s *stat, struct system_timespec_s *time)
 {
-    stat->stx.stx_mtime.tv_sec=(int64_t) time->sec;
-    stat->stx.stx_mtime.tv_nsec=(uint32_t) time->nsec;
+    stat->stx.stx_mtime.tv_sec=(int64_t) time->tv_sec;
+    stat->stx.stx_mtime.tv_nsec=(uint32_t) time->tv_nsec;
     stat->mask |= SYSTEM_STAT_MTIME;
 }
 
@@ -569,8 +622,8 @@ void set_mtime_nsec_system_stat(struct system_stat_s *stat, uint32_t nsec)
 
 void set_ctime_system_stat(struct system_stat_s *stat, struct system_timespec_s *time)
 {
-    stat->stx.stx_ctime.tv_sec=(int64_t) time->sec;
-    stat->stx.stx_ctime.tv_nsec=(uint32_t) time->nsec;
+    stat->stx.stx_ctime.tv_sec=(int64_t) time->tv_sec;
+    stat->stx.stx_ctime.tv_nsec=(uint32_t) time->tv_nsec;
     stat->mask |= SYSTEM_STAT_CTIME;
 }
 
@@ -586,8 +639,8 @@ void set_ctime_nsec_system_stat(struct system_stat_s *stat, uint32_t nsec)
 
 void set_btime_system_stat(struct system_stat_s *stat, struct system_timespec_s *time)
 {
-    stat->stx.stx_btime.tv_sec=(int64_t) time->sec;
-    stat->stx.stx_btime.tv_nsec=(uint32_t) time->nsec;
+    stat->stx.stx_btime.tv_sec=(int64_t) time->tv_sec;
+    stat->stx.stx_btime.tv_nsec=(uint32_t) time->tv_nsec;
     stat->mask |= SYSTEM_STAT_BTIME;
 }
 
@@ -601,7 +654,44 @@ void set_btime_nsec_system_stat(struct system_stat_s *stat, uint32_t nsec)
     stat->stx.stx_btime.tv_nsec=nsec;
 }
 
-#else 
+void set_dev_system_stat(struct system_stat_s *stat, struct system_dev_s *dev)
+{
+    stat->stx.stx_dev_major=dev->major;
+    stat->stx.stx_dev_minor=dev->minor;
+}
+
+void set_rdev_system_stat(struct system_stat_s *stat, struct system_dev_s *dev)
+{
+    stat->stx.stx_rdev_major=dev->major;
+    stat->stx.stx_rdev_minor=dev->minor;
+}
+
+void copy_atime_system_stat(struct system_stat_s *to, struct system_stat_s *from)
+{
+    memcpy(&to->stx.stx_atime, &from->stx.stx_atime, sizeof(struct statx_timestamp));
+}
+
+void copy_mtime_system_stat(struct system_stat_s *to, struct system_stat_s *from)
+{
+    memcpy(&to->stx.stx_mtime, &from->stx.stx_mtime, sizeof(struct statx_timestamp));
+}
+
+void copy_ctime_system_stat(struct system_stat_s *to, struct system_stat_s *from)
+{
+    memcpy(&to->stx.stx_ctime, &from->stx.stx_ctime, sizeof(struct statx_timestamp));
+}
+
+void copy_btime_system_stat(struct system_stat_s *to, struct system_stat_s *from)
+{
+    memcpy(&to->stx.stx_btime, &from->stx.stx_btime, sizeof(struct statx_timestamp));
+}
+
+void set_blksize_system_stat(struct system_stat_s *stat, uint32_t blksize)
+{
+    stat->stx.stx_blksize=blksize;
+}
+
+#else
 
 int system_getstat(struct fs_location_path_s *path, unsigned int mask, struct system_stat_s *stat)
 {
@@ -943,44 +1033,54 @@ int system_fgetstatat(struct fs_socket_s *socket, char *name, unsigned int mask,
     return 0;
 }
 
-uint16_t get_type_system_stat(struct system_stat_s *stat)
-{
-    return stat->st.st_mode & S_IFMT;
-}
-uint16_t get_mode_system_stat(struct system_stat_s *stat)
-{
-    return stat->st.st_mode & ~S_IFMT;
-}
-uint32_t get_nlink_system_stat(struct system_stat_s *stat)
-{
-    return stat->st.st_nlink;
-}
-uint32_t get_uid_system_stat(struct system_stat_s *stat)
-{
-    return stat->st.st_uid;
-}
-uint32_t get_gid_system_stat(struct system_stat_s *stat)
-{
-    return stat->st.st_gid;
-}
+/* GET stat values */
+
 uint64_t get_ino_system_stat(struct system_stat_s *stat)
 {
-    return stat->st.st_ino;
+    return (uint64_t) stat->st.st_ino;
 }
+
+uint16_t get_type_system_stat(struct system_stat_s *stat)
+{
+    return (uint16_t) stat->st.st_mode & S_IFMT;
+}
+
+uint16_t get_mode_system_stat(struct system_stat_s *stat)
+{
+    return (uint16_t) stat->st.st_mode & ~S_IFMT;
+}
+
+uint32_t get_nlink_system_stat(struct system_stat_s *stat)
+{
+    return (uint32_t) stat->st.st_nlink;
+}
+
+uint32_t get_uid_system_stat(struct system_stat_s *stat)
+{
+    return (uint32_t) stat->st.st_uid;
+}
+
+uint32_t get_gid_system_stat(struct system_stat_s *stat)
+{
+    return (uint32_t) stat->st.st_gid;
+}
+
 uint32_t get_size_system_stat(struct system_stat_s *stat)
 {
-    return stat->st.st_size;
+    return (uint32_t) stat->st.st_size;
 }
 
 void get_atime_system_stat(struct system_stat_s *stat, struct system_timespec_s *atime)
 {
-    atime->sec=(int64_t) stat->st.st_atim.tv_sec;
-    atime->nsec=(uint32_t) stat->st.st_atim.tv_nsec;
+    atime->tv_sec=(int64_t) stat->st.st_atim.tv_sec;
+    atime->tv_nsec=(uint32_t) stat->st.st_atim.tv_nsec;
 }
+
 int64_t get_atime_sec_system_stat(struct system_stat_s *stat)
 {
     return (int64_t) stat->stx.stx_atime.tv_sec;
 }
+
 uint32_t get_atime_nsec_system_stat(struct system_stat_s *stat)
 {
     return (uint32_t) stat->stx.stx_atime.tv_nsec;
@@ -988,28 +1088,32 @@ uint32_t get_atime_nsec_system_stat(struct system_stat_s *stat)
 
 void get_mtime_system_stat(struct system_stat_s *stat, struct system_timespec_s *mtime)
 {
-    mtime->sec=(int64_t) stat->st.st_mtim.tv_sec;
-    mtime->nsec=(uint32_t) stat->st.st_mtim.tv_nsec;
+    mtime->tv_sec=(int64_t) stat->st.st_mtim.tv_sec;
+    mtime->tv_nsec=(uint32_t) stat->st.st_mtim.tv_nsec;
 }
+
 int64_t get_mtime_sec_system_stat(struct system_stat_s *stat)
 {
     return (int64_t) stat->stx.stx_mtime.tv_sec;
 }
+
 uint32_t get_mtime_nsec_system_stat(struct system_stat_s *stat)
 {
+
     return (uint32_t) stat->stx.stx_mtime.tv_nsec;
 }
 
 void get_ctime_system_stat(struct system_stat_s *stat, struct system_timespec_s *ctime)
 {
-    ctime->sec=(int64_t) stat->st.st_ctim.tv_sec;
-    ctime->nsec=(uint32_t) stat->st.st_ctim.tv_nsec;
+    ctime->tv_sec=(int64_t) stat->st.st_ctim.tv_sec;
+    ctime->tv_nsec=(uint32_t) stat->st.st_ctim.tv_nsec;
 }
 
 int64_t get_ctime_sec_system_stat(struct system_stat_s *stat)
 {
     return (int64_t) stat->stx.stx_ctime.tv_sec;
 }
+
 uint32_t get_ctime_nsec_system_stat(struct system_stat_s *stat)
 {
     return (uint32_t) stat->stx.stx_ctime.tv_nsec;
@@ -1017,27 +1121,31 @@ uint32_t get_ctime_nsec_system_stat(struct system_stat_s *stat)
 
 void get_btime_system_stat(struct system_stat_s *stat, struct system_timespec_s *btime)
 {
-    btime->sec=0;
-    btime->nsec=0;
+    btime->tv_sec=0;
+    btime->tv_nsec=0;
 }
 
 int64_t get_btime_sec_system_stat(struct system_stat_s *stat)
 {
     return 0;
 }
+
 uint32_t get_btime_nsec_system_stat(struct system_stat_s *stat)
 {
     return 0;
 }
 
-uint32_t get_dev_major_system_stat(struct system_stat_s *stat)
+void get_dev_system_stat(struct system_stat_s *stat, struct system_dev_t *dev)
 {
-    return major(stat->st.st_dev);
+    dev->major=major(stat->st.st_dev);
+    dev->minor=minor(stat->st.st_dev);
 }
 
-uint32_t get_dev_minor_system_stat(struct system_stat_s *stat)
+void get_rdev_system_stat(struct system_stat_s *stat, struct system_dev_t *dev)
 {
-    return minor(stat->st.st_dev);
+    dev->major=major(stat->st.st_rdev);
+    dev->minor=minor(stat->st.st_rdev);
+
 }
 
 uint32_t get_blocks_system_stat(struct system_stat_s *stat)
@@ -1045,21 +1153,31 @@ uint32_t get_blocks_system_stat(struct system_stat_s *stat)
     return stat->st.st_blocks;
 }
 
-void get_devino_system_stat(struct system_stat_s *stat, struct fs_location_devino_s *devino)
+uint32_t get_blksize_system_stat(struct system_stat_s *stat)
 {
-    devino->dev=stat->st.st_dev;
-    devino->ino=stat->st.st_ino;
+    return stat->st.st_blksize;
+}
+
+/* SET stat values */
+
+void set_ino_system_stat(struct system_stat_s *stat, uint64_t ino)
+{
+    stat->st.st_ino=ino;
 }
 
 void set_type_system_stat(struct system_stat_s *stat, uint16_t type)
 {
-    stat->st.st_mode |= (type & S_IFMT);
+    uint16_t perm=(stat->st.st_mode & ~S_IFMT);
+
+    stat->st.st_mode = (type & S_IFMT) | perm;
     stat->mask |= SYSTEM_STAT_TYPE;
 }
 
 void set_mode_system_stat(struct system_stat_s *stat, uint16_t mode)
 {
-    stat->st.st_mode |= (mode & ~S_IFMT);
+    uint16_t type=(stat->st.st_mode & S_IFMT);
+
+    stat->st.st_mode = type | (mode & ~S_IFMT);
     stat->mask |= SYSTEM_STAT_MODE;
 }
 
@@ -1079,6 +1197,32 @@ void set_size_system_stat(struct system_stat_s *stat, uint64_t size)
 {
     stat->st.st_size=size;
     stat->mask |= SYSTEM_STAT_SIZE;
+}
+
+void set_nlink_system_stat(struct system_stat_s *stat, uint32_t nlink)
+{
+    stat->st.st_nlink=nlink;
+    stat->mask |= SYSTEM_STAT_NLINK;
+}
+
+void increase_nlink_system_stat(struct system_stat_s *stat, int32_t count)
+{
+    stat->st.st_nlink+=count;
+}
+
+void decrease_nlink_system_stat(struct system_stat_s *stat, int32_t count)
+{
+
+    if (count > stat->st.st_nlink) {
+
+	stat->st.st_nlink=0;
+
+    } else {
+
+	stat->st.st_nlink-=count;
+
+    }
+
 }
 
 /* with the stat a timespec is used, tv_sec is of type time_t, tv_nsec of long */
@@ -1102,8 +1246,8 @@ void set_atime_nsec_system_stat(struct system_stat_s *stat, uint32_t nsec)
 
 void set_mtime_system_stat(struct system_stat_s *stat, struct system_timespec_s *time)
 {
-    stat->st.st_btim.tv_sec=(time_t) time->sec;
-    stat->st.st_btim.tv_nsec=(long) time->nsec;
+    stat->st.st_btim.tv_sec=(time_t) time->tv_sec;
+    stat->st.st_btim.tv_nsec=(long) time->tv_nsec;
     stat->mask |= SYSTEM_STAT_MTIME;
 }
 
@@ -1119,8 +1263,8 @@ void set_mtime_nsec_system_stat(struct system_stat_s *stat, uint32_t nsec)
 
 void set_ctime_system_stat(struct system_stat_s *stat, struct system_timespec_s *time)
 {
-    stat->st.st_ctim.tv_sec=(time_t) time->sec;
-    stat->st.st_ctim.tv_nsec=(long) time->nsec;
+    stat->st.st_ctim.tv_sec=(time_t) time->tv_sec;
+    stat->st.st_ctim.tv_nsec=(long) time->tv_nsec;
     stat->mask |= SYSTEM_STAT_CTIME;
 }
 
@@ -1147,5 +1291,76 @@ void set_btime_nsec_system_stat(struct system_stat_s *stat, uint32_t nsec)
 {
 }
 
+void set_dev_system_stat(struct system_stat_s *stat, struct system_dev_t *dev)
+{
+    stat->st.st_dev=makedev(dev->major, dev->minor);
+}
+
+void set_rdev_system_stat(struct system_stat_s *stat, struct system_dev_t *dev)
+{
+    stat->st.st_rdev=makedev(dev->major, dev->minor);
+}
+
+void copy_atime_system_stat(struct system_stat_s *to, struct system_stat_s *from)
+{
+    memcpy(&to->st.st_atim, &from->st.st_atim, sizeof(struct timespec));
+}
+
+void copy_mtime_system_stat(struct system_stat_s *to, struct system_stat_s *from)
+{
+    memcpy(&to->st.st_mtim, &from->st.st_mtim, sizeof(struct timespec));
+}
+
+void copy_ctime_system_stat(struct system_stat_s *to, struct system_stat_s *from)
+{
+    memcpy(&to->st.st_ctim, &from->st.st_ctim, sizeof(struct timespec));
+}
+
+void copy_btime_system_stat(struct system_stat_s *to, struct system_stat_s *from)
+{
+    /* create time not supported for stat */
+}
+
+void set_blksize_system_stat(struct system_stat_s *stat, uint32_t blksize)
+{
+    stat->st.st_blksize=blksize;
+}
+
 #endif
 
+struct active_system_stat_s {
+    unsigned int				code;
+    unsigned char				shift;
+    void					(* cb)(struct system_stat_s *stat, void *ptr, unsigned char ctr);
+};
+
+uint32_t calc_amount_blocks(uint64_t size, uint32_t blksize)
+{
+    uint32_t count=(size / blksize);
+    count += ((size % blksize)==0 ? 0 : 1);
+
+    return count;
+}
+
+void copy_system_time(struct system_timespec_s *to, struct system_timespec_s *from)
+{
+    memcpy(to, from, sizeof(struct system_timespec_s));
+}
+
+void calc_blocks_system_stat(struct system_stat_s *stat)
+{
+    uint32_t blksize=get_blksize_system_stat(stat);
+
+    if (blksize>0) {
+	uint64_t size=get_size_system_stat(stat);
+
+	stat->sst_blocks=calc_amount_blocks(size, blksize);
+
+    }
+
+}
+
+uint32_t get_unique_system_dev(struct system_dev_s *dev)
+{
+    return makedev(dev->major, dev->minor);
+}

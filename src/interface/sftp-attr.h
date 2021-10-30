@@ -19,23 +19,16 @@
 #ifndef _INTERFACE_SFTP_ATTR_H
 #define _INTERFACE_SFTP_ATTR_H
 
-//#include "fuse.h"
-
 /* prototypes */
 
-void read_sftp_attributes_ctx(struct context_interface_s *interface, struct attr_response_s *response, struct sftp_attr_s *attr);
+void parse_attributes_generic_ctx(struct context_interface_s *interface, struct rw_attr_result_s *r, struct system_stat_s *stat, unsigned char what, void (* cb)(unsigned int stat_mask, unsigned int len, unsigned int valid, unsigned int fattr, void *ptr), void *ptr);
 
-void write_attributes_ctx(struct context_interface_s *interface, char *buffer, unsigned int len, struct rw_attr_result_s *r, struct sftp_attr_s *attr);
-unsigned int write_attributes_len_ctx(struct context_interface_s *interface, struct rw_attr_result_s *r, struct sftp_attr_s *attr);
+void read_sftp_attributes_ctx(struct context_interface_s *interface, struct attr_buffer_s *abuff, struct system_stat_s *stat);
+void write_attributes_ctx(struct context_interface_s *interface, struct attr_buffer_s *abuff, struct rw_attr_result_s *r, struct system_stat_s *stat, unsigned int valid);
 
-void read_name_nameresponse_ctx(struct context_interface_s *interface, struct fuse_buffer_s *buffer, struct ssh_string_s *name);
-void read_attr_nameresponse_ctx(struct context_interface_s *interface, struct fuse_buffer_s *buffer, struct sftp_attr_s *attr);
-
-int get_attribute_info_ctx(struct context_interface_s *interface, unsigned int valid, const char *what);
+void read_name_name_response_ctx(struct context_interface_s *interface, struct attr_buffer_s *abuff, struct ssh_string_s *name);
 
 void correct_time_c2s_ctx(struct context_interface_s *interface, struct timespec *t);
 void correct_time_s2c_ctx(struct context_interface_s *interface, struct timespec *t);
-
-void translate_sftp_attr_fattr(struct context_interface_s *interface);
 
 #endif

@@ -162,7 +162,7 @@ void notify_kernel_change(struct context_interface_s *i, uint64_t ino, uint32_t 
 
 }
 
-int add_direntry_buffer(struct context_interface_s *i, struct direntry_buffer_s *buffer, struct name_s *xname, struct stat *st)
+int add_direntry_buffer(struct context_interface_s *i, struct direntry_buffer_s *buffer, struct name_s *xname, struct system_stat_s *stat)
 {
     size_t dirent_size=offsetof(struct fuse_dirent, name) + xname->len;
     size_t dirent_size_alligned=(((dirent_size) + sizeof(uint64_t) - 1) & ~(sizeof(uint64_t) - 1));
@@ -171,11 +171,13 @@ int add_direntry_buffer(struct context_interface_s *i, struct direntry_buffer_s 
 	struct fuse_dirent *dirent=(struct fuse_dirent *) buffer->pos;
 
 	memset(buffer->pos, 0, dirent_size_alligned); /* to be sure, the buffer should be zerod already */
-	dirent->ino=st->st_ino;
+
+	dirent->ino=stat->sst_ino;
 	dirent->off=buffer->offset;
 	dirent->namelen=xname->len;
-	dirent->type=(st->st_mode>0) ? (st->st_mode & S_IFMT) >> 12 : DT_UNKNOWN;
+	dirent->type=(stat->sst_mode>0) ? ((stat->sst_mode & S_IFMT) >> 12) : DT_UNKNOWN;
 	memcpy(dirent->name, xname->name, xname->len);
+
 	buffer->pos += dirent_size_alligned;
 	buffer->left-= dirent_size_alligned;
 	buffer->offset++;
@@ -187,7 +189,7 @@ int add_direntry_buffer(struct context_interface_s *i, struct direntry_buffer_s 
 
 }
 
-int add_direntry_plus_buffer(struct context_interface_s *i, struct direntry_buffer_s *buffer, struct name_s *xname, struct stat *st)
+int add_direntry_plus_buffer(struct context_interface_s *i, struct direntry_buffer_s *buffer, struct name_s *xname, struct system_stat_s *stat)
 {
     size_t dirent_size=offsetof(struct fuse_direntplus, dirent.name) + xname->len;
     size_t dirent_size_alligned=(((dirent_size) + sizeof(uint64_t) - 1) & ~(sizeof(uint64_t) - 1));
@@ -201,37 +203,20 @@ int add_direntry_plus_buffer(struct context_interface_s *i, struct direntry_buff
 
 	memset(buffer->pos, 0, dirent_size_alligned); /* to be sure, the buffer should be zerod already */
 
-	direntplus->dirent.ino=st->st_ino;
+	direntplus->dirent.ino=stat->sst_ino;
 	direntplus->dirent.off=buffer->offset;
 	direntplus->dirent.namelen=xname->len;
-	direntplus->dirent.type=(st->st_mode>0) ? (st->st_mode & S_IFMT) >> 12 : DT_UNKNOWN;
+	direntplus->dirent.type=(stat->sst_mode>0) ? ((stat->sst_mode & S_IFMT) >> 12) : DT_UNKNOWN;
 	memcpy(direntplus->dirent.name, xname->name, xname->len);
 
-	direntplus->entry_out.nodeid=st->st_ino;
+	direntplus->entry_out.nodeid=stat->sst_ino;
 	direntplus->entry_out.generation=0; /* ???? */
-
 	direntplus->entry_out.entry_valid=entry_timeout->tv_sec;
 	direntplus->entry_out.entry_valid_nsec=entry_timeout->tv_nsec;
 	direntplus->entry_out.attr_valid=attr_timeout->tv_sec;
 	direntplus->entry_out.attr_valid_nsec=attr_timeout->tv_nsec;
 
-	direntplus->entry_out.attr.ino=st->st_ino;
-	direntplus->entry_out.attr.size=st->st_size;
-	direntplus->entry_out.attr.blksize=_DEFAULT_BLOCKSIZE;
-	direntplus->entry_out.attr.blocks=st->st_size / _DEFAULT_BLOCKSIZE + (st->st_size % _DEFAULT_BLOCKSIZE == 0) ? 0 : 1;
-
-	direntplus->entry_out.attr.atime=(uint64_t) st->st_atim.tv_sec;
-	direntplus->entry_out.attr.atimensec=(uint64_t) st->st_atim.tv_nsec;
-	direntplus->entry_out.attr.mtime=(uint64_t) st->st_mtim.tv_sec;
-	direntplus->entry_out.attr.mtimensec=(uint64_t) st->st_mtim.tv_nsec;
-	direntplus->entry_out.attr.ctime=(uint64_t) st->st_ctim.tv_sec;
-	direntplus->entry_out.attr.ctimensec=(uint64_t) st->st_ctim.tv_nsec;
-
-	direntplus->entry_out.attr.mode=st->st_mode;
-	direntplus->entry_out.attr.nlink=st->st_nlink;
-	direntplus->entry_out.attr.uid=st->st_uid;
-	direntplus->entry_out.attr.gid=st->st_gid;
-	direntplus->entry_out.attr.rdev=0;
+	fill_fuse_attr_system_stat(&direntplus->entry_out.attr, stat);
 
 	buffer->pos += dirent_size_alligned;
 	buffer->left-= dirent_size_alligned;

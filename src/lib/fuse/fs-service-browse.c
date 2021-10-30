@@ -93,7 +93,7 @@ static void _fs_browse_lookup(struct service_context_s *context, struct fuse_req
     struct service_fs_s *fs=get_service_context_fs(context);
     unsigned int error=(* fs->access)(context, request, SERVICE_OP_TYPE_LOOKUP);
 
-    logoutput("_fs_browse_lookup: ino %li name %s", (unsigned long) pinode->st.st_ino, name);
+    logoutput("_fs_browse_lookup: ino %li name %s", (unsigned long) pinode->stat.sst_ino, name);
 
     if (error) {
 
@@ -107,7 +107,7 @@ static void _fs_browse_lookup(struct service_context_s *context, struct fuse_req
     if (context==NULL || (context->type != SERVICE_CTX_TYPE_BROWSE && context->type != SERVICE_CTX_TYPE_WORKSPACE)) {
 
 	reply_VFS_error(request, EIO);
-	logoutput_warning("_fs_browse_lookup: ino %li internal error wrong or no context", (unsigned long) pinode->st.st_ino);
+	logoutput_warning("_fs_browse_lookup: ino %li internal error wrong or no context", (unsigned long) pinode->stat.sst_ino);
 	return;
 
     }
@@ -192,7 +192,7 @@ static void _fs_browse_getattr(struct service_context_s *context, struct fuse_re
 
 }
 
-static void _fs_browse_setattr(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, struct stat *st, unsigned int set)
+static void _fs_browse_setattr(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, struct system_stat_s *stat)
 {
     struct service_fs_s *fs=get_service_context_fs(context);
     struct entry_s *entry=inode->alias;
@@ -208,7 +208,7 @@ static void _fs_browse_setattr(struct service_context_s *context, struct fuse_re
 
 	if (error==0) {
 
-	    (* fs->setattr)(context, request, inode, NULL, st, set);
+	    (* fs->setattr)(context, request, inode, NULL, stat);
 
 	} else {
 
@@ -295,7 +295,7 @@ static void _fs_browse_opendir(struct fuse_opendir_s *opendir, struct fuse_reque
     struct service_fs_s *fs=get_service_context_fs(context);
     unsigned int error=(* fs->access)(context, request, SERVICE_OP_TYPE_OPENDIR);
 
-    logoutput("OPENDIR browse %s (thread %i) %li", context->name, (int) gettid(), opendir->inode->st.st_ino);
+    logoutput("OPENDIR browse %s (thread %i) %li", context->name, (int) gettid(), opendir->inode->stat.sst_ino);
 
     if (error==0) {
 
@@ -304,7 +304,7 @@ static void _fs_browse_opendir(struct fuse_opendir_s *opendir, struct fuse_reque
 	if (context==NULL || (context->type != SERVICE_CTX_TYPE_BROWSE && context->type != SERVICE_CTX_TYPE_WORKSPACE)) {
 
 	    reply_VFS_error(request, EIO);
-	    logoutput_warning("_fs_browse_opendir: ino %li internal error wrong or no context", (unsigned long) opendir->inode->st.st_ino);
+	    logoutput_warning("_fs_browse_opendir: ino %li internal error wrong or no context", (unsigned long) opendir->inode->stat.sst_ino);
 	    return;
 
 	}
@@ -315,7 +315,7 @@ static void _fs_browse_opendir(struct fuse_opendir_s *opendir, struct fuse_reque
 	if (error==0) {
 
 	    opendir->context=context;
-	    logoutput("OPENDIR browse %s (thread %i) %li", context->name, (int) gettid(), opendir->inode->st.st_ino);
+	    logoutput("OPENDIR browse %s (thread %i) %li", context->name, (int) gettid(), opendir->inode->stat.sst_ino);
 	    (* fs->opendir)(opendir, request, NULL, flags);
 
 	} else {
@@ -347,7 +347,7 @@ static void _fs_browse_statfs(struct service_context_s *context, struct fuse_req
 
 	if (error==0) {
 
-	    logoutput("STATFS %s (thread %i) %li", context->name, (int) gettid(), inode->st.st_ino);
+	    logoutput("STATFS %s (thread %i) %li", context->name, (int) gettid(), inode->stat.sst_ino);
 	    (* fs->statfs)(context, request, NULL);
 
 	} else {

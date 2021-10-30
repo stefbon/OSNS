@@ -236,7 +236,7 @@ static int _start_interface_sftp_client(struct context_interface_s *interface, i
 
 	/* translate the supported sftp attributes to something fuse understands (FATTR_MODE, FATTR_SIZE, etc) */
 
-	translate_sftp_attr_fattr(interface);
+	//translate_sftp_attr_fattr(interface);
 
     }
 

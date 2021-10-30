@@ -35,35 +35,35 @@ osns_client_SOURCES =  	lib/fuse/directory.c lib/fuse/dentry.c lib/fuse/dentry-o
 			lib/log/logging.c lib/mime/handlemime.c lib/misc/replaceandskip.c lib/commonsignal/lock.c \
 			options.c \
 			osns_client.c osns_socket.c \
-			lib/datatypes/name.c \
+			lib/datatypes/name.c lib/datatypes/buffer.c \
 			lib/datatypes/ssh-string.c lib/datatypes/ssh-uint.c \
 			lib/datatypes/ssh-namelist.c lib/datatypes/ssh-payload.c lib/datatypes/ssh-mpint.c lib/datatypes/ssh-msg-buffer.c \
 			lib/file/read.c \
 			lib/users/check.c lib/users/getent.c lib/users/local.c lib/users/lookup.c \
-			lib/users/mapcb.c lib/users/mapcb-c2s.c lib/users/mapcb-s2c.c lib/users/mapping.c lib/users/monitor.c \ 
-			fuse/network.c fuse/ssh.c fuse/sftp.c fuse/smb.c \
+			lib/users/mapcb.c lib/users/mapcb_p2l.c lib/users/mapcb_l2p.c lib/users/mapping.c lib/users/monitor.c \
+			lib/system/directory.c lib/system/file.c lib/system/fshandle.c \
+			lib/system/hash.c lib/system/insert.c lib/system/location.c \
+			lib/system/open.c lib/system/path.c lib/system/stat.c \
+			fuse/network.c fuse/ssh.c fuse/sftp.c \
 			fuse/workspace-fs.c fuse/workspace/access.c fuse/workspace/getattr.c fuse/workspace/lookup.c fuse/workspace/opendir.c fuse/workspace/statfs.c fuse/workspace/xattr.c \
 			fuse/sftp-fs.c fuse/sftp/access.c fuse/sftp/inode-stat.c \
 			fuse/sftp/getattr.c fuse/sftp/lock.c fuse/sftp/lookup.c fuse/sftp/mk.c fuse/sftp/open.c fuse/sftp/opendir.c \
 			fuse/sftp/realpath.c fuse/sftp/rm.c fuse/sftp/setattr.c fuse/sftp/statfs.c  fuse/sftp/symlink.c fuse/sftp/xattr.c \
-			fuse/smb-fs.c fuse/smb/access.c fuse/smb/getattr.c fuse/smb/lookup.c fuse/smb/opendir.c fuse/smb/readlink.c \
 			interface/fuse.c \
 			interface/sftp-attr.c interface/sftp-extensions.c interface/sftp-prefix.c interface/sftp-send.c interface/sftp-wait-response.c interface/sftp.c \
 			interface/ssh-utils.c interface/ssh.c \
-			interface/smb.c interface/smb-wait-response.c interface/smb-signal.c interface/smb-eventloop.c interface/smb-utils.c interface/smb-enum-shares.c \
-			lib/sftp/attr-context.c \
-			lib/sftp/attr/buffer.c lib/sftp/attr/read-attr-generic.c lib/sftp/attr/write-attr-generic.c \
+			lib/sftp/attr-context.c lib/sftp/attr-utils.c \
+			lib/sftp/attr/init-attr-v03.c lib/sftp/attr/init-attr-v04.c lib/sftp/attr/init-attr-v05.c lib/sftp/attr/init-attr-v06.c \
 			lib/sftp/attr/read-attr-v03.c lib/sftp/attr/read-attr-v04.c lib/sftp/attr/read-attr-v05.c lib/sftp/attr/read-attr-v06.c \
 			lib/sftp/attr/write-attr-v03.c lib/sftp/attr/write-attr-v04.c lib/sftp/attr/write-attr-v05.c lib/sftp/attr/write-attr-v06.c \
-			lib/sftp/attr/read-name-v03.c \
+			lib/sftp/rw-attr-generic.c \
 			sftp/recv.c sftp/recv/recv-v03.c sftp/recv/recv-v04.c sftp/recv/recv-v05.c sftp/recv/recv-v06.c \
 			sftp/send.c sftp/send/send-v03.c sftp/send/send-v04.c sftp/send/send-v05.c sftp/send/send-v06.c \
 			sftp/attr.c sftp/context.c sftp/common.c sftp/extensions.c sftp/init.c   \
 			sftp/request-hash.c sftp/time.c sftp/usermapping.c sftp/utils.c \
-			smb/send/stat.c smb/send/opendir.c smb/send/readlink.c \
 			ssh/channel/init.c ssh/channel/payload.c ssh/channel/shell.c ssh/channel/startclose.c \
 			ssh/channel/table.c ssh/channel/uri.c ssh/channel/utils.c \
-			ssh/connections/connect.c  ssh/connections/init.c ssh/connections/setup.c ssh/connections/utils.c \
+			ssh/connections/connect.c ssh/connections/init.c ssh/connections/setup.c ssh/connections/utils.c \
 			ssh/extensions/extension.c ssh/extensions/global-request.c \
 			ssh/hash/hash.c \
 			ssh/keyexchange/algo-exchange.c ssh/keyexchange/compare.c ssh/keyexchange/createkeys.c ssh/keyexchange/dh.c ssh/keyexchange/ecdh.c ssh/keyexchange/key-exchange.c ssh/keyexchange/keyx.c \
@@ -85,6 +85,10 @@ osns_client_SOURCES =  	lib/fuse/directory.c lib/fuse/dentry.c lib/fuse/dentry-o
 			ssh/ssh-pubkey.c \
 			ssh/ssh-signal.c \
 			ssh/ssh-utils.c
+
+# 			smb/send/stat.c smb/send/opendir.c smb/send/readlink.c fuse/smb.c \
+#			fuse/smb-fs.c fuse/smb/access.c fuse/smb/getattr.c fuse/smb/lookup.c fuse/smb/opendir.c fuse/smb/readlink.c
+#			interface/smb.c interface/smb-wait-response.c interface/smb-signal.c interface/smb-eventloop.c interface/smb-utils.c interface/smb-enum-shares.c
 
 if LIBRSYNC_AVAIL
 osns_client_CFLAGS += -lrsync
@@ -234,18 +238,18 @@ osns_sftp_subsystem_SOURCES	=	osns_sftp_subsystem.c \
 					ssh/subsystem/sftp/handle.c ssh/subsystem/sftp/init.c \
 					ssh/subsystem/sftp/receive.c ssh/subsystem/sftp/send.c \
 					ssh/subsystem/sftp/supported.c \
-					lib/sftp/attr-context.c lib/sftp/attr/buffer.c \
+					lib/sftp/attr-context.c \
 					lib/sftp/attr/init-attr-v03.c lib/sftp/attr/init-attr-v04.c lib/sftp/attr/init-attr-v05.c lib/sftp/attr/init-attr-v06.c \
 					lib/sftp/attr/read-attr-v03.c lib/sftp/attr/read-attr-v04.c lib/sftp/attr/read-attr-v05.c lib/sftp/attr/read-attr-v06.c \
 					lib/sftp/attr/write-attr-v03.c lib/sftp/attr/write-attr-v04.c lib/sftp/attr/write-attr-v05.c lib/sftp/attr/write-attr-v06.c \
-					lib/sftp/attr/rw-attr-generic.c \
+					lib/sftp/rw-attr-generic.c \
 					lib/users/getent.c \
 					lib/users/local.c lib/users/lookup.c lib/users/mapcb.c \
 					lib/users/mapcb_l2p.c lib/users/mapcb_p2l.c lib/users/mapping.c \
 					lib/system/directory.c lib/system/file.c lib/system/fshandle.c \
 					lib/system/hash.c lib/system/insert.c lib/system/location.c \
 					lib/system/open.c lib/system/path.c lib/system/stat.c \
-					lib/datatypes/ssh-string.c lib/datatypes/ssh-uint.c \
+					lib/datatypes/ssh-string.c lib/datatypes/ssh-uint.c lib/datatypes/buffer.c \
 					lib/eventloop/beventloop.c lib/eventloop/beventsignal.c \
 					lib/error/error-handling.c \
 					lib/list/simple-list.c lib/list/simple-locking.c lib/list/simple-hash.c \

@@ -19,8 +19,31 @@
 #ifndef LIB_SYSTEM_STAT_H
 #define LIB_SYSTEM_STAT_H
 
+#include <sys/sysmacros.h>
+
 #include "path.h"
 #include "open.h"
+
+#define SYSTEM_STAT_INDEX_TYPE			0
+#define SYSTEM_STAT_INDEX_MODE			1
+#define SYSTEM_STAT_INDEX_NLINK			2
+#define SYSTEM_STAT_INDEX_UID			3
+#define SYSTEM_STAT_INDEX_GID			4
+#define SYSTEM_STAT_INDEX_ATIME			5
+#define SYSTEM_STAT_INDEX_MTIME			6
+#define SYSTEM_STAT_INDEX_CTIME			7
+#define SYSTEM_STAT_INDEX_INO			8
+#define SYSTEM_STAT_INDEX_SIZE			9
+#define SYSTEM_STAT_INDEX_BLOCKS		10
+#define SYSTEM_STAT_INDEX_BTIME			11
+#define SYSTEM_STAT_INDEX_MNTID			12
+
+struct system_dev_s {
+    uint32_t				major;
+    uint32_t				minor;
+};
+
+#define SYSTEM_DEV_INIT			{0, 0}
 
 #ifdef __linux__
 
@@ -51,6 +74,19 @@ struct system_stat_s {
 	struct statx 	stx;
 };
 
+#define sst_mode				stx.stx_mode
+#define sst_nlink				stx.stx_nlink
+#define sst_uid					stx.stx_uid
+#define sst_gid					stx.stx_gid
+#define sst_atime				stx.stx_atime
+#define sst_mtime				stx.stx_mtime
+#define sst_btime				stx.stx_btime
+#define sst_ctime				stx.stx_ctime
+#define sst_ino					stx.stx_ino
+#define sst_size				stx.stx_size
+#define sst_blocks				stx.stx_blocks
+#define sst_blksize				stx.stx_blksize
+
 #else
 
 #define SYSTEM_STAT_TYPE			(1 << 0)
@@ -74,20 +110,36 @@ struct system_stat_s {
 struct system_stat_s {
 	unsigned int	mask;
 	struct stat	st;
+	struct timespec	dummy
 };
+
+#define sst_mode				st.st_mode
+#define sst_nlink				st.st_nlink
+#define sst_uid					st.st_uid
+#define sst_gid					st.st_gid
+#define sst_atime				st.st_atim
+#define sst_mtime				st.st_mtim
+#define sst_btime				dummy;
+#define sst_ctime				st.st_ctim
+#define sst_ino					st.st_ino
+#define sst_size				st.st_size
+#define sst_blocks				st.st_blocks
+#define sst_blksize				st.st_blksize
 
 #endif
 
 #endif /* __linux__ */
 
 struct system_timespec_s {
-    uint64_t			sec;
-    uint32_t			nsec;
+    int64_t			tv_sec;
+    uint32_t			tv_nsec;
 };
 
 #define SYSTEM_TIME_INIT	{0, 0}
 
 /* Prototypes */
+
+/* system calls */
 
 int system_getstat(struct fs_location_path_s *p, unsigned int mask, struct system_stat_s *stat);
 int system_getlstat(struct fs_location_path_s *p, unsigned int mask, struct system_stat_s *stat);
@@ -98,6 +150,10 @@ int system_fsetstat(struct fs_socket_s *socket, unsigned int mask, struct system
 
 int system_fgetstatat(struct fs_socket_s *socket, char *name, unsigned int mask, struct system_stat_s *stat);
 
+/* get */
+
+uint64_t get_ino_system_stat(struct system_stat_s *stat);
+uint32_t get_nlink_system_stat(struct system_stat_s *stat);
 uint32_t get_uid_system_stat(struct system_stat_s *stat);
 uint32_t get_gid_system_stat(struct system_stat_s *stat);
 uint32_t get_size_system_stat(struct system_stat_s *stat);
@@ -120,13 +176,18 @@ void get_mtime_system_stat(struct system_stat_s *stat, struct system_timespec_s 
 int64_t get_mtime_sec_system_stat(struct system_stat_s *stat);
 uint32_t get_mtime_nsec_system_stat(struct system_stat_s *stat);
 
-void get_devino_system_stat(struct system_stat_s *stat, struct fs_location_devino_s *devino);
+void get_dev_system_stat(struct system_stat_s *stat, struct system_dev_s *dev);
+void get_rdev_system_stat(struct system_stat_s *stat, struct system_dev_s *dev);
 
+/* set */
+
+void set_ino_system_stat(struct system_stat_s *stat, uint64_t ino);
 void set_type_system_stat(struct system_stat_s *stat, uint16_t type);
 void set_mode_system_stat(struct system_stat_s *stat, uint16_t mode);
 void set_uid_system_stat(struct system_stat_s *stat, uint32_t uid);
 void set_gid_system_stat(struct system_stat_s *stat, uint32_t gid);
 void set_size_system_stat(struct system_stat_s *stat, uint64_t size);
+void set_nlink_system_stat(struct system_stat_s *stat, uint32_t nlink);
 
 void set_atime_system_stat(struct system_stat_s *stat, struct system_timespec_s *time);
 void set_atime_sec_system_stat(struct system_stat_s *stat, int64_t sec);
@@ -144,5 +205,27 @@ void set_btime_system_stat(struct system_stat_s *stat, struct system_timespec_s 
 void set_btime_sec_system_stat(struct system_stat_s *stat, int64_t sec);
 void set_btime_nsec_system_stat(struct system_stat_s *stat, uint32_t nsec);
 
+void set_dev_system_stat(struct system_stat_s *stat, struct system_dev_s *dev);
+void set_rdev_system_stat(struct system_stat_s *stat, struct system_dev_s *dev);
+
+void copy_atime_system_stat(struct system_stat_s *to, struct system_stat_s *from);
+void copy_mtime_system_stat(struct system_stat_s *to, struct system_stat_s *from);
+void copy_ctime_system_stat(struct system_stat_s *to, struct system_stat_s *from);
+void copy_btime_system_stat(struct system_stat_s *to, struct system_stat_s *from);
+
+void set_blksize_system_stat(struct system_stat_s *stat, uint32_t blksize);
+
+void increase_nlink_system_stat(struct system_stat_s *stat, uint32_t count);
+void decrease_nlink_system_stat(struct system_stat_s *stat, uint32_t count);
 
 #endif
+
+/*
+    TODO: get a function to copy the atime to system time formats like timespec
+*/
+
+uint32_t calc_amount_blocks(uint64_t size, uint32_t blksize);
+void copy_system_time(struct system_timespec_s *to, struct system_timespec_s *from);
+void calc_blocks_system_stat(struct system_stat_s *stat);
+
+uint32_t get_unique_system_dev(struct system_dev_s *dev);

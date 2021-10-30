@@ -82,18 +82,22 @@ static unsigned int get_sftp_flags(struct attr_context_s *ctx, const char *what)
     return 0;
 }
 
+static void rw_attr_cb_zero(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)
+{}
+
 void init_attrcb_zero(struct _rw_attrcb_s *attrcb, unsigned int count)
 {
 
     for (unsigned int i=0; i<count; i++) {
 
-	attrcb[i].code		= 0;
-	attrcb[i].shift		= 0;
-	attrcb[i].maxlength	= 0;
-	attrcb[i].stat_mask	= 0;
-	attrcb[i].w_cb		= NULL;
-	attrcb[i].r_cb		= NULL;
-	attrcb[i].name		="";
+	attrcb[i].code				= 0;
+	attrcb[i].shift				= 0;
+	attrcb[i].stat_mask			= 0;
+	attrcb[i].fattr				= 0;
+	attrcb[i].r_cb				= rw_attr_cb_zero;
+	attrcb[i].w_cb				= rw_attr_cb_zero;
+	attrcb[i].maxlength			= 0;
+	attrcb[i].name				= NULL;
 
     }
 
@@ -110,7 +114,7 @@ void init_attr_context(struct attr_context_s *actx, unsigned int flags, void *pt
     actx->w_valid=0;
     actx->r_valid=0;
 
-    init_attrcb_zero(attrcb, 36);
+    init_attrcb_zero(attrcb, ATTR_CONTEXT_COUNT_ATTR_CB);
 
     actx->maxlength_filename=get_maxlength_filename;
     actx->maxlength_username=get_maxlength_username;
@@ -151,46 +155,29 @@ void set_sftp_attr_context(struct attr_context_s *actx)
     if (version<=3) {
 
 	ops->read_name_name_response		= read_name_name_response_v03;
-	ops->read_attr_name_response		= read_attr_name_response_v03;
 	ops->write_name_name_response		= write_name_name_response_v03;
-	ops->write_attr_name_response		= write_attr_name_response_v03;
-
 	ops->parse_attributes			= parse_attributes_v03;
-
 	init_attr_context_v03(actx);
 
     } else if (version==4) {
 
 	ops->read_name_name_response		= read_name_name_response_v04;
-	ops->read_attr_name_response		= read_attr_name_response_v04;
 	ops->write_name_name_response		= write_name_name_response_v04;
-	ops->write_attr_name_response		= write_attr_name_response_v04;
-
 	ops->parse_attributes			= parse_attributes_v04;
-
 	init_attr_context_v04(actx);
 
     } else if (version==5) {
 
 	ops->read_name_name_response		= read_name_name_response_v04;
-	ops->read_attr_name_response		= read_attr_name_response_v04;
 	ops->write_name_name_response		= write_name_name_response_v04;
-	ops->write_attr_name_response		= write_attr_name_response_v04;
-
-
 	ops->parse_attributes			= parse_attributes_v05;
-
 	init_attr_context_v05(actx);
 
     } else if (version==6) {
 
 	ops->read_name_name_response		= read_name_name_response_v04;
-	ops->read_attr_name_response		= read_attr_name_response_v04;
 	ops->write_name_name_response		= write_name_name_response_v04;
-	ops->write_attr_name_response		= write_attr_name_response_v04;
-
 	ops->parse_attributes			= parse_attributes_v06;
-
 	init_attr_context_v06(actx);
 
     } else {

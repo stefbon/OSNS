@@ -49,7 +49,6 @@
 #include "sftp/protocol-v03.h"
 #include "sftp/attr-context.h"
 
-#include "rw-attr-generic.h"
 #include "write-attr-v03.h"
 #include "read-attr-v03.h"
 #include "init-attr-v03.h"
@@ -71,6 +70,7 @@ void init_attr_context_v03(struct attr_context_s *actx)
     attrcb[SSH_FILEXFER_INDEX_SIZE].maxlength		= 8;
     attrcb[SSH_FILEXFER_INDEX_SIZE].name		= "size";
     attrcb[SSH_FILEXFER_INDEX_SIZE].stat_mask		= SYSTEM_STAT_SIZE;
+    attrcb[SSH_FILEXFER_INDEX_SIZE].fattr		= FATTR_SIZE;
 
     /* owner and group == uid and gid with version 3 */
 
@@ -81,6 +81,7 @@ void init_attr_context_v03(struct attr_context_s *actx)
     attrcb[SSH_FILEXFER_INDEX_UIDGID].maxlength		= 8;
     attrcb[SSH_FILEXFER_INDEX_UIDGID].name		= "uidgid";
     attrcb[SSH_FILEXFER_INDEX_UIDGID].stat_mask		= SYSTEM_STAT_UID | SYSTEM_STAT_GID;
+    attrcb[SSH_FILEXFER_INDEX_UIDGID].fattr		= FATTR_UID | FATTR_GID;
 
     /* permissions = posix mode */
 
@@ -89,8 +90,9 @@ void init_attr_context_v03(struct attr_context_s *actx)
     attrcb[SSH_FILEXFER_INDEX_PERMISSIONS].w_cb		= write_attr_permissions_v03;
     attrcb[SSH_FILEXFER_INDEX_PERMISSIONS].r_cb		= read_attr_permissions_v03;
     attrcb[SSH_FILEXFER_INDEX_PERMISSIONS].maxlength	= 4;
-    attrcb[SSH_FILEXFER_INDEX_PERMISSIONS].name		= "permissions";
-    attrcb[SSH_FILEXFER_INDEX_PERMISSIONS].stat_mask	= SYSTEM_STAT_MODE;
+    attrcb[SSH_FILEXFER_INDEX_PERMISSIONS].name		= "permissions and type";
+    attrcb[SSH_FILEXFER_INDEX_PERMISSIONS].stat_mask	= SYSTEM_STAT_MODE | SYSTEM_STAT_TYPE;
+    attrcb[SSH_FILEXFER_INDEX_PERMISSIONS].fattr	= FATTR_MODE;
 
     /* access and modify time in one */
 
@@ -101,6 +103,7 @@ void init_attr_context_v03(struct attr_context_s *actx)
     attrcb[SSH_FILEXFER_INDEX_ACMODTIME].maxlength	= 8;
     attrcb[SSH_FILEXFER_INDEX_ACMODTIME].name		= "acmodtime";
     attrcb[SSH_FILEXFER_INDEX_ACMODTIME].stat_mask	= SYSTEM_STAT_ATIME | SYSTEM_STAT_MTIME;
+    attrcb[SSH_FILEXFER_INDEX_ACMODTIME].fattr		= FATTR_ATIME | FATTR_MTIME;
 
     /* extensions */
 

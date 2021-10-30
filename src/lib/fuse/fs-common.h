@@ -43,8 +43,8 @@ void _fs_common_virtual_fsyncdir(struct fuse_opendir_s *opendir, struct fuse_req
 
 void _fs_common_remove_nonsynced_dentries(struct fuse_opendir_s *opendir);
 
-struct entry_s *_fs_common_create_entry(struct workspace_mount_s *workspace, struct entry_s *parent, struct name_s *xname, struct stat *st, unsigned int size, unsigned int flags, unsigned int *error);
-struct entry_s *_fs_common_create_entry_unlocked(struct workspace_mount_s *workspace, struct directory_s *directory, struct name_s *xname, struct stat *st, unsigned int size, unsigned int flags, unsigned int *error);
+struct entry_s *_fs_common_create_entry(struct workspace_mount_s *workspace, struct entry_s *parent, struct name_s *xname, struct system_stat_s *st, unsigned int size, unsigned int flags, unsigned int *error);
+struct entry_s *_fs_common_create_entry_unlocked(struct workspace_mount_s *workspace, struct directory_s *directory, struct name_s *xname, struct system_stat_s *st, unsigned int size, unsigned int flags, unsigned int *error);
 
 void _fs_common_statfs(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, uint64_t blocks, uint64_t bfree, uint64_t bavail, uint32_t bsize);
 

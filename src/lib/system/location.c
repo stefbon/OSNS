@@ -143,10 +143,11 @@ static int compare_devino_location_path(struct fs_location_path_s *path, struct 
     int differ=1;
 
     if (system_getstat(path, SYSTEM_STAT_MNTID | SYSTEM_STAT_INO, &stat)==0) {
-	struct fs_location_devino_s tmp=FS_LOCATION_DEVINO_INIT;
+	struct system_dev_s dev;
 
-	get_devino_system_stat(&stat, &tmp);
-	if (tmp.dev==devino->dev && tmp.ino==devino->ino) differ=0;
+	get_dev_system_stat(&stat, &dev);
+
+	if (get_unique_system_dev(&dev)==devino->dev && get_ino_system_stat(&stat)==devino->ino) differ=0;
 
     }
 

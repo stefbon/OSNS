@@ -218,6 +218,8 @@ void _walk_ssh_session_channels(struct ssh_session_s *session, const char *what,
     struct channel_table_s *table=&session->channel_table;
     struct simple_lock_s wlock;
 
+    logoutput_debug("_walk_ssh_session_channels: what %s signal %i", what, signal);
+
     if (channeltable_writelock(table, &wlock)==0) {
 	struct ssh_channel_s *channel=get_next_channel(session, NULL);
 
@@ -334,6 +336,8 @@ int init_ssh_session(struct ssh_session_s *session, uid_t uid, void *ctx)
     init_ssh_extensions(session);
     init_ssh_pubkey(session);
     init_ssh_connections(session);
+
+    return 0;
 }
 
 int setup_ssh_session(struct ssh_session_s *session, int fd)
@@ -531,8 +535,6 @@ static void analyze_ssh_connection_problem(void *ptr)
 
     if (error>0) {
 
-	logoutput("analyze_connection_problem: error %i (%s): disconnecting", error, strerror(error));
-
 	switch (error) {
 
 	    case EBADF:
@@ -548,12 +550,18 @@ static void analyze_ssh_connection_problem(void *ptr)
 	    case EHOSTDOWN:
 	    case EHOSTUNREACH:
 
-	    change_ssh_connection_setup(connection, "setup", 0, SSH_SETUP_FLAG_DISCONNECTING, 0, NULL, 0);
-	    remove_ssh_connection_eventloop(connection);
-	    disconnect_ssh_connection(connection);
-	    change_ssh_connection_setup(connection, "setup", 0, SSH_SETUP_FLAG_DISCONNECTED, 0, NULL, 0);
+	    logoutput("analyze_connection_problem: error %i (%s): disconnecting", error, strerror(error));
 
-	    if (connection->refcount>0) {
+	    change_ssh_connection_setup(connection, "setup", 0, SSH_SETUP_FLAG_DISCONNECTING, 0, NULL, 0);
+	    logoutput("analyze_connection_problem: A");
+	    remove_ssh_connection_eventloop(connection);
+	    logoutput("analyze_connection_problem: B");
+	    disconnect_ssh_connection(connection);
+	    logoutput("analyze_connection_problem: C");
+	    change_ssh_connection_setup(connection, "setup", 0, SSH_SETUP_FLAG_DISCONNECTED, 0, NULL, 0);
+	    logoutput("analyze_connection_problem: D .. c refcount %i", connection->refcount);
+
+	    if (connection->refcount>=0) {
 		struct ssh_session_s *session=get_ssh_connection_session(connection);
 
 		/* send close to channels context using this connection */
@@ -572,7 +580,11 @@ static void analyze_ssh_connection_problem(void *ptr)
 
     }
 
+    logoutput("analyze_connection_problem: E");
+
     change_ssh_connection_setup(connection, "setup", 0, SSH_SETUP_FLAG_ANALYZETHREAD, SSH_SETUP_OPTION_UNDO, NULL, NULL);
+
+    logoutput("analyze_connection_problem: F");
 
 }
 

@@ -48,7 +48,6 @@
 #include "sftp/protocol-v04.h"
 
 #include "sftp/attr-context.h"
-#include "rw-attr-generic.h"
 #include "write-attr-v03.h"
 #include "write-attr-v04.h"
 
@@ -125,14 +124,4 @@ void write_name_name_response_v04(struct attr_context_s *actx, struct attr_buffe
     /* TODO: convert from local to UTF-8 (if required) */
 
     (* buffer->ops->rw.write.write_string)(buffer, name);
-}
-
-void write_attr_name_response_v04(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)
-{
-
-    /* attr */
-
-    (* buffer->ops->rw.write.write_uint32)(buffer, r->valid);
-    write_attributes_generic(actx, buffer, r, stat, r->valid);
-
 }

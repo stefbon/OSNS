@@ -479,8 +479,8 @@ static struct mountentry_s *read_mountinfo_values(char *buffer, unsigned int siz
     me->fs=fs;
     me->source=source;
     me->options=options;
-    me->major=major;
-    me->minor=minor;
+    me->dev.major=major;
+    me->dev.minor=minor;
     me->flags=0;
 
     init_list_element(&me->list_m, NULL);
@@ -522,14 +522,14 @@ static int add_mountentry_sorted_d(struct list_header_s *header, struct mountent
 {
     int diff=-1;
     struct list_element_s *walk=get_list_tail(header, 0);
-    dev_t dev=makedev(me->major, me->minor);
+    uint32_t dev=get_unique_system_dev(&me->dev);
     uint64_t cnt=0;
 
     /* walk back starting at the last and compare */
 
     while (walk) {
     	struct mountentry_s *prev=(struct mountentry_s *)((char *) walk - offsetof(struct mountentry_s, list_d));
-	dev_t devprev=makedev(prev->major, prev->minor);
+	uint32_t devprev=get_unique_system_dev(&prev->dev);
 
 	cnt++;
 	if (cnt > (3 * header->count / 2)) {

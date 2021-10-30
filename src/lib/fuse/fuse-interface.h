@@ -91,8 +91,8 @@ struct timespec *get_fuse_attr_timeout(struct context_interface_s *root);
 struct timespec *get_fuse_entry_timeout(struct context_interface_s *root);
 struct timespec *get_fuse_negative_timeout(struct context_interface_s *root);
 
-int add_direntry_buffer(struct context_interface_s *root, struct direntry_buffer_s *buffer, struct name_s *xname, struct stat *st);
-int add_direntry_plus_buffer(struct context_interface_s *root, struct direntry_buffer_s *buffer, struct name_s *xname, struct stat *st);
+int add_direntry_buffer(struct context_interface_s *root, struct direntry_buffer_s *buffer, struct name_s *xname, struct system_stat_s *stat);
+int add_direntry_plus_buffer(struct context_interface_s *root, struct direntry_buffer_s *buffer, struct name_s *xname, struct system_stat_s *st);
 
 struct fs_connection_s *get_fs_connection_fuse(struct context_interface_s *root);
 signal_ctx2fuse_t get_signal_ctx2fuse(struct context_interface_s *root);

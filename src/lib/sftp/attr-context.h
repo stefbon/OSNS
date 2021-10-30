@@ -20,8 +20,10 @@
 #ifndef LIB_SFTP_ATTR_CONTEXT_H
 #define LIB_SFTP_ATTR_CONTEXT_H
 
+#include "linux/fuse.h"
+
 #include "system.h"
-#include "attr/buffer.h"
+#include "datatypes.h"
 #include "lib/users/mapping.h"
 
 #define SSH_FILEXFER_INDEX_NSEC_ATIME			32
@@ -51,29 +53,31 @@ struct rw_attr_result_s {
 
 void parse_dummy(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat, unsigned char ctr);
 
-
 #define RW_ATTR_RESULT_INIT				{0, 0, 0, 0, 0, 0, parse_dummy, NULL}
 
 struct _rw_attrcb_s {
     uint32_t						code;
     unsigned char					shift;
     unsigned int					stat_mask;
+    unsigned int					fattr;				/* used by FUSE to indicate which values to change in setattr */
     rw_attr_cb						r_cb;
     rw_attr_cb						w_cb;
     unsigned int					maxlength;
     const char						*name;
 };
 
+#define RW_ATTRCB_INIT					{0, 0, 0, 0, NULL, NULL, 0, NULL}
+
 struct attr_ops_s {
     void						(* parse_attributes)(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *result, struct system_stat_s *stat);
     void						(* read_name_name_response)(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct ssh_string_s *name);
-    void						(* read_attr_name_response)(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *result, struct system_stat_s *stat);
     void						(* write_name_name_response)(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct ssh_string_s *name);
-    void						(* write_attr_name_response)(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *result, struct system_stat_s *stat);
 };
 
 #define ATTR_CONTEXT_FLAG_CLIENT			1
 #define ATTR_CONTEXT_FLAG_SERVER			2
+/* maximal ammount of attr cb = 32 (32 bits available) plus maximum 4 calls for subseconds (atime, btime, mtime, ctime)*/
+#define ATTR_CONTEXT_COUNT_ATTR_CB			36
 
 struct attr_context_s {
     unsigned int					flags;
@@ -84,7 +88,7 @@ struct attr_context_s {
     unsigned int					w_count;
     unsigned int					r_valid;
     unsigned int					r_count;
-    struct _rw_attrcb_s					attrcb[36];
+    struct _rw_attrcb_s					attrcb[ATTR_CONTEXT_COUNT_ATTR_CB];
     unsigned int					(* maxlength_filename)(struct attr_context_s *actx);
     unsigned int					(* maxlength_username)(struct attr_context_s *actx);
     unsigned int					(* maxlength_groupname)(struct attr_context_s *actx);

@@ -49,12 +49,38 @@
 
 #include "sftp/common-protocol.h"
 #include "sftp/attr-context.h"
+#include "sftp/attr-utils.h"
+
 #include "interface/sftp-attr.h"
 #include "interface/sftp-send.h"
 #include "interface/sftp-wait-response.h"
+
 #include "inode-stat.h"
 
-static const char *rootpath="/.";
+static void handle_sftp_attr_reply(struct service_context_s *context, struct fuse_request_s *f_request, struct sftp_reply_s *reply, struct inode_s *inode)
+{
+    struct context_interface_s *interface=&context->interface;
+    struct attr_buffer_s abuff;
+
+    /* read the atributes received from server */
+
+    set_attr_buffer_read_attr_response(&abuff, &reply->response.attr);
+    read_sftp_attributes_ctx(interface, &abuff, &inode->stat);
+
+    /* reply to VFS */
+
+    _fs_common_getattr(get_root_context(context), f_request, inode);
+
+    /* adjust inodes stat synchronize time */
+
+    get_current_time_system_time(&inode->stime);
+
+    /* free */
+
+    free(reply->response.attr.buff);
+    unset_fuse_request_flags_cb(f_request);
+
+}
 
 /* GETATTR */
 
@@ -66,7 +92,7 @@ void _fs_sftp_getattr(struct service_context_s *context, struct fuse_request_s *
     unsigned int pathlen=(* interface->backend.sftp.get_complete_pathlen)(interface, pathinfo->len);
     char path[pathlen];
 
-    logoutput("_fs_sftp_getattr: %li %s", inode->st.st_ino, pathinfo->path);
+    logoutput("_fs_sftp_getattr: %li %s", get_ino_system_stat(&inode->stat), pathinfo->path);
 
     pathinfo->len += (* interface->backend.sftp.complete_path)(interface, path, pathinfo);
 
@@ -88,15 +114,8 @@ void _fs_sftp_getattr(struct service_context_s *context, struct fuse_request_s *
 	    struct sftp_reply_s *reply=&sftp_r.reply;
 
 	    if (reply->type==SSH_FXP_ATTRS) {
-		struct sftp_attr_s attr;
 
-		memset(&attr, 0, sizeof(struct sftp_attr_s));
-		read_sftp_attributes_ctx(interface, &reply->response.attr, &attr);
-		fill_inode_attr_sftp(interface, &inode->st, &attr);
-		_fs_common_getattr(get_root_context(context), f_request, inode);
-		get_current_time(&inode->stim);
-		free(reply->response.attr.buff);
-		unset_fuse_request_flags_cb(f_request);
+		handle_sftp_attr_reply(context, f_request, reply, inode);
 		return;
 
 	    } else if (reply->type==SSH_FXP_STATUS) {
@@ -152,16 +171,8 @@ void _fs_sftp_fgetattr(struct fuse_openfile_s *openfile, struct fuse_request_s *
 	    struct sftp_reply_s *reply=&sftp_r.reply;
 
 	    if (reply->type==SSH_FXP_ATTRS) {
-		struct sftp_attr_s attr;
-		struct inode_s *inode=openfile->inode;
 
-		memset(&attr, 0, sizeof(struct sftp_attr_s));
-		read_sftp_attributes_ctx(interface, &reply->response.attr, &attr);
-		fill_inode_attr_sftp(interface, &inode->st, &attr);
-		_fs_common_getattr(get_root_context(context), f_request, inode);
-		get_current_time(&inode->stim);
-		free(reply->response.attr.buff);
-		unset_fuse_request_flags_cb(f_request);
+		handle_sftp_attr_reply(context, f_request, reply, openfile->inode);
 		return;
 
 	    } else if (reply->type==SSH_FXP_STATUS) {
@@ -185,68 +196,6 @@ void _fs_sftp_fgetattr(struct fuse_openfile_s *openfile, struct fuse_request_s *
     out:
     reply_VFS_error(f_request, error);
     unset_fuse_request_flags_cb(f_request);
-
-}
-
-int _fs_sftp_getattr_root(struct context_interface_s *interface, void *ptr)
-{
-    struct sftp_attr_s *attr=(struct sftp_attr_s *) ptr;
-    struct sftp_request_s sftp_r;
-    unsigned int error=EIO;
-    struct pathinfo_s pathinfo={rootpath, strlen(rootpath), 0, 0};
-    unsigned int pathlen=(* interface->backend.sftp.get_complete_pathlen)(interface, pathinfo.len);
-    char path[pathlen];
-    int cache_size=0;
-
-    logoutput("_fs_sftp_getattr_root");
-
-    pathinfo.len += (* interface->backend.sftp.complete_path)(interface, path, &pathinfo);
-
-    init_sftp_request_minimal(&sftp_r, interface);
-
-    sftp_r.id=0;
-    sftp_r.call.lstat.path=(unsigned char *) pathinfo.path;
-    sftp_r.call.lstat.len=pathinfo.len;
-
-    /* send lstat cause not interested in target when dealing with symlink */
-
-    if (send_sftp_lstat_ctx(interface, &sftp_r)>0) {
-	struct timespec timeout;
-
-	get_sftp_request_timeout_ctx(interface, &timeout);
-	error=0;
-
-	if (wait_sftp_response_ctx(interface, &sftp_r, &timeout)==1) {
-	    struct sftp_reply_s *reply=&sftp_r.reply;
-
-	    if (reply->type==SSH_FXP_ATTRS) {
-
-		if (attr) read_sftp_attributes_ctx(interface, &reply->response.attr, attr);
-		cache_size=reply->response.attr.size;
-		free(reply->response.attr.buff);
-		return cache_size;
-
-	    } else if (reply->type==SSH_FXP_STATUS) {
-
-		error=reply->response.status.linux_error;
-
-	    } else {
-
-		error=EPROTO;
-
-	    }
-
-	}
-
-    } else {
-
-	error=(sftp_r.reply.error) ? sftp_r.reply.error : EIO;
-
-    }
-
-    out:
-    logoutput("_fs_sftp_getattr_root: error %i (%s)", error, strerror(error));
-    return cache_size;
 
 }
 

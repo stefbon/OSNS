@@ -118,7 +118,7 @@ void set_entry_ops(struct entry_s *entry)
 
 	entry->ops=&entry_ops_zero;
 
-    } else if (S_ISDIR(inode->st.st_mode)) {
+    } else if (S_ISDIR(inode->stat.sst_mode)) {
 
 	entry->ops=&entry_ops_dir;
 

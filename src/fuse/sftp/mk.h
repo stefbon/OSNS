@@ -20,10 +20,10 @@
 #ifndef _FUSE_SFTP_MK_H
 #define _FUSE_SFTP_MK_H
 
-void _fs_sftp_mkdir(struct service_context_s *context, struct fuse_request_s *r, struct entry_s *entry, struct pathinfo_s *pathinfo, struct stat *st);
-void _fs_sftp_mknod(struct service_context_s *context, struct fuse_request_s *r, struct entry_s *entry, struct pathinfo_s *pathinfo, struct stat *st);
+void _fs_sftp_mkdir(struct service_context_s *context, struct fuse_request_s *r, struct entry_s *entry, struct pathinfo_s *pathinfo, struct system_stat_s *st);
+void _fs_sftp_mknod(struct service_context_s *context, struct fuse_request_s *r, struct entry_s *entry, struct pathinfo_s *pathinfo, struct system_stat_s *st);
 
-void _fs_sftp_mkdir_disconnected(struct service_context_s *context, struct fuse_request_s *f_request, struct entry_s *entry, struct pathinfo_s *pathinfo, struct stat *st);
-void _fs_sftp_mknod_disconnected(struct service_context_s *context, struct fuse_request_s *f_request, struct entry_s *entry, struct pathinfo_s *pathinfo, struct stat *st);
+void _fs_sftp_mkdir_disconnected(struct service_context_s *context, struct fuse_request_s *f_request, struct entry_s *entry, struct pathinfo_s *pathinfo, struct system_stat_s *st);
+void _fs_sftp_mknod_disconnected(struct service_context_s *context, struct fuse_request_s *f_request, struct entry_s *entry, struct pathinfo_s *pathinfo, struct system_stat_s *st);
 
 #endif

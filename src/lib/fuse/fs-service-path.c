@@ -158,7 +158,7 @@ static void _fs_service_getattr(struct service_context_s *context, struct fuse_r
 
 /* SETATTR */
 
-static void _fs_service_setattr(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, struct stat *st, unsigned int set)
+static void _fs_service_setattr(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, struct system_stat_s *stat)
 {
     struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
     struct entry_s *entry=inode->alias;
@@ -192,7 +192,7 @@ static void _fs_service_setattr(struct service_context_s *context, struct fuse_r
     }
 
     logoutput("SETATTR %s (thread %i): %s", context->name, (int) gettid(), pathinfo.path);
-    (* fs->setattr)(context, request, inode, &pathinfo, st, set);
+    (* fs->setattr)(context, request, inode, &pathinfo, stat);
 }
 
 struct _fs_mk_s {
@@ -232,7 +232,8 @@ static void _fs_service_mk_common(struct service_context_s *context, struct fuse
     mode_t type=0;
     mode_t perm=0;
     struct entry_s *entry=NULL;
-    struct stat st;
+    struct system_stat_s stat;
+    struct system_timespec_s time=SYSTEM_TIME_INIT;
     struct directory_s *directory=get_directory(pinode);
     unsigned int pathlen=(* directory->getpath->get_pathlen)(context, directory) + 1 + len;
     char buffer[sizeof(struct fuse_path_s) + pathlen + 1];
@@ -331,20 +332,22 @@ static void _fs_service_mk_common(struct service_context_s *context, struct fuse
 
     }
 
-    memset(&st, 0, sizeof(struct stat));
-    st.st_mode=perm | type;
-    st.st_uid=request->uid;
-    st.st_gid=request->gid;
-    st.st_size=0;
-    st.st_blksize=4096; 	/* TODO: get from local config/parameters */
+    memset(&stat, 0, sizeof(struct system_stat_s));
+    set_type_system_stat(&stat, type);
+    set_mode_system_stat(&stat, perm);
+    set_uid_system_stat(&stat, request->uid);
+    set_gid_system_stat(&stat, request->gid);
+    set_size_system_stat(&stat, 0);
+    set_blksize_system_stat(&stat, 4096); 	/* TODO: get from local config/parameters */
 
-    get_current_time(&st.st_atim);
-    memcpy(&st.st_mtim, &st.st_atim, sizeof(struct timespec));
-    memcpy(&st.st_ctim, &st.st_atim, sizeof(struct timespec));
-
+    get_current_time_system_time(&time);
+    set_atime_system_stat(&stat, &time);
+    set_mtime_system_stat(&stat, &time);
+    set_ctime_system_stat(&stat, &time);
+    set_btime_system_stat(&stat, &time);
 
     calculate_nameindex(&xname);
-    entry=_fs_common_create_entry_unlocked(w, directory, &xname, &st, 0, 0, &error);
+    entry=_fs_common_create_entry_unlocked(w, directory, &xname, &stat, 0, 0, &error);
 
     /* entry created local and no error (no EEXIST!) */
 
@@ -352,11 +355,11 @@ static void _fs_service_mk_common(struct service_context_s *context, struct fuse
 
 	if (mk->op==SERVICE_OP_TYPE_MKNOD) {
 
-	    (* fs->mknod)(context, request, entry, &pathinfo, &st);
+	    (* fs->mknod)(context, request, entry, &pathinfo, &stat);
 
 	} else if (mk->op==SERVICE_OP_TYPE_MKDIR) {
 
-	    (* fs->mkdir)(context, request, entry, &pathinfo, &st);
+	    (* fs->mkdir)(context, request, entry, &pathinfo, &stat);
 
 	} else if (mk->op==SERVICE_OP_TYPE_SYMLINK) {
 	    char *remote_target=NULL;
@@ -373,7 +376,7 @@ static void _fs_service_mk_common(struct service_context_s *context, struct fuse
 	    } else {
 
 		reply_VFS_error(request, EINVAL);
-		queue_inode_2forget(w, entry->inode->st.st_ino, 0, 0);
+		queue_inode_2forget(w, entry->inode->stat.sst_ino, 0, 0);
 
 	    }
 
@@ -383,12 +386,12 @@ static void _fs_service_mk_common(struct service_context_s *context, struct fuse
 	    openfile->context=context;
 	    openfile->inode=entry->inode; /* now it's pointing to the right inode */
 
-	    (* fs->create)(openfile, request, &pathinfo, &st, mk->mk.create.flags);
+	    (* fs->create)(openfile, request, &pathinfo, &stat, mk->mk.create.flags);
 
 	    if (openfile->error>0) {
 		struct inode_s *inode=openfile->inode;
 
-		queue_inode_2forget(w, inode->st.st_ino, 0, 0);
+		queue_inode_2forget(w, inode->stat.sst_ino, 0, 0);
 		openfile->inode=NULL;
 
 	    }
@@ -399,7 +402,7 @@ static void _fs_service_mk_common(struct service_context_s *context, struct fuse
 
 	if (error==0) error=EIO;
 	reply_VFS_error(request, error);
-	if (entry) queue_inode_2forget(w, entry->inode->st.st_ino, 0, 0);
+	if (entry) queue_inode_2forget(w, entry->inode->stat.sst_ino, 0, 0);
 
     }
 
@@ -415,7 +418,6 @@ void _fs_service_mkdir(struct service_context_s *context, struct fuse_request_s 
     mk.op=SERVICE_OP_TYPE_MKDIR;
     mk.mk.mkdir.mode=mode;
     mk.mk.mkdir.mask=mask;
-
     _fs_service_mk_common(context, request, pinode, name, len, &mk);
 }
 
@@ -430,7 +432,6 @@ void _fs_service_mknod(struct service_context_s *context, struct fuse_request_s 
     mk.mk.mknod.mode=mode;
     mk.mk.mknod.mask=mask;
     mk.mk.mknod.rdev=rdev;
-
     _fs_service_mk_common(context, request, pinode, name, len, &mk);
 }
 
@@ -444,10 +445,8 @@ void _fs_service_symlink(struct service_context_s *context, struct fuse_request_
     mk.op=SERVICE_OP_TYPE_SYMLINK;
     mk.mk.symlink.target=target;
     mk.mk.symlink.len=size;
-
     _fs_service_mk_common(context, request, pinode, name, len, &mk);
 }
-
 
 /* REMOVE/UNLINK */
 
@@ -743,11 +742,11 @@ void _fs_service_fgetattr(struct fuse_openfile_s *openfile, struct fuse_request_
 
 /* FSETATTR */
 
-void _fs_service_fsetattr(struct fuse_openfile_s *openfile, struct fuse_request_s *request, struct stat *st, int set)
+void _fs_service_fsetattr(struct fuse_openfile_s *openfile, struct fuse_request_s *request, struct system_stat_s *stat)
 {
     struct service_fs_s *fs=get_service_context_fs(openfile->context);
     logoutput("FSETATTR %s (thread %i)", openfile->context->name, (int) gettid());
-    (* fs->fsetattr)(openfile, request, st, set);
+    (* fs->fsetattr)(openfile, request, stat);
 }
 
 /* RELEASE */
@@ -1145,7 +1144,7 @@ void init_service_fs()
 void use_service_path_fs(struct inode_s *inode)
 {
 
-    if (S_ISDIR(inode->st.st_mode)) {
+    if (S_ISDIR(inode->stat.sst_mode)) {
 
 	inode->fs=&service_dir_fs;
 
@@ -1166,7 +1165,7 @@ unsigned char check_service_path_fs(struct inode_s *inode)
 {
     unsigned char isused=0;
 
-    if (S_ISDIR(inode->st.st_mode)) {
+    if (S_ISDIR(inode->stat.sst_mode)) {
 
 	isused=(inode->fs==&service_dir_fs) ? 1 : 0;
 

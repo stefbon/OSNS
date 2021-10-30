@@ -582,7 +582,7 @@ struct ssh_hostinfo_s {
     struct timespec					delta;
     void						(* correct_time_s2c)(struct ssh_session_s *session, struct timespec *time);
     void						(* correct_time_c2s)(struct ssh_session_s *session, struct timespec *time);
-    struct net_usermapping_s				mapping;
+    struct net_idmapping_s				mapping;
 };
 
 #define SSH_IDENTITY_FLAG_VALID				1

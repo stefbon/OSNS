@@ -20,8 +20,6 @@
 #ifndef LIB_SFTP_ATTR_STAT_H
 #define LIB_SFTP_ATTR_STAT_H
 
-#include "attr/buffer.h"
-
 #include "attr/init-attr-v03.h"
 #include "attr/init-attr-v04.h"
 #include "attr/init-attr-v05.h"

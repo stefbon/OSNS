@@ -903,7 +903,7 @@ int main(int argc, char *argv[])
     init_fusesocket_interface();
     init_sftp_client_interface();
     init_ssh_session_interface();
-    init_smb_share_interface();
+    // init_smb_share_interface();
 
     logoutput_info("MAIN: initializing hashtable fuse socket");
 

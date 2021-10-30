@@ -249,13 +249,3 @@ void read_name_name_response_v04(struct attr_context_s *actx, struct attr_buffer
 
     /* TODO: convert from UTF-8 to local */
 }
-
-void read_attr_name_response_v04(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)
-{
-    unsigned int valid=0;
-
-    /* attr */
-
-    valid=(* buffer->ops->rw.read.read_uint32)(buffer);
-    read_attributes_generic(actx, buffer, r, stat, valid);
-}

@@ -22,6 +22,7 @@
 
 #include "list.h"
 #include "datatypes.h"
+#include "system/stat.h"
 
 #define MODEMASK 07777
 
@@ -76,8 +77,8 @@ struct inode_s {
     uint64_t				nlookup;
     struct list_element_s		list;
     struct entry_s 			*alias;
-    struct stat				st;
-    struct timespec			stim;
+    struct system_stat_s		stat;
+    struct system_timespec_s		stime;
     struct fuse_fs_s			*fs;
     struct data_link_s			link;
     struct inodecache_s			*cache;
@@ -105,8 +106,8 @@ void free_inode(struct inode_s *inode);
 
 int check_create_inodecache(struct inode_s *inode, unsigned int size, char *buffer, unsigned int flag);
 
-void fill_inode_stat(struct inode_s *inode, struct stat *st);
-void get_inode_stat(struct inode_s *inode, struct stat *st);
+void fill_inode_stat(struct inode_s *inode, struct system_stat_s *stat);
+void get_inode_stat(struct inode_s *inode, struct system_stat_s *stat);
 
 #define INODE_INFORMATION_OWNER						(1 << 0)
 #define INODE_INFORMATION_GROUP						(1 << 1)
@@ -123,7 +124,6 @@ void get_inode_stat(struct inode_s *inode, struct stat *st);
 #define INODE_INFORMATION_FS_COUNT					(1 << 12)
 
 void log_inode_information(struct inode_s *inode, uint64_t what);
-
 void init_dentry_once();
 
 #endif

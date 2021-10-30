@@ -498,7 +498,7 @@ void _fs_sftp_symlink(struct service_context_s *context, struct fuse_request_s *
 
     out:
 
-    queue_inode_2forget(workspace, entry->inode->st.st_ino, 0, 0);
+    queue_inode_2forget(workspace, get_ino_system_stat(&entry->inode->stat), 0, 0);
     reply_VFS_error(f_request, error);
     unset_fuse_request_flags_cb(f_request);
 

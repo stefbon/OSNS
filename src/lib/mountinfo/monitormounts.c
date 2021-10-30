@@ -103,8 +103,10 @@ static int update_mountinfo(uint64_t generation, struct mountentry_s *(*next_me)
 	while (workspace) {
 
 	    if (strcmp(me->mountpoint, workspace->mountpoint.path)==0) {
+		struct system_dev_s dev=SYSTEM_DEV_INIT;
 
-		if (workspace->inodes.rootinode.st.st_dev==0) workspace->inodes.rootinode.st.st_dev=makedev(me->major, me->minor);
+		get_dev_system_stat(&workspace->inodes.rootinode.stat, &dev);
+		if (get_unique_system_dev(&dev)==0) set_dev_system_stat(&workspace->inodes.rootinode.stat, &me->dev);
 		break;
 
 	    }

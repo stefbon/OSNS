@@ -55,30 +55,22 @@
 
 void get_sftp_usermapping(struct sftp_client_s *sftp)
 {
-    struct net_usermapping_s *mapping=sftp->mapping;
+    struct net_idmapping_s *mapping=sftp->mapping;
     unsigned int flag=0;
 
     if (get_sftp_protocol_version(sftp)>3) {
 
-	flag |= NET_USERMAPPING_FLAG_MAPBYNAME;
+	flag |= NET_IDMAPPING_FLAG_MAPBYNAME;
 
     } else {
 
-	flag |= NET_USERMAPPING_FLAG_MAPBYID;
+	flag |= NET_IDMAPPING_FLAG_MAPBYID;
 
     }
 
     if ((* mapping->setup)(mapping, flag)>0) {
 
-	if (mapping->flags & NET_USERMAPPING_FLAG_NONSHARED) {
-
-	    logoutput("get_sftp_usermapping: setup to nonshared userdb");
-
-	} else if (mapping->flags & NET_USERMAPPING_FLAG_SHARED) {
-
-	    logoutput("get_sftp_usermapping: setup to shared userdb");
-
-	}
+	logoutput("get_sftp_usermapping: id's %s", (mapping->flags & NET_IDMAPPING_FLAG_SHARED) ? "shared" : "nonshared");
 
     } else {
 

@@ -79,6 +79,7 @@ static void _sftp_op_opendir(struct sftp_subsystem_s *sftp, struct sftp_payload_
     struct system_stat_s st;
     struct commonhandle_s *handle=NULL;
     struct fs_location_devino_s devino=FS_LOCATION_DEVINO_INIT;
+    struct system_dev_s dev;
 
     logoutput("_sftp_op_opendir: path %.*s", location->type.path.len, location->type.path.ptr);
 
@@ -110,7 +111,9 @@ static void _sftp_op_opendir(struct sftp_subsystem_s *sftp, struct sftp_payload_
     }
 
     logoutput_debug("_sftp_op_opendir: insert dirhandle");
-    get_devino_system_stat(&st, &devino);
+    devino.ino=get_ino_system_stat(&st);
+    get_dev_system_stat(&st, &dev);
+    devino.dev=get_unique_system_dev(&dev);
     handle=create_sftp_dirhandle(sftp, &devino);
 
     if (handle==NULL) {
@@ -259,7 +262,9 @@ static void _sftp_op_readdir(struct sftp_subsystem_s *sftp, struct commonhandle_
 		name.ptr=dentry->name;
 
 		(* actx->ops.write_name_name_response)(actx, &abuff, &name);
-		(* actx->ops.write_attr_name_response)(actx, &abuff, &r, &stat);
+
+		(* abuff.ops->rw.write.write_uint32)(&abuff, valid);
+		write_attributes_generic(actx, &abuff, &r, &stat, valid);
 
 		/* does it fit? */
 

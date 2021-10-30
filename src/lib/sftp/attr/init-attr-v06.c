@@ -48,7 +48,6 @@
 #include "sftp/protocol-v06.h"
 
 #include "sftp/attr-context.h"
-#include "rw-attr-generic.h"
 
 #include "write-attr-v03.h"
 #include "write-attr-v04.h"
@@ -72,6 +71,7 @@ void init_attr_context_v06(struct attr_context_s *actx)
     attrcb[SSH_FILEXFER_INDEX_TYPE].maxlength		= 1;
     attrcb[SSH_FILEXFER_INDEX_TYPE].name		= "type";
     attrcb[SSH_FILEXFER_INDEX_TYPE].stat_mask		= SYSTEM_STAT_TYPE;
+    attrcb[SSH_FILEXFER_INDEX_TYPE].fattr		= 0;
 
     /* size */
 
@@ -82,6 +82,7 @@ void init_attr_context_v06(struct attr_context_s *actx)
     attrcb[SSH_FILEXFER_INDEX_SIZE].maxlength		= 8; /* size uses 8 bytes (=64 bits) */
     attrcb[SSH_FILEXFER_INDEX_SIZE].name		= "size";
     attrcb[SSH_FILEXFER_INDEX_SIZE].stat_mask		= SYSTEM_STAT_SIZE;
+    attrcb[SSH_FILEXFER_INDEX_SIZE].fattr		= FATTR_SIZE;
 
     /* owner and group */
 
@@ -93,6 +94,7 @@ void init_attr_context_v06(struct attr_context_s *actx)
     attrcb[SSH_FILEXFER_INDEX_OWNERGROUP].maxlength	= ((* actx->maxlength_username)(actx) + 5 + (* actx->maxlength_groupname)(actx) + 5 + 2 * ((* actx->maxlength_domainname)(actx)));
     attrcb[SSH_FILEXFER_INDEX_OWNERGROUP].name		= "ownergroup";
     attrcb[SSH_FILEXFER_INDEX_OWNERGROUP].stat_mask	= SYSTEM_STAT_UID | SYSTEM_STAT_GID;
+    attrcb[SSH_FILEXFER_INDEX_OWNERGROUP].fattr		= FATTR_UID | FATTR_GID;
 
     /* permissions = posix mode */
 
@@ -103,6 +105,7 @@ void init_attr_context_v06(struct attr_context_s *actx)
     attrcb[SSH_FILEXFER_INDEX_PERMISSIONS].maxlength	= 4; /* perm uses 4 bytes (=32 bits) */
     attrcb[SSH_FILEXFER_INDEX_PERMISSIONS].name		= "permissions";
     attrcb[SSH_FILEXFER_INDEX_PERMISSIONS].stat_mask	= SYSTEM_STAT_MODE;
+    attrcb[SSH_FILEXFER_INDEX_PERMISSIONS].fattr	= FATTR_MODE;
 
     /* access time */
 
@@ -113,6 +116,7 @@ void init_attr_context_v06(struct attr_context_s *actx)
     attrcb[SSH_FILEXFER_INDEX_ACCESSTIME].maxlength	= 8; /* both access and modify time use 8 bytes (=64 bits) */
     attrcb[SSH_FILEXFER_INDEX_ACCESSTIME].name		= "accesstime";
     attrcb[SSH_FILEXFER_INDEX_ACCESSTIME].stat_mask	= SYSTEM_STAT_ATIME;
+    attrcb[SSH_FILEXFER_INDEX_ACCESSTIME].fattr		= FATTR_ATIME;
 
     /* create time */
 
@@ -123,6 +127,7 @@ void init_attr_context_v06(struct attr_context_s *actx)
     attrcb[SSH_FILEXFER_INDEX_CREATETIME].maxlength	= 8; /* both access and modify time use 8 bytes (=64 bits) */
     attrcb[SSH_FILEXFER_INDEX_CREATETIME].name		= "createtime";
     attrcb[SSH_FILEXFER_INDEX_CREATETIME].stat_mask	= SYSTEM_STAT_BTIME;
+    attrcb[SSH_FILEXFER_INDEX_CREATETIME].fattr		= 0;
 
     /* modify time */
 
@@ -133,6 +138,7 @@ void init_attr_context_v06(struct attr_context_s *actx)
     attrcb[SSH_FILEXFER_INDEX_MODIFYTIME].maxlength	= 8;
     attrcb[SSH_FILEXFER_INDEX_MODIFYTIME].name		= "modifytime";
     attrcb[SSH_FILEXFER_INDEX_MODIFYTIME].stat_mask	= SYSTEM_STAT_MTIME;
+    attrcb[SSH_FILEXFER_INDEX_MODIFYTIME].fattr		= FATTR_MTIME;
 
     /* ACL */
 
@@ -143,6 +149,7 @@ void init_attr_context_v06(struct attr_context_s *actx)
     attrcb[SSH_FILEXFER_INDEX_ACL].maxlength		= 0; /* unknown and not supported */
     attrcb[SSH_FILEXFER_INDEX_ACL].name			= "ACL";
     attrcb[SSH_FILEXFER_INDEX_ACL].stat_mask		= 0;
+    attrcb[SSH_FILEXFER_INDEX_ACL].fattr		= 0;
 
     /* attrib bits */
 
@@ -153,6 +160,7 @@ void init_attr_context_v06(struct attr_context_s *actx)
     attrcb[SSH_FILEXFER_INDEX_BITS].maxlength		= 8;
     attrcb[SSH_FILEXFER_INDEX_BITS].name		= "attrib bits";
     attrcb[SSH_FILEXFER_INDEX_BITS].stat_mask		= 0;
+    attrcb[SSH_FILEXFER_INDEX_BITS].fattr		= 0;
 
     /* allocation size */
 
@@ -163,6 +171,7 @@ void init_attr_context_v06(struct attr_context_s *actx)
     attrcb[SSH_FILEXFER_INDEX_ALLOCATION_SIZE].maxlength= 8;
     attrcb[SSH_FILEXFER_INDEX_ALLOCATION_SIZE].name	= "allocation size";
     attrcb[SSH_FILEXFER_INDEX_ALLOCATION_SIZE].stat_mask= 0;
+    attrcb[SSH_FILEXFER_INDEX_ALLOCATION_SIZE].fattr	= 0;
 
     /* text hint */
 
@@ -173,6 +182,7 @@ void init_attr_context_v06(struct attr_context_s *actx)
     attrcb[SSH_FILEXFER_INDEX_TEXT_HINT].maxlength	= 1;
     attrcb[SSH_FILEXFER_INDEX_TEXT_HINT].name		= "text hint";
     attrcb[SSH_FILEXFER_INDEX_TEXT_HINT].stat_mask	= 0;
+    attrcb[SSH_FILEXFER_INDEX_TEXT_HINT].fattr		= 0;
 
     /* mime type  */
 
@@ -183,6 +193,7 @@ void init_attr_context_v06(struct attr_context_s *actx)
     attrcb[SSH_FILEXFER_INDEX_MIME_TYPE].maxlength	= 0; /* variable width */
     attrcb[SSH_FILEXFER_INDEX_MIME_TYPE].name		= "mimetype";
     attrcb[SSH_FILEXFER_INDEX_MIME_TYPE].stat_mask	= 0;
+    attrcb[SSH_FILEXFER_INDEX_MIME_TYPE].fattr		= 0;
 
     /* link count */
 
@@ -193,6 +204,7 @@ void init_attr_context_v06(struct attr_context_s *actx)
     attrcb[SSH_FILEXFER_INDEX_LINK_COUNT].maxlength	= 4;
     attrcb[SSH_FILEXFER_INDEX_LINK_COUNT].name		= "link count";
     attrcb[SSH_FILEXFER_INDEX_LINK_COUNT].stat_mask	= 0;
+    attrcb[SSH_FILEXFER_INDEX_LINK_COUNT].fattr		= 0;
 
     /* untranslated name */
 
@@ -203,6 +215,7 @@ void init_attr_context_v06(struct attr_context_s *actx)
     attrcb[SSH_FILEXFER_INDEX_UNTRANSLATED_NAME].maxlength	= 0; /* variable width */
     attrcb[SSH_FILEXFER_INDEX_UNTRANSLATED_NAME].name		= "untranslated name";
     attrcb[SSH_FILEXFER_INDEX_UNTRANSLATED_NAME].stat_mask	= 0;
+    attrcb[SSH_FILEXFER_INDEX_UNTRANSLATED_NAME].fattr		= 0;
 
     /* change time */
 
@@ -213,6 +226,7 @@ void init_attr_context_v06(struct attr_context_s *actx)
     attrcb[SSH_FILEXFER_INDEX_CHANGETIME].maxlength	= 8;
     attrcb[SSH_FILEXFER_INDEX_CHANGETIME].name		= "changetime";
     attrcb[SSH_FILEXFER_INDEX_CHANGETIME].stat_mask	= SYSTEM_STAT_CTIME;
+    attrcb[SSH_FILEXFER_INDEX_CHANGETIME].fattr		= FATTR_CTIME;
 
     /* extensions */
 
@@ -223,6 +237,7 @@ void init_attr_context_v06(struct attr_context_s *actx)
     attrcb[SSH_FILEXFER_INDEX_EXTENDED].maxlength	= 0;
     attrcb[SSH_FILEXFER_INDEX_EXTENDED].name		= "extended";
     attrcb[SSH_FILEXFER_INDEX_EXTENDED].stat_mask	= 0;
+    attrcb[SSH_FILEXFER_INDEX_EXTENDED].fattr		= 0;
 
     actx->w_valid=(SSH_FILEXFER_ATTR_TYPE | SSH_FILEXFER_ATTR_SIZE | SSH_FILEXFER_ATTR_OWNERGROUP | SSH_FILEXFER_ATTR_PERMISSIONS | SSH_FILEXFER_ATTR_ACCESSTIME | SSH_FILEXFER_ATTR_MODIFYTIME | SSH_FILEXFER_ATTR_CHANGETIME | SSH_FILEXFER_ATTR_SUBSECOND_TIMES);
     actx->w_count=10;
@@ -240,6 +255,7 @@ void init_attr_context_v06(struct attr_context_s *actx)
     attrcb[SSH_FILEXFER_INDEX_NSEC_ATIME].maxlength	= 4; /* nsec time use 4 bytes (=32 bits) */
     attrcb[SSH_FILEXFER_INDEX_NSEC_ATIME].name		= "nsec accesstime";
     attrcb[SSH_FILEXFER_INDEX_NSEC_ATIME].stat_mask	= 0;
+    attrcb[SSH_FILEXFER_INDEX_NSEC_ATIME].fattr		= 0;
 
     /* nsec createtime */
 
@@ -250,6 +266,7 @@ void init_attr_context_v06(struct attr_context_s *actx)
     attrcb[SSH_FILEXFER_INDEX_NSEC_BTIME].maxlength	= 4; /* nsec time use 4 bytes (=32 bits) */
     attrcb[SSH_FILEXFER_INDEX_NSEC_BTIME].name		= "nsec createtime";
     attrcb[SSH_FILEXFER_INDEX_NSEC_BTIME].stat_mask	= 0;
+    attrcb[SSH_FILEXFER_INDEX_NSEC_BTIME].fattr		= 0;
 
     /* nsec modifytime */
 
@@ -260,6 +277,7 @@ void init_attr_context_v06(struct attr_context_s *actx)
     attrcb[SSH_FILEXFER_INDEX_NSEC_MTIME].maxlength	= 4;
     attrcb[SSH_FILEXFER_INDEX_NSEC_MTIME].name		= "nsec modifytime";
     attrcb[SSH_FILEXFER_INDEX_NSEC_MTIME].stat_mask	= 0;
+    attrcb[SSH_FILEXFER_INDEX_NSEC_MTIME].fattr		= 0;
 
     /* nsec changetime */
 
@@ -270,6 +288,7 @@ void init_attr_context_v06(struct attr_context_s *actx)
     attrcb[SSH_FILEXFER_INDEX_NSEC_CTIME].maxlength	= 4;
     attrcb[SSH_FILEXFER_INDEX_NSEC_CTIME].name		= "nsec changetime";
     attrcb[SSH_FILEXFER_INDEX_NSEC_CTIME].stat_mask	= 0;
+    attrcb[SSH_FILEXFER_INDEX_NSEC_CTIME].fattr		= 0;
 
 }
 

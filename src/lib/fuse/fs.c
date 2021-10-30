@@ -194,18 +194,101 @@ void fuse_fs_getattr(struct fuse_request_s *request)
 
 }
 
-static void fill_stat_attr(struct fuse_setattr_in *attr, struct stat *st)
+/*
+    translate the attributes to set from fuse to a buffer sftp understands
+
+    FUSE (20161123) :
+
+    FATTR_MODE
+    FATTR_UID
+    FATTR_GID
+    FATTR_SIZE
+    FATTR_ATIME
+    FATTR_MTIME
+    FATTR_FH
+    FATTR_ATIME_NOW
+    FATTR_MTIME_NOW
+    FATTR_LOCKOWNER
+    FATTR_CTIME
+
+    to
+
+    SYSTEM STAT used by OSNS
+
+    - size
+    - uid
+    - gid
+    - type
+    - permissions
+    - access time
+    - modify time
+    - change time
+
+    TODO:
+    find out about lock owner
+
+*/
+
+void set_stat_mask_from_fuse_setattr(struct fuse_setattr_in *attr, struct system_stat_s *stat)
 {
-    st->st_mode=attr->mode;
-    st->st_uid=attr->uid;
-    st->st_gid=attr->gid;
-    st->st_size=attr->size;
-    st->st_atim.tv_sec=attr->atime;
-    st->st_atim.tv_nsec=attr->atimensec;
-    st->st_mtim.tv_sec=attr->mtime;
-    st->st_mtim.tv_nsec=attr->mtimensec;
-    st->st_ctim.tv_sec=attr->ctime;
-    st->st_ctim.tv_nsec=attr->ctimensec;
+
+    if (attr->valid & FATTR_MODE) {
+
+	set_type_system_stat(stat, attr->mode);
+	set_mode_system_stat(stat, attr->mode);
+
+    }
+
+    if (attr->valid & FATTR_SIZE) set_size_system_stat(stat, attr->size);
+    if (attr->valid & FATTR_UID) set_uid_system_stat(stat, attr->uid);
+    if (attr->valid & FATTR_GID) set_gid_system_stat(stat, attr->gid);
+
+    if (attr->valid & FATTR_ATIME) {
+	struct system_timespec_s time=SYSTEM_TIME_INIT;
+
+	if (attr->valid & FATTR_ATIME_NOW) {
+
+	    get_current_time_system_time(&time);
+
+	} else {
+
+	    time.tv_sec=attr->atime;
+	    time.tv_nsec=attr->atimensec;
+
+	}
+
+	set_atime_system_stat(stat, &time);
+
+    }
+
+    if (attr->valid & FATTR_MTIME) {
+	struct system_timespec_s time=SYSTEM_TIME_INIT;
+
+	if (attr->valid & FATTR_MTIME_NOW) {
+
+	    get_current_time_system_time(&time);
+
+	} else {
+
+	    time.tv_sec=attr->mtime;
+	    time.tv_nsec=attr->mtimensec;
+
+	}
+
+	set_mtime_system_stat(stat, &time);
+
+    }
+
+    if (attr->valid & FATTR_CTIME) {
+	struct system_timespec_s time=SYSTEM_TIME_INIT;
+
+	time.tv_sec=attr->ctime;
+	time.tv_nsec=attr->ctimensec;
+
+	set_ctime_system_stat(stat, &time);
+
+    }
+
 }
 
 void fuse_fs_setattr(struct fuse_request_s *request)
@@ -218,19 +301,21 @@ void fuse_fs_setattr(struct fuse_request_s *request)
 
     if (ino==FUSE_ROOT_ID) {
 	struct inode_s *inode=&workspace->inodes.rootinode;
-	struct stat st;
+	struct system_stat_s stat;
+
+	memset(&stat, 0, sizeof(struct system_stat_s));
 
 	if (setattr_in->valid & FATTR_FH) {
 	    struct fuse_openfile_s *openfile=(struct fuse_openfile_s *) setattr_in->fh;
 
-	    setattr_in->valid -= FATTR_FH;
-	    fill_stat_attr(setattr_in, &st);
-	    (* inode->fs->type.nondir.fsetattr) (openfile, request, &st, setattr_in->valid);
+	    setattr_in->valid &= ~FATTR_FH;
+	    set_stat_mask_from_fuse_setattr(setattr_in, &stat);
+	    (* inode->fs->type.nondir.fsetattr) (openfile, request, &stat);
 
 	} else {
 
-	    fill_stat_attr(setattr_in, &st);
-	    (* inode->fs->setattr)(context, request, inode, &st, setattr_in->valid);
+	    set_stat_mask_from_fuse_setattr(setattr_in, &stat);
+	    (* inode->fs->setattr)(context, request, inode, &stat);
 
 	}
 
@@ -238,19 +323,19 @@ void fuse_fs_setattr(struct fuse_request_s *request)
 	struct inode_s *inode=lookup_workspace_inode(workspace, ino);
 
 	if (inode) {
-	    struct stat st;
+	    struct system_stat_s stat;
 
 	    if (setattr_in->valid & FATTR_FH) {
 		struct fuse_openfile_s *openfile=(struct fuse_openfile_s *) setattr_in->fh;
 
-		setattr_in->valid -= FATTR_FH;
-		fill_stat_attr(setattr_in, &st);
-		(* inode->fs->type.nondir.fsetattr) (openfile, request, &st, setattr_in->valid);
+		setattr_in->valid &= ~FATTR_FH;
+		set_stat_mask_from_fuse_setattr(setattr_in, &stat);
+		(* inode->fs->type.nondir.fsetattr) (openfile, request, &stat);
 
 	    } else {
 
-		fill_stat_attr(setattr_in, &st);
-		(* inode->fs->setattr)(context, request, inode, &st, setattr_in->valid);
+		set_stat_mask_from_fuse_setattr(setattr_in, &stat);
+		(* inode->fs->setattr)(context, request, inode, &stat);
 
 	    }
 
@@ -611,7 +696,7 @@ void fuse_fs_fsync(struct fuse_request_s *request)
     if (openfile) {
 	struct inode_s *inode=openfile->inode;
 
-	(* inode->fs->type.nondir.fsync) (openfile, request, fsync_in->fsync_flags & 1);
+	(* inode->fs->type.nondir.fsync) (openfile, request, (fsync_in->fsync_flags & FUSE_FSYNC_FDATASYNC));
 
     } else {
 
@@ -761,7 +846,7 @@ void _fuse_fs_opendir(struct service_context_s *context, struct inode_s *inode, 
 	init_list_header(&opendir->symlinks, SIMPLE_LIST_TYPE_EMPTY, NULL);
 	opendir->signal = get_fusesocket_signal(request->root);
 
-	logoutput("_fuse_fs_opendir: ino %li", inode->st.st_ino);
+	logoutput("_fuse_fs_opendir: ino %li", inode->stat.sst_ino);
 
 	(* inode->fs->type.dir.opendir)(opendir, request, open_in->flags);
 
@@ -1204,7 +1289,6 @@ void fuse_fs_getxattr(struct fuse_request_s *request)
 	char *name=(char *) ((char *) getxattr_in + sizeof(struct fuse_getxattr_in));
 
 	logoutput("fuse_fs_getxattr: root ino %li name %s", ino, name);
-
 	(* inode->fs->getxattr)(context, request, inode, name, getxattr_in->size);
 
     } else {
@@ -1216,7 +1300,6 @@ void fuse_fs_getxattr(struct fuse_request_s *request)
 	    struct entry_s *entry=inode->alias;
 
 	    logoutput("fuse_fs_getxattr: ino %li entry %.*s name %s", ino, entry->name.len, entry->name.name, name);
-
 	    (* inode->fs->getxattr)(context, request, inode, name, getxattr_in->size);
 
 	} else {
@@ -1377,11 +1460,11 @@ static void get_fusefs_flags(struct fuse_init_in *in, struct fuse_init_out *out,
 
 		if (defaulton) {
 
-		    logoutput("fuse_fs_init: kernel supports %s but fs does not: taking default = on", what);
+		    logoutput("get_fusefs_flags: kernel supports %s but fs does not: taking default = on", what);
 
 		} else {
 
-		    logoutput("fuse_fs_init: kernel supports %s but fs does not: taking default = off", what);
+		    logoutput("get_fusefs_flags: kernel supports %s but fs does not: taking default = off", what);
 
 		}
 

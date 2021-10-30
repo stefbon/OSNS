@@ -31,6 +31,5 @@ void write_attr_permissions_v03(struct attr_context_s *ctx, struct attr_buffer_s
 void write_attr_acmodtime_v03(struct attr_context_s *ctx, struct attr_buffer_s *b, struct rw_attr_result_s *r, struct system_stat_s *stat);
 
 void write_name_name_response_v03(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct ssh_string_s *name);
-void write_attr_name_response_v03(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat);
 
 #endif

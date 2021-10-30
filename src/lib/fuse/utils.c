@@ -153,7 +153,7 @@ struct directory_s *get_directory(struct inode_s *inode)
     struct simple_lock_s wlock;
     struct directory_s *directory=&dummy_directory;
 
-    logoutput_debug("get_directory: ino %li", inode->st.st_ino);
+    logoutput_debug("get_directory: ino %li", inode->stat.sst_ino);
 
     init_simple_writelock(&directory->locking, &wlock);
 
@@ -377,17 +377,17 @@ static int _cb_check(struct create_entry_s *ce)
 }
 static void _cb_cache_created(struct entry_s *entry, struct create_entry_s *ce)
 {
-    fill_inode_stat(entry->inode, &ce->cache.st);
-    entry->inode->st.st_mode=ce->cache.st.st_mode;
-    entry->inode->st.st_size=ce->cache.st.st_size;
-    entry->inode->st.st_nlink=ce->cache.st.st_nlink;
+    fill_inode_stat(entry->inode, &ce->cache.stat);
+    entry->inode->stat.sst_mode=ce->cache.stat.sst_mode;
+    entry->inode->stat.sst_size=ce->cache.stat.sst_size;
+    entry->inode->stat.sst_nlink=ce->cache.stat.sst_nlink;
 }
 static void _cb_cache_found(struct entry_s *entry, struct create_entry_s *ce)
 {
-    fill_inode_stat(entry->inode, &ce->cache.st);
-    entry->inode->st.st_mode=ce->cache.st.st_mode;
-    entry->inode->st.st_size=ce->cache.st.st_size;
-    entry->inode->st.st_nlink=ce->cache.st.st_nlink;
+    fill_inode_stat(entry->inode, &ce->cache.stat);
+    entry->inode->stat.sst_mode=ce->cache.stat.sst_mode;
+    entry->inode->stat.sst_size=ce->cache.stat.sst_size;
+    entry->inode->stat.sst_nlink=ce->cache.stat.sst_nlink;
 }
 
 static void _cb_created_default(struct entry_s *entry, struct create_entry_s *ce)
@@ -397,13 +397,13 @@ static void _cb_created_default(struct entry_s *entry, struct create_entry_s *ce
     struct directory_s *directory=get_directory(inode);
 
     inode->nlookup=0; /*20210401: changed from 1 to 0: setting of this should be done in the context */
-    inode->st.st_nlink=1;
-    get_current_time(&inode->stim); 							/* sync time */
+    inode->stat.sst_nlink=1;
+    get_current_time_system_time(&inode->stime); 							/* sync time */
 
     if (directory && directory->inode) {
 
-	memcpy(&directory->inode->st.st_ctim, &inode->stim, sizeof(struct timespec)); 		/* change the ctime of parent directory since it's attr are changed */
-	memcpy(&directory->inode->st.st_mtim, &inode->stim, sizeof(struct timespec)); 		/* change the mtime of parent directory since an entry is added */
+	set_ctime_system_stat(&directory->inode->stat, &inode->stime); 		/* change the ctime of parent directory since it's attr are changed */
+	set_mtime_system_stat(&directory->inode->stat, &inode->stime); 		/* change the mtime of parent directory since an entry is added */
 
     }
 
@@ -411,10 +411,10 @@ static void _cb_created_default(struct entry_s *entry, struct create_entry_s *ce
     (* ce->cb_cache_created)(entry, ce); 						/* create the inode stat and cache */
     (* ce->cb_context_created)(ce, entry); 						/* context depending cb, like a FUSE reply and adding inode to context, set fs etc */
 
-    if (S_ISDIR(inode->st.st_mode)) {
+    if (S_ISDIR(inode->stat.sst_mode)) {
 
-	inode->st.st_nlink++;
-	if (directory && directory->inode) directory->inode->st.st_nlink++;
+	inode->stat.sst_nlink++;
+	if (directory && directory->inode) directory->inode->stat.sst_nlink++;
 	// set_directory_dump(inode, get_dummy_directory());
 
     }
@@ -427,22 +427,17 @@ static void _cb_created_default(struct entry_s *entry, struct create_entry_s *ce
 static void _cb_found_default(struct entry_s *entry, struct create_entry_s *ce)
 {
     struct service_context_s *context=ce->context;
-    struct stat *st=&ce->cache.st;
+    struct system_stat_s *st=&ce->cache.stat;
     struct inode_s *inode=entry->inode;
 
     inode->nlookup++;
-    get_current_time(&inode->stim);
-
-    logoutput("_cb_found_default: A");
+    get_current_time_system_time(&inode->stime);
 
     /* when just created (for example by readdir) adjust the pathcache */
 
     if (inode->nlookup==1) (* ce->cb_adjust_pathmax)(ce); /* adjust the maximum path len */
-    logoutput("_cb_found_default: B");
     (* ce->cb_cache_found)(entry, ce); /* get/set the inode stat cache */
-    logoutput("_cb_found_default: C");
     (* ce->cb_context_found)(ce, entry); /* context depending cb, like a FUSE reply and adding inode to context, set fs etc */
-    logoutput("_cb_found_default: D");
 
 }
 
@@ -469,7 +464,7 @@ static struct directory_s *get_directory_03(struct create_entry_s *ce)
     return get_directory(inode);
 }
 
-void init_create_entry(struct create_entry_s *ce, struct name_s *n, struct entry_s *p, struct directory_s *d, struct fuse_opendir_s *fo, struct service_context_s *c, struct stat *st, void *ptr)
+void init_create_entry(struct create_entry_s *ce, struct name_s *n, struct entry_s *p, struct directory_s *d, struct fuse_opendir_s *fo, struct service_context_s *c, struct system_stat_s *stat, void *ptr)
 {
     memset(ce, 0, sizeof(struct create_entry_s));
 
@@ -493,13 +488,13 @@ void init_create_entry(struct create_entry_s *ce, struct name_s *n, struct entry
     }
 
     ce->context=c;
-    if (st) memcpy(&ce->cache.st, st, sizeof(struct stat));
+    if (stat) memcpy(&ce->cache.stat, stat, sizeof(struct system_stat_s));
     ce->flags=0;
     ce->ptr=ptr;
     ce->error=0;
 
     ce->cache_size=0;
-    ce->cache.buffer=NULL;
+    ce->cache.abuff=NULL;
 
     ce->cb_create_entry=_cb_create_entry;
     ce->cb_create_inode=_cb_create_inode;
@@ -551,7 +546,7 @@ static struct entry_s *_create_entry_extended_common(struct create_entry_s *ce)
 
 	    /* new */
 
-	    logoutput("_create_entry_extended_common: entry %.*s added ino %li", ce->name->len, ce->name->name, inode->st.st_ino);
+	    logoutput("_create_entry_extended_common: entry %.*s added ino %li", ce->name->len, ce->name->name, inode->stat.sst_ino);
 
 	    inode->alias=entry;
 	    entry->inode=inode;
@@ -641,7 +636,7 @@ static void _clear_directory(struct context_interface_s *i, struct directory_s *
 
 	    (* inode->fs->forget)(inode);
 
-	    if (S_ISDIR(inode->st.st_mode)) {
+	    if (S_ISDIR(inode->stat.sst_mode)) {
 		unsigned int error=0;
 		struct directory_s *subdir=remove_directory(inode, &error);
 
@@ -691,4 +686,36 @@ void clear_directory_recursive(struct context_interface_s *i, struct directory_s
 
     memset(path, 0, workspace->pathmax);
     _clear_directory(i, directory, path, 0, 0);
+}
+
+void get_current_time_system_time(struct system_timespec_s *time)
+{
+    struct timespec tmp;
+
+    get_current_time(&tmp);
+    time->tv_sec=tmp.tv_sec;
+    time->tv_nsec=tmp.tv_nsec;
+}
+
+void fill_fuse_attr_system_stat(struct fuse_attr *attr, struct system_stat_s *stat)
+{
+
+    attr->ino=stat->sst_ino;
+    attr->size=stat->sst_size;
+    attr->blksize=_DEFAULT_BLOCKSIZE;
+    attr->blocks=calc_amount_blocks(attr->size, attr->blksize);
+
+    attr->atime=(uint64_t) stat->sst_atime.tv_sec;
+    attr->atimensec=(uint64_t) stat->sst_atime.tv_nsec;
+    attr->mtime=(uint64_t) stat->sst_mtime.tv_sec;
+    attr->mtimensec=(uint64_t) stat->sst_mtime.tv_nsec;
+    attr->ctime=(uint64_t) stat->sst_ctime.tv_sec;
+    attr->ctimensec=(uint64_t) stat->sst_ctime.tv_nsec;
+
+    attr->mode=stat->sst_mode;
+    attr->nlink=stat->sst_nlink;
+    attr->uid=stat->sst_uid;
+    attr->gid=stat->sst_gid;
+    attr->rdev=0;
+
 }

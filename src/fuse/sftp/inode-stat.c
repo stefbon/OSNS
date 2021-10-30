@@ -51,261 +51,72 @@
 #include "sftp/attr-context.h"
 #include "interface/sftp-attr.h"
 
-typedef void (* copy_attr_cb)(struct context_interface_s *interface, struct stat *st, struct sftp_attr_s *attr);
+#include "inode-stat.h"
 
-static void copy_attr_size(struct context_interface_s *interface, struct stat *st, struct sftp_attr_s *attr)
+/* TODO: use in stead of setting this and copy it to the inode->stat, use the inode->stat from the first moment, and use some custom "set" functions
+    same as the mapping of users: use a parse_time_net2local and vice versa */
+
+void set_local_attributes(struct context_interface_s *interface, struct inode_s *inode, struct system_stat_s *stat)
 {
-    st->st_size=attr->size;
-}
 
-static void copy_attr_mode(struct context_interface_s *interface, struct stat *st, struct sftp_attr_s *attr)
-{
-    mode_t mode_keep=(st->st_mode & S_IFMT);
-    mode_t perm_keep=st->st_mode - mode_keep;
-    st->st_mode=perm_keep | attr->type;
-}
+    if (stat->mask & SYSTEM_STAT_TYPE) set_type_system_stat(&inode->stat, get_type_system_stat(stat));
+    if (stat->mask & SYSTEM_STAT_MODE) set_mode_system_stat(&inode->stat, get_mode_system_stat(stat));
+    if (stat->mask & SYSTEM_STAT_SIZE) set_size_system_stat(&inode->stat, get_size_system_stat(stat));
+    if (stat->mask & SYSTEM_STAT_UID) set_uid_system_stat(&inode->stat, get_uid_system_stat(stat));
+    if (stat->mask & SYSTEM_STAT_GID) set_gid_system_stat(&inode->stat, get_gid_system_stat(stat));
 
-static void copy_attr_permissions(struct context_interface_s *interface, struct stat *st, struct sftp_attr_s *attr)
-{
-    unsigned int keep=st->st_mode;
+    if (stat->mask & SYSTEM_STAT_ATIME) {
 
-    if (attr->received & SFTP_ATTR_TYPE) {
+	// correct_time_s2c_ctx(interface, &stat->atime);
 
-	st->st_mode=attr->permissions | attr->type;
+	copy_atime_system_stat(&inode->stat, stat);
 
-    } else {
-	mode_t mode_keep=(st->st_mode & S_IFMT);
+    }
 
-	st->st_mode=attr->permissions | mode_keep;
+    if (stat->mask & SYSTEM_STAT_MTIME) {
+
+
+	// correct_time_s2c_ctx(interface, &stat->mtime);
+	copy_mtime_system_stat(&inode->stat, stat);
+
+    }
+
+    if (stat->mask & SYSTEM_STAT_CTIME) {
+
+	// correct_time_s2c_ctx(interface, &stat->ctime);
+	copy_ctime_system_stat(&inode->stat, stat);
+
+    }
+
+    if (stat->mask & SYSTEM_STAT_BTIME) {
+
+	// correct_time_s2c_ctx(interface, &stat->atime);
+	copy_btime_system_stat(&inode->stat, stat);
 
     }
 
 }
 
-static void copy_attr_uid(struct context_interface_s *interface, struct stat *st, struct sftp_attr_s *attr)
+static void _get_supported_sftp_attr_cb(unsigned int stat_mask, unsigned int len, unsigned int valid, unsigned int fattr, void *ptr)
 {
-    st->st_uid=attr->user.uid;
-}
+    struct get_supported_sftp_attr_s *gssa=(struct get_supported_sftp_attr_s *) ptr;
 
-static void copy_attr_gid(struct context_interface_s *interface, struct stat *st, struct sftp_attr_s *attr)
-{
-    st->st_gid=attr->group.gid;
-}
+    if (stat_mask & gssa->stat_mask) {
 
-static void copy_attr_atim(struct context_interface_s *interface, struct stat *st, struct sftp_attr_s *attr)
-{
-    st->st_atim.tv_sec=attr->atime;
-    st->st_atim.tv_nsec=attr->atime_n;
-    correct_time_s2c_ctx(interface, &st->st_atim);
-}
-
-static void copy_attr_mtim(struct context_interface_s *interface, struct stat *st, struct sftp_attr_s *attr)
-{
-    st->st_mtim.tv_sec=attr->mtime;
-    st->st_mtim.tv_nsec=attr->mtime_n;
-    correct_time_s2c_ctx(interface, &st->st_mtim);
-}
-
-static void copy_attr_ctim(struct context_interface_s *interface, struct stat *st, struct sftp_attr_s *attr)
-{
-    st->st_ctim.tv_sec=attr->ctime;
-    st->st_ctim.tv_nsec=attr->ctime_n;
-    correct_time_s2c_ctx(interface, &st->st_ctim);
-}
-
-static void copy_attr_nothing(struct context_interface_s *interface, struct stat *st, struct sftp_attr_s *attr)
-{
-}
-
-static copy_attr_cb copy_attr_acb[][2] = {
-	{copy_attr_nothing, copy_attr_size},
-	{copy_attr_nothing, copy_attr_uid},
-	{copy_attr_nothing, copy_attr_gid},
-	{copy_attr_mode, copy_attr_permissions},
-	{copy_attr_nothing, copy_attr_atim},
-	{copy_attr_nothing, copy_attr_mtim},
-	{copy_attr_nothing, copy_attr_ctim}};
-
-/*
-    fill the inode values (size,mode,uid,gid,c/m/atime) with the attributes from sftp
-    this is not straightforward since it's possible that the server did not provide all values
-    param:
-    - ptr				pointer to sftp context
-    - inode				inode to fill
-    - fuse_sftp_attr_s			values received from server
-*/
-
-void fill_inode_attr_sftp(struct context_interface_s *interface, struct stat *st, struct sftp_attr_s *attr)
-{
-    unsigned char vb[7];
-
-    vb[0] = (attr->received && SFTP_ATTR_SIZE);
-    vb[1] = (attr->received && SFTP_ATTR_USER);
-    vb[2] = (attr->received && SFTP_ATTR_GROUP);
-    vb[3] = (attr->received && SFTP_ATTR_PERMISSIONS);
-    vb[4] = (attr->received && SFTP_ATTR_ATIME);
-    vb[5] = (attr->received && SFTP_ATTR_MTIME);
-    vb[6] = (attr->received && SFTP_ATTR_CTIME);
-
-    /* size */
-
-    (* copy_attr_acb[0][vb[0]])(interface, st, attr);
-
-    /* owner */
-
-    (* copy_attr_acb[1][vb[1]])(interface, st, attr);
-
-    /* group */
-
-    (* copy_attr_acb[2][vb[2]])(interface, st, attr);
-
-    /* permissions */
-
-    (* copy_attr_acb[3][vb[3]])(interface, st, attr);
-
-    /* atime */
-
-    (* copy_attr_acb[4][vb[4]])(interface, st, attr);
-
-    /* mtime */
-
-    (* copy_attr_acb[5][vb[5]])(interface, st, attr);
-
-    /* ctime */
-
-    (* copy_attr_acb[6][vb[6]])(interface, st, attr);
-
-}
-
-/*
-    translate the attributes to set from fuse to a buffer sftp understands
-
-    FUSE (20161123) :
-
-    FATTR_MODE
-    FATTR_UID
-    FATTR_GID
-    FATTR_SIZE
-    FATTR_ATIME
-    FATTR_MTIME
-    FATTR_FH
-    FATTR_ATIME_NOW
-    FATTR_MTIME_NOW
-    FATTR_LOCKOWNER
-    FATTR_CTIME
-
-    to
-
-    SFTP:
-
-    - size
-    - owner
-    - group
-    - permissions
-    - access time
-    - modify time
-    - change time
-
-    (there are more attributes in sftp, but those are not relevant)
-
-    TODO:
-    find out about lock owner
-
-*/
-
-unsigned int get_attr_buffer_size(struct context_interface_s *interface, struct stat *st, unsigned int fattr, struct rw_attr_result_s *r, struct sftp_attr_s *attr, unsigned char raw)
-{
-    unsigned int set=0;
-
-    memset(attr, 0, sizeof(struct sftp_attr_s));
-
-    set=(raw==0) ? (fattr & interface->backend.sftp.fattr_supported) : fattr;
-
-    if (set & FATTR_SIZE) {
-
-	logoutput("get_attr_buffer_size: set size: %lu", st->st_size);
-
-	attr->asked |= SFTP_ATTR_SIZE;
-	attr->size=st->st_size;
+	gssa->len += len;
+	gssa->valid |= valid;
 
     }
 
-    if (set & FATTR_UID) {
+}
 
-	logoutput("get_attr_buffer_size: set owner: %i", (unsigned int) st->st_uid);
+unsigned int get_attr_buffer_size(struct context_interface_s *interface, struct rw_attr_result_s *r, struct system_stat_s *stat, struct get_supported_sftp_attr_s *gssa)
+{
 
-	attr->asked |= SFTP_ATTR_USER;
-	attr->user.uid=st->st_uid;
-
-    }
-
-    if (set & FATTR_GID) {
-
-	logoutput("get_attr_buffer_size: set group: %i", (unsigned int) st->st_gid);
-
-	attr->asked |= SFTP_ATTR_GROUP;
-	attr->group.gid=st->st_gid;
-
-    }
-
-    if (set & FATTR_MODE) {
-
-	attr->asked |= SFTP_ATTR_PERMISSIONS;
-	attr->permissions=(st->st_mode & (S_IRWXU | S_IRWXG | S_IRWXO));
-
-	logoutput("get_attr_buffer_size: set permissions: %i", (unsigned int) attr->permissions);
-
-    }
-
-    if (set & FATTR_ATIME) {
-	struct timespec time;
-
-	logoutput("get_attr_buffer_size: set atime");
-
-	if (set & FATTR_ATIME_NOW) get_current_time(&st->st_atim);
-
-	time.tv_sec=st->st_atim.tv_sec;
-	time.tv_nsec=st->st_atim.tv_nsec;
-
-	correct_time_c2s_ctx(interface, &time);
-
-	attr->atime=time.tv_sec;
-	attr->atime_n=time.tv_nsec;
-	attr->asked |= SFTP_ATTR_ATIME;
-
-    }
-
-    if (set & FATTR_MTIME) {
-	struct timespec time;
-
-	if (set & FATTR_MTIME_NOW) get_current_time(&st->st_mtim);
-
-	time.tv_sec=st->st_mtim.tv_sec;
-	time.tv_nsec=st->st_mtim.tv_nsec;
-
-	correct_time_c2s_ctx(interface, &time);
-
-	attr->mtime=time.tv_sec;
-	attr->mtime_n=time.tv_nsec;
-	attr->asked |= SFTP_ATTR_MTIME;
-
-    }
-
-    if (set & FATTR_CTIME) {
-	struct timespec time;
-
-	time.tv_sec=st->st_ctim.tv_sec;
-	time.tv_nsec=st->st_ctim.tv_nsec;
-
-	correct_time_c2s_ctx(interface, &time);
-
-	attr->ctime=time.tv_sec;
-	attr->ctime_n=time.tv_nsec;
-	attr->asked |= SFTP_ATTR_CTIME;
-
-    }
-
-    attr->type=(st->st_mode & S_IFMT);
-    return write_attributes_len_ctx(interface, r, attr);
+    gssa->stat_mask=stat->mask;
+    gssa->len=0;
+    gssa->valid=0;
+    parse_attributes_generic_ctx(interface, r, NULL, 'w', _get_supported_sftp_attr_cb, (void *) gssa);
+    return gssa->len;
 
 }

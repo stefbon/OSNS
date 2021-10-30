@@ -48,6 +48,7 @@
 #include "sftp/common-protocol.h"
 #include "sftp/common.h"
 #include "sftp/attr-context.h"
+#include "sftp/rw-attr-generic.h"
 #include "request-hash.h"
 
 #include "time.h"
@@ -96,7 +97,7 @@ struct sftp_client_s *create_sftp_client(struct generic_error_s *error)
     return sftp;
 }
 
-int init_sftp_client(struct sftp_client_s *sftp, uid_t uid, struct net_usermapping_s *mapping)
+int init_sftp_client(struct sftp_client_s *sftp, uid_t uid, struct net_idmapping_s *mapping)
 {
 
     sftp->context.unique=0;
@@ -135,8 +136,7 @@ int init_sftp_client(struct sftp_client_s *sftp, uid_t uid, struct net_usermappi
     /* here link the attr_context->get_remote_uid/get_local_uid... functions 
 	to the function in usermapping */
 
-    init_readattr_generic();
-    init_writeattr_generic();
+    init_hashattr_generic();
 
     return 0;
 }
@@ -145,11 +145,8 @@ void clear_sftp_client(struct sftp_client_s *sftp)
 {
 
     clear_sftp_extensions(sftp);
-
     pthread_mutex_destroy(&sftp->sendhash.mutex);
-
-    clear_readattr_generic(0);
-    clear_writeattr_generic(0);
+    clear_hashattr_generic(0);
 }
 
 void free_sftp_client(struct sftp_client_s **p_sftp)
@@ -261,12 +258,6 @@ int start_init_sftp_client(struct sftp_client_s *sftp)
     error:
     return -1;
 
-}
-
-unsigned int get_sftp_features(struct sftp_client_s *sftp)
-{
-    struct sftp_supported_s *supported=&sftp->supported;
-    return (supported->attr_supported);
 }
 
 unsigned int get_sftp_buffer_size()

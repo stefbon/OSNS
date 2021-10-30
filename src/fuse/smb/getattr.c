@@ -80,7 +80,7 @@ void _fs_smb_getattr(struct service_context_s *context, struct fuse_request_s *f
     data->id=0;
     data->size=size;
 
-    logoutput("_fs_smb_getattr: %li %s", inode->st.st_ino, pathinfo->path);
+    logoutput("_fs_smb_getattr: %li %s", get_ino_system_stat(&inode->stat), pathinfo->path);
 
     init_smb_request(&smb_r, interface, f_request);
 
@@ -95,7 +95,7 @@ void _fs_smb_getattr(struct service_context_s *context, struct fuse_request_s *f
 
 	    /* fill inode stat */
 
-	    fill_inode_attr_smb(interface, &inode->st, data->buffer);
+	    fill_inode_attr_smb(interface, &inode->stat, data->buffer);
 	    _fs_common_getattr(get_root_context(context), f_request, inode);
 	    get_current_time(&inode->stim);
 	    unset_fuse_request_flags_cb(f_request);

@@ -93,7 +93,7 @@ struct fuse_opendir_s {
     void 							(* fsyncdir) (struct fuse_opendir_s *opendir, struct fuse_request_s *request, unsigned char datasync);
     signed char							(* hidefile)(struct fuse_opendir_s *opendir, struct entry_s *entry);
     struct entry_s 						*(* get_fuse_direntry)(struct fuse_opendir_s *opendir, struct list_header_s *h, struct fuse_request_s *request);
-    int 							(* add_direntry_buffer)(struct context_interface_s *i, struct direntry_buffer_s *buffer, struct name_s *xname, struct stat *st);
+    int 							(* add_direntry_buffer)(struct context_interface_s *i, struct direntry_buffer_s *buffer, struct name_s *xname, struct system_stat_s *stat);
     void							(* clear)(struct fuse_opendir_s *opendir);
     struct list_header_s					entries;
     struct list_header_s					symlinks;
@@ -110,7 +110,7 @@ struct fuse_opendir_s {
     union {
 	uint64_t						nr;
 	void							*ptr;
-	struct fuse_buffer_s					buffer;
+	struct attr_buffer_s					abuff;
     } data;
 };
 
@@ -137,14 +137,14 @@ struct fuse_fs_s {
 
     unsigned int flags;
 
-    int (*lock_datalink)(struct inode_s *inode);
-    int (*unlock_datalink)(struct inode_s *inode);
+    int (* lock_datalink)(struct inode_s *inode);
+    int (* unlock_datalink)(struct inode_s *inode);
     void (* get_data_link)(struct inode_s *inode, struct data_link_s **link);
 
-    void (*forget) (struct inode_s *inode);
+    void (* forget) (struct inode_s *inode);
 
-    void (*getattr) (struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode);
-    void (*setattr) (struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, struct stat *st, unsigned int fuse_set);
+    void (* getattr) (struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode);
+    void (* setattr) (struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, struct system_stat_s *stat);
 
     union {
 	struct nondir_fs_s {
@@ -160,7 +160,7 @@ struct fuse_fs_s {
 	    void (*lseek) (struct fuse_openfile_s *openfile, struct fuse_request_s *request, off_t off, int whence);
 
 	    void (*fgetattr) (struct fuse_openfile_s *openfile, struct fuse_request_s *request);
-	    void (*fsetattr) (struct fuse_openfile_s *openfile, struct fuse_request_s *request, struct stat *st, int fuse_set);
+	    void (*fsetattr) (struct fuse_openfile_s *openfile, struct fuse_request_s *request, struct system_stat_s *stat);
 
 	    void (*getlock) (struct fuse_openfile_s *openfile, struct fuse_request_s *request, struct flock *flock);
 	    void (*setlock) (struct fuse_openfile_s *openfile, struct fuse_request_s *request, struct flock *flock);

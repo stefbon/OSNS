@@ -76,7 +76,7 @@ int get_path_root(struct directory_s *directory, struct fuse_path_s *fpath)
     /* go one entry higher */
 
     entry=get_parent_entry(entry);
-    if (entry->inode->st.st_ino>FUSE_ROOT_ID) goto appendname;
+    if (get_ino_system_stat(&entry->inode->stat) > FUSE_ROOT_ID) goto appendname;
 
     return pathlen;
 
@@ -108,7 +108,7 @@ int get_service_path_default(struct directory_s *directory, struct fuse_path_s *
 
     /* walk back to the root of the context or the root of the mountpoint: whatever comes first */
 
-    while (inode->st.st_ino > FUSE_ROOT_ID && link->type!=DATA_LINK_TYPE_CONTEXT) {
+    while (get_ino_system_stat(&inode->stat) > FUSE_ROOT_ID && link->type!=DATA_LINK_TYPE_CONTEXT) {
 
 	xname=&entry->name;
 
@@ -503,7 +503,7 @@ void set_directory_getpath(struct directory_s *d)
 	struct entry_s *entry=inode->alias;
 	struct entry_s *parent=NULL;
 
-	if (inode->st.st_ino==FUSE_ROOT_ID) {
+	if (get_ino_system_stat(&inode->stat)==FUSE_ROOT_ID) {
 
 	    d->getpath=&getpath_0;
 	    return;
@@ -513,7 +513,7 @@ void set_directory_getpath(struct directory_s *d)
 	parent=get_parent_entry(entry);
 	inode=parent->inode;
 
-	if (inode->st.st_ino==FUSE_ROOT_ID) {
+	if (get_ino_system_stat(&inode->stat)==FUSE_ROOT_ID) {
 
 	    d->getpath=&getpath_1;
 	    return;

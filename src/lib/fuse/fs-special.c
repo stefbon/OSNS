@@ -92,25 +92,18 @@ static void _fs_special_getattr(struct service_context_s *context, struct fuse_r
     _fs_common_getattr(context, request, inode);
 }
 
-static void _fs_special_setattr(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, struct stat *st, unsigned int set)
+static void _fs_special_setattr(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, struct system_stat_s *stat)
 {
-    if (set & (FATTR_SIZE | FATTR_UID | FATTR_GID | FATTR_MODE | FATTR_MTIME | FATTR_CTIME)) {
 
-	reply_VFS_error(request, EPERM);
+    if (stat->mask & SYSTEM_STAT_ATIME) {
+
+	_fs_common_getattr(context, request, inode);
 	return;
 
     }
 
-    if (set & FATTR_ATIME) {
+    reply_VFS_error(request, EPERM);
 
-	if (set & FATTR_ATIME_NOW) get_current_time(&st->st_atim);
-
-	inode->st.st_atim.tv_sec=st->st_atim.tv_sec;
-	inode->st.st_atim.tv_nsec=st->st_atim.tv_nsec;
-
-    }
-
-    _fs_common_getattr(context, request, inode);
 
 }
 
@@ -191,9 +184,9 @@ void _fs_special_release(struct fuse_openfile_s *openfile, struct fuse_request_s
     reply_VFS_error(request, 0);
 }
 
-void _fs_special_fsetattr(struct fuse_openfile_s *openfile, struct fuse_request_s *request, struct stat *st, int fuse_set)
+void _fs_special_fsetattr(struct fuse_openfile_s *openfile, struct fuse_request_s *request, struct system_stat_s *stat)
 {
-    _fs_special_setattr(openfile->context, request, openfile->inode, st, fuse_set);
+    _fs_special_setattr(openfile->context, request, openfile->inode, stat);
 }
 
 void _fs_special_fgetattr(struct fuse_openfile_s *openfile, struct fuse_request_s *request)
@@ -255,16 +248,30 @@ void free_special_fs()
 
 void set_fs_special(struct inode_s *inode)
 {
-    if (! S_ISDIR(inode->st.st_mode)) inode->fs=&fs;
+    if (! S_ISDIR(inode->stat.sst_mode)) inode->fs=&fs;
 }
 
 static void create_desktopentry_file(char *path, struct entry_s *parent, struct workspace_mount_s *workspace)
 {
-    struct stat st;
+    struct system_stat_s stat;
+    struct fs_location_path_s location=FS_LOCATION_PATH_INIT;
     struct directory_s *directory=get_directory(parent->inode);
     struct simple_lock_s wlock;
 
-    if (lstat(path, &st)==-1 || ! S_ISREG(st.st_mode)) return;
+    location.ptr=path;
+    location.len=strlen(path);
+
+    if (system_getstat(&location, SYSTEM_STAT_MODE | SYSTEM_STAT_TYPE, &stat)<0) {
+
+	logoutput("create_desktopentry_file: %s does not exist");
+	return;
+
+    } else if (! S_ISREG(stat.sst_mode)) {
+
+	logoutput("create_desktopentry_file: %s is not a file");
+	return;
+
+    }
 
     if (wlock_directory(directory, &wlock)==0) {
 	struct entry_s *entry=NULL;
@@ -284,7 +291,7 @@ static void create_desktopentry_file(char *path, struct entry_s *parent, struct 
 	    logoutput("create_desktopentry_file: %s in %s (file=%s)", xname.name, parent->name.name, path);
 
 	    error=0;
-	    entry=_fs_common_create_entry_unlocked(workspace, directory, &xname, &st, 0, 0, &error);
+	    entry=_fs_common_create_entry_unlocked(workspace, directory, &xname, &stat, 0, 0, &error);
 
 	    if (entry) {
 		unsigned int size=sizeof(struct special_path_s) + strlen(path) + 1;  /* inlcuding terminating zero */
@@ -296,7 +303,7 @@ static void create_desktopentry_file(char *path, struct entry_s *parent, struct 
 		    memset(s, 0, size);
 
 		    inode->fs=&fs;
-		    s->ino=inode->st.st_ino;
+		    s->ino=inode->stat.sst_ino;
 		    strcpy(s->path, path);
 		    s->size=strlen(path);
 		    inode->link.link.ptr=(void *)s;
@@ -333,6 +340,6 @@ void create_netshare_desktopentry_file(struct entry_s *parent, struct workspace_
 
 int check_entry_special(struct inode_s *inode)
 {
-    if (! S_ISDIR(inode->st.st_mode)) return ((inode->fs==&fs) ? 1 : 0);
+    if (! S_ISDIR(inode->stat.sst_mode)) return ((inode->fs==&fs) ? 1 : 0);
     return 0;
 }

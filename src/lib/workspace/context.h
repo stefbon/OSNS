@@ -155,15 +155,15 @@ struct service_fs_s {
     void (*lookup_new) (struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, struct name_s *xname, struct pathinfo_s *pathinfo);
 
     void (*getattr) (struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, struct pathinfo_s *pathinfo);
-    void (*setattr) (struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, struct pathinfo_s *pathinfo, struct stat *st, unsigned int set);
+    void (*setattr) (struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, struct pathinfo_s *pathinfo, struct system_stat_s *stat);
 
     void (*readlink) (struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, struct pathinfo_s *pathinfo);
 
     int (* access) (struct service_context_s *context, struct fuse_request_s *request, unsigned char what);
     unsigned int (* get_name)(struct service_context_s *context, char *buffer, unsigned int len);
 
-    void (*mkdir) (struct service_context_s *context, struct fuse_request_s *request, struct entry_s *entry, struct pathinfo_s *pathinfo, struct stat *st);
-    void (*mknod) (struct service_context_s *context, struct fuse_request_s *request, struct entry_s *entry, struct pathinfo_s *pathinfo, struct stat *st);
+    void (*mkdir) (struct service_context_s *context, struct fuse_request_s *request, struct entry_s *entry, struct pathinfo_s *pathinfo, struct system_stat_s *stat);
+    void (*mknod) (struct service_context_s *context, struct fuse_request_s *request, struct entry_s *entry, struct pathinfo_s *pathinfo, struct system_stat_s *stat);
     void (*symlink) (struct service_context_s *context, struct fuse_request_s *request, struct entry_s *entry, struct pathinfo_s *pathinfo, const char *link);
     int  (*symlink_validate)(struct service_context_s *context, struct pathinfo_s *pathinfo, char *target, char **remote_target);
 
@@ -178,10 +178,10 @@ struct service_fs_s {
     void (*flush) (struct fuse_openfile_s *openfile, struct fuse_request_s *request, uint64_t lock_owner);
     void (*fsync) (struct fuse_openfile_s *openfile, struct fuse_request_s *request, unsigned char datasync);
     void (*release) (struct fuse_openfile_s *openfile, struct fuse_request_s *request, unsigned int flags, uint64_t lock_owner);
-    void (*create) (struct fuse_openfile_s *openfile, struct fuse_request_s *request, struct pathinfo_s *pathinfo, struct stat *st, unsigned int flags);
+    void (*create) (struct fuse_openfile_s *openfile, struct fuse_request_s *request, struct pathinfo_s *pathinfo, struct system_stat_s *stat, unsigned int flags);
 
     void (*fgetattr) (struct fuse_openfile_s *openfile, struct fuse_request_s *request);
-    void (*fsetattr) (struct fuse_openfile_s *openfile, struct fuse_request_s *request, struct stat *st, unsigned int set);
+    void (*fsetattr) (struct fuse_openfile_s *openfile, struct fuse_request_s *request, struct system_stat_s *stat);
 
     void (*getlock) (struct fuse_openfile_s *openfile, struct fuse_request_s *request, struct flock *flock);
     void (*setlock) (struct fuse_openfile_s *openfile, struct fuse_request_s *request, struct flock *flock);

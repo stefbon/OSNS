@@ -127,7 +127,8 @@ static void init_workspace_inodes(struct workspace_mount_s *workspace)
     struct workspace_inodes_s *inodes=&workspace->inodes;
     struct inode_s *inode=&inodes->rootinode;
     struct entry_s *entry=&inodes->rootentry;
-    struct stat *st=&inode->st;
+    struct system_stat_s *stat=&inode->stat;
+    struct system_timespec_s tmp=SYSTEM_TIME_INIT;
 
     init_inode(inode);
     inode->nlookup=1;
@@ -142,17 +143,20 @@ static void init_workspace_inodes(struct workspace_mount_s *workspace)
 
     /* root inode stat */
 
-    get_current_time(&st->st_mtim);
-    st->st_ctim.tv_sec=st->st_mtim.tv_sec;
-    st->st_ctim.tv_nsec=st->st_mtim.tv_nsec;
-    st->st_ino=FUSE_ROOT_ID;
-    st->st_mode=S_IFDIR | S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH;
-    st->st_nlink=2;
-    st->st_uid=0;
-    st->st_gid=0;
-    st->st_size=_INODE_DIRECTORY_SIZE;
-    st->st_blksize=1024;
-    st->st_blocks=(unsigned int) (st->st_size / st->st_blksize) + ((st->st_size % st->st_blksize)==0) ? 1 : 0;
+    get_current_time_system_time(&tmp);
+    set_ctime_system_stat(stat, &tmp);
+    set_atime_system_stat(stat, &tmp);
+    set_btime_system_stat(stat, &tmp);
+    set_mtime_system_stat(stat, &tmp);
+    set_ino_system_stat(stat, FUSE_ROOT_ID);
+    set_type_system_stat(stat, S_IFDIR);
+    set_mode_system_stat(stat, (S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH));
+    set_nlink_system_stat(stat, 2);
+    set_uid_system_stat(stat, 0);
+    set_gid_system_stat(stat, 0);
+    set_size_system_stat(stat, _INODE_DIRECTORY_SIZE);
+    set_blksize_system_stat(stat, 4096);
+    calc_blocks_system_stat(stat);
 
     /* inodes hashtable */
 
@@ -263,7 +267,7 @@ static void notify_VFS_inode_delete(struct workspace_mount_s *workspace, struct 
 	struct entry_s *entry=inode->alias;
 	struct name_s name={NULL, 0, 0};
 	ino_t pino=0;
-	ino_t ino=inode->st.st_ino;
+	ino_t ino=get_ino_system_stat(&inode->stat);
 
 	if (entry) {
 	    struct entry_s *parent=get_parent_entry(entry);
@@ -271,7 +275,7 @@ static void notify_VFS_inode_delete(struct workspace_mount_s *workspace, struct 
 	    name.name=entry->name.name;
 	    name.len=entry->name.len;
 
-	    if (parent) pino=parent->inode->st.st_ino;
+	    if (parent) pino=get_ino_system_stat(&parent->inode->stat);
 
 	}
 
@@ -297,7 +301,7 @@ struct inode_s *lookup_workspace_inode(struct workspace_mount_s *workspace, uint
 
 	inode=(struct inode_s *)((char *) list - offsetof(struct inode_s, list));
 
-	if (inode->st.st_ino==ino) {
+	if (get_ino_system_stat(&inode->stat)==ino) {
 
 	    /* following code needs a upgrade_read_to_writelock function and that's not ready yet 
 		and a swap function */
@@ -333,7 +337,7 @@ static void get_new_ino(struct workspace_inodes_s *inodes, struct inode_s *inode
     pthread_mutex_lock(&inodes->mutex);
     inodes->inoctr++;
     inodes->nrinodes++;
-    inode->st.st_ino=inodes->inoctr;
+    set_ino_system_stat(&inode->stat, inodes->inoctr);
     pthread_mutex_unlock(&inodes->mutex);
 
 }
@@ -342,14 +346,14 @@ static void remove_old_ino(struct workspace_inodes_s *inodes, struct inode_s *in
 {
     pthread_mutex_lock(&inodes->mutex);
     inodes->nrinodes--;
-    inode->st.st_ino=0;
+    set_ino_system_stat(&inode->stat, 0);
     pthread_mutex_unlock(&inodes->mutex);
 }
 
 static void _write_inode_workspace_hashtable(struct workspace_mount_s *workspace, struct inode_s *inode, void (*cb)(struct list_header_s *h, struct list_element_s *l))
 {
     struct workspace_inodes_s *inodes=&workspace->inodes;
-    unsigned int hash=inode->st.st_ino % WORKSPACE_INODE_HASHTABLE_SIZE;
+    unsigned int hash=get_ino_system_stat(&inode->stat) % WORKSPACE_INODE_HASHTABLE_SIZE;
     struct list_header_s *header=&inodes->hashtable[hash];
 
     write_lock_list_header(header, &inodes->mutex, &inodes->cond);
@@ -385,10 +389,12 @@ void add_inode_context(struct service_context_s *context, struct inode_s *inode)
     struct entry_s *parent=get_parent_entry(inode->alias);
     struct inode_s *pinode=parent->inode;
     struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
+    struct system_dev_s dev;
 
     add_inode_workspace_hashtable(workspace, inode);
     (* pinode->fs->type.dir.use_fs)(context, inode);
-    inode->st.st_dev=workspace->inodes.rootinode.st.st_dev;
+    get_dev_system_stat(&workspace->inodes.rootinode.stat, &dev);
+    set_dev_system_stat(&inode->stat, &dev);
 
 }
 

@@ -20,9 +20,6 @@
 #ifndef LIB_SFTP_ATTR_READ_H
 #define LIB_SFTP_ATTR_READ_H
 
-#include "attr/buffer.h"
-
-#include "attr/rw-attr-generic.h"
 #include "attr/read-attr-v03.h"
 #include "attr/read-attr-v04.h"
 #include "attr/read-attr-v05.h"
