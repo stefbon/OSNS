@@ -125,7 +125,7 @@ struct commonhandle_s *find_commonhandle(dev_t dev, uint64_t ino, unsigned int p
 
 	logoutput_debug("find_commonhandle: handle dev %i ino %i pid %i fd %i flags %i", handle->location.type.devino.dev, handle->location.type.devino.ino, get_pid_commonhandle(handle), get_fd_commonhandle(handle), handle->flags);
 
-	if ((handle->flags & FS_LOCATION_FLAG_DEVINO)) {
+	if ((handle->location.flags & FS_LOCATION_FLAG_DEVINO)) {
 
 	    if (handle->location.type.devino.ino==ino && handle->location.type.devino.dev==dev &&
 		get_pid_commonhandle(handle)==pid &&
