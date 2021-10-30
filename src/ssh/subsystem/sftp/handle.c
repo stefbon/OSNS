@@ -426,6 +426,7 @@ struct commonhandle_s *create_sftp_dirhandle(struct sftp_subsystem_s *sftp, stru
     if (handle) {
 	struct sftp_handle_s *sftp_handle=(struct sftp_handle_s *) handle->buffer;
 
+	handle->flags |= COMMONHANDLE_FLAG_SFTP;
 	sftp_handle->sftp=sftp;
 
 	/* take a default for the sftp attributes the server sends to the client per dentry next to the name and the type (which are always send)
