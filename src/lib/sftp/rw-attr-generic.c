@@ -258,6 +258,8 @@ static void _prepare_write_cb(struct attr_context_s *actx, struct attr_buffer_s 
     r->done |= actx->attrcb[ctr].code;
     r->todo &= ~actx->attrcb[ctr].code;
 
+    logoutput_debug("_prepare_write_cb: ctr %i stat_mask %i done %i", ctr, actx->attrcb[ctr].stat_mask, r->done);
+
 }
 
 unsigned int get_size_buffer_write_attributes(struct attr_context_s *actx, struct rw_attr_result_s *r, unsigned int valid)
@@ -272,6 +274,8 @@ unsigned int get_size_buffer_write_attributes(struct attr_context_s *actx, struc
     r->flags |= RW_ATTR_RESULT_FLAG_WRITE;
     r->parse_attribute=_prepare_write_cb;
     r->ptr=(void *) &tmp;
+
+    logoutput_debug("get_size_buffer_write_attributes: valid %i", valid);
 
     parse_attributes_generic(actx, NULL, r, NULL, valid);
 
