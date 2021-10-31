@@ -124,4 +124,6 @@ void write_name_name_response_v04(struct attr_context_s *actx, struct attr_buffe
     /* TODO: convert from local to UTF-8 (if required) */
 
     (* buffer->ops->rw.write.write_string)(buffer, name);
+
+    logoutput_debug("write_name_name_response_v04: name %.*s", name->len, name->ptr);
 }

@@ -60,6 +60,7 @@ void write_attr_type_v06(struct attr_context_s *actx, struct attr_buffer_s *buff
 
     type=((type<13) ? type_reverse[type] : SSH_FILEXFER_TYPE_UNKNOWN);
     (* buffer->ops->rw.write.write_uchar)(buffer, type);
+    logoutput_debug("write_attr_type_v06: type %i", type);
 }
 
 void write_attr_changetime_v06(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)

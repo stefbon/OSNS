@@ -152,6 +152,8 @@ void set_sftp_attr_context(struct attr_context_s *actx)
     unsigned char version=(* actx->get_sftp_protocol_version)(actx);
     struct attr_ops_s *ops=&actx->ops;
 
+    logoutput_debug("set_sftp_attr_context: version %i", version);
+
     if (version<=3) {
 
 	ops->read_name_name_response		= read_name_name_response_v03;

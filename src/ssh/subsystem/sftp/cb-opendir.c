@@ -235,6 +235,7 @@ static void _sftp_op_readdir(struct sftp_subsystem_s *sftp, struct commonhandle_
     struct rw_attr_result_s r=RW_ATTR_RESULT_INIT;
     uint32_t valid=get_valid_sftp_dirhandle(handle);
     unsigned int len=get_write_max_buffersize(actx, &r, valid);
+    unsigned int size=0;
     unsigned int mask=r.stat_mask;
     char tmp[len]; 								/* temporary buffer for writing filename and attributes */
     struct attr_buffer_s abuff;
@@ -244,15 +245,13 @@ static void _sftp_op_readdir(struct sftp_subsystem_s *sftp, struct commonhandle_
 
     set_attr_buffer_write(&abuff, tmp, len);
 
-    logoutput("_sftp_op_readdir (tid %i) valid %i len write buffer %i", (int) gettid(), valid, len);
+    logoutput("_sftp_op_readdir (tid %i) valid %i len write buffer %i stat mask %i", (int) gettid(), valid, len, mask);
 
     while (pos < SFTP_READDIR_NAMES_SIZE) {
 
 	dentry=(* dh->readdentry)(dh);
 
 	if (dentry) {
-
-	    logoutput("sftp_op_readdir: found %s", dentry->name);
 
 	    if ((* dh->fstatat)(dh, dentry->name, mask, &stat)==0) {
 
@@ -265,10 +264,13 @@ static void _sftp_op_readdir(struct sftp_subsystem_s *sftp, struct commonhandle_
 
 		(* abuff.ops->rw.write.write_uint32)(&abuff, valid);
 		write_attributes_generic(actx, &abuff, &r, &stat, valid);
+		size=(unsigned int)(abuff.pos - abuff.buffer);
 
 		/* does it fit? */
 
-		if (pos + abuff.len > SFTP_READDIR_NAMES_SIZE) {
+		logoutput("sftp_op_readdir: found %s %i bytes written", dentry->name, size);
+
+		if ((pos + size) > SFTP_READDIR_NAMES_SIZE) {
 
 		    (* dh->set_keep_dentry)(dh);
 		    /* 20211020: also keep the buffer with attributes just written? (where?) or */
@@ -277,7 +279,7 @@ static void _sftp_op_readdir(struct sftp_subsystem_s *sftp, struct commonhandle_
 		}
 
 		memcpy(&buffer[pos], abuff.buffer, abuff.len);
-		pos+=abuff.len;
+		pos+=size;
 		count++;
 
 		/* reset abuff */
