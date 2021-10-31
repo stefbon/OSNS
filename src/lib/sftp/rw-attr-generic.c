@@ -229,6 +229,7 @@ static void _attr_write_cb(struct attr_context_s *actx, struct attr_buffer_s *bu
     r->done |= actx->attrcb[ctr].code;
     r->todo &= ~actx->attrcb[ctr].code;
     (* actx->attrcb[ctr].w_cb)(actx, buffer, r, stat);
+    logoutput_debug("_attr_write_cb: ctr %i code %i done %i todo %i", ctr, actx->attrcb[ctr].code, r->done, r->todo);
 }
 
 void write_attributes_generic(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat, unsigned int valid)
