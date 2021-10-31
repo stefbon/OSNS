@@ -263,14 +263,18 @@ static void _sftp_op_readdir(struct sftp_subsystem_s *sftp, struct commonhandle_
 		name.ptr=dentry->name;
 
 		(* actx->ops.write_name_name_response)(actx, &abuff, &name);
+		size=(unsigned int)(abuff.pos - abuff.buffer);
+		logoutput("sftp_op_readdir: a. found %s %i bytes written", dentry->name, size);
 
 		(* abuff.ops->rw.write.write_uint32)(&abuff, valid);
+		size=(unsigned int)(abuff.pos - abuff.buffer);
+		logoutput("sftp_op_readdir: b. %i bytes written", size);
+
 		write_attributes_generic(actx, &abuff, &r, &stat, valid);
 		size=(unsigned int)(abuff.pos - abuff.buffer);
+		logoutput("sftp_op_readdir: c. %i bytes written pos %i", size, pos);
 
 		/* does it fit? */
-
-		logoutput("sftp_op_readdir: found %s %i bytes written", dentry->name, size);
 
 		if ((pos + size) > SFTP_READDIR_NAMES_SIZE) {
 
