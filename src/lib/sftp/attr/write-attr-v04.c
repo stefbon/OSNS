@@ -82,6 +82,8 @@ void write_attr_ownergroup_v04(struct attr_context_s *actx, struct attr_buffer_s
     (* buffer->ops->rw.write.write_uint32)(buffer, group.net.name.len);
     (* buffer->ops->rw.write.write_skip)(buffer, group.net.name.len); /* name is already written above to the buffer */
 
+    logoutput_debug("write_attr_ownergroup_v04: user %.*s group %.*s", user.net.name.len, user.net.name.ptr, group.net.name.len, group.net.name.ptr);
+
 }
 
 void write_attr_permissions_v04(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)
@@ -89,6 +91,8 @@ void write_attr_permissions_v04(struct attr_context_s *actx, struct attr_buffer_
     uint32_t perm=get_mode_system_stat(stat) & (S_IRWXU | S_IRWXG | S_IRWXO); /* only interested in permission bits */
 
     (* buffer->ops->rw.write.write_uint32)(buffer, perm);
+
+    logoutput_debug("write_attr_permissions_v04: perm %i", perm);
 }
 
 void write_attr_accesstime_v04(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)
@@ -96,7 +100,7 @@ void write_attr_accesstime_v04(struct attr_context_s *actx, struct attr_buffer_s
     int64_t sec=get_atime_sec_system_stat(stat);
 
     (* buffer->ops->rw.write.write_int64)(buffer, sec);
-
+    logoutput_debug("write_attr_accesstime_v04: sec %i", sec);
 }
 
 void write_attr_accesstime_n_v04(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)
@@ -110,7 +114,7 @@ void write_attr_modifytime_v04(struct attr_context_s *actx, struct attr_buffer_s
     int64_t sec=get_mtime_sec_system_stat(stat);
 
     (* buffer->ops->rw.write.write_int64)(buffer, sec);
-
+    logoutput_debug("write_attr_modifytime_v04: sec %i", sec);
 }
 
 void write_attr_modifytime_n_v04(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)

@@ -67,6 +67,7 @@ void write_attr_changetime_v06(struct attr_context_s *actx, struct attr_buffer_s
 {
     int64_t sec=get_ctime_sec_system_stat(stat);
     (* buffer->ops->rw.write.write_int64)(buffer, sec);
+    logoutput_debug("write_attr_changetime_v06: sec %i", sec);
 }
 
 void write_attr_changetime_n_v06(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)

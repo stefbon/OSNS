@@ -218,6 +218,8 @@ static unsigned int get_write_max_buffersize(struct attr_context_s *actx, struct
 
     size += 4 + get_size_buffer_write_attributes(actx, r, valid);
 
+    logoutput_debug("get_write_max_buffersize: size %i stat mask %i valid %i ignored %i", size, r->stat_mask, r->valid, r->ignored);
+
     return size;
 
 }
