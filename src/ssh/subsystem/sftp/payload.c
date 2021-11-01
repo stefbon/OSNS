@@ -209,6 +209,7 @@ static void process_sftp_payload_init(struct sftp_payload_s *payload)
 	sftp->flags |= SFTP_SUBSYSTEM_FLAG_VERSION_SEND;
 	set_sftp_protocol_version(sftp, clientversion);
 	setup_sftp_idmapping(sftp);
+	set_sftp_attr_context(&sftp->attrctx);
 
     } else {
 

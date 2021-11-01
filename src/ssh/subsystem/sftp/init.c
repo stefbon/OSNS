@@ -331,6 +331,7 @@ int init_sftp_subsystem(struct sftp_subsystem_s *sftp)
     init_sftp_connection(&sftp->connection, 0);
     init_sftp_receive(&sftp->receive);
     init_sftp_payload_queue(&sftp->queue);
+    init_sftp_subsystem_attr_context(sftp);
 
     set_sftp_protocol_version(sftp, 6);
     init_attr_context(&sftp->attrctx, ATTR_CONTEXT_FLAG_SERVER, (void *) sftp, &sftp->mapping);
