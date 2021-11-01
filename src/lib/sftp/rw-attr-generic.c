@@ -170,14 +170,16 @@ void parse_attributes_generic(struct attr_context_s *actx, struct attr_buffer_s 
     if (r->flags & RW_ATTR_RESULT_FLAG_WRITE) {
 
 	r->valid = (valid & actx->w_valid);
+	logoutput_debug("parse_attributes_generic: w valid %i r->valid %i mask %i", valid, r->valid, actx->w_valid);
 
     } else if (r->flags & RW_ATTR_RESULT_FLAG_READ) {
 
 	r->valid = (valid & actx->r_valid);
+	logoutput_debug("parse_attributes_generic: r valid %i r->valid %i mask %i", valid, r->valid, actx->r_valid);
 
     }
 
-    r->ignored = (valid &= ~r->valid);				/* which attributes are not taken into account */
+    r->ignored = (valid & ~r->valid);				/* which attributes are not taken into account */
     r->todo = (r->valid & ~SSH_FILEXFER_ATTR_SUBSECOND_TIMES);	/* the flags of the main attributes */
     r->done=0;
 
