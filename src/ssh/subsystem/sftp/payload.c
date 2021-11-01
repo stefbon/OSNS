@@ -168,12 +168,12 @@ static void process_sftp_payload_init(struct sftp_payload_s *payload)
 
 	/* error: version already received */
 
-	logoutput_warning("process_sftp_init: init version message already received from client");
+	logoutput_warning("process_sftp_payload_init: init version message already received from client");
 	goto disconnect;
 
     }
 
-    logoutput("process_sftp_init: received init version");
+    logoutput("process_sftp_payload_init: received init version");
     sftp->flags |= SFTP_SUBSYSTEM_FLAG_VERSION_RECEIVED;
 
     /* set function to process to handle error:
@@ -202,14 +202,22 @@ static void process_sftp_payload_init(struct sftp_payload_s *payload)
     payload=NULL;
 
     if (send_sftp_init(sftp)==0) {
+	unsigned char version=get_sftp_protocol_version(sftp);
 
 	/* switch to processing "normal" payload */
 
 	set_process_sftp_payload_session(sftp);
 	sftp->flags |= SFTP_SUBSYSTEM_FLAG_VERSION_SEND;
-	set_sftp_protocol_version(sftp, clientversion);
+
+	if (version != clientversion) {
+
+	    logoutput("process_sftp_payload_init: change version from %i to %i", version, clientversion);
+	    set_sftp_protocol_version(sftp, clientversion);
+	    set_sftp_attr_context(&sftp->attrctx);
+
+	}
+
 	setup_sftp_idmapping(sftp);
-	set_sftp_attr_context(&sftp->attrctx);
 
     } else {
 

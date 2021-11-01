@@ -334,7 +334,7 @@ int init_sftp_subsystem(struct sftp_subsystem_s *sftp)
     init_sftp_subsystem_attr_context(sftp);
 
     set_sftp_protocol_version(sftp, 6);
-    init_attr_context(&sftp->attrctx, ATTR_CONTEXT_FLAG_SERVER, (void *) sftp, &sftp->mapping);
+    init_sftp_subsystem_attr_context(sftp);
     init_net_idmapping(&sftp->mapping, &sftp->identity.pwd);
     set_sftp_attr_context(&sftp->attrctx);
 
