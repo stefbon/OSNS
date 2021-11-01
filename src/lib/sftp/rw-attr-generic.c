@@ -181,6 +181,8 @@ void parse_attributes_generic(struct attr_context_s *actx, struct attr_buffer_s 
     r->todo = (r->valid & ~SSH_FILEXFER_ATTR_SUBSECOND_TIMES);	/* the flags of the main attributes */
     r->done=0;
 
+    logoutput_debug("parse_attributes_generic: valid %i r->valid %i todo %i ignored %i", valid, r->valid, r->todo, r->ignored);
+
     hcb=lookup_hashed_attrcb(r->valid, version);
 
     if (hcb) {
