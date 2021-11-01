@@ -74,6 +74,7 @@ static unsigned int get_maxlength_domainname(struct attr_context_s *ctx)
 
 static unsigned char get_sftp_protocol_version(struct attr_context_s *ctx)
 {
+    logoutput_debug("get_sftp_protocol_version: you should not see this");
     return 0;
 }
 

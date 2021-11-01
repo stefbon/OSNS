@@ -51,6 +51,7 @@
 static unsigned char get_sftp_subsystem_protocol_version(struct attr_context_s *ctx)
 {
     struct sftp_subsystem_s *sftp=(struct sftp_subsystem_s *)((char *) ctx - offsetof(struct sftp_subsystem_s, attrctx));
+    logoutput_debug("get_sftp_subsystem_protocol_version");
     return get_sftp_protocol_version(sftp);
 }
 

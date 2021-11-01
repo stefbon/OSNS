@@ -27,7 +27,6 @@
 
 /* prototypes */
 
-void set_sftp_attr_version(struct sftp_subsystem_s *sftp);
 void init_sftp_subsystem_attr_context(struct sftp_subsystem_s *sftp);
 
 #endif
