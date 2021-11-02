@@ -21,6 +21,7 @@
 #define _SFTP_PROTOCOL_V05_H
 
 #include "acl-ace4.h"
+#include "attr-indices.h"
 
 /*
     Definitions as described in:
@@ -28,18 +29,6 @@
 */
 
 /* attributes valid */
-
-#define SSH_FILEXFER_INDEX_TYPE			0
-#define SSH_FILEXFER_INDEX_SIZE			0
-#define SSH_FILEXFER_INDEX_PERMISSIONS		2
-#define SSH_FILEXFER_INDEX_ACCESSTIME		3
-#define SSH_FILEXFER_INDEX_CREATETIME		4
-#define SSH_FILEXFER_INDEX_MODIFYTIME		5
-#define SSH_FILEXFER_INDEX_ACL			6
-#define SSH_FILEXFER_INDEX_OWNERGROUP		7
-#define SSH_FILEXFER_INDEX_SUBSECOND_TIMES	8
-#define SSH_FILEXFER_INDEX_BITS			9
-#define SSH_FILEXFER_INDEX_EXTENDED		31
 
 #define SSH_FILEXFER_ATTR_TYPE			0
 #define SSH_FILEXFER_ATTR_SIZE 			1 << SSH_FILEXFER_INDEX_SIZE

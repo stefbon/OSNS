@@ -93,8 +93,8 @@ int send_sftp_stat_v04_generic(struct sftp_client_s *sftp, struct sftp_request_s
 
 static int send_sftp_stat_v04(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r)
 {
-    unsigned int flags=sftp->attrctx.w_valid;
-    return send_sftp_stat_v04_generic(sftp, sftp_r, flags);
+    unsigned int valid=sftp->attrctx.w_valid.mask | sftp->attrctx.w_valid.flags;
+    return send_sftp_stat_v04_generic(sftp, sftp_r, valid);
 }
 
 /*
@@ -132,8 +132,8 @@ int send_sftp_lstat_v04_generic(struct sftp_client_s *sftp, struct sftp_request_
 
 static int send_sftp_lstat_v04(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r)
 {
-    unsigned int flags=sftp->attrctx.w_valid;
-    return send_sftp_lstat_v04_generic(sftp, sftp_r, flags);
+    unsigned int valid=sftp->attrctx.w_valid.mask | sftp->attrctx.w_valid.flags;
+    return send_sftp_lstat_v04_generic(sftp, sftp_r, valid);
 }
 
 /*
@@ -171,8 +171,8 @@ int send_sftp_fstat_v04_generic(struct sftp_client_s *sftp, struct sftp_request_
 
 static int send_sftp_fstat_v04(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r)
 {
-    unsigned int flags=sftp->attrctx.w_valid;
-    return send_sftp_fstat_v04_generic(sftp, sftp_r, flags);
+    unsigned int valid=sftp->attrctx.w_valid.mask | sftp->attrctx.w_valid.flags;
+    return send_sftp_fstat_v04_generic(sftp, sftp_r, valid);
 }
 
 

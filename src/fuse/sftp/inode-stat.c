@@ -101,10 +101,11 @@ static void _get_supported_sftp_attr_cb(unsigned int stat_mask, unsigned int len
 {
     struct get_supported_sftp_attr_s *gssa=(struct get_supported_sftp_attr_s *) ptr;
 
-    if (stat_mask & gssa->stat_mask) {
+    if (stat_mask & gssa->stat_mask_asked) {
 
+	gssa->stat_mask_result |= stat_mask;
 	gssa->len += len;
-	gssa->valid |= valid;
+	gssa->valid.mask |= valid;
 
     }
 
@@ -113,9 +114,11 @@ static void _get_supported_sftp_attr_cb(unsigned int stat_mask, unsigned int len
 unsigned int get_attr_buffer_size(struct context_interface_s *interface, struct rw_attr_result_s *r, struct system_stat_s *stat, struct get_supported_sftp_attr_s *gssa)
 {
 
-    gssa->stat_mask=stat->mask;
+    gssa->stat_mask_asked=stat->mask;
+    gssa->stat_mask_result=0;
     gssa->len=0;
-    gssa->valid=0;
+    init_sftp_valid(&gssa->valid);
+
     parse_attributes_generic_ctx(interface, r, NULL, 'w', _get_supported_sftp_attr_cb, (void *) gssa);
     return gssa->len;
 

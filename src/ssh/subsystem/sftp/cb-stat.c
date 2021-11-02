@@ -76,7 +76,6 @@ static void sftp_op_stat_generic(struct sftp_subsystem_s *sftp, struct sftp_payl
 	char *data=payload->data;
 	struct sftp_identity_s *user=&sftp->identity;
 	unsigned int pos=0;
-	unsigned int valid=0;
 	struct ssh_string_s path=SSH_STRING_INIT;
 
 	path.len=get_uint32(&data[pos]);
@@ -86,34 +85,37 @@ static void sftp_op_stat_generic(struct sftp_subsystem_s *sftp, struct sftp_payl
 
 	if (path.len + 8 <= payload->len) {
 	    struct system_stat_s stat;
+	    struct sftp_valid_s valid;
 	    struct fs_location_s location;
 	    struct convert_sftp_path_s convert;
 	    unsigned int size=get_fullpath_size(user, &path, &convert);
-	    char tmp[size+1];
+	    char pathtmp[size+1];
 	    int result=0;
 	    unsigned int mask=0;
+	    uint32_t validbits=0;
 
-	    valid=get_uint32(&data[pos]);
+	    validbits=get_uint32(&data[pos]);
+	    convert_sftp_valid_w(&sftp->attrctx, &valid, validbits);
 
 	    memset(&location, 0, sizeof(struct fs_location_s));
 	    location.flags=FS_LOCATION_FLAG_PATH;
-	    set_buffer_location_path(&location.type.path, tmp, size+1, 0);
+	    set_buffer_location_path(&location.type.path, pathtmp, size+1, 0);
 	    (* convert.complete)(user, &path, &location.type.path);
 
-	    mask=translate_valid_2_stat_mask(&sftp->attrctx, valid, 'w');
+	    mask=translate_valid_2_stat_mask(&sftp->attrctx, &valid, 'w');
 	    result=(* cb_stat)(&location.type.path, mask, &stat);
 
-	    logoutput("sftp_op_stat: result %i valid %i", result, valid);
+	    logoutput("sftp_op_stat: result %i valid %i", result, valid.mask);
 
 	    if (result==0) {
 		struct rw_attr_result_s r=RW_ATTR_RESULT_INIT;
-		unsigned int size=get_size_buffer_write_attributes(&sftp->attrctx, &r, valid);
+		unsigned int size=get_size_buffer_write_attributes(&sftp->attrctx, &r, &valid);
 		char tmp[size];
 		struct attr_buffer_s abuff;
 
 		set_attr_buffer_write(&abuff, tmp, size);
-		(* abuff.ops->rw.write.write_uint32)(&abuff, r.valid);
-		write_attributes_generic(&sftp->attrctx, &abuff, &r, &stat, valid);
+		(* abuff.ops->rw.write.write_uint32)(&abuff, r.valid.mask);
+		write_attributes_generic(&sftp->attrctx, &abuff, &r, &stat, &valid);
 
 		if (reply_sftp_attrs(sftp, payload->id, tmp, abuff.len)==-1) logoutput_warning("sftp_op_stat: error sending attr");
 		return;

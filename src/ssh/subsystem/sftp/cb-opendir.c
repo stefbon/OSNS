@@ -201,7 +201,7 @@ void sftp_op_opendir(struct sftp_payload_s *payload)
 
 }
 
-static unsigned int get_write_max_buffersize(struct attr_context_s *actx, struct rw_attr_result_s *r, unsigned int valid)
+static unsigned int get_write_max_buffersize(struct attr_context_s *actx, struct rw_attr_result_s *r, struct sftp_valid_s *valid)
 {
     unsigned int size=0;
     unsigned char version=(* actx->get_sftp_protocol_version)(actx);
@@ -218,7 +218,7 @@ static unsigned int get_write_max_buffersize(struct attr_context_s *actx, struct
 
     size += 4 + get_size_buffer_write_attributes(actx, r, valid);
 
-    logoutput_debug("get_write_max_buffersize: size %i stat mask %i valid %i ignored %i", size, r->stat_mask, r->valid, r->ignored);
+    logoutput_debug("get_write_max_buffersize: size %i stat mask %i valid %i ignored %i", size, r->stat_mask, r->valid.mask, r->ignored);
 
     return size;
 
@@ -235,7 +235,7 @@ static void _sftp_op_readdir(struct sftp_subsystem_s *sftp, struct commonhandle_
     unsigned char eof=0;
     struct attr_context_s *actx=&sftp->attrctx;
     struct rw_attr_result_s r=RW_ATTR_RESULT_INIT;
-    uint32_t valid=get_valid_sftp_dirhandle(handle);
+    struct sftp_valid_s *valid=get_valid_sftp_dirhandle(handle);
     unsigned int len=get_write_max_buffersize(actx, &r, valid);
     unsigned int size=0;
     unsigned int mask=r.stat_mask;
@@ -266,7 +266,7 @@ static void _sftp_op_readdir(struct sftp_subsystem_s *sftp, struct commonhandle_
 		size=(unsigned int)(abuff.pos - abuff.buffer);
 		logoutput("sftp_op_readdir: a. found %s %i bytes written", dentry->name, size);
 
-		(* abuff.ops->rw.write.write_uint32)(&abuff, valid);
+		(* abuff.ops->rw.write.write_uint32)(&abuff, valid->mask);
 		size=(unsigned int)(abuff.pos - abuff.buffer);
 		logoutput("sftp_op_readdir: b. %i bytes written", size);
 

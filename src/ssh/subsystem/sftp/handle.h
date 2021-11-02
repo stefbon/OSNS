@@ -37,6 +37,6 @@ void release_sftp_handle(struct commonhandle_s **p_handle);
 
 struct commonhandle_s *create_sftp_dirhandle(struct sftp_subsystem_s *sftp, struct fs_location_devino_s *devino);
 
-uint32_t get_valid_sftp_dirhandle(struct commonhandle_s *handle);
+struct sftp_valid_s *get_valid_sftp_dirhandle(struct commonhandle_s *handle);
 
 #endif

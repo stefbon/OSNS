@@ -104,6 +104,12 @@ void init_attrcb_zero(struct _rw_attrcb_s *attrcb, unsigned int count)
 
 }
 
+void init_sftp_valid(struct sftp_valid_s *valid)
+{
+    valid->mask=0;
+    valid->flags=0;
+}
+
 void init_attr_context(struct attr_context_s *actx, unsigned int flags, void *ptr, struct net_idmapping_s *mapping)
 {
     struct _rw_attrcb_s *attrcb=actx->attrcb;
@@ -112,8 +118,8 @@ void init_attr_context(struct attr_context_s *actx, unsigned int flags, void *pt
     actx->ptr=ptr;
     actx->mapping=mapping;
 
-    actx->w_valid=0;
-    actx->r_valid=0;
+    init_sftp_valid(&actx->w_valid);
+    init_sftp_valid(&actx->r_valid);
 
     init_attrcb_zero(attrcb, ATTR_CONTEXT_COUNT_ATTR_CB);
 
@@ -131,21 +137,33 @@ void parse_dummy(struct attr_context_s *actx, struct attr_buffer_s *buffer, stru
 {
 }
 
-unsigned int get_supported_valid_flags(struct attr_context_s *actx, unsigned char what)
+struct sftp_valid_s *get_supported_valid_flags(struct attr_context_s *actx, unsigned char what)
 {
 
     if (what=='r') {
 
-	return actx->r_valid;
+	return &actx->r_valid;
 
     } else if (what=='w') {
 
-	return actx->w_valid;
+	return &actx->w_valid;
 
     }
 
-    return 0;
+    return NULL;
 
+}
+
+void convert_sftp_valid_w(struct attr_context_s *actx, struct sftp_valid_s *valid, uint32_t bits)
+{
+    valid->mask = (bits & actx->w_valid.mask);
+    valid->flags = (bits & actx->w_valid.flags);
+}
+
+void convert_sftp_valid_r(struct attr_context_s *actx, struct sftp_valid_s *valid, uint32_t bits)
+{
+    valid->mask = (bits & actx->r_valid.mask);
+    valid->flags = (bits & actx->r_valid.flags);
 }
 
 void set_sftp_attr_context(struct attr_context_s *actx)
@@ -160,6 +178,7 @@ void set_sftp_attr_context(struct attr_context_s *actx)
 	ops->read_name_name_response		= read_name_name_response_v03;
 	ops->write_name_name_response		= write_name_name_response_v03;
 	ops->parse_attributes			= parse_attributes_v03;
+	ops->enable_attr			= enable_attr_v03;
 	init_attr_context_v03(actx);
 
     } else if (version==4) {
@@ -167,6 +186,7 @@ void set_sftp_attr_context(struct attr_context_s *actx)
 	ops->read_name_name_response		= read_name_name_response_v04;
 	ops->write_name_name_response		= write_name_name_response_v04;
 	ops->parse_attributes			= parse_attributes_v04;
+	ops->enable_attr			= enable_attr_v04;
 	init_attr_context_v04(actx);
 
     } else if (version==5) {
@@ -174,6 +194,7 @@ void set_sftp_attr_context(struct attr_context_s *actx)
 	ops->read_name_name_response		= read_name_name_response_v04;
 	ops->write_name_name_response		= write_name_name_response_v04;
 	ops->parse_attributes			= parse_attributes_v05;
+	ops->enable_attr			= enable_attr_v05;
 	init_attr_context_v05(actx);
 
     } else if (version==6) {
@@ -181,6 +202,7 @@ void set_sftp_attr_context(struct attr_context_s *actx)
 	ops->read_name_name_response		= read_name_name_response_v04;
 	ops->write_name_name_response		= write_name_name_response_v04;
 	ops->parse_attributes			= parse_attributes_v06;
+	ops->enable_attr			= enable_attr_v06;
 	init_attr_context_v06(actx);
 
     } else {

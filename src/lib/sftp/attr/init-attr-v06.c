@@ -55,6 +55,7 @@
 #include "read-attr-v03.h"
 #include "read-attr-v04.h"
 #include "read-attr-v05.h"
+#include "init-attr-v04.h"
 
 void init_attr_context_v06(struct attr_context_s *actx)
 {
@@ -239,12 +240,15 @@ void init_attr_context_v06(struct attr_context_s *actx)
     attrcb[SSH_FILEXFER_INDEX_EXTENDED].stat_mask	= 0;
     attrcb[SSH_FILEXFER_INDEX_EXTENDED].fattr		= 0;
 
-    actx->w_valid=(SSH_FILEXFER_ATTR_TYPE | SSH_FILEXFER_ATTR_SIZE | SSH_FILEXFER_ATTR_OWNERGROUP | SSH_FILEXFER_ATTR_PERMISSIONS | SSH_FILEXFER_ATTR_ACCESSTIME | SSH_FILEXFER_ATTR_MODIFYTIME | SSH_FILEXFER_ATTR_CHANGETIME | SSH_FILEXFER_ATTR_SUBSECOND_TIMES);
+    actx->w_valid.mask=(SSH_FILEXFER_ATTR_TYPE | SSH_FILEXFER_ATTR_SIZE | SSH_FILEXFER_ATTR_OWNERGROUP | SSH_FILEXFER_ATTR_PERMISSIONS | SSH_FILEXFER_ATTR_ACCESSTIME | SSH_FILEXFER_ATTR_MODIFYTIME | SSH_FILEXFER_ATTR_CHANGETIME);
+    actx->w_valid.flags=SSH_FILEXFER_ATTR_SUBSECOND_TIMES;
     actx->w_count=10;
     actx->r_count=20;
-    actx->r_valid=(SSH_FILEXFER_ATTR_TYPE | SSH_FILEXFER_ATTR_SIZE | SSH_FILEXFER_ATTR_OWNERGROUP | SSH_FILEXFER_ATTR_PERMISSIONS | SSH_FILEXFER_ATTR_ACCESSTIME | SSH_FILEXFER_ATTR_CREATETIME | SSH_FILEXFER_ATTR_MODIFYTIME | SSH_FILEXFER_ATTR_SUBSECOND_TIMES |
+    actx->r_valid.mask=(SSH_FILEXFER_ATTR_TYPE | SSH_FILEXFER_ATTR_SIZE | SSH_FILEXFER_ATTR_OWNERGROUP | SSH_FILEXFER_ATTR_PERMISSIONS | SSH_FILEXFER_ATTR_ACCESSTIME | SSH_FILEXFER_ATTR_CREATETIME | SSH_FILEXFER_ATTR_MODIFYTIME  |
 		    SSH_FILEXFER_ATTR_ACL | SSH_FILEXFER_ATTR_BITS | SSH_FILEXFER_ATTR_ALLOCATION_SIZE | SSH_FILEXFER_ATTR_TEXT_HINT | SSH_FILEXFER_ATTR_MIME_TYPE | SSH_FILEXFER_ATTR_LINK_COUNT | SSH_FILEXFER_ATTR_UNTRANSLATED_NAME | SSH_FILEXFER_ATTR_CHANGETIME |
 		    SSH_FILEXFER_ATTR_EXTENDED);
+    actx->r_valid.flags=SSH_FILEXFER_ATTR_SUBSECOND_TIMES;
+
 
     /* nsec accesstime */
 
@@ -344,28 +348,28 @@ void parse_attributes_v06(struct attr_context_s *actx, struct attr_buffer_s *buf
     if (r->todo & SSH_FILEXFER_ATTR_ACCESSTIME) {
 
 	(* r->parse_attribute)(actx, buffer, r, stat, SSH_FILEXFER_INDEX_ACCESSTIME);
-	if (r->valid & SSH_FILEXFER_ATTR_SUBSECOND_TIMES) (* r->parse_attribute)(actx, buffer, r, stat, SSH_FILEXFER_INDEX_NSEC_ATIME);
+	if (r->valid.flags & SSH_FILEXFER_ATTR_SUBSECOND_TIMES) (* r->parse_attribute)(actx, buffer, r, stat, SSH_FILEXFER_INDEX_NSEC_ATIME);
 
     }
 
     if (r->todo & SSH_FILEXFER_ATTR_CREATETIME) {
 
 	(* r->parse_attribute)(actx, buffer, r, stat, SSH_FILEXFER_INDEX_CREATETIME);
-	if (r->valid & SSH_FILEXFER_ATTR_SUBSECOND_TIMES) (* r->parse_attribute)(actx, buffer, r, stat, SSH_FILEXFER_INDEX_NSEC_BTIME);
+	if (r->valid.flags & SSH_FILEXFER_ATTR_SUBSECOND_TIMES) (* r->parse_attribute)(actx, buffer, r, stat, SSH_FILEXFER_INDEX_NSEC_BTIME);
 
     }
 
     if (r->todo & SSH_FILEXFER_ATTR_MODIFYTIME) {
 
 	(* r->parse_attribute)(actx, buffer, r, stat, SSH_FILEXFER_INDEX_MODIFYTIME);
-	if (r->valid & SSH_FILEXFER_ATTR_SUBSECOND_TIMES) (* r->parse_attribute)(actx, buffer, r, stat, SSH_FILEXFER_INDEX_NSEC_MTIME);
+	if (r->valid.flags & SSH_FILEXFER_ATTR_SUBSECOND_TIMES) (* r->parse_attribute)(actx, buffer, r, stat, SSH_FILEXFER_INDEX_NSEC_MTIME);
 
     }
 
     if (r->todo & SSH_FILEXFER_ATTR_CHANGETIME) {
 
 	(* r->parse_attribute)(actx, buffer, r, stat, SSH_FILEXFER_INDEX_CHANGETIME);
-	if (r->valid & SSH_FILEXFER_ATTR_SUBSECOND_TIMES) (* r->parse_attribute)(actx, buffer, r, stat, SSH_FILEXFER_INDEX_NSEC_CTIME);
+	if (r->valid.flags & SSH_FILEXFER_ATTR_SUBSECOND_TIMES) (* r->parse_attribute)(actx, buffer, r, stat, SSH_FILEXFER_INDEX_NSEC_CTIME);
 
     }
 
@@ -377,4 +381,22 @@ void parse_attributes_v06(struct attr_context_s *actx, struct attr_buffer_s *buf
     if (r->todo & SSH_FILEXFER_ATTR_UNTRANSLATED_NAME) (* r->parse_attribute)(actx, buffer, r, stat, SSH_FILEXFER_INDEX_UNTRANSLATED_NAME);
     if (r->todo & SSH_FILEXFER_ATTR_EXTENDED) (* r->parse_attribute)(actx, buffer, r, stat, SSH_FILEXFER_INDEX_EXTENDED);
 
+}
+
+unsigned char enable_attr_v06(struct attr_context_s *actx, struct sftp_valid_s *p, const char *name)
+{
+    unsigned char result=0;
+
+    if (strcmp(name, "ctime")==0) {
+
+	p->mask |= SSH_FILEXFER_ATTR_CHANGETIME;
+	result=1;
+
+    } else {
+
+	result=enable_attr_v04(actx, p, name);
+
+    }
+
+    return result;
 }

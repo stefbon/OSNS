@@ -115,9 +115,11 @@ void init_attr_context_v03(struct attr_context_s *actx)
     attrcb[SSH_FILEXFER_INDEX_EXTENDED].name		= "extended";
     attrcb[SSH_FILEXFER_INDEX_EXTENDED].stat_mask	= 0;
 
-    actx->w_valid=(SSH_FILEXFER_ATTR_SIZE | SSH_FILEXFER_ATTR_UIDGID | SSH_FILEXFER_ATTR_PERMISSIONS | SSH_FILEXFER_ATTR_ACMODTIME);
+    actx->w_valid.mask=(SSH_FILEXFER_ATTR_SIZE | SSH_FILEXFER_ATTR_UIDGID | SSH_FILEXFER_ATTR_PERMISSIONS | SSH_FILEXFER_ATTR_ACMODTIME);
+    actx->w_valid.flags=0;
     actx->w_count=4;
-    actx->r_valid=(SSH_FILEXFER_ATTR_SIZE | SSH_FILEXFER_ATTR_UIDGID | SSH_FILEXFER_ATTR_PERMISSIONS | SSH_FILEXFER_ATTR_ACMODTIME | SSH_FILEXFER_ATTR_EXTENDED);
+    actx->r_valid.mask=(SSH_FILEXFER_ATTR_SIZE | SSH_FILEXFER_ATTR_UIDGID | SSH_FILEXFER_ATTR_PERMISSIONS | SSH_FILEXFER_ATTR_ACMODTIME | SSH_FILEXFER_ATTR_EXTENDED);
+    actx->r_valid.flags=0;
     actx->r_count=5;
 
 }
@@ -149,7 +151,7 @@ void init_attr_context_v03(struct attr_context_s *actx)
 void parse_attributes_v03(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)
 {
 
-    /* NOTE: no type, is not part of the ATTR structure with version 3 */
+    /* NOTE: no type, is part of the permissions field */
 
     if (r->todo & SSH_FILEXFER_ATTR_SIZE) (* r->parse_attribute)(actx, buffer, r, stat, SSH_FILEXFER_INDEX_SIZE);
     if (r->todo & SSH_FILEXFER_ATTR_UIDGID) (* r->parse_attribute)(actx, buffer, r, stat, SSH_FILEXFER_INDEX_UIDGID);
@@ -157,4 +159,38 @@ void parse_attributes_v03(struct attr_context_s *actx, struct attr_buffer_s *buf
     if (r->todo & SSH_FILEXFER_ATTR_ACMODTIME) (* r->parse_attribute)(actx, buffer, r, stat, SSH_FILEXFER_INDEX_ACMODTIME);
     if (r->todo & SSH_FILEXFER_ATTR_EXTENDED) (* r->parse_attribute)(actx, buffer, r, stat, SSH_FILEXFER_INDEX_EXTENDED);
 
+}
+
+unsigned char enable_attr_v03(struct attr_context_s *actx, struct sftp_valid_s *p, const char *name)
+{
+    unsigned char result=0;
+
+    if (strcmp(name, "size")==0) {
+
+	p->mask |= SSH_FILEXFER_ATTR_SIZE;
+	result=1;
+
+    } else if (strcmp(name, "permissions")==0) {
+
+	p->mask |= SSH_FILEXFER_ATTR_PERMISSIONS;
+	result=1;
+
+    } else if (strcmp(name, "user")==0 || strcmp(name, "group")==0) {
+
+	p->mask |= SSH_FILEXFER_ATTR_UIDGID;
+	result=1;
+
+    } else if (strcmp(name, "atime")==0 || strcmp(name, "mtime")==0) {
+
+	p->mask |= SSH_FILEXFER_ATTR_ACMODTIME;
+	result=1;
+
+    } else if (strcmp(name, "extended")==0) {
+
+	p->mask |= SSH_FILEXFER_ATTR_EXTENDED;
+	result=1;
+
+    }
+
+    return result;
 }

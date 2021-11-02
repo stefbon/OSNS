@@ -22,7 +22,7 @@
 
 struct hashed_attrcb_s {
     struct list_element_s		list;
-    uint32_t				valid;
+    struct sftp_valid_s			valid;
     unsigned char			version;
     unsigned int			count;
     unsigned int			len;
@@ -32,16 +32,16 @@ struct hashed_attrcb_s {
 
 /* prototypes */
 
-struct hashed_attrcb_s *lookup_hashed_attrcb(uint32_t valid, unsigned char version);
-void create_hashed_attrcb(unsigned char version, unsigned int valid, unsigned char *cb, unsigned char count, unsigned int len, unsigned int stat_mask);
+struct hashed_attrcb_s *lookup_hashed_attrcb(struct sftp_valid_s *valid, unsigned char version);
+void create_hashed_attrcb(unsigned char version, struct sftp_valid_s *valid, unsigned char *cb, unsigned char count, unsigned int len, unsigned int stat_mask);
 
-void parse_attributes_generic(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat, unsigned int valid);
-void write_attributes_generic(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat, unsigned int valid);
-void read_attributes_generic(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat, unsigned int valid);
+void parse_attributes_generic(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat, struct sftp_valid_s *valid);
+void write_attributes_generic(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat, struct sftp_valid_s *valid);
+void read_attributes_generic(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat, unsigned int valid_bits);
 
-unsigned int get_size_buffer_write_attributes(struct attr_context_s *actx, struct rw_attr_result_s *r, unsigned int valid);
+unsigned int get_size_buffer_write_attributes(struct attr_context_s *actx, struct rw_attr_result_s *r, struct sftp_valid_s *valid);
 
-unsigned int translate_valid_2_stat_mask(struct attr_context_s *actx, unsigned int valid, unsigned char what);
+unsigned int translate_valid_2_stat_mask(struct attr_context_s *actx, struct sftp_valid_s *valid, unsigned char what);
 unsigned int translate_stat_mask_2_valid(struct attr_context_s *actx, unsigned int mask, unsigned char what);
 
 void parse_sftp_attributes_stat_mask(struct attr_context_s *actx, struct rw_attr_result_s *r, struct system_stat_s *stat, unsigned char what, void (* cb)(unsigned int stat_mask, unsigned int len, unsigned int flag, unsigned int fattr, void *ptr), void *ptr);

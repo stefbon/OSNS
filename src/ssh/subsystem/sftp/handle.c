@@ -97,6 +97,8 @@
 
 #endif
 
+#define SFTP_DIRHANDLE_FLAG_NEGOTIATED				1
+
 struct sftp_handle_s {
     struct sftp_subsystem_s					*sftp;
     union _sftp_type_u {
@@ -105,7 +107,8 @@ struct sftp_handle_s {
 	    int							flags;
 	} filehandle;
 	struct sftp_dirhandle_s {
-	    unsigned int					valid;
+	    unsigned int					flags;
+	    struct sftp_valid_s					valid;
 	} dirhandle;
     } type;
 };
@@ -414,6 +417,7 @@ struct commonhandle_s *create_sftp_dirhandle(struct sftp_subsystem_s *sftp, stru
 {
     struct fs_location_s location;
     struct commonhandle_s *handle=NULL;
+    struct attr_context_s *actx=&sftp->attrctx;
 
     memset(&location, 0, sizeof(struct fs_location_s));
 
@@ -427,6 +431,11 @@ struct commonhandle_s *create_sftp_dirhandle(struct sftp_subsystem_s *sftp, stru
 	struct sftp_handle_s *sftp_handle=(struct sftp_handle_s *) handle->buffer;
 
 	handle->flags |= COMMONHANDLE_FLAG_SFTP;
+
+	/* set the properties of the dirhandle:
+	- one of the properties is which attributes send by the readdir. Now with the latest versions (20211101: versions 3 to 6) this is determined
+	somehowe by the server, no negotiation at all */
+
 	sftp_handle->sftp=sftp;
 
 	/* take a default for the sftp attributes the server sends to the client per dentry next to the name and the type (which are always send)
@@ -434,7 +443,14 @@ struct commonhandle_s *create_sftp_dirhandle(struct sftp_subsystem_s *sftp, stru
 	    - make this configurable
 	    - use a "new" opendir where the client can ask for the set of attributes: an extension or a new protocol version */
 
-	sftp_handle->type.dirhandle.valid=SSH_FILEXFER_ATTR_SIZE | SSH_FILEXFER_ATTR_PERMISSIONS | SSH_FILEXFER_ATTR_MODIFYTIME | SSH_FILEXFER_ATTR_SUBSECOND_TIMES | SSH_FILEXFER_ATTR_CTIME;
+	if ((* actx->ops.enable_attr)(actx, &sftp_handle->type.dirhandle.valid, "size")==1) logoutput("create_sftp_dirhandle: enabled sending of attr/readdir size");
+	if ((* actx->ops.enable_attr)(actx, &sftp_handle->type.dirhandle.valid, "permissions")==1) logoutput("create_sftp_dirhandle: enabled sending of attr/readdir permissions");
+	if ((* actx->ops.enable_attr)(actx, &sftp_handle->type.dirhandle.valid, "mtime")==1) logoutput("create_sftp_dirhandle: enabled sending of attr/readdir modifytime");
+	if ((* actx->ops.enable_attr)(actx, &sftp_handle->type.dirhandle.valid, "user")==1) logoutput("create_sftp_dirhandle: enabled sending of attr/readdir user");
+	if ((* actx->ops.enable_attr)(actx, &sftp_handle->type.dirhandle.valid, "subseconds")==1) logoutput("create_sftp_dirhandle: enabled sending of attr/readdir subsecond times");
+
+	sftp_handle->type.dirhandle.flags=0;
+
 	insert_dirhandle(handle);
 
     }
@@ -472,8 +488,8 @@ void release_sftp_handle(struct commonhandle_s **p_handle)
 
 }
 
-uint32_t get_valid_sftp_dirhandle(struct commonhandle_s *handle)
+struct sftp_valid_s *get_valid_sftp_dirhandle(struct commonhandle_s *handle)
 {
     struct sftp_handle_s *sftp_handle=(struct sftp_handle_s *) handle->buffer;
-    return sftp_handle->type.dirhandle.valid;
+    return &sftp_handle->type.dirhandle.valid;
 }

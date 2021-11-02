@@ -48,7 +48,7 @@
 #define HASH_ATTRCB_TABLE_SIZE				17
 
 #ifndef SSH_FILEXFER_ATTR_SUBSECOND_TIMES
-#define SSH_FILEXFER_ATTR_SUBSECOND_TIMES 		1 << 8
+#define SSH_FILEXFER_ATTR_SUBSECOND_TIMES 	1 << SSH_FILEXFER_INDEX_SUBSECOND_TIMES
 #endif
 
 static struct list_header_s header_attrcbs[HASH_ATTRCB_TABLE_SIZE];
@@ -58,7 +58,7 @@ static unsigned char refcount=0;
 
 static void add_attrcb_hashtable(struct hashed_attrcb_s *hcb)
 {
-    unsigned int hash = hcb->valid % HASH_ATTRCB_TABLE_SIZE;
+    unsigned int hash = hcb->valid.mask % HASH_ATTRCB_TABLE_SIZE;
     struct list_header_s *header=&header_attrcbs[hash];
     struct hashed_attrcb_s *tmp=NULL;
     struct list_element_s *list=NULL;
@@ -71,7 +71,7 @@ static void add_attrcb_hashtable(struct hashed_attrcb_s *hcb)
     while (list) {
 
 	tmp=(struct hashed_attrcb_s *)((char *) list - offsetof(struct hashed_attrcb_s, list));
-	if (tmp->valid==hcb->valid && tmp->version==hcb->version) break;
+	if (memcmp(&tmp->valid, &hcb->valid, sizeof(struct sftp_valid_s))==0 && tmp->version==hcb->version) break;
 	list=get_next_element(list);
 	tmp=NULL;
 
@@ -92,7 +92,7 @@ static void add_attrcb_hashtable(struct hashed_attrcb_s *hcb)
 
 static void remove_attrcb_hashtable(struct hashed_attrcb_s *hcb)
 {
-    unsigned int hash = hcb->valid % HASH_ATTRCB_TABLE_SIZE;
+    unsigned int hash = hcb->valid.mask % HASH_ATTRCB_TABLE_SIZE;
     struct list_header_s *header=&header_attrcbs[hash];
 
     write_lock_list_header(header, &hash_mutex, &hash_cond);
@@ -100,9 +100,9 @@ static void remove_attrcb_hashtable(struct hashed_attrcb_s *hcb)
     write_unlock_list_header(header, &hash_mutex, &hash_cond);
 }
 
-struct hashed_attrcb_s *lookup_hashed_attrcb(uint32_t valid, unsigned char version)
+struct hashed_attrcb_s *lookup_hashed_attrcb(struct sftp_valid_s *valid, unsigned char version)
 {
-    unsigned int hash = valid % HASH_ATTRCB_TABLE_SIZE;
+    unsigned int hash = valid->mask % HASH_ATTRCB_TABLE_SIZE;
     struct list_header_s *header=&header_attrcbs[hash];
     struct list_element_s *list=NULL;
     struct hashed_attrcb_s *hcb=NULL;
@@ -114,7 +114,7 @@ struct hashed_attrcb_s *lookup_hashed_attrcb(uint32_t valid, unsigned char versi
 
 	hcb=(struct hashed_attrcb_s *)((char *) list - offsetof(struct hashed_attrcb_s, list));
 
-	if (hcb->valid==valid && hcb->version==version) break;
+	if (memcmp(&hcb->valid, valid, sizeof(struct sftp_valid_s))==0 && hcb->version==version) break;
 	list=get_next_element(list);
 	hcb=NULL;
 
@@ -130,7 +130,7 @@ void init_rw_attr_result(struct rw_attr_result_s *r)
     memset(r, 0, sizeof(struct rw_attr_result_s));
 }
 
-void create_hashed_attrcb(unsigned char version, unsigned int valid, unsigned char *cb, unsigned char count, unsigned int len, unsigned int stat_mask)
+void create_hashed_attrcb(unsigned char version, struct sftp_valid_s *valid, unsigned char *cb, unsigned char count, unsigned int len, unsigned int stat_mask)
 {
     unsigned int size=sizeof(struct hashed_attrcb_s) + count * sizeof(unsigned char);
     struct hashed_attrcb_s *hcb=malloc(size);
@@ -140,7 +140,7 @@ void create_hashed_attrcb(unsigned char version, unsigned int valid, unsigned ch
 	memset(hcb, 0, size);
 
 	init_list_element(&hcb->list, NULL);
-	hcb->valid=valid;
+	memcpy(&hcb->valid, valid, sizeof(struct sftp_valid_s));
 	hcb->version=version;
 	hcb->count=count;
 	hcb->len=len;
@@ -159,7 +159,7 @@ void create_hashed_attrcb(unsigned char version, unsigned int valid, unsigned ch
 
 }
 
-void parse_attributes_generic(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat, unsigned int valid)
+void parse_attributes_generic(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat, struct sftp_valid_s *valid)
 {
     unsigned char version=(* actx->get_sftp_protocol_version)(actx);
     struct hashed_attrcb_s *hcb=NULL;
@@ -169,23 +169,24 @@ void parse_attributes_generic(struct attr_context_s *actx, struct attr_buffer_s 
 
     if (r->flags & RW_ATTR_RESULT_FLAG_WRITE) {
 
-	r->valid = (valid & actx->w_valid);
-	logoutput_debug("parse_attributes_generic: w valid %i r->valid %i mask %i", valid, r->valid, actx->w_valid);
+	r->valid.mask = (valid->mask & actx->w_valid.mask);
+	r->valid.flags = (valid->flags & actx->w_valid.flags);
+	logoutput_debug("parse_attributes_generic: w valid %i r->valid %i mask %i", valid->mask, r->valid.mask, actx->w_valid.mask);
 
     } else if (r->flags & RW_ATTR_RESULT_FLAG_READ) {
 
-	r->valid = (valid & actx->r_valid);
-	logoutput_debug("parse_attributes_generic: r valid %i r->valid %i mask %i", valid, r->valid, actx->r_valid);
+	r->valid.mask = (valid->mask & actx->r_valid.mask);
+	r->valid.flags = (valid->flags & actx->r_valid.flags);
+	logoutput_debug("parse_attributes_generic: r valid %i r->valid %i mask %i", valid->mask, r->valid.mask, actx->r_valid.mask);
 
     }
 
-    r->ignored = (valid & ~r->valid);				/* which attributes are not taken into account */
-    r->todo = (r->valid & ~SSH_FILEXFER_ATTR_SUBSECOND_TIMES);	/* the flags of the main attributes */
+    r->ignored = (valid->mask & ~r->valid.mask);		/* which attributes are not taken into account */
+    r->todo = r->valid.mask;					/* the flags of the main attributes */
     r->done=0;
+    logoutput_debug("parse_attributes_generic: valid %i r->valid %i todo %i ignored %i", valid->mask, r->valid.mask, r->todo, r->ignored);
 
-    logoutput_debug("parse_attributes_generic: valid %i r->valid %i todo %i ignored %i", valid, r->valid, r->todo, r->ignored);
-
-    hcb=lookup_hashed_attrcb(r->valid, version);
+    hcb=lookup_hashed_attrcb(&r->valid, version);
 
     if (hcb) {
 	unsigned char index=0;
@@ -220,11 +221,20 @@ static void _attr_read_cb(struct attr_context_s *actx, struct attr_buffer_s *buf
     (* actx->attrcb[ctr].r_cb)(actx, buffer, r, stat);
 }
 
-void read_attributes_generic(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat, unsigned int valid)
+void read_attributes_generic(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat, unsigned int valid_bits)
 {
+    struct sftp_valid_s valid=SFTP_VALID_INIT;
+
     r->flags |= RW_ATTR_RESULT_FLAG_READ;
     r->parse_attribute=_attr_read_cb;
-    parse_attributes_generic(actx, buffer, r, stat, valid);
+
+    /* read_attributes_generic is called typically direct from the sftp protocol where all bits (inluding SUBSECOND_TIMES) are set in valid_bits
+	here split those into the internal struct with mask and flags */
+
+    valid.mask = (valid_bits & ~SSH_FILEXFER_ATTR_SUBSECOND_TIMES);
+    valid.flags = (valid_bits | SSH_FILEXFER_ATTR_SUBSECOND_TIMES);
+
+    parse_attributes_generic(actx, buffer, r, stat, &valid);
 }
 
 static void _attr_write_cb(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat, unsigned char ctr)
@@ -236,7 +246,7 @@ static void _attr_write_cb(struct attr_context_s *actx, struct attr_buffer_s *bu
     logoutput_debug("_attr_write_cb: ctr %i code %i done %i todo %i", ctr, actx->attrcb[ctr].code, r->done, r->todo);
 }
 
-void write_attributes_generic(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat, unsigned int valid)
+void write_attributes_generic(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat, struct sftp_valid_s *valid)
 {
     r->flags |= RW_ATTR_RESULT_FLAG_WRITE;
     r->parse_attribute=_attr_write_cb;
@@ -258,7 +268,6 @@ static void _prepare_write_cb(struct attr_context_s *actx, struct attr_buffer_s 
     tmp->index++;
 
     r->stat_mask |= actx->attrcb[ctr].stat_mask;
-
     r->done |= actx->attrcb[ctr].code;
     r->todo &= ~actx->attrcb[ctr].code;
 
@@ -266,7 +275,7 @@ static void _prepare_write_cb(struct attr_context_s *actx, struct attr_buffer_s 
 
 }
 
-unsigned int get_size_buffer_write_attributes(struct attr_context_s *actx, struct rw_attr_result_s *r, unsigned int valid)
+unsigned int get_size_buffer_write_attributes(struct attr_context_s *actx, struct rw_attr_result_s *r, struct sftp_valid_s *valid)
 {
     unsigned char cb[36];
     struct _prepare_write_s tmp;
@@ -279,7 +288,7 @@ unsigned int get_size_buffer_write_attributes(struct attr_context_s *actx, struc
     r->parse_attribute=_prepare_write_cb;
     r->ptr=(void *) &tmp;
 
-    logoutput_debug("get_size_buffer_write_attributes: valid %i", valid);
+    logoutput_debug("get_size_buffer_write_attributes: valid %i", valid->mask);
 
     parse_attributes_generic(actx, NULL, r, NULL, valid);
 
@@ -288,7 +297,7 @@ unsigned int get_size_buffer_write_attributes(struct attr_context_s *actx, struc
     if (tmp.index>0 && (r->flags & RW_ATTR_RESULT_FLAG_CACHED)==0) {
 	unsigned char version=(* actx->get_sftp_protocol_version)(actx);
 
-	create_hashed_attrcb(version, valid, cb, tmp.index, tmp.len, r->stat_mask);
+	create_hashed_attrcb(version, &r->valid, cb, tmp.index, tmp.len, r->stat_mask);
 
     }
 
@@ -303,7 +312,7 @@ static void _read_stat_mask_cb(struct attr_context_s *actx, struct attr_buffer_s
     r->stat_mask |= actx->attrcb[ctr].stat_mask;
 }
 
-unsigned int translate_valid_2_stat_mask(struct attr_context_s *actx, unsigned int valid, unsigned char what)
+unsigned int translate_valid_2_stat_mask(struct attr_context_s *actx, struct sftp_valid_s *valid, unsigned char what)
 {
     struct rw_attr_result_s r=RW_ATTR_RESULT_INIT;
 
@@ -325,23 +334,23 @@ unsigned int translate_valid_2_stat_mask(struct attr_context_s *actx, unsigned i
 }
 
 struct _get_valid_flags_s {
-    unsigned int 			mask;
-    unsigned int			valid;
+    unsigned int 			stat_mask;
+    unsigned int			valid_mask;
 };
 
 static void _get_valid_flags_cb(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat, unsigned char ctr)
 {
     struct _get_valid_flags_s *tmp=(struct _get_valid_flags_s *) r->ptr;
 
-    if (actx->attrcb[ctr].stat_mask & tmp->mask) tmp->valid |= actx->attrcb[ctr].code;
+    if (actx->attrcb[ctr].stat_mask & tmp->stat_mask) tmp->valid_mask |= actx->attrcb[ctr].code;
     r->todo &= ~actx->attrcb[ctr].code;
 }
 
-unsigned int translate_stat_mask_2_valid(struct attr_context_s *actx, unsigned int mask, unsigned char what)
+unsigned int translate_stat_mask_2_valid(struct attr_context_s *actx, unsigned int stat_mask, unsigned char what)
 {
     struct rw_attr_result_s r=RW_ATTR_RESULT_INIT;
     struct _get_valid_flags_s tmp;
-    unsigned int valid=get_supported_valid_flags(actx, what);
+    struct sftp_valid_s *valid=get_supported_valid_flags(actx, what);
 
     if (what=='r') {
 
@@ -353,14 +362,14 @@ unsigned int translate_stat_mask_2_valid(struct attr_context_s *actx, unsigned i
 
     }
 
-    tmp.mask=mask;
-    tmp.valid=0;
+    tmp.stat_mask=stat_mask;
+    tmp.valid_mask=0;
 
     r.parse_attribute=_get_valid_flags_cb;
     r.ptr=(void *) &tmp;
     parse_attributes_generic(actx, NULL, &r, NULL, valid);
 
-    return tmp.valid;
+    return tmp.valid_mask;
 
 }
 
@@ -378,21 +387,26 @@ static void _parse_stat_mask_cb(struct attr_context_s *actx, struct attr_buffer_
     r->stat_mask |= actx->attrcb[ctr].stat_mask;
     r->done |= actx->attrcb[ctr].code;
     r->todo &= ~actx->attrcb[ctr].code;
-
 }
 
 void parse_sftp_attributes_stat_mask(struct attr_context_s *actx, struct rw_attr_result_s *r, struct system_stat_s *stat, unsigned char what, void (* cb)(unsigned int stat_mask, unsigned int len, unsigned int validflag, unsigned int fattr, void *ptr), void *ptr)
 {
-    unsigned int valid=get_supported_valid_flags(actx, what);
+    struct sftp_valid_s *valid=NULL;
     struct _parse_stat_mask_s psm;
 
     if (what=='r') {
 
 	r->flags |= RW_ATTR_RESULT_FLAG_READ;
+	valid=&actx->r_valid;
 
     } else if (what=='w') {
 
 	r->flags |= RW_ATTR_RESULT_FLAG_WRITE;
+	valid=&actx->w_valid;
+
+    } else {
+
+	return;
 
     }
 

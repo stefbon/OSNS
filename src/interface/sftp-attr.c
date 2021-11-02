@@ -63,16 +63,15 @@ void parse_attributes_generic_ctx(struct context_interface_s *interface, struct 
 void read_sftp_attributes_ctx(struct context_interface_s *interface, struct attr_buffer_s *abuff, struct system_stat_s *stat)
 {
     struct sftp_client_s *sftp=(struct sftp_client_s *) (* interface->get_interface_buffer)(interface);
-    unsigned int valid=(* abuff->ops->rw.read.read_uint32)(abuff);
+    unsigned int valid_bits=(* abuff->ops->rw.read.read_uint32)(abuff);
     struct rw_attr_result_s r=RW_ATTR_RESULT_INIT;
 
-    read_attributes_generic(&sftp->attrctx, abuff, &r, stat, valid);
+    read_attributes_generic(&sftp->attrctx, abuff, &r, stat, valid_bits);
 }
 
-void write_attributes_ctx(struct context_interface_s *interface, struct attr_buffer_s *abuff, struct rw_attr_result_s *r, struct system_stat_s *stat, unsigned int valid)
+void write_attributes_ctx(struct context_interface_s *interface, struct attr_buffer_s *abuff, struct rw_attr_result_s *r, struct system_stat_s *stat, struct sftp_valid_s *valid)
 {
     struct sftp_client_s *sftp=(struct sftp_client_s *) (* interface->get_interface_buffer)(interface);
-
     write_attributes_generic(&sftp->attrctx, abuff, r, stat, valid);
 }
 
@@ -94,3 +93,9 @@ void correct_time_c2s_ctx(struct context_interface_s *interface, struct timespec
     (* sftp->time_ops.correct_time_c2s)(sftp, t);
 }
 
+unsigned char enable_attributes_ctx(struct context_interface_s *interface, struct sftp_valid_s *valid, const char *name)
+{
+    struct sftp_client_s *sftp=(struct sftp_client_s *) (* interface->get_interface_buffer)(interface);
+
+    return (* sftp->attrctx.ops.enable_attr)(&sftp->attrctx, valid, name);
+}

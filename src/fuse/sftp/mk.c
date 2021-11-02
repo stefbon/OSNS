@@ -65,7 +65,7 @@ void _fs_sftp_mkdir(struct service_context_s *context, struct fuse_request_s *f_
     struct inode_s *inode=entry->inode;
     struct sftp_request_s sftp_r;
     struct rw_attr_result_s r=RW_ATTR_RESULT_INIT;
-    struct get_supported_sftp_attr_s gssa=GSSA_INIT;
+    struct get_supported_sftp_attr_s gssa;
     unsigned int size=get_attr_buffer_size(interface, &r, stat, &gssa) + 5; /* uid and gid by server ?*/
     char buffer[size];
     unsigned int error=EIO;
@@ -73,11 +73,36 @@ void _fs_sftp_mkdir(struct service_context_s *context, struct fuse_request_s *f_
     char path[pathlen];
     struct attr_buffer_s abuff;
 
+    /* compare the stat mask as asked by FUSE and the ones SFTP can set using this protocol version */
+
+    if (gssa.stat_mask_result != gssa.stat_mask_asked) {
+
+
+	logoutput_warning("_fs_sftp_mkdir: not able to set every stat attr: asked %i to set %i", gssa.stat_mask_asked, gssa.stat_mask_result);
+
+    }
+
+    /* enable writing of subseconds (only of course if one of the time attr is included)*/
+
+    if (gssa.stat_mask_result & (SYSTEM_STAT_ATIME | SYSTEM_STAT_MTIME | SYSTEM_STAT_BTIME | SYSTEM_STAT_CTIME)) {
+
+	if (enable_attributes_ctx(interface, &gssa.valid, "subseconds")==1) {
+
+	    logoutput_info("_fs_sftp_mkdir: enabled setting subseconds");
+
+	} else {
+
+	    logoutput_info("_fs_sftp_mkdir: subseconds not supported");
+
+	}
+
+    }
+
     pathinfo->len += (* interface->backend.sftp.complete_path)(interface, path, pathinfo);
 
     set_attr_buffer_write(&abuff, buffer, size);
-    (* abuff.ops->rw.write.write_uint32)(&abuff, gssa.valid);
-    write_attributes_ctx(interface, &abuff, &r, stat, gssa.valid);
+    (* abuff.ops->rw.write.write_uint32)(&abuff, gssa.valid.mask);
+    write_attributes_ctx(interface, &abuff, &r, stat, &gssa.valid);
 
     init_sftp_request(&sftp_r, interface, f_request);
 

@@ -160,10 +160,12 @@ void init_attr_context_v04(struct attr_context_s *actx)
     attrcb[SSH_FILEXFER_INDEX_EXTENDED].stat_mask	= 0;
     attrcb[SSH_FILEXFER_INDEX_EXTENDED].fattr		= 0;
 
-    actx->w_valid=(SSH_FILEXFER_ATTR_TYPE | SSH_FILEXFER_ATTR_SIZE | SSH_FILEXFER_ATTR_OWNERGROUP | SSH_FILEXFER_ATTR_PERMISSIONS | SSH_FILEXFER_ATTR_ACCESSTIME | SSH_FILEXFER_ATTR_MODIFYTIME | SSH_FILEXFER_ATTR_SUBSECOND_TIMES);
+    actx->w_valid.mask=(SSH_FILEXFER_ATTR_TYPE | SSH_FILEXFER_ATTR_SIZE | SSH_FILEXFER_ATTR_OWNERGROUP | SSH_FILEXFER_ATTR_PERMISSIONS | SSH_FILEXFER_ATTR_ACCESSTIME | SSH_FILEXFER_ATTR_MODIFYTIME);
+    actx->w_valid.flags=SSH_FILEXFER_ATTR_SUBSECOND_TIMES;
     actx->w_count=8;
     actx->r_count=10;
-    actx->r_valid=(SSH_FILEXFER_ATTR_TYPE | SSH_FILEXFER_ATTR_SIZE | SSH_FILEXFER_ATTR_OWNERGROUP | SSH_FILEXFER_ATTR_PERMISSIONS | SSH_FILEXFER_ATTR_ACCESSTIME | SSH_FILEXFER_ATTR_MODIFYTIME | SSH_FILEXFER_ATTR_SUBSECOND_TIMES | SSH_FILEXFER_ATTR_ACL | SSH_FILEXFER_ATTR_EXTENDED);
+    actx->r_valid.mask=(SSH_FILEXFER_ATTR_TYPE | SSH_FILEXFER_ATTR_SIZE | SSH_FILEXFER_ATTR_OWNERGROUP | SSH_FILEXFER_ATTR_PERMISSIONS | SSH_FILEXFER_ATTR_ACCESSTIME | SSH_FILEXFER_ATTR_MODIFYTIME | SSH_FILEXFER_ATTR_ACL | SSH_FILEXFER_ATTR_EXTENDED);
+    actx->r_valid.flags=SSH_FILEXFER_ATTR_SUBSECOND_TIMES;
 
     /* nsec accesstime */
 
@@ -246,25 +248,74 @@ void parse_attributes_v04(struct attr_context_s *actx, struct attr_buffer_s *buf
     if (r->todo & SSH_FILEXFER_ATTR_ACCESSTIME) {
 
 	(* r->parse_attribute)(actx, buffer, r, stat, SSH_FILEXFER_INDEX_ACCESSTIME);
-	if (r->valid & SSH_FILEXFER_ATTR_SUBSECOND_TIMES) (* r->parse_attribute)(actx, buffer, r, stat, SSH_FILEXFER_INDEX_NSEC_ATIME);
+	if (r->valid.flags & SSH_FILEXFER_ATTR_SUBSECOND_TIMES) (* r->parse_attribute)(actx, buffer, r, stat, SSH_FILEXFER_INDEX_NSEC_ATIME);
 
     }
 
     if (r->todo & SSH_FILEXFER_ATTR_CREATETIME) {
 
 	(* r->parse_attribute)(actx, buffer, r, stat, SSH_FILEXFER_INDEX_CREATETIME);
-	if (r->valid & SSH_FILEXFER_ATTR_SUBSECOND_TIMES) (* r->parse_attribute)(actx, buffer, r, stat, SSH_FILEXFER_INDEX_NSEC_BTIME);
+	if (r->valid.flags & SSH_FILEXFER_ATTR_SUBSECOND_TIMES) (* r->parse_attribute)(actx, buffer, r, stat, SSH_FILEXFER_INDEX_NSEC_BTIME);
 
     }
 
     if (r->todo & SSH_FILEXFER_ATTR_MODIFYTIME) {
 
 	(* r->parse_attribute)(actx, buffer, r, stat, SSH_FILEXFER_INDEX_MODIFYTIME);
-	if (r->valid & SSH_FILEXFER_ATTR_SUBSECOND_TIMES) (* r->parse_attribute)(actx, buffer, r, stat, SSH_FILEXFER_INDEX_NSEC_MTIME);
+	if (r->valid.flags & SSH_FILEXFER_ATTR_SUBSECOND_TIMES) (* r->parse_attribute)(actx, buffer, r, stat, SSH_FILEXFER_INDEX_NSEC_MTIME);
 
     }
 
     if (r->todo & SSH_FILEXFER_ATTR_ACL) (* r->parse_attribute)(actx, buffer, r, stat, SSH_FILEXFER_INDEX_ACL);
     if (r->todo & SSH_FILEXFER_ATTR_EXTENDED) (* r->parse_attribute)(actx, buffer, r, stat, SSH_FILEXFER_INDEX_EXTENDED);
 
+}
+
+unsigned char enable_attr_v04(struct attr_context_s *actx, struct sftp_valid_s *p, const char *name)
+{
+    unsigned char result=0;
+
+    if (strcmp(name, "size")==0) {
+
+	p->mask |= SSH_FILEXFER_ATTR_SIZE;
+	result=1;
+
+    } else if (strcmp(name, "permissions")==0) {
+
+	p->mask |= SSH_FILEXFER_ATTR_PERMISSIONS;
+	result=1;
+
+    } else if (strcmp(name, "user")==0 || strcmp(name, "group")==0) {
+
+	p->mask |= SSH_FILEXFER_ATTR_OWNERGROUP;
+	result=1;
+
+    } else if (strcmp(name, "atime")==0) {
+
+	p->mask |= SSH_FILEXFER_ATTR_ACCESSTIME;
+	result=1;
+
+    } else if (strcmp(name, "btime")==0) {
+
+	p->mask |= SSH_FILEXFER_ATTR_CREATETIME;
+	result=1;
+
+    } else if (strcmp(name, "mtime")==0) {
+
+	p->mask |= SSH_FILEXFER_ATTR_MODIFYTIME;
+	result=1;
+
+    } else if (strcmp(name, "subseconds")==0) {
+
+	p->flags |= SSH_FILEXFER_ATTR_SUBSECOND_TIMES;
+	result=1;
+
+    } else if (strcmp(name, "extended")==0) {
+
+	p->mask |= SSH_FILEXFER_ATTR_EXTENDED;
+	result=1;
+
+    }
+
+    return result;
 }

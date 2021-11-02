@@ -26,14 +26,18 @@
 #include "datatypes.h"
 #include "lib/users/mapping.h"
 
-#define SSH_FILEXFER_INDEX_NSEC_ATIME			32
-#define SSH_FILEXFER_INDEX_NSEC_MTIME			33
-#define SSH_FILEXFER_INDEX_NSEC_BTIME			34
-#define SSH_FILEXFER_INDEX_NSEC_CTIME			35
+#include "attr-indices.h"
 
 #define RW_ATTR_RESULT_FLAG_READ			1
 #define RW_ATTR_RESULT_FLAG_WRITE			2
 #define RW_ATTR_RESULT_FLAG_CACHED			4
+
+struct sftp_valid_s {
+    unsigned int					flags;
+    unsigned int					mask;
+};
+
+#define SFTP_VALID_INIT				{0, 0}
 
 struct attr_context_s;
 struct rw_attr_result_s;
@@ -42,7 +46,7 @@ typedef void (* rw_attr_cb)(struct attr_context_s *actx, struct attr_buffer_s *b
 
 struct rw_attr_result_s {
     unsigned int					flags;
-    unsigned int					valid;
+    struct sftp_valid_s					valid;
     unsigned int					todo;
     unsigned int					done;
     unsigned int					ignored;
@@ -53,7 +57,7 @@ struct rw_attr_result_s {
 
 void parse_dummy(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat, unsigned char ctr);
 
-#define RW_ATTR_RESULT_INIT				{0, 0, 0, 0, 0, 0, parse_dummy, NULL}
+#define RW_ATTR_RESULT_INIT				{0, {0, 0}, 0, 0, 0, 0, parse_dummy, NULL}
 
 struct _rw_attrcb_s {
     uint32_t						code;
@@ -72,6 +76,7 @@ struct attr_ops_s {
     void						(* parse_attributes)(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *result, struct system_stat_s *stat);
     void						(* read_name_name_response)(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct ssh_string_s *name);
     void						(* write_name_name_response)(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct ssh_string_s *name);
+    unsigned char					(* enable_attr)(struct attr_context_s *actx, struct sftp_valid_s *p, const char *name);
 };
 
 #define ATTR_CONTEXT_FLAG_CLIENT			1
@@ -84,9 +89,9 @@ struct attr_context_s {
     void						*ptr;
     struct net_idmapping_s 				*mapping;
     struct attr_ops_s					ops;
-    unsigned int					w_valid;
+    struct sftp_valid_s					w_valid;
     unsigned int					w_count;
-    unsigned int					r_valid;
+    struct sftp_valid_s					r_valid;
     unsigned int					r_count;
     struct _rw_attrcb_s					attrcb[ATTR_CONTEXT_COUNT_ATTR_CB];
     unsigned int					(* maxlength_filename)(struct attr_context_s *actx);
@@ -99,10 +104,14 @@ struct attr_context_s {
 
 /* prototypes */
 
+void init_sftp_valid(struct sftp_valid_s *valid);
+
 void init_attrcb_zero(struct _rw_attrcb_s *attrcb, unsigned int count);
 void init_attr_context(struct attr_context_s *actx, unsigned int flags, void *ptr, struct net_idmapping_s *m);
 void set_sftp_attr_context(struct attr_context_s *actx);
 
-unsigned int get_supported_valid_flags(struct attr_context_s *actx, unsigned char what);
+struct sftp_valid_s *get_supported_valid_flags(struct attr_context_s *actx, unsigned char what);
+void convert_sftp_valid_w(struct attr_context_s *actx, struct sftp_valid_s *valid, uint32_t bits);
+void convert_sftp_valid_r(struct attr_context_s *actx, struct sftp_valid_s *valid, uint32_t bits);
 
 #endif

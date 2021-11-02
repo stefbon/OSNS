@@ -21,12 +21,11 @@
 #define FUSE_SFTP_INODE_STAT_H
 
 struct get_supported_sftp_attr_s {
-    unsigned int				stat_mask;
+    unsigned int				stat_mask_asked;
+    unsigned int				stat_mask_result;
     unsigned int				len;
-    unsigned int				valid;
+    struct sftp_valid_s				valid;
 };
-
-#define GSSA_INIT				{0, 0, 0}
 
 /* prototypes */
 

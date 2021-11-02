@@ -20,22 +20,14 @@
 #ifndef _SFTP_PROTOCOL_V03_H
 #define _SFTP_PROTOCOL_V03_H
 
+#include "attr-indices.h"
+
 /*
     Definitions as described in:
     https://tools.ietf.org/html/draft-ietf-secsh-filexfer-02
 */
 
 /* attributes valid */
-
-#define SSH_FILEXFER_INDEX_TYPE			0
-#define SSH_FILEXFER_INDEX_SIZE			0
-#define SSH_FILEXFER_INDEX_UIDGID		1
-#define SSH_FILEXFER_INDEX_PERMISSIONS		2
-#define SSH_FILEXFER_INDEX_ACMODTIME		3
-
-#define SSH_FILEXFER_INDEX_SUBSECOND_TIMES	8
-
-#define SSH_FILEXFER_INDEX_EXTENDED		31
 
 #define SSH_FILEXFER_ATTR_TYPE			0
 #define SSH_FILEXFER_ATTR_SIZE 			1 << SSH_FILEXFER_INDEX_SIZE

@@ -24,11 +24,13 @@
 void parse_attributes_generic_ctx(struct context_interface_s *interface, struct rw_attr_result_s *r, struct system_stat_s *stat, unsigned char what, void (* cb)(unsigned int stat_mask, unsigned int len, unsigned int valid, unsigned int fattr, void *ptr), void *ptr);
 
 void read_sftp_attributes_ctx(struct context_interface_s *interface, struct attr_buffer_s *abuff, struct system_stat_s *stat);
-void write_attributes_ctx(struct context_interface_s *interface, struct attr_buffer_s *abuff, struct rw_attr_result_s *r, struct system_stat_s *stat, unsigned int valid);
+void write_attributes_ctx(struct context_interface_s *interface, struct attr_buffer_s *abuff, struct rw_attr_result_s *r, struct system_stat_s *stat, struct sftp_valid_s *valid);
 
 void read_name_name_response_ctx(struct context_interface_s *interface, struct attr_buffer_s *abuff, struct ssh_string_s *name);
 
 void correct_time_c2s_ctx(struct context_interface_s *interface, struct timespec *t);
 void correct_time_s2c_ctx(struct context_interface_s *interface, struct timespec *t);
+
+unsigned char enable_attributes_ctx(struct context_interface_s *interface, struct sftp_valid_s *valid, const char *name);
 
 #endif
