@@ -55,6 +55,7 @@ static struct list_header_s header_attrcbs[HASH_ATTRCB_TABLE_SIZE];
 static pthread_mutex_t hash_mutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t hash_cond=PTHREAD_COND_INITIALIZER;
 static unsigned char refcount=0;
+static unsigned int attr_subsecond_times=SSH_FILEXFER_ATTR_SUBSECOND_TIMES;
 
 static void add_attrcb_hashtable(struct hashed_attrcb_s *hcb)
 {
@@ -164,27 +165,18 @@ void parse_attributes_generic(struct attr_context_s *actx, struct attr_buffer_s 
     unsigned char version=(* actx->get_sftp_protocol_version)(actx);
     struct hashed_attrcb_s *hcb=NULL;
     unsigned char ctr=0;
+    struct sftp_valid_s *supported=(r->flags & RW_ATTR_RESULT_FLAG_WRITE) ? &actx->w_valid : &actx->r_valid;
 
     /* take only the valid bits which are supported */
 
-    if (r->flags & RW_ATTR_RESULT_FLAG_WRITE) {
-
-	r->valid.mask = (valid->mask & actx->w_valid.mask);
-	r->valid.flags = (valid->flags & actx->w_valid.flags);
-	logoutput_debug("parse_attributes_generic: w valid %i r->valid %i mask %i", valid->mask, r->valid.mask, actx->w_valid.mask);
-
-    } else if (r->flags & RW_ATTR_RESULT_FLAG_READ) {
-
-	r->valid.mask = (valid->mask & actx->r_valid.mask);
-	r->valid.flags = (valid->flags & actx->r_valid.flags);
-	logoutput_debug("parse_attributes_generic: r valid %i r->valid %i mask %i", valid->mask, r->valid.mask, actx->r_valid.mask);
-
-    }
+    r->valid.mask = (valid->mask & supported->mask);
+    r->valid.flags = (valid->flags & supported->flags);
+    logoutput_debug("parse_attributes_generic: valid mask %i supported mask %i result %i", valid->mask, supported->mask, r->valid.mask);
 
     r->ignored = (valid->mask & ~r->valid.mask);		/* which attributes are not taken into account */
     r->todo = r->valid.mask;					/* the flags of the main attributes */
     r->done=0;
-    logoutput_debug("parse_attributes_generic: valid %i r->valid %i todo %i ignored %i", valid->mask, r->valid.mask, r->todo, r->ignored);
+    logoutput_debug("parse_attributes_generic: r->valid %i todo %i ignored %i", r->valid.mask, r->todo, r->ignored);
 
     hcb=lookup_hashed_attrcb(&r->valid, version);
 
@@ -215,6 +207,7 @@ void parse_attributes_generic(struct attr_context_s *actx, struct attr_buffer_s 
 
 static void _attr_read_cb(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat, unsigned char ctr)
 {
+    logoutput_debug("_attr_read_cb: ctr %i name %s index %i valid %i", ctr, actx->attrcb[ctr].name, actx->attrcb[ctr].shift, actx->attrcb[ctr].code);
     r->stat_mask |= actx->attrcb[ctr].stat_mask;
     r->done |= actx->attrcb[ctr].code;
     r->todo &= ~actx->attrcb[ctr].code;
@@ -225,14 +218,16 @@ void read_attributes_generic(struct attr_context_s *actx, struct attr_buffer_s *
 {
     struct sftp_valid_s valid=SFTP_VALID_INIT;
 
+    logoutput_debug("read_attributes_generic: valid bits %u ~subseconds %u result %u", valid_bits, ~attr_subsecond_times, (valid_bits & ~SSH_FILEXFER_ATTR_SUBSECOND_TIMES));
+
     r->flags |= RW_ATTR_RESULT_FLAG_READ;
     r->parse_attribute=_attr_read_cb;
 
     /* read_attributes_generic is called typically direct from the sftp protocol where all bits (inluding SUBSECOND_TIMES) are set in valid_bits
 	here split those into the internal struct with mask and flags */
 
-    valid.mask = (valid_bits & ~SSH_FILEXFER_ATTR_SUBSECOND_TIMES);
-    valid.flags = (valid_bits | SSH_FILEXFER_ATTR_SUBSECOND_TIMES);
+    valid.mask = valid_bits & ~attr_subsecond_times;
+    valid.flags = valid_bits & attr_subsecond_times;
 
     parse_attributes_generic(actx, buffer, r, stat, &valid);
 }

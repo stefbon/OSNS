@@ -300,7 +300,7 @@ int set_sftp_protocol(struct sftp_client_s *sftp)
 	set_sftp_recv_version(sftp);
 	set_sftp_send_version(sftp);
 
-	result=(int) sftp->protocol.version;
+	result=(int) version;
 
     } else {
 
