@@ -101,22 +101,55 @@ void get_group_l2p_byname_client(struct net_idmapping_s *m, struct net_entity_s 
 
 }
 
+struct _write_id_ssh_string_s {
+    struct net_idmapping_s 	*m;
+    struct net_entity_s		*ent;
+};
+
+void _cb_id_found(char *name, void *ptr)
+{
+    struct _write_id_ssh_string_s *wiss=(struct _write_id_ssh_string_s *) ptr;
+    struct net_entity_s *ent=wiss->ent;
+    unsigned int len=strlen(name);
+
+    /* cb when name is found for the local id
+	NOTE: the buffers for writing the name to have to be large enough ( to hold at least one user/group/other name) */
+
+    ent->net.name.len=len;
+    memcpy(ent->net.name.ptr, name, len);
+
+}
+
+void _cb_id_notfound(void *ptr)
+{
+    struct _write_id_ssh_string_s *wiss=(struct _write_id_ssh_string_s *) ptr;
+    struct net_entity_s *ent=wiss->ent;
+
+    ent->net.name.len=0;
+}
+
 void get_user_l2p_byname_server(struct net_idmapping_s *m, struct net_entity_s *user)
 {
-    unsigned int error=0;
+    struct _write_id_ssh_string_s wiss;
+
+    wiss.m=m;
+    wiss.ent=user;
 
     /* 20211104: just send the local user ... no domain ... no locking */
 
-    get_local_user_byuid(user->local.uid, &user->net.name, &error);
+    get_local_user_byuid(user->local.uid, _cb_id_found, _cb_id_notfound, (void *) &wiss);
 
 }
 
 void get_group_l2p_byname_server(struct net_idmapping_s *m, struct net_entity_s *group)
 {
-    unsigned int error=0;
+    struct _write_id_ssh_string_s wiss;
+
+    wiss.m=m;
+    wiss.ent=group;
 
     /* 20211104: just send the local group ... no domain ... no locking */
 
-    get_local_group_bygid(group->local.gid, &group->net.name, &error);
+    get_local_group_bygid(group->local.gid, _cb_id_found, _cb_id_notfound, (void *) &wiss);
 
 }

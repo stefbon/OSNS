@@ -88,33 +88,19 @@ void get_local_uid_byid(uid_t id, uid_t *uid, unsigned int *error)
 
 }
 
-unsigned int get_local_user_byuid(uid_t uid, struct ssh_string_s *user, unsigned int *error)
+void get_local_user_byuid(uid_t uid, void (* cb_found)(char *name, void *ptr), void (* cb_notfound)(void *ptr), void *ptr)
 {
     struct passwd *pwd=getpwuid(uid);
-    unsigned int len=0;
 
     if (pwd) {
 
-	*error=0;
-	len=strlen(pwd->pw_name);
-
-	if (user && user->ptr) {
-	    unsigned int tmp=len;
-
-	    if (user->len<tmp) tmp=user->len;
-	    memset(user->ptr, 0, user->len);
-	    memcpy(user->ptr, pwd->pw_name, tmp);
-
-	}
+	(* cb_found)(pwd->pw_name, ptr);
 
     } else {
 
-	*error=ENOENT;
-	if (user && user->ptr) memset(user->ptr, '\0', user->len);
+	(* cb_notfound)(ptr);
 
     }
-
-    return len;
 
 }
 
@@ -161,33 +147,19 @@ void get_local_gid_byid(gid_t id, gid_t *gid, unsigned int *error)
 
 }
 
-unsigned int get_local_group_bygid(gid_t gid, struct ssh_string_s *group, unsigned int *error)
+void get_local_group_bygid(gid_t gid, void (* cb_found)(char *name, void *ptr), void (* cb_notfound)(void *ptr), void *ptr)
 {
     struct group *grp=getgrgid(gid);
-    unsigned int len=0;
 
     if (grp) {
 
-	*error=0;
-	len=strlen(grp->gr_name);
-
-	if (group->ptr) {
-	    unsigned int tmp=len;
-
-	    if (group->len<tmp) tmp=group->len;
-	    memset(group->ptr, 0, group->len);
-	    memcpy(group->ptr, grp->gr_name, tmp);
-
-	}
+	(* cb_found)(grp->gr_name, ptr);
 
     } else {
 
-	*error=ENOENT;
-	if (group->ptr) memset(group->ptr, '\0', group->len);
+	(* cb_notfound)(ptr);
 
     }
-
-    return len;
 
 }
 
