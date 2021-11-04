@@ -42,13 +42,15 @@ struct sftp_time_s {
 #define SFTP_RECEIVE_STATUS_WAITING1			(1 << 11)
 #define SFTP_RECEIVE_STATUS_WAITING2			(1 << 12)
 #define SFTP_RECEIVE_STATUS_WAIT			( SFTP_RECEIVE_STATUS_WAITING2 | SFTP_RECEIVE_STATUS_WAITING1 )
-#define SFTP_RECEIVE_STATUS_ERROR			(1 << 30)
-#define SFTP_RECEIVE_STATUS_DISCONNECT			(1 << 31)
+#define SFTP_RECEIVE_STATUS_ERROR			(1 << 20)
+#define SFTP_RECEIVE_STATUS_DISCONNECTING		(1 << 21)
+#define SFTP_RECEIVE_STATUS_DISCONNECTED		(1 << 22)
+#define SFTP_RECEIVE_STATUS_DISCONNECT			( SFTP_RECEIVE_STATUS_DISCONNECTING | SFTP_RECEIVE_STATUS_DISCONNECTED )
 
 #define SFTP_RECEIVE_BUFFER_SIZE_DEFAULT		16384
 
 struct sftp_receive_s {
-    unsigned char					flags;
+    unsigned int					flags;
     pthread_mutex_t					mutex;
     pthread_cond_t					cond;
     void						(* process_sftp_payload)(struct sftp_payload_s *payload);

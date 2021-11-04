@@ -305,9 +305,13 @@ void remove_sftp_connection_eventloop(struct sftp_connection_s *connection)
 
 void disconnect_sftp_connection(struct sftp_connection_s *connection, unsigned char senddisconnect)
 {
+
+    if (connection->flags & (SFTP_CONNECTION_FLAG_DISCONNECTING | SFTP_CONNECTION_FLAG_DISCONNECTED)) return;
+
     connection->flags |= SFTP_CONNECTION_FLAG_DISCONNECTING;
     (* connection->close)(connection);
     connection->flags |= SFTP_CONNECTION_FLAG_DISCONNECTED;
+
 }
 
 void free_sftp_connection(struct sftp_connection_s *connection)

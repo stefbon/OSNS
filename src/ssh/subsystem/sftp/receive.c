@@ -311,17 +311,23 @@ static int read_sftp_connection_socket(struct sftp_subsystem_s *s, int fd, struc
 
 void read_sftp_connection_signal(int fd, void *ptr, struct event_s *event)
 {
-    struct sftp_subsystem_s *s=(struct sftp_subsystem_s *) ptr;
+    struct sftp_subsystem_s *sftp=(struct sftp_subsystem_s *) ptr;
+    struct sftp_connection_s *connection=&sftp->connection;
+    struct sftp_receive_s *receive=&sftp->receive;
     int result=0;
 
-    if (signal_is_error(event) || signal_is_close(event)) {
+    if (signal_is_error(event)) {
 
 	s->connection.flags |= SFTP_CONNECTION_FLAG_TROUBLE;
-	start_thread_sftp_connection_problem(&s->connection);
+	start_thread_sftp_connection_problem(connection);
+
+    } else if (signal_is_close(event)) {
+
+	goto close;
 
     } else if (signal_is_data(event)) {
 
-	result=read_sftp_connection_socket(s, fd, event);
+	result=read_sftp_connection_socket(sftp, fd, event);
 
     } else {
 
@@ -329,6 +335,33 @@ void read_sftp_connection_signal(int fd, void *ptr, struct event_s *event)
 
     }
 
+    return;
+
+    close:
+
+    pthread_mutex_lock(&receive->mutex);
+
+    if (receive->flags & SFTP_RECEIVE_STATUS_DISCONNECT) {
+
+	pthread_mutex_unlock(&receive->mutex);
+	return;
+
+    }
+
+    receive->flags |= SFTP_RECEIVE_STATUS_DISCONNECTING;
+    pthread_mutex_unlock(&receive->mutex);
+
+    remove_sftp_connection_eventloop(connection);
+    disconnect_sftp_connection(connection, 0);
+
+    pthread_mutex_lock(&receive->mutex);
+    receive->flags |= SFTP_RECEIVE_STATUS_DISCONNECTED;
+    pthread_mutex_unlock(&receive->mutex);
+
+    logoutput("read_sftp_connection_signal: disconnected.. exit..");
+    stop_beventloop();
+
+    return;
 
 }
 
