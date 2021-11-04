@@ -69,6 +69,8 @@ void write_attr_ownergroup_v04(struct attr_context_s *actx, struct attr_buffer_s
     user.net.name.ptr=(char *) (buffer->pos+4); /* use buffer to write name to */
     user.local.uid=get_uid_system_stat(stat);
 
+    logoutput_debug("write_attr_ownergroup_v04: local uid %i", user.local.uid);
+
     (* actx->mapping->mapcb.get_user_l2p)(actx->mapping, &user);
 
     (* buffer->ops->rw.write.write_uint32)(buffer, user.net.name.len);
@@ -76,6 +78,8 @@ void write_attr_ownergroup_v04(struct attr_context_s *actx, struct attr_buffer_s
 
     group.net.name.ptr=(char *) (buffer->pos+4); /* use buffer to write name to */
     group.local.gid=get_gid_system_stat(stat);
+
+    logoutput_debug("write_attr_ownergroup_v04: local gid %i", group.local.gid);
 
     (* actx->mapping->mapcb.get_group_l2p)(actx->mapping, &group);
 
