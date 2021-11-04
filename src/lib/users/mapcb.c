@@ -91,8 +91,18 @@ void set_net_entity_map_func(struct net_idmapping_s *m, unsigned int flags)
 
 	    m->mapcb.get_user_p2l=get_user_p2l_shared_byname;
 	    m->mapcb.get_group_p2l=get_group_p2l_shared_byname;
-	    m->mapcb.get_user_l2p=get_user_l2p_byname;
-	    m->mapcb.get_group_l2p=get_group_l2p_byname;
+
+	    if (m->flags & NET_IDMAPPING_FLAG_CLIENT) {
+
+		m->mapcb.get_user_l2p=get_user_l2p_byname_client;
+	        m->mapcb.get_group_l2p=get_group_l2p_byname_client;
+
+	    } else {
+
+		m->mapcb.get_user_l2p=get_user_l2p_byname_server;
+	        m->mapcb.get_group_l2p=get_group_l2p_byname_server;
+
+	    }
 
 	    m->lookup.lookup_user=lookup_user_byname_system;
 	    m->lookup.lookup_group=lookup_group_byname_system;
@@ -132,8 +142,18 @@ void set_net_entity_map_func(struct net_idmapping_s *m, unsigned int flags)
 
 	    m->mapcb.get_user_p2l=get_user_p2l_nonshared_byname;
 	    m->mapcb.get_group_p2l=get_group_p2l_nonshared_byname;
-	    m->mapcb.get_user_l2p=get_user_l2p_byname;
-	    m->mapcb.get_group_l2p=get_group_l2p_byname;
+
+	    if (m->flags & NET_IDMAPPING_FLAG_CLIENT) {
+
+		m->mapcb.get_user_l2p=get_user_l2p_byname_client;
+	        m->mapcb.get_group_l2p=get_group_l2p_byname_client;
+
+	    } else {
+
+		m->mapcb.get_user_l2p=get_user_l2p_byname_server;
+	        m->mapcb.get_group_l2p=get_group_l2p_byname_server;
+
+	    }
 
 	    m->lookup.lookup_user=lookup_user_byname_system;
 	    m->lookup.lookup_group=lookup_group_byname_system;

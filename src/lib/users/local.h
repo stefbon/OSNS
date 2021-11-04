@@ -23,6 +23,8 @@
 #include "pwd.h"
 #include "grp.h"
 
+#include "datatypes.h"
+
 /* prototypes */
 
 void lock_local_userbase();

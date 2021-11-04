@@ -43,6 +43,7 @@
 #include "log.h"
 #include "main.h"
 #include "misc.h"
+#include "local.h"
 
 #include "threads.h"
 #include "workspace-interface.h"
@@ -66,7 +67,7 @@ void get_group_l2p_byid(struct net_idmapping_s *m, struct net_entity_s *group)
 /* get protocol user by name
     no domains */
 
-void get_user_l2p_byname(struct net_idmapping_s *m, struct net_entity_s *user)
+void get_user_l2p_byname_client(struct net_idmapping_s *m, struct net_entity_s *user)
 {
 
     if (user->local.uid==0) {
@@ -83,7 +84,7 @@ void get_user_l2p_byname(struct net_idmapping_s *m, struct net_entity_s *user)
 
 }
 
-void get_group_l2p_byname(struct net_idmapping_s *m, struct net_entity_s *group)
+void get_group_l2p_byname_client(struct net_idmapping_s *m, struct net_entity_s *group)
 {
 
     if (group->local.gid==0) {
@@ -97,5 +98,25 @@ void get_group_l2p_byname(struct net_idmapping_s *m, struct net_entity_s *group)
 	if (group->net.name.ptr) memcpy(group->net.name.ptr, m->sg.name, group->net.name.len);
 
     }
+
+}
+
+void get_user_l2p_byname_server(struct net_idmapping_s *m, struct net_entity_s *user)
+{
+    unsigned int error=0;
+
+    /* 20211104: just send the local user ... no domain ... no locking */
+
+    get_local_user_byuid(user->local.uid, &user->net.name, &error);
+
+}
+
+void get_group_l2p_byname_server(struct net_idmapping_s *m, struct net_entity_s *group)
+{
+    unsigned int error=0;
+
+    /* 20211104: just send the local group ... no domain ... no locking */
+
+    get_local_group_bygid(group->local.gid, &group->net.name, &error);
 
 }

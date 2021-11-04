@@ -25,7 +25,10 @@
 void get_user_l2p_byid(struct net_idmapping_s *m, struct net_entity_s *u);
 void get_group_l2p_byid(struct net_idmapping_s *m, struct net_entity_s *g);
 
-void get_user_l2p_byname(struct net_idmapping_s *m, struct net_entity_s *u);
-void get_group_l2p_byname(struct net_idmapping_s *m, struct net_entity_s *g);
+void get_user_l2p_byname_client(struct net_idmapping_s *m, struct net_entity_s *u);
+void get_group_l2p_byname_client(struct net_idmapping_s *m, struct net_entity_s *g);
+
+void get_user_l2p_byname_server(struct net_idmapping_s *m, struct net_entity_s *u);
+void get_group_l2p_byname_server(struct net_idmapping_s *m, struct net_entity_s *g);
 
 #endif

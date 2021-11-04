@@ -302,7 +302,7 @@ void set_sftp_protocol_version(struct sftp_subsystem_s *sftp, unsigned char vers
 void setup_sftp_idmapping(struct sftp_subsystem_s *sftp)
 {
     struct net_idmapping_s *mapping=&sftp->mapping;
-    unsigned int flags=0;
+    unsigned int flags=NET_IDMAPPING_FLAG_SERVER;
     unsigned int version=get_sftp_protocol_version(sftp);
 
     if (version > 3) {
