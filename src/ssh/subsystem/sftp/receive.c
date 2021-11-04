@@ -359,7 +359,7 @@ void read_sftp_connection_signal(int fd, void *ptr, struct event_s *event)
     pthread_mutex_unlock(&receive->mutex);
 
     logoutput("read_sftp_connection_signal: disconnected.. exit..");
-    stop_beventloop();
+    stop_beventloop(NULL);
 
     return;
 
