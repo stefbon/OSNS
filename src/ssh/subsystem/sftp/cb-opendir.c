@@ -218,7 +218,7 @@ static unsigned int get_write_max_buffersize(struct attr_context_s *actx, struct
 
     size += 4 + get_size_buffer_write_attributes(actx, r, valid);
 
-    logoutput_debug("get_write_max_buffersize: size %i stat mask %i valid %i ignored %i", size, r->stat_mask, r->valid.mask, r->ignored);
+    logoutput_debug("get_write_max_buffersize: size %i stat mask %i valid %i flag %i ignored %i", size, r->stat_mask, r->valid.mask, r->valid.flags, r->ignored);
 
     return size;
 
@@ -247,7 +247,7 @@ static void _sftp_op_readdir(struct sftp_subsystem_s *sftp, struct commonhandle_
 
     set_attr_buffer_write(&abuff, tmp, len);
 
-    logoutput("_sftp_op_readdir (tid %i) valid %i len write buffer %i stat mask %i", (int) gettid(), valid, len, mask);
+    logoutput("_sftp_op_readdir (tid %i) valid %u:%u len write buffer %i stat mask %i", (int) gettid(), valid->mask, valid->flags, len, mask);
 
     while (pos < SFTP_READDIR_NAMES_SIZE) {
 
@@ -268,11 +268,11 @@ static void _sftp_op_readdir(struct sftp_subsystem_s *sftp, struct commonhandle_
 
 		(* abuff.ops->rw.write.write_uint32)(&abuff, valid->mask);
 		size=(unsigned int)(abuff.pos - abuff.buffer);
-		logoutput("sftp_op_readdir: b. %i bytes written", size);
+		// logoutput("sftp_op_readdir: b. %i bytes written", size);
 
 		write_attributes_generic(actx, &abuff, &r, &stat, valid);
 		size=(unsigned int)(abuff.pos - abuff.buffer);
-		logoutput("sftp_op_readdir: c. %i bytes written pos %i", size, pos);
+		// logoutput("sftp_op_readdir: c. %i bytes written pos %i", size, pos);
 
 		/* does it fit? */
 
