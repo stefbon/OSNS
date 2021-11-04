@@ -106,13 +106,14 @@ void write_attr_accesstime_v04(struct attr_context_s *actx, struct attr_buffer_s
     int64_t sec=get_atime_sec_system_stat(stat);
 
     (* buffer->ops->rw.write.write_int64)(buffer, sec);
-    logoutput_debug("write_attr_accesstime_v04: sec %i", sec);
+    logoutput_debug("write_attr_accesstime_v04: sec %li", sec);
 }
 
 void write_attr_accesstime_n_v04(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)
 {
     uint32_t nsec=get_atime_nsec_system_stat(stat);
     (* buffer->ops->rw.write.write_uint32)(buffer, nsec);
+    logoutput_debug("write_attr_accesstime_n_v04: nsec %i", nsec);
 }
 
 void write_attr_modifytime_v04(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)
@@ -120,13 +121,14 @@ void write_attr_modifytime_v04(struct attr_context_s *actx, struct attr_buffer_s
     int64_t sec=get_mtime_sec_system_stat(stat);
 
     (* buffer->ops->rw.write.write_int64)(buffer, sec);
-    logoutput_debug("write_attr_modifytime_v04: sec %i", sec);
+    logoutput_debug("write_attr_modifytime_v04: sec %li", sec);
 }
 
 void write_attr_modifytime_n_v04(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)
 {
     uint32_t nsec=get_mtime_nsec_system_stat(stat);
     (* buffer->ops->rw.write.write_uint32)(buffer, nsec);
+    logoutput_debug("write_attr_modifytime_n_v04: nsec %i", nsec);
 }
 
 void write_name_name_response_v04(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct ssh_string_s *name)
