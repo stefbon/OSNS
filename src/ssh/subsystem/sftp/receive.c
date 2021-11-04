@@ -318,7 +318,7 @@ void read_sftp_connection_signal(int fd, void *ptr, struct event_s *event)
 
     if (signal_is_error(event)) {
 
-	s->connection.flags |= SFTP_CONNECTION_FLAG_TROUBLE;
+	sftp->connection.flags |= SFTP_CONNECTION_FLAG_TROUBLE;
 	start_thread_sftp_connection_problem(connection);
 
     } else if (signal_is_close(event)) {
