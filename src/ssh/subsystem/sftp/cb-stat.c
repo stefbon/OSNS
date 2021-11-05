@@ -161,4 +161,3 @@ void sftp_op_lstat(struct sftp_payload_s *payload)
     struct sftp_subsystem_s *sftp=payload->sftp;
     sftp_op_stat_generic(sftp, payload, system_getlstat);
 }
-

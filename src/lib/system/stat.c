@@ -71,7 +71,7 @@ int system_getlstat(struct fs_location_path_s *path, unsigned int mask, struct s
 {
     struct statx *stx=&stat->stx;
 
-    if (statx(0, path->ptr, AT_STATX_SYNC_AS_STAT | AT_SYMLINK_FOLLOW, mask, stx)==-1) {
+    if (statx(0, path->ptr, AT_STATX_DONT_SYNC | AT_SYMLINK_NOFOLLOW, mask, stx)==-1) {
 
 	logoutput_warning("system_getlstat: error %i on path %s (%s)", errno, path->ptr, strerror(errno));
 	return -errno;
