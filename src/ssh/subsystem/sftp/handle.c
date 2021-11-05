@@ -443,11 +443,14 @@ struct commonhandle_s *create_sftp_dirhandle(struct sftp_subsystem_s *sftp, stru
 	    - make this configurable
 	    - use a "new" opendir where the client can ask for the set of attributes: an extension or a new protocol version */
 
-	if ((* actx->ops.enable_attr)(actx, &sftp_handle->type.dirhandle.valid, "size")==1) logoutput("create_sftp_dirhandle: enabled sending of attr/readdir size");
-	if ((* actx->ops.enable_attr)(actx, &sftp_handle->type.dirhandle.valid, "permissions")==1) logoutput("create_sftp_dirhandle: enabled sending of attr/readdir permissions");
-	if ((* actx->ops.enable_attr)(actx, &sftp_handle->type.dirhandle.valid, "mtime")==1) logoutput("create_sftp_dirhandle: enabled sending of attr/readdir modifytime");
-	if ((* actx->ops.enable_attr)(actx, &sftp_handle->type.dirhandle.valid, "user")==1) logoutput("create_sftp_dirhandle: enabled sending of attr/readdir user");
-	if ((* actx->ops.enable_attr)(actx, &sftp_handle->type.dirhandle.valid, "subseconds")==1) logoutput("create_sftp_dirhandle: enabled sending of attr/readdir subsecond times");
+	sftp_handle->type.dirhandle.valid.mask=0;
+	sftp_handle->type.dirhandle.valid.flags=0;
+
+	//if ((* actx->ops.enable_attr)(actx, &sftp_handle->type.dirhandle.valid, "size")==1) logoutput("create_sftp_dirhandle: enabled sending of attr/readdir size");
+	//if ((* actx->ops.enable_attr)(actx, &sftp_handle->type.dirhandle.valid, "permissions")==1) logoutput("create_sftp_dirhandle: enabled sending of attr/readdir permissions");
+	//if ((* actx->ops.enable_attr)(actx, &sftp_handle->type.dirhandle.valid, "mtime")==1) logoutput("create_sftp_dirhandle: enabled sending of attr/readdir modifytime");
+	//if ((* actx->ops.enable_attr)(actx, &sftp_handle->type.dirhandle.valid, "user")==1) logoutput("create_sftp_dirhandle: enabled sending of attr/readdir user");
+	//if ((* actx->ops.enable_attr)(actx, &sftp_handle->type.dirhandle.valid, "subseconds")==1) logoutput("create_sftp_dirhandle: enabled sending of attr/readdir subsecond times");
 
 	sftp_handle->type.dirhandle.flags=0;
 
