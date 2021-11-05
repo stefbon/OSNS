@@ -114,7 +114,7 @@ static void sftp_op_stat_generic(struct sftp_subsystem_s *sftp, struct sftp_payl
 		struct attr_buffer_s abuff;
 
 		set_attr_buffer_write(&abuff, tmp, size);
-		(* abuff.ops->rw.write.write_uint32)(&abuff, r.valid.mask);
+		(* abuff.ops->rw.write.write_uint32)(&abuff, (r.valid.mask | r.valid.flags));
 		write_attributes_generic(&sftp->attrctx, &abuff, &r, &stat, &valid);
 
 		if (reply_sftp_attrs(sftp, payload->id, tmp, abuff.len)==-1) logoutput_warning("sftp_op_stat: error sending attr");

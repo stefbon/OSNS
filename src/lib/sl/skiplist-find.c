@@ -91,7 +91,7 @@ void sl_find_generic(struct sl_skiplist_s *sl, unsigned char opcode, struct sl_l
     struct list_element_s *list=NULL;
     int diff=0;
 
-    logoutput("sl_find_generic: level %i count: %i", sl->dirnode.level, sl->header.count);
+    // logoutput("sl_find_generic: level %i count: %i", sl->dirnode.level, sl->header.count);
 
     vector=create_vector_path(sl->dirnode.level+1, dirnode);
 
@@ -106,12 +106,12 @@ void sl_find_generic(struct sl_skiplist_s *sl, unsigned char opcode, struct sl_l
 
     (* lockops->readlock_vector_path)(sl, vector, dirnode);
     vector->level--;
-    logoutput_debug("sl_find_generic: A: vector level %i", vector->level);
+    // logoutput_debug("sl_find_generic: A: vector level %i", vector->level);
     vector->path[vector->level].dirnode=dirnode;
 
     if (sl->header.count==0) {
 
-	logoutput_debug("sl_find_generic: empty");
+	// logoutput_debug("sl_find_generic: empty");
 	result->flags |= SL_SEARCHRESULT_FLAG_EMPTY;
 	move_lock_vector_down(sl, vector);
 	goto out;
@@ -129,7 +129,7 @@ void sl_find_generic(struct sl_skiplist_s *sl, unsigned char opcode, struct sl_l
     if (diff<0) {
 
 	/* after the last: not found */
-	logoutput_debug("sl_find_generic: after last");
+	// logoutput_debug("sl_find_generic: after last");
 	result->flags |= (SL_SEARCHRESULT_FLAG_NOENT | SL_SEARCHRESULT_FLAG_LAST | SL_SEARCHRESULT_FLAG_AFTER);
 	result->found=list;
 	result->row=sl->header.count;
@@ -154,7 +154,7 @@ void sl_find_generic(struct sl_skiplist_s *sl, unsigned char opcode, struct sl_l
     if (diff>0) {
 
 	/* before the first: not found */
-	logoutput_debug("sl_find_generic: before first");
+	// logoutput_debug("sl_find_generic: before first");
 	result->flags |= (SL_SEARCHRESULT_FLAG_NOENT | SL_SEARCHRESULT_FLAG_FIRST | SL_SEARCHRESULT_FLAG_BEFORE);
 	result->found=list;
 	result->row=0;
@@ -163,7 +163,7 @@ void sl_find_generic(struct sl_skiplist_s *sl, unsigned char opcode, struct sl_l
 
     } else if (diff==0) {
 
-	logoutput_debug("sl_find_generic: first");
+	// logoutput_debug("sl_find_generic: first");
 	result->found=list;
 	result->flags |= (SL_SEARCHRESULT_FLAG_EXACT | SL_SEARCHRESULT_FLAG_FIRST);
 	move_lock_vector_down(sl, vector);
@@ -181,7 +181,7 @@ void sl_find_generic(struct sl_skiplist_s *sl, unsigned char opcode, struct sl_l
 	next=dirnode->junction[vector->level].n;
 	diff=1;
 
-	logoutput_debug("sl_find_generic: level %i step %i", vector->level, dirnode->junction[vector->level].step);
+	// logoutput_debug("sl_find_generic: level %i step %i", vector->level, dirnode->junction[vector->level].step);
 
 	diff=(* next->compare)(list, result->lookupdata);
 
@@ -192,19 +192,19 @@ void sl_find_generic(struct sl_skiplist_s *sl, unsigned char opcode, struct sl_l
 
 	    if (vector->level==0) {
 
-		logoutput_debug("sl_find_generic: C down level 0 -> goto linked list");
+		// logoutput_debug("sl_find_generic: C down level 0 -> goto linked list");
 		break;
 
 	    }
 
-	    logoutput_debug("sl_find_generic: C down level (%i)", vector->level);
+	    // logoutput_debug("sl_find_generic: C down level (%i)", vector->level);
 	    move_lock_vector_path_down(sl, vector);
 
 	} else if (diff==0) {
 
 	    /* exact match */
 
-	    logoutput_debug("sl_find_generic: C exit (steps %i)", dirnode->junction[vector->level].step - 1);
+	    // logoutput_debug("sl_find_generic: C exit (steps %i)", dirnode->junction[vector->level].step - 1);
 
 	    result->found=list;
 	    result->row+=dirnode->junction[vector->level].step - 1;
@@ -218,7 +218,7 @@ void sl_find_generic(struct sl_skiplist_s *sl, unsigned char opcode, struct sl_l
 	    /* res<0: next_entry is smaller than name: skip
 		move lock from previous, the level/lane stays the same  */
 
-	    logoutput_debug("sl_find_generic: C skip (steps %i)", dirnode->junction[vector->level].step);
+	    // logoutput_debug("sl_find_generic: C skip (steps %i)", dirnode->junction[vector->level].step);
 
 	    result->row+=dirnode->junction[vector->level].step;
 	    (* lockops->move_readlock_vector_path)(sl, vector, next);
@@ -247,7 +247,7 @@ void sl_find_generic(struct sl_skiplist_s *sl, unsigned char opcode, struct sl_l
 	diff=sl->ops.compare(list, result->lookupdata);
 	result->ctr++;
 
-	logoutput_debug("sl_find_generic: D %s diff: %i", sl->ops.get_logname(list), diff);
+	// logoutput_debug("sl_find_generic: D %s diff: %i", sl->ops.get_logname(list), diff);
 
 	if (diff<0) {
 
