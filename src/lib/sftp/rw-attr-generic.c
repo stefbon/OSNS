@@ -171,12 +171,12 @@ void parse_attributes_generic(struct attr_context_s *actx, struct attr_buffer_s 
 
     r->valid.mask = (valid->mask & supported->mask);
     r->valid.flags = (valid->flags & supported->flags);
-    logoutput_debug("parse_attributes_generic: valid mask %i supported mask %i result %i", valid->mask, supported->mask, r->valid.mask);
+    logoutput_debug("parse_attributes_generic: valid mask %i:%i supported mask %i", valid->mask, valid->flags, supported->mask);
 
     r->ignored = (valid->mask & ~r->valid.mask);		/* which attributes are not taken into account */
     r->todo = r->valid.mask;					/* the flags of the main attributes */
     r->done=0;
-    logoutput_debug("parse_attributes_generic: r->valid %i todo %i ignored %i", r->valid.mask, r->todo, r->ignored);
+    logoutput_debug("parse_attributes_generic: r->valid %i:%i todo %i ignored %i", r->valid.mask, r->valid.flags, r->todo, r->ignored);
 
     hcb=lookup_hashed_attrcb(&r->valid, version);
 
@@ -187,7 +187,7 @@ void parse_attributes_generic(struct attr_context_s *actx, struct attr_buffer_s 
 
 	r->flags |= RW_ATTR_RESULT_FLAG_CACHED;
 
-	while (index<hcb->count && r->todo>0) {
+	while (index<hcb->count) {
 
 	    /* the ctr is the indexnr of the arrayelement attrcb */
 
