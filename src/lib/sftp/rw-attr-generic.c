@@ -207,18 +207,18 @@ void parse_attributes_generic(struct attr_context_s *actx, struct attr_buffer_s 
 
 static void _attr_read_cb(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat, unsigned char ctr)
 {
-    logoutput_debug("_attr_read_cb: ctr %i name %s index %i valid %i", ctr, actx->attrcb[ctr].name, actx->attrcb[ctr].shift, actx->attrcb[ctr].code);
     r->stat_mask |= actx->attrcb[ctr].stat_mask;
     r->done |= actx->attrcb[ctr].code;
     r->todo &= ~actx->attrcb[ctr].code;
     (* actx->attrcb[ctr].r_cb)(actx, buffer, r, stat);
+    logoutput_debug("_attr_read_cb: ctr %i name %s index %i code %i done %i todo %i pos %i", ctr, actx->attrcb[ctr].name, actx->attrcb[ctr].shift, actx->attrcb[ctr].code, r->done, r->todo, (unsigned int)(buffer->pos - buffer->buffer));
 }
 
 void read_attributes_generic(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat, unsigned int valid_bits)
 {
     struct sftp_valid_s valid=SFTP_VALID_INIT;
 
-    logoutput_debug("read_attributes_generic: valid bits %u subseconds %u result %u", valid_bits, attr_subsecond_times, (valid_bits & ~SSH_FILEXFER_ATTR_SUBSECOND_TIMES));
+    logoutput_debug("read_attributes_generic: valid_bits %u", valid_bits);
 
     r->flags |= RW_ATTR_RESULT_FLAG_READ;
     r->parse_attribute=_attr_read_cb;
@@ -229,6 +229,8 @@ void read_attributes_generic(struct attr_context_s *actx, struct attr_buffer_s *
     valid.mask = valid_bits & ~attr_subsecond_times;
     valid.flags = valid_bits & attr_subsecond_times;
 
+    logoutput_debug("read_attributes_generic: valid %u:%u", valid.mask, valid.flags);
+
     parse_attributes_generic(actx, buffer, r, stat, &valid);
 }
 
@@ -238,13 +240,16 @@ static void _attr_write_cb(struct attr_context_s *actx, struct attr_buffer_s *bu
     r->done |= actx->attrcb[ctr].code;
     r->todo &= ~actx->attrcb[ctr].code;
     (* actx->attrcb[ctr].w_cb)(actx, buffer, r, stat);
-    logoutput_debug("_attr_write_cb: ctr %i code %i done %i todo %i", ctr, actx->attrcb[ctr].code, r->done, r->todo);
+    logoutput_debug("_attr_write_cb: ctr %i name %s index %i code %i done %i todo %i pos %i", ctr, actx->attrcb[ctr].name, actx->attrcb[ctr].shift, actx->attrcb[ctr].code, r->done, r->todo, (unsigned int)(buffer->pos - buffer->buffer));
 }
 
 void write_attributes_generic(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat, struct sftp_valid_s *valid)
 {
     r->flags |= RW_ATTR_RESULT_FLAG_WRITE;
     r->parse_attribute=_attr_write_cb;
+
+    logoutput_debug("write_attributes_generic: valid %u:%u", valid->mask, valid->flags);
+
     parse_attributes_generic(actx, buffer, r, stat, valid);
 }
 
