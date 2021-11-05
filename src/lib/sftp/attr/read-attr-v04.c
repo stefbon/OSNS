@@ -126,14 +126,14 @@ void read_attr_accesstime_v04(struct attr_context_s *ctx, struct attr_buffer_s *
 {
     int64_t sec=(* buffer->ops->rw.read.read_int64)(buffer);
     set_atime_sec_system_stat(stat, sec);
-    logoutput("read_attr_accesstime_v04: sec %i", sec);
+    logoutput_debug("read_attr_accesstime_v04: sec %i", sec);
 }
 
 void read_attr_accesstime_n_v04(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)
 {
     uint32_t nsec=(* buffer->ops->rw.read.read_uint32)(buffer);
     set_atime_nsec_system_stat(stat, nsec);
-    logoutput("read_attr_accesstime_n_v04: nsec %i", nsec);
+    logoutput_debug("read_attr_accesstime_n_v04: nsec %i", nsec);
 }
 
 void read_attr_createtime_v04(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)
@@ -152,14 +152,14 @@ void read_attr_modifytime_v04(struct attr_context_s *ctx, struct attr_buffer_s *
 {
     int64_t sec=(* buffer->ops->rw.read.read_int64)(buffer);
     set_mtime_sec_system_stat(stat, sec);
-    logoutput("read_attr_modifytime_v04: sec %i", sec);
+    logoutput_debug("read_attr_modifytime_v04: sec %i", sec);
 }
 
 void read_attr_modifytime_n_v04(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)
 {
     uint32_t nsec=(* buffer->ops->rw.read.read_uint32)(buffer);
     set_mtime_nsec_system_stat(stat, nsec);
-    logoutput("read_attr_modifytime_n_v04: nsec %i", nsec);
+    logoutput_debug("read_attr_modifytime_n_v04: nsec %i", nsec);
 }
 
 static void _attr_acl_string_cb(struct attr_buffer_s *buffer, struct ssh_string_s *aclblock, void *ptr)

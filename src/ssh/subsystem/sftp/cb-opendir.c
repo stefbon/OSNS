@@ -264,9 +264,9 @@ static void _sftp_op_readdir(struct sftp_subsystem_s *sftp, struct commonhandle_
 
 		(* actx->ops.write_name_name_response)(actx, &abuff, &name);
 		size=(unsigned int)(abuff.pos - abuff.buffer);
-		logoutput("sftp_op_readdir: a. found %s %i bytes written len %i strlen %i", dentry->name, size, dentry->len, strlen(dentry->name));
+		logoutput("sftp_op_readdir: a. found %s %i bytes written", dentry->name, size);
 
-		(* abuff.ops->rw.write.write_uint32)(&abuff, valid->mask);
+		(* abuff.ops->rw.write.write_uint32)(&abuff, (valid->mask | valid->flags));
 		size=(unsigned int)(abuff.pos - abuff.buffer);
 		// logoutput("sftp_op_readdir: b. %i bytes written", size);
 

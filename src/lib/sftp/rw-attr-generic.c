@@ -218,7 +218,7 @@ void read_attributes_generic(struct attr_context_s *actx, struct attr_buffer_s *
 {
     struct sftp_valid_s valid=SFTP_VALID_INIT;
 
-    logoutput_debug("read_attributes_generic: valid bits %u ~subseconds %u result %u", valid_bits, ~attr_subsecond_times, (valid_bits & ~SSH_FILEXFER_ATTR_SUBSECOND_TIMES));
+    logoutput_debug("read_attributes_generic: valid bits %u subseconds %u result %u", valid_bits, attr_subsecond_times, (valid_bits & ~SSH_FILEXFER_ATTR_SUBSECOND_TIMES));
 
     r->flags |= RW_ATTR_RESULT_FLAG_READ;
     r->parse_attribute=_attr_read_cb;
