@@ -123,3 +123,12 @@ unsigned int get_attr_buffer_size(struct context_interface_s *interface, struct 
     return gssa->len;
 
 }
+
+void set_sftp_inode_stat_defaults(struct context_interface_s *interface, struct inode_s *inode)
+{
+    struct system_stat_s *stat=&inode->stat;
+
+    stat->sst_uid=get_sftp_unknown_userid_ctx(interface);
+    stat->sst_gid=get_sftp_unknown_groupid_ctx(interface);
+
+}

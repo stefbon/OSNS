@@ -65,6 +65,7 @@ void read_attr_type_v05(struct attr_context_s *actx, struct attr_buffer_s *buffe
     unsigned char tmp=(* buffer->ops->rw.read.read_uchar)(buffer);
     unsigned int type=(tmp<10) ? type_mapping[tmp] : 0;
     set_type_system_stat(stat, type);
+    logoutput_debug("read_attr_type_v05: type %i", type);
 }
 
 void read_attr_bits_v05(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)

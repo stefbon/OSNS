@@ -60,6 +60,7 @@ void read_attr_type_v04(struct attr_context_s *actx, struct attr_buffer_s *buffe
     unsigned char tmp=(* buffer->ops->rw.read.read_uchar)(buffer);
     unsigned int type=(tmp<5) ? type_mapping[tmp] : 0;
     set_type_system_stat(stat, type);
+    logoutput_debug("read_attr_type_v04: type %i", type);
 }
 
 struct _attr_cb_s {
@@ -120,6 +121,7 @@ void read_attr_permissions_v04(struct attr_context_s *actx, struct attr_buffer_s
     uint16_t perm=(mode & (S_IRWXU | S_IRWXG | S_IRWXO));
 
     set_mode_system_stat(stat, perm); /* sftp uses the same permission bits as Linux */
+    logoutput_debug("read_attr_permissions_v04: perm %i", perm);
 }
 
 void read_attr_accesstime_v04(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)

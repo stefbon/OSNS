@@ -81,8 +81,13 @@ struct attr_ops_s {
 
 #define ATTR_CONTEXT_FLAG_CLIENT			1
 #define ATTR_CONTEXT_FLAG_SERVER			2
-/* maximal ammount of attr cb = 32 (32 bits available) plus maximum 4 calls for subseconds (atime, btime, mtime, ctime)*/
-#define ATTR_CONTEXT_COUNT_ATTR_CB			36
+
+/* maximal ammount of attr cb = 32:
+    - (32 bits available)
+    - plus maximum 4 calls for subseconds (atime, btime, mtime, ctime)
+    - plus one for type (which is always present for version>=4) */
+
+#define ATTR_CONTEXT_COUNT_ATTR_CB			37
 
 struct attr_context_s {
     unsigned int					flags;

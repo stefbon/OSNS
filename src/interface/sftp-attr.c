@@ -99,3 +99,17 @@ unsigned char enable_attributes_ctx(struct context_interface_s *interface, struc
 
     return (* sftp->attrctx.ops.enable_attr)(&sftp->attrctx, valid, name);
 }
+
+uid_t get_sftp_unknown_userid_ctx(struct context_interface_s *interface)
+{
+    struct sftp_client_s *sftp=(struct sftp_client_s *) (* interface->get_interface_buffer)(interface);
+
+    return sftp->mapping->unknown_uid;
+}
+
+gid_t get_sftp_unknown_groupid_ctx(struct context_interface_s *interface)
+{
+    struct sftp_client_s *sftp=(struct sftp_client_s *) (* interface->get_interface_buffer)(interface);
+
+    return sftp->mapping->unknown_gid;
+}

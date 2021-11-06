@@ -52,6 +52,8 @@
 #include "attr-write.h"
 #include "attr-init.h"
 
+static char *empty_name="";
+
 static unsigned int get_maxlength_filename(struct attr_context_s *ctx)
 {
     return 256;
@@ -98,7 +100,7 @@ void init_attrcb_zero(struct _rw_attrcb_s *attrcb, unsigned int count)
 	attrcb[i].r_cb				= rw_attr_cb_zero;
 	attrcb[i].w_cb				= rw_attr_cb_zero;
 	attrcb[i].maxlength			= 0;
-	attrcb[i].name				= NULL;
+	attrcb[i].name				= empty_name;
 
     }
 

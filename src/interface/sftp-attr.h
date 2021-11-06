@@ -33,4 +33,7 @@ void correct_time_s2c_ctx(struct context_interface_s *interface, struct timespec
 
 unsigned char enable_attributes_ctx(struct context_interface_s *interface, struct sftp_valid_s *valid, const char *name);
 
+uid_t get_sftp_unknown_userid_ctx(struct context_interface_s *interface);
+gid_t get_sftp_unknown_groupid_ctx(struct context_interface_s *interface);
+
 #endif

@@ -61,7 +61,7 @@ void init_attr_context_v06(struct attr_context_s *actx)
 {
     struct _rw_attrcb_s *attrcb=actx->attrcb;
 
-    init_attrcb_zero(attrcb, 36);
+    init_attrcb_zero(attrcb, ATTR_CONTEXT_COUNT_ATTR_CB);
 
     /* type */
 

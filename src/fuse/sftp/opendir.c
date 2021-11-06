@@ -251,6 +251,8 @@ static void _cb_created(struct entry_s *entry, struct create_entry_s *ce)
     struct context_interface_s *interface=&context->interface;
     struct system_stat_s *stat=&inode->stat;
 
+    set_sftp_inode_stat_defaults(interface, inode);
+
     read_sftp_attributes_ctx(interface, abuff, stat);
     set_nlink_system_stat(stat, 1);
     inode->nlookup=1;

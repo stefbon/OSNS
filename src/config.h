@@ -212,10 +212,10 @@
 #define VERSION "1.0a1"
 
 /* Define to build OSNS client */
-#define WITH_OSNS_CLIENT 1
+/* #undef WITH_OSNS_CLIENT */
 
 /* Define to build OSNS SSH Server */
-/* #undef WITH_OSNS_SFTP_SUBSYSTEM */
+#define WITH_OSNS_SFTP_SUBSYSTEM 1
 
 /* Define for Solaris 2.5.1 so the uint32_t typedef from <sys/synch.h>,
    <pthread.h>, or <semaphore.h> is not used. If the typedef were allowed, the

@@ -106,6 +106,7 @@ void _fs_common_cached_lookup(struct service_context_s *context, struct fuse_req
     struct timespec *entry_timeout=NULL;
 
     logoutput_debug("_fs_common_cached_lookup: ino %li name %.*s", inode->stat.sst_ino, inode->alias->name.len, inode->alias->name.name);
+    log_inode_information(inode, INODE_INFORMATION_NAME | INODE_INFORMATION_NLOOKUP | INODE_INFORMATION_MODE | INODE_INFORMATION_SIZE | INODE_INFORMATION_MTIM | INODE_INFORMATION_INODE_LINK | INODE_INFORMATION_FS_COUNT);
 
     context=get_root_context(context);
     attr_timeout=get_fuse_attr_timeout(request->root);

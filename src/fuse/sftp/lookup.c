@@ -80,6 +80,8 @@ static void _sftp_lookup_cb_created(struct entry_s *entry, struct create_entry_s
     struct entry_s *parent=get_parent_entry(entry);
     struct attr_buffer_s abuff;
 
+    set_sftp_inode_stat_defaults(interface, inode);
+
     /* read attributes */
 
     set_attr_buffer_read_attr_response(&abuff, response);
