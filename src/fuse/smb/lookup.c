@@ -120,7 +120,7 @@ static void _smb_lookup_cb_found(struct entry_s *entry, struct create_entry_s *c
 
     if (inode->st.st_mtim.tv_sec>mtim.tv_sec || (inode->st.st_mtim.tv_sec==mtim.tv_sec && inode->st.st_mtim.tv_nsec>mtim.tv_nsec)) {
 
-	inode->alias->flags |= _ENTRY_FLAG_REMOTECHANGED;
+	inode->flags |= INODE_FLAG_REMOTECHANGED;
 
     }
 
@@ -251,7 +251,7 @@ void _fs_smb_lookup_existing(struct service_context_s *context, struct fuse_requ
 
 	    if (inode->st.st_mtim.tv_sec>mtim.tv_sec || (inode->st.st_mtim.tv_sec==mtim.tv_sec && inode->st.st_mtim.tv_nsec>mtim.tv_nsec)) {
 
-		inode->alias->flags |= _ENTRY_FLAG_REMOTECHANGED;
+		inode->flags |= INODE_FLAG_REMOTECHANGED;
 
 	    }
 

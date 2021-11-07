@@ -548,6 +548,8 @@ static void _fs_service_readlink(struct service_context_s *context, struct fuse_
     struct service_fs_s *fs=get_service_context_fs(context);
     unsigned int error=(* fs->access)(context, request, SERVICE_OP_TYPE_READLINK);
 
+    logoutput("READLINK %s (thread %i) %li", context->name, (int) gettid(), inode->sst_ino);
+
     if (error) {
 
 	reply_VFS_error(request, error);

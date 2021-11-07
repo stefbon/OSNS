@@ -375,7 +375,7 @@ void _fs_sftp_readlink(struct service_context_s *context, struct fuse_request_s 
     sftp_r.call.readlink.path=(unsigned char *) pathinfo->path;
     sftp_r.call.readlink.len=pathinfo->len;
 
-    if ((inode->alias->flags & _ENTRY_FLAG_REMOTECHANGED)==0) {
+    if ((inode->flags & INODE_FLAG_REMOTECHANGED)==0) {
 
 	if (inode->link.type==DATA_LINK_TYPE_SYMLINK) {
 	    char *target=inode->link.link.ptr;

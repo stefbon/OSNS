@@ -255,7 +255,7 @@ void init_attr_context_v06(struct attr_context_s *actx)
     attrcb[SSH_FILEXFER_INDEX_NSEC_ATIME].code		= 0;
     attrcb[SSH_FILEXFER_INDEX_NSEC_ATIME].shift		= 0;
     attrcb[SSH_FILEXFER_INDEX_NSEC_ATIME].w_cb		= write_attr_accesstime_n_v04;
-    attrcb[SSH_FILEXFER_INDEX_NSEC_ATIME].w_cb		= read_attr_accesstime_n_v04;
+    attrcb[SSH_FILEXFER_INDEX_NSEC_ATIME].r_cb		= read_attr_accesstime_n_v04;
     attrcb[SSH_FILEXFER_INDEX_NSEC_ATIME].maxlength	= 4; /* nsec time use 4 bytes (=32 bits) */
     attrcb[SSH_FILEXFER_INDEX_NSEC_ATIME].name		= "nsec accesstime";
     attrcb[SSH_FILEXFER_INDEX_NSEC_ATIME].stat_mask	= 0;
@@ -266,7 +266,7 @@ void init_attr_context_v06(struct attr_context_s *actx)
     attrcb[SSH_FILEXFER_INDEX_NSEC_BTIME].code		= 0;
     attrcb[SSH_FILEXFER_INDEX_NSEC_BTIME].shift		= 0;
     attrcb[SSH_FILEXFER_INDEX_NSEC_BTIME].w_cb		= NULL;
-    attrcb[SSH_FILEXFER_INDEX_NSEC_BTIME].w_cb		= read_attr_createtime_n_v04;
+    attrcb[SSH_FILEXFER_INDEX_NSEC_BTIME].r_cb		= read_attr_createtime_n_v04;
     attrcb[SSH_FILEXFER_INDEX_NSEC_BTIME].maxlength	= 4; /* nsec time use 4 bytes (=32 bits) */
     attrcb[SSH_FILEXFER_INDEX_NSEC_BTIME].name		= "nsec createtime";
     attrcb[SSH_FILEXFER_INDEX_NSEC_BTIME].stat_mask	= 0;

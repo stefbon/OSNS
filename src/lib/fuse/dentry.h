@@ -28,9 +28,8 @@
 
 #define _ENTRY_FLAG_TEMP					1
 #define _ENTRY_FLAG_VIRTUAL					2
-#define _ENTRY_FLAG_REMOTECHANGED				4
-#define _ENTRY_FLAG_ROOT					8
-#define _ENTRY_FLAG_NOBUFFER					16
+#define _ENTRY_FLAG_ROOT					4
+#define _ENTRY_FLAG_NOBUFFER					8
 
 #define _INODE_DIRECTORY_SIZE					4096
 #define _DEFAULT_BLOCKSIZE					4096
@@ -47,6 +46,7 @@
 #define INODE_FLAG_CACHED					2
 #define INODE_FLAG_DELETED					4
 #define INODE_FLAG_REMOVED					8
+#define INODE_FLAG_REMOTECHANGED				16
 
 #define INODECACHE_FLAG_STAT					1
 #define INODECACHE_FLAG_READDIR					2
@@ -73,7 +73,7 @@ struct data_link_s {
 };
 
 struct inode_s {
-    unsigned char			flags;
+    unsigned int			flags;
     uint64_t				nlookup;
     struct list_element_s		list;
     struct entry_s 			*alias;

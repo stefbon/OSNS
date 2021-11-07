@@ -129,11 +129,9 @@ static void _cb_found(struct entry_s *entry, struct create_entry_s *ce)
     logoutput("_cb_found: (entry %s)", (entry) ? "exists" : "NULL");
 
     inode=entry->inode;
-
     directory=(* ce->get_directory)(ce);
 
     memcpy(&mtim, &inode->st.st_mtim, sizeof(struct timespec));
-
     fill_inode_stat(inode, &ce->cache.st);
     inode->st.st_mode=ce->cache.st.st_mode;
     inode->st.st_size=ce->cache.st.st_size;
@@ -141,7 +139,7 @@ static void _cb_found(struct entry_s *entry, struct create_entry_s *ce)
 
     if (inode->st.st_mtim.tv_sec>mtim.tv_sec || (inode->st.st_mtim.tv_sec==mtim.tv_sec && inode->st.st_mtim.tv_nsec>mtim.tv_nsec)) {
 
-	entry->flags |= _ENTRY_FLAG_REMOTECHANGED;
+	inode->flags |= INODE_FLAG_REMOTECHANGED;
 
     }
 
@@ -159,7 +157,7 @@ static void _cb_found(struct entry_s *entry, struct create_entry_s *ce)
 
 		if (strcmp(inode->link.link.ptr, ce->cache.link.link.ptr) !=0) {
 
-		    if ((entry->flags & _ENTRY_FLAG_REMOTECHANGED)==0) {
+		    if ((inode->flags & INODE_FLAG_REMOTECHANGED)==0) {
 
 			logoutput_warning("_cb_found: symbolic link changed but attribute mtime did not");
 
@@ -329,9 +327,8 @@ void _fs_smb_opendir(struct fuse_opendir_s *opendir, struct fuse_request_s *f_re
     /* test a full opendir/readdir is required: test entries are deleted and/or created */
 
     if (directory && directory->synctime.tv_sec>0) {
-	struct entry_s *entry=opendir->inode->alias;
 
-	if ((entry->flags & _ENTRY_FLAG_REMOTECHANGED)==0) {
+	if ((opendir->inode->flags & INODE_FLAG_REMOTECHANGED)==0) {
 
 	    /* no entries added and deleted: no need to read all entries again: use cache */
 
@@ -483,10 +480,8 @@ void _fs_smb_releasedir(struct fuse_opendir_s *opendir, struct fuse_request_s *f
     reply_VFS_error(f_request, 0);
 
     if ((opendir->flags & _FUSE_OPENDIR_FLAG_READDIR_INCOMPLETE)==0) {
-	struct entry_s *entry=opendir->inode->alias;
 
-	if (entry->flags & _ENTRY_FLAG_REMOTECHANGED) entry->flags-=_ENTRY_FLAG_REMOTECHANGED;
-
+	if (opendir->inode->flags & INODE_FLAG_REMOTECHANGED) opendir->inode->flags-=INODE_FLAG_REMOTECHANGED;
 	_fs_common_remove_nonsynced_dentries(opendir);
 
     }

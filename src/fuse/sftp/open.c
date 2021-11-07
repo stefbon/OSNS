@@ -85,7 +85,7 @@ void _fs_sftp_open(struct fuse_openfile_s *openfile, struct fuse_request_s *f_re
 
 	    if (reply->type==SSH_FXP_HANDLE) {
 		struct fuse_open_out open_out;
-		struct entry_s *entry=openfile->inode->alias;
+		struct inode_s *inode=openfile->inode;
 
 		/* handle name is defined in sftp_r.response.handle.name: take it "over" */
 
@@ -96,16 +96,16 @@ void _fs_sftp_open(struct fuse_openfile_s *openfile, struct fuse_request_s *f_re
 
 		open_out.fh=(uint64_t) openfile;
 
-		if (entry->flags & _ENTRY_FLAG_REMOTECHANGED) {
+		if (inode->flags & INODE_FLAG_REMOTECHANGED) {
 
 		    /* VFS will free any cached data for this file */
 
 		    open_out.open_flags=0;
-		    entry->flags -= _ENTRY_FLAG_REMOTECHANGED;
+		    inode->flags &= ~INODE_FLAG_REMOTECHANGED;
 
 		} else {
 
-		    /* if there is a local cache it's uptodate */
+		    /* if there is a local cache it's usable since in sync with remote data */
 
 		    open_out.open_flags=FOPEN_KEEP_CACHE;
 

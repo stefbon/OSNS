@@ -136,7 +136,7 @@ static void _sftp_lookup_cb_found(struct entry_s *entry, struct create_entry_s *
 	if (stat->sst_mtime.tv_sec > mtime.tv_sec ||
 	    (stat->sst_mtime.tv_sec==mtime.tv_sec && stat->sst_mtime.tv_nsec>mtime.tv_nsec)) {
 
-	    entry->flags |= _ENTRY_FLAG_REMOTECHANGED;
+	    inode->flags |= INODE_FLAG_REMOTECHANGED;
 
 	}
 
@@ -289,7 +289,7 @@ void _fs_sftp_lookup_existing(struct service_context_s *context, struct fuse_req
 		    if (stat->sst_mtime.tv_sec > mtime.tv_sec ||
 			(stat->sst_mtime.tv_sec==mtime.tv_sec && stat->sst_mtime.tv_nsec>mtime.tv_nsec)) {
 
-			entry->flags |= _ENTRY_FLAG_REMOTECHANGED;
+			inode->flags |= INODE_FLAG_REMOTECHANGED;
 
 		    }
 

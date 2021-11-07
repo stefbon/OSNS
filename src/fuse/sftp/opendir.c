@@ -268,7 +268,7 @@ static void _cb_created(struct entry_s *entry, struct create_entry_s *ce)
 	set_ctime_system_stat(&directory->inode->stat, &directory->synctime); /* set the change time of parent since attribute nlink changed */
 	set_directory_dump(inode, get_dummy_directory());
 
-    } else if (S_ISLNK(inode->stat.sst_mode)) {
+    } else if (S_ISLNK(stat->sst_mode)) {
 
 	/* symlink is cached */
 
@@ -309,7 +309,7 @@ static void _cb_found(struct entry_s *entry, struct create_entry_s *ce)
     if (stat->sst_mtime.tv_sec > mtime.tv_sec ||
 	(stat->sst_mtime.tv_sec==mtime.tv_sec && stat->sst_mtime.tv_nsec>mtime.tv_nsec)) {
 
-	entry->flags |= _ENTRY_FLAG_REMOTECHANGED;
+	inode->flags |= INODE_FLAG_REMOTECHANGED;
 
     }
 
@@ -330,7 +330,7 @@ static void _cb_found(struct entry_s *entry, struct create_entry_s *ce)
 
 		if (strcmp(inode->link.link.ptr, ce->cache.link.link.ptr) !=0) {
 
-		    if ((entry->flags & _ENTRY_FLAG_REMOTECHANGED)==0) {
+		    if ((inode->flags & INODE_FLAG_REMOTECHANGED)==0) {
 
 			logoutput_warning("_cb_found: symbolic link changed but attribute mtime did not");
 
@@ -652,7 +652,7 @@ void _fs_sftp_opendir(struct fuse_opendir_s *opendir, struct fuse_request_s *f_r
     if (directory && directory->synctime.tv_sec>0) {
 	struct entry_s *entry=opendir->inode->alias;
 
-	if ((entry->flags & _ENTRY_FLAG_REMOTECHANGED)==0) {
+	if ((inode->flags & INODE_FLAG_REMOTECHANGED)==0) {
 
 	    /* no entries added and deleted: no need to read all entries again: use cache */
 
@@ -781,7 +781,6 @@ void _fs_sftp_releasedir(struct fuse_opendir_s *opendir, struct fuse_request_s *
     struct context_interface_s *interface=&context->interface;
     struct sftp_request_s sftp_r;
     unsigned int error=EIO;
-    struct entry_s *entry=opendir->inode->alias;
     struct simple_lock_s wlock;
     struct directory_s *directory=NULL;
 
@@ -790,7 +789,6 @@ void _fs_sftp_releasedir(struct fuse_opendir_s *opendir, struct fuse_request_s *
     set_flag_fuse_opendir(opendir, _FUSE_OPENDIR_FLAG_READDIR_FINISH);
 
     init_sftp_request(&sftp_r, interface, f_request);
-
     sftp_r.call.close.handle=(unsigned char *) opendir->handle.name.name;
     sftp_r.call.close.len=opendir->handle.name.len;
 
@@ -844,7 +842,7 @@ void _fs_sftp_releasedir(struct fuse_opendir_s *opendir, struct fuse_request_s *
 
     if ((opendir->flags & _FUSE_OPENDIR_FLAG_READDIR_INCOMPLETE)==0) {
 
-	entry->flags &= ~_ENTRY_FLAG_REMOTECHANGED;
+	opendir->inode->flags &= ~INODE_FLAG_REMOTECHANGED;
 
 	/* remove local entries not found on server */
 	_fs_common_remove_nonsynced_dentries(opendir);

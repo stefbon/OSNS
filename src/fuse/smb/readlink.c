@@ -62,7 +62,7 @@ void _fs_smb_readlink(struct service_context_s *context, struct fuse_request_s *
     unsigned int error=EIO;
     struct smb_data_s *data=NULL;
 
-    if ((inode->alias->flags & _ENTRY_FLAG_REMOTECHANGED)==0) {
+    if ((inode->flags & INODE_FLAG_REMOTECHANGED)==0) {
 
 	if (inode->link.type==DATA_LINK_TYPE_SYMLINK) {
 	    char *target=inode->link.link.ptr;
