@@ -49,12 +49,13 @@
 
 #ifdef __linux__
 
-static int get_target_unix_symlink(char *path, unsigned int len, unsigned int extra, struct fs_location_path_s *result)
+int get_target_unix_symlink(char *path, unsigned int len, unsigned int extra, struct fs_location_path_s *target)
 {
     char tmp[len + 1];
     char *buffer=NULL;
     unsigned int size=512;
     ssize_t bytesread=0;
+    int result=0;
 
     memcpy(tmp, path, len);
     tmp[len]='\0';
@@ -62,12 +63,19 @@ static int get_target_unix_symlink(char *path, unsigned int len, unsigned int ex
     realloc:
 
     buffer=realloc(buffer, size);
-    if (buffer==NULL) goto error;
+    if (buffer==NULL) {
+
+	result=ENOMEM;
+	logoutput_warning("get_target_unix_symlink: error %i allocating %i bytes (%s)", errno, size, strerror(errno));
+	goto error;
+
+    }
 
     bytesread=readlink(tmp, buffer, size);
 
     if (bytesread==-1) {
 
+	result=errno;
 	logoutput_warning("get_target_unix_symlink: error %i reading path %s (%s)", errno, tmp, strerror(errno));
 	goto error;
 
@@ -80,18 +88,25 @@ static int get_target_unix_symlink(char *path, unsigned int len, unsigned int ex
 
     }
 
-    result->ptr=buffer;
-    result->size=size;
-    result->len=(unsigned int) bytesread;
-    result->flags |= FS_LOCATION_PATH_FLAG_PTR_ALLOC;
+    target->ptr=buffer;
+    target->size=size;
+    target->len=(unsigned int) bytesread;
+    target->flags |= FS_LOCATION_PATH_FLAG_PTR_ALLOC;
     return 0;
 
     error:
 
     logoutput_warning("get_target_unix_symlink: fialed to get target");
     if (buffer) free(buffer);
-    return -1;
+    return -result;
 
+}
+
+#else
+
+int get_target_unix_symlink(char *path, unsigned int len, unsigned int extra, struct fs_location_path_s *result)
+{
+    return -ENOSYS;
 }
 
 #endif

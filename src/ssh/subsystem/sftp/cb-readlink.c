@@ -48,74 +48,51 @@
 #include "protocol.h"
 
 #include "osns_sftp_subsystem.h"
-#include "attributes-write.h"
+#include "attr.h"
 #include "send.h"
 #include "path.h"
 #include "handle.h"
 #include "init.h"
 
+/* reply to a valid readlink is a special case of a NAME reply with one name and a dummy ATTR struct:
 
-static int reply_sftp_readlink(struct sftp_subsyste_s *sftp, uint32_t id, char *target, unsigned int len)
+    byte			SSH_FXP_NAME
+    uint32			request-id
+    uint32			count
+    repeats count times:
+	string			filename (UTF-8 for versions>=4)
+	ATTR			attr
+	(optional for versions>=6) byte eof
+
+
+    the part with filenames and ATTR (repeated count times) is provided as is to the reply_sftp_names function, so sonstruct that here
+    from the target and a dummy ATTR
+    */
+
+
+static int reply_sftp_readlink(struct sftp_subsystem_s *sftp, uint32_t id, struct fs_location_path_s *target)
 {
-    /* reply of readlink is a special case of the name reply */
-    return reply_sftp_names(sftp, id, 1, target, len, 0);
+    char name[4 + target->len + 5];
+    unsigned int pos=0;
+
+    /* write name as ssh string */
+
+    store_uint32(&name[pos], target->len);
+    pos+=4;
+
+    memcpy(&name[pos], target->ptr, target->len);
+    pos+=target->len;
+
+    /* write dummy ATTR == uint32 valid | byte type (both can be zero) */
+
+    memset(&name[pos], 0, 5);
+    pos+=5;
+
+    return reply_sftp_names(sftp, id, 1, name, pos, 1);
+
 }
 
-static void search_reply_readlink_target(struct sftp_subsystem_s *sftp, uint32_t id, char *path)
-{
-    unsigned int status=SSH_FX_BAD_MESSAGE;
-    unsigned int size=512;
-    char *buffer=NULL;
 
-    allocbuffer:
-
-    buffer=realloc(buffer, size);
-    if (buffer==NULL) goto error;
-
-    int bytesread=readlink(path, buffer, size);
-
-    if (bytesread==-1) {
-
-	switch (errno) {
-
-	    case ENOENT:
-
-		status=SSH_FX_NO_SUCH_FILE;
-		break;
-
-	    case ENOTDIR:
-
-		status=SSH_FX_NO_SUCH_PATH;
-		break;
-
-	    case EACCES:
-
-		status=SSH_FX_PERMISSION_DENIED;
-		break;
-
-	    default:
-
-		statuc=SSH_FX_FAILURE; /* the best guess */
-
-	}
-
-	reply_sftp_status_simple(sftp, id, status);
-
-    }
-
-    if (bytesread==size) {
-
-	/* truncation may have been done, there is no way to find out this is the case, so there is nothing else to do 
-	    but to increase the buffersize and do it again */
-
-	size+=512;
-	goto allocbuffer;
-
-    }
-
-    reply_sftp_readlink(sftp, id, buffer, bytesread;
-
-}
 
 /* SSH_FXP_READLINK/
     message has the form:
@@ -135,45 +112,59 @@ void sftp_op_readlink(struct sftp_payload_s *payload)
 	char *data=payload->data;
 	struct sftp_identity_s *user=&sftp->identity;
 	unsigned int pos=0;
-	unsigned int len=0;
-	unsigned int valid=0;
+	struct ssh_string_s path=SSH_STRING_INIT;
 
-	len=get_uint32(&data[pos]);
+	path.len=get_uint32(&data[pos]);
 	pos+=4;
+	path.ptr=&data[pos];
+	pos+=path.len;
 
-	if (len + 4 <= payload->len) {
-	    struct stat st;
-	    int result=0;
-	    unsigned int error=0;
+	if (path.len + 8 <= payload->len) {
+	    struct fs_location_s location;
+	    struct fs_location_path_s target=FS_LOCATION_PATH_INIT;
+	    struct convert_sftp_path_s convert;
+	    unsigned int size=get_fullpath_size(user, &path, &convert);
+	    char pathtmp[size+1];
+	    int result=-ENOSYS;
 
-	    if (len==0) {
+	    /* get the fullpath on the local system */
 
-		search_reply_readlink_target(sftp, payload->id, user->pwd.pw_home);
+	    memset(&location, 0, sizeof(struct fs_location_s));
+	    location.flags=FS_LOCATION_FLAG_PATH;
+	    set_buffer_location_path(&location.type.path, pathtmp, size+1, 0);
+	    (* convert.complete)(user, &path, &location.type.path);
 
-	    } else if (data[pos]=='/') {
-		char tmp[len+1];
+#ifdef __linux__
 
-		memcpy(tmp, &data[pos], len);
-		tmp[len]='\0';
-		search_reply_readlink_target(sftp, payload->id, tmp);
+	    result=get_target_unix_symlink(location.type.path.ptr, location.type.path.len, 0, &target);
+
+#endif
+
+	    if (result==0) {
+
+		if (reply_sftp_readlink(sftp, payload->id, &target)==-1) logoutput_warning("sftp_op_readlink: error sending target");
+		return;
 
 	    } else {
-		char tmp[user->len_home + len + 2];
-		unsigned int index=0;
 
-		/* not empty and not starting with a slash: relative to homedirectory */
+		result=abs(result);
+		status=SSH_FX_FAILURE;
 
-		memcpy(&tmp[index], user->pwd.pw_home, user->len_home);
-		index+=user->len_home;
-		tmp[index]='/';
-		memcpy(&tmp[index], &data[pos], len);
-		index+=len;
-		tmp[index]='\0';
-		search_reply_readlink_target(sftp, payload->id, tmp);
+		if (result==ENOENT) {
+
+		    status=SSH_FX_NO_SUCH_FILE;
+
+		} else if (result==ENOTDIR) {
+
+		    status=SSH_FX_NO_SUCH_PATH;
+
+		} else if (result==EACCES) {
+
+		    status=SSH_FX_PERMISSION_DENIED;
+
+		}
 
 	    }
-
-	    return;
 
 	}
 

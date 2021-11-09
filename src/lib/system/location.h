@@ -52,6 +52,7 @@ struct fs_location_s {
 
 /* prototypes */
 
+int get_target_unix_symlink(char *path, unsigned int len, unsigned int extra, struct fs_location_path_s *result);
 int compare_fs_locations(struct fs_location_s *a, struct fs_location_s *b);
 
 #endif
