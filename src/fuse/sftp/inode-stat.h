@@ -33,4 +33,6 @@ void set_local_attributes(struct context_interface_s *interface, struct inode_s 
 unsigned int get_attr_buffer_size(struct context_interface_s *interface, struct rw_attr_result_s *r, struct system_stat_s *stat, struct get_supported_sftp_attr_s *gssa);
 void set_sftp_inode_stat_defaults(struct context_interface_s *interface, struct inode_s *inode);
 
+int compare_cache_sftp(struct ssh_string_s *data, unsigned int size, char *buffer, void *ptr);
+
 #endif

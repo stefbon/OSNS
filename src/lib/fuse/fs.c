@@ -356,14 +356,14 @@ void fuse_fs_readlink(struct fuse_request_s *request)
     struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
     struct inode_s *inode=lookup_workspace_inode(workspace, request->ino);
 
-    logoutput("fuse_fs_readlink: ino %li", request->ino);
-
     if (inode) {
 
+	logoutput("fuse_fs_readlink: ino %li fs flags %i", request->ino, inode->fs->flags);
 	(* inode->fs->type.nondir.readlink)(context, request, inode);
 
     } else {
 
+	logoutput("fuse_fs_readlink: ino %li ENOENT", request->ino);
 	reply_VFS_error(request, ENOENT);
 
     }

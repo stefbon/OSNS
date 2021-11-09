@@ -98,183 +98,111 @@ void destroy_entry(struct entry_s *entry)
     free(entry);
 }
 
-int check_create_inodecache(struct inode_s *inode, unsigned int size, char *buffer, unsigned int flag)
+static void create_inodecache_common(struct inode_s *inode, unsigned int size, char *buffer, unsigned int offset, unsigned int flag)
 {
     struct inodecache_s *cache=NULL;
-    int result=0;
+    struct system_dev_s dev;
+    struct ssh_string_s *tmp=NULL;
+    char *ptr=NULL;
 
-    logoutput("check_create_inodecache: size %i flag %i", size, flag);
+    /* create the cache for */
+
+    cache=malloc(sizeof(struct inodecache_s));
+    ptr=malloc(size);
+
+    if (cache==NULL || ptr==NULL) {
+
+	if (cache) free(cache);
+	if (ptr) free(ptr);
+	return;
+
+    }
+
+    tmp=(struct ssh_string_s *) (cache + offset);
+
+    memset(cache, 0, sizeof(struct inodecache_s));
+    init_ssh_string(&cache->stat);
+    init_ssh_string(&cache->readdir);
+    init_ssh_string(&cache->xattr);
+
+    get_dev_system_stat(&inode->stat, &dev);
+    cache->dev=get_unique_system_dev(&dev);
+    cache->ino=inode->stat.sst_ino;
+
+    init_list_element(&cache->list, NULL);
+    add_list_element_first(&cacheheader, &cache->list);
+    inode->cache=cache;
+
+    memcpy(ptr, buffer, size);
+    tmp->ptr=ptr;
+    tmp->len=size;
+    inode->flags |= flag;
+
+}
+
+void create_inodecache_stat(struct inode_s *inode, unsigned int size, char *buffer)
+{
+    pthread_mutex_lock(&cachemutex);
+    create_inodecache_common(inode, size, buffer, offsetof(struct inodecache_s, stat), INODE_FLAG_STAT_CACHED);
+    pthread_mutex_unlock(&cachemutex);
+}
+
+void create_inodecache_readdir(struct inode_s *inode, unsigned int size, char *buffer)
+{
+    pthread_mutex_lock(&cachemutex);
+    create_inodecache_common(inode, size, buffer, offsetof(struct inodecache_s, readdir), INODE_FLAG_READDIR_CACHED);
+    pthread_mutex_unlock(&cachemutex);
+}
+
+/* compare stat/readdir/xattr data with cache
+    return:
+    -1			error
+    0 			the same
+    1 			differ
+*/
+
+static int compare_inodecache_common(struct inode_s *inode, unsigned int size, char *buffer, unsigned int offset, int (* compare_cache)(struct ssh_string_s *data, unsigned int size, char *buffer, void *ptr), void *ptr, unsigned int flag)
+{
+    struct inodecache_s *cache=inode->cache;
+    int result=-1;
+
+    if (size==0 || buffer==NULL) return -1;
+
+    logoutput("compare_inodecache_common: size %i", size);
 
     pthread_mutex_lock(&cachemutex);
 
-    cache=inode->cache;
-
     if (cache) {
-	struct ssh_string_s *tmp=NULL;
-	struct ssh_string_s *copy=NULL;
+	struct ssh_string_s *tmp=(struct ssh_string_s *) (cache + offset);
 
-	logoutput("check_create_inodecache: exist");
+	result=(tmp->len>0) ? compare_cache(tmp, size, buffer, ptr) : 1;
 
-	switch (flag) {
+	if (result==1) {
 
-	    case INODECACHE_FLAG_STAT:
+	    tmp->ptr=realloc(tmp->ptr, size);
 
-		tmp=&cache->stat;
-		copy=&cache->readdir;
-		break;
+		/* cache en current differ
+		differ: replace  */
 
-	    case INODECACHE_FLAG_READDIR:
+	    if (tmp->ptr) {
 
-		tmp=&cache->readdir;
-		copy=&cache->stat;
-		break;
-
-	    case INODECACHE_FLAG_XATTR:
-
-		tmp=&cache->xattr;
-		break;
-
-	    default:
-
-		return 0;
-
-	}
-
-	if (tmp==NULL || (tmp->len==0 && size==0)) return -1;
-
-	logoutput("check_create_inodecache: size buffer %i size cache %i", size, tmp->len);
-
-	if (tmp->len == size) {
-
-	    if (memcmp(tmp->ptr, buffer, size) != 0) {
-
-		/* differ */
-
-		logoutput("check_create_inodecache: memcmp");
 		memcpy(tmp->ptr, buffer, size);
-		result=1;
-
-	    }
-
-	} else {
-
-	    if (copy && copy->len>0 && tmp->len==0 && (cache->flags & INODECACHE_FLAG_STAT_EQUAL_READDIR)==0) {
-
-		if (memcmp(copy->ptr, buffer, 4)==0) {
-
-		    cache->flags |= INODECACHE_FLAG_STAT_EQUAL_READDIR;
-		    tmp->ptr=copy->ptr;
-		    tmp->len=copy->len;
-
-		    if (copy->len==size) {
-
-			if (memcmp(copy->ptr, buffer, size) != 0) {
-
-			    memcpy(copy->ptr, buffer, size);
-			    result=1;
-
-			}
-
-		    } else {
-
-			copy->ptr = realloc(copy->ptr, size);
-
-			if (copy->ptr) {
-
-			    memcpy(copy->ptr, buffer, size);
-			    copy->len=size;
-			    result=1;
-
-			}
-
-		    }
-
-		    goto unlock;
-
-		}
-
-	    }
-
-	    char *ptr=tmp->ptr;
-	    unsigned char equal=(unsigned char) ((copy) ? (copy->ptr==tmp->ptr) : 0);
-
-	    ptr=realloc(ptr, size);
-
-	    if (ptr==NULL) {
-
-		/* not fatal */
-
-		tmp->len=0;
-		tmp->ptr=NULL;
+		tmp->len=size;
 
 	    } else {
 
-		memcpy(ptr, buffer, size);
-		tmp->len=size;
-		tmp->ptr=ptr;
-
-		if (equal) {
-
-		    copy->ptr=tmp->ptr;
-		    copy->len=tmp->len;
-
-		}
+		logoutput_warning("compare_inodecache_common: unable to allocate %i bytes", size);
+		tmp->len=0;
 
 	    }
 
 	}
+
 
     } else {
-	char *ptr=NULL;
 
-	logoutput("check_create_inodecache: create");
-
-	/* create */
-
-	cache=malloc(sizeof(struct inodecache_s));
-	ptr=malloc(size);
-
-	if (cache && ptr) {
-	    struct ssh_string_s *tmp=NULL;
-
-	    switch (flag) {
-
-		case INODECACHE_FLAG_STAT:
-
-		    tmp=&cache->stat;
-		    break;
-
-		case INODECACHE_FLAG_READDIR:
-
-		    tmp=&cache->readdir;
-		    break;
-
-		case INODECACHE_FLAG_XATTR:
-
-		    tmp=&cache->xattr;
-		    break;
-
-	    }
-
-	    memset(cache, 0, sizeof(struct inodecache_s));
-
-	    cache->ino=inode->stat.sst_ino;
-	    init_list_element(&cache->list, NULL);
-	    add_list_element_first(&cacheheader, &cache->list);
-	    inode->cache=cache;
-
-	    memcpy(ptr, buffer, size);
-	    tmp->ptr=ptr;
-	    tmp->len=size;
-
-	    result=1;
-
-	} else {
-
-	    if (cache) free(cache);
-	    if (ptr) free(ptr);
-
-	}
+	create_inodecache_common(inode, size, buffer, offset, flag);
+	result=1;
 
     }
 
@@ -283,6 +211,16 @@ int check_create_inodecache(struct inode_s *inode, unsigned int size, char *buff
     pthread_mutex_unlock(&cachemutex);
     return result;
 
+}
+
+int compare_inodecache_stat(struct inode_s *inode, unsigned int size, char *buffer, int (* compare_cache)(struct ssh_string_s *data, unsigned int size, char *buffer, void *ptr), void *ptr)
+{
+    return compare_inodecache_common(inode, size, buffer, offsetof(struct inodecache_s, stat), compare_cache, ptr, INODE_FLAG_STAT_CACHED);
+}
+
+int compare_inodecache_readdir(struct inode_s *inode, unsigned int size, char *buffer, int (* compare_cache)(struct ssh_string_s *data, unsigned int size, char *buffer, void *ptr), void *ptr)
+{
+    return compare_inodecache_common(inode, size, buffer, offsetof(struct inodecache_s, readdir), compare_cache, ptr, INODE_FLAG_READDIR_CACHED);
 }
 
 void init_inode(struct inode_s *inode)

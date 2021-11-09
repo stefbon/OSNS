@@ -132,3 +132,8 @@ void set_sftp_inode_stat_defaults(struct context_interface_s *interface, struct 
     stat->sst_gid=get_sftp_unknown_groupid_ctx(interface);
 
 }
+
+int compare_cache_sftp(struct ssh_string_s *data, unsigned int size, char *buffer, void *ptr)
+{
+    return (size>=data->len && memcmp(buffer, data->ptr, data->len)==0) ? 0 : 1;
+}

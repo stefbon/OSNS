@@ -110,8 +110,7 @@ static void _sftp_lookup_cb_created(struct entry_s *entry, struct create_entry_s
     _fs_common_cached_lookup(context, r, inode); /* reply FUSE/VFS */
     adjust_pathmax(workspace, ce->pathlen);
 
-    check_create_inodecache(inode, response->size, (char *)response->buff, INODECACHE_FLAG_STAT);
-    inode->flags|=INODE_FLAG_CACHED;
+    create_inodecache_stat(inode, response->size, (char *)response->buff);
     set_entry_ops(entry);
 
 }
@@ -124,10 +123,12 @@ static void _sftp_lookup_cb_found(struct entry_s *entry, struct create_entry_s *
     struct fuse_request_s *r=(struct fuse_request_s *) ce->ptr;
     struct inode_s *inode=entry->inode;
 
-    if (check_create_inodecache(inode, response->size, (char *)response->buff, INODECACHE_FLAG_STAT)==1) {
+    if (compare_inodecache_stat(inode, response->size, (char *)response->buff, compare_cache_sftp, NULL)) {
 	struct system_timespec_s mtime;
 	struct attr_buffer_s abuff;
 	struct system_stat_s *stat=&inode->stat;
+
+	/* received attr buffer differs from the cache: have to parse it */
 
 	get_mtime_system_stat(stat, &mtime);
 	set_attr_buffer_read_attr_response(&abuff, (struct attr_response_s *) ce->cache.link.link.ptr);
@@ -139,8 +140,6 @@ static void _sftp_lookup_cb_found(struct entry_s *entry, struct create_entry_s *
 	    inode->flags |= INODE_FLAG_REMOTECHANGED;
 
 	}
-
-	inode->flags|=INODE_FLAG_CACHED;
 
     }
 
@@ -274,10 +273,11 @@ void _fs_sftp_lookup_existing(struct service_context_s *context, struct fuse_req
 		struct attr_response_s *response=&reply->response.attr;
 		struct inode_s *inode=entry->inode;
 
-		if (check_create_inodecache(inode, response->size, (char *)response->buff, INODECACHE_FLAG_STAT)==1) {
+		if (compare_inodecache_stat(inode, response->size, (char *)response->buff, compare_cache_sftp, NULL)) {
 		    struct attr_buffer_s abuff;
 		    struct system_timespec_s mtime;
 		    struct system_stat_s *stat=&inode->stat;
+		    uint16_t type=get_type_system_stat(stat);
 
 		    get_mtime_system_stat(stat, &mtime);
 
@@ -293,7 +293,13 @@ void _fs_sftp_lookup_existing(struct service_context_s *context, struct fuse_req
 
 		    }
 
-		    inode->flags|=INODE_FLAG_CACHED;
+		    if (type != get_type_system_stat(stat)) {
+			struct entry_s *parent=get_parent_entry(entry);
+			struct inode_s *pinode=parent->inode;
+
+			(* pinode->fs->type.dir.use_fs)(context, inode);
+
+		    }
 
 		} else {
 

@@ -258,8 +258,10 @@ static void _cb_created(struct entry_s *entry, struct create_entry_s *ce)
     inode->nlookup=1;
     fo->count_created++; /* count the numbers added */
 
-    memcpy(&inode->stime, &directory->synctime, sizeof(struct timespec));
+    copy_system_time(&inode->stime, &directory->synctime);
     add_inode_context(context, inode);
+
+    log_inode_information(inode, INODE_INFORMATION_OWNER | INODE_INFORMATION_SIZE | INODE_INFORMATION_MODE);
 
     if (S_ISDIR(stat->sst_mode)) {
 
@@ -649,10 +651,9 @@ void _fs_sftp_opendir(struct fuse_opendir_s *opendir, struct fuse_request_s *f_r
 
     /* test a full opendir/readdir is required: test entries are deleted and/or created */
 
-    if (directory && directory->synctime.tv_sec>0) {
-	struct entry_s *entry=opendir->inode->alias;
+    if (directory && directory->synctime.tv_sec>0) {;
 
-	if ((inode->flags & INODE_FLAG_REMOTECHANGED)==0) {
+	if ((opendir->inode->flags & INODE_FLAG_REMOTECHANGED)==0) {
 
 	    /* no entries added and deleted: no need to read all entries again: use cache */
 

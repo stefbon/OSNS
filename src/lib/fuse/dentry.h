@@ -43,10 +43,11 @@
 #define DATA_LINK_TYPE_CACHE					7
 
 #define INODE_FLAG_HASHED					1
-#define INODE_FLAG_CACHED					2
-#define INODE_FLAG_DELETED					4
-#define INODE_FLAG_REMOVED					8
-#define INODE_FLAG_REMOTECHANGED				16
+#define INODE_FLAG_STAT_CACHED					2
+#define INODE_FLAG_READDIR_CACHED				4
+#define INODE_FLAG_DELETED					8
+#define INODE_FLAG_REMOVED					16
+#define INODE_FLAG_REMOTECHANGED				32
 
 #define INODECACHE_FLAG_STAT					1
 #define INODECACHE_FLAG_READDIR					2
@@ -54,8 +55,9 @@
 #define INODECACHE_FLAG_STAT_EQUAL_READDIR			8
 
 struct inodecache_s {
+    uint32_t				dev;
     ino_t				ino;
-    unsigned char			flags;
+    unsigned int			flags;
     struct list_element_s		list;
     struct ssh_string_s			stat;
     struct ssh_string_s			readdir;
@@ -104,7 +106,11 @@ void init_inode(struct inode_s *inode);
 struct inode_s *create_inode();
 void free_inode(struct inode_s *inode);
 
-int check_create_inodecache(struct inode_s *inode, unsigned int size, char *buffer, unsigned int flag);
+void create_inodecache_stat(struct inode_s *inode, unsigned int size, char *buffer);
+void create_inodecache_readdir(struct inode_s *inode, unsigned int size, char *buffer);
+
+int compare_inodecache_stat(struct inode_s *inode, unsigned int size, char *buffer, int (* compare_cache)(struct ssh_string_s *data, unsigned int size, char *buffer, void *ptr), void *ptr);
+int compare_inodecache_readdir(struct inode_s *inode, unsigned int size, char *buffer, int (* compare_cache)(struct ssh_string_s *data, unsigned int size, char *buffer, void *ptr), void *ptr);
 
 void fill_inode_stat(struct inode_s *inode, struct system_stat_s *stat);
 void get_inode_stat(struct inode_s *inode, struct system_stat_s *stat);

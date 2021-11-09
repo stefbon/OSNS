@@ -545,10 +545,18 @@ static void _fs_service_readlink(struct service_context_s *context, struct fuse_
     char buffer[sizeof(struct fuse_path_s) + pathlen + 1];
     struct fuse_path_s *fpath=(struct fuse_path_s *) buffer;
     struct pathinfo_s pathinfo=PATHINFO_INIT;
-    struct service_fs_s *fs=get_service_context_fs(context);
-    unsigned int error=(* fs->access)(context, request, SERVICE_OP_TYPE_READLINK);
+    struct service_fs_s *fs=NULL;
+    unsigned int error=0;
 
-    logoutput("READLINK %s (thread %i) %li", context->name, (int) gettid(), inode->sst_ino);
+    logoutput("READLINK A");
+
+    fs=get_service_context_fs(context);
+
+    logoutput("READLINK B");
+
+    error=(* fs->access)(context, request, SERVICE_OP_TYPE_READLINK);
+
+    logoutput("READLINK %s (thread %i) %li", context->name, (int) gettid(), inode->stat.sst_ino);
 
     if (error) {
 
@@ -558,12 +566,16 @@ static void _fs_service_readlink(struct service_context_s *context, struct fuse_
     }
 
     init_fuse_path(fpath, pathlen + 1);
+    logoutput("READLINK C");
     (* entry->ops->append_path)(context, entry, fpath);
+    logoutput("READLINK D");
     pathinfo.path=get_pathinfo_fpath(fpath, &pathinfo.len);
+    logoutput("READLINK E");
 
     context=fpath->context;
     fs=get_service_context_fs(context);
     error=(* fs->access)(context, request, SERVICE_OP_TYPE_READLINK);
+    logoutput("READLINK F");
 
     if (error) {
 

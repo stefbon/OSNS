@@ -142,7 +142,8 @@ static struct fs_dentry_s *_readdentry_handle(struct dirhandle_s *dh)
     dentry->type=DTTOIF(dirent->d_type);
     dentry->ino=dirent->d_ino;
     dentry->name=dirent->d_name;
-    len=dirent->d_reclen - offsetof(struct linux_dirent64, d_name) - 2; /* minus the trailing byte and type byte */
+    len=dirent->d_reclen - offsetof(struct linux_dirent64, d_name) - 1; /* minus the type byte */
+    /* use rawmemchr ?? dangerous .... no check if there is no zero byte found */
     pos=memchr(dentry->name, '\0', len);
     dentry->len=(pos) ? (unsigned int)(pos - dentry->name) : len;
     return dentry;
