@@ -171,7 +171,7 @@ static void read_sftp_buffer(void *ptr)
 
 	    memset(payload, 0, sizeof(struct sftp_payload_s) + length - 1);
 	    payload->sftp=s;
-	    payload->len=length - 1;
+	    payload->len=length - 1; /* minus the first type byte */
 	    init_list_element(&payload->list, NULL);
 	    payload->type=(unsigned char) buffer[pos];
 	    pos++;

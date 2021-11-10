@@ -294,8 +294,8 @@ int change_ssh_connection_setup(struct ssh_connection_s *connection, const char 
 
 		    } else if (option & SSH_SETUP_OPTION_UNDO) {
 
-			greeter->flags-=common;
-			flag-=common;
+			greeter->flags &= ~common;
+			flag &= ~common;
 
 		    }
 
@@ -327,8 +327,8 @@ int change_ssh_connection_setup(struct ssh_connection_s *connection, const char 
 
 			/* undo only the common bits */
 
-			kex->flags-=common;
-			flag-=common;
+			kex->flags &= ~common;
+			flag &= ~common;
 
 		    }
 
@@ -369,8 +369,8 @@ int change_ssh_connection_setup(struct ssh_connection_s *connection, const char 
 
 			/* undo only the common bits */
 
-			auth->done-=common;
-			flag-=common;
+			auth->done &= ~common;
+			flag &= ~common;
 
 		    }
 
@@ -387,6 +387,11 @@ int change_ssh_connection_setup(struct ssh_connection_s *connection, const char 
 	unsigned int all=(SSH_SETUP_FLAG_DISCONNECT|SSH_SETUP_FLAG_ANALYZETHREAD|SSH_SETUP_FLAG_SETUPTHREAD|SSH_SETUP_FLAG_HOSTINFO);
 
 	flag &= all;
+
+	/* if already disconnected not going disconnecting again */
+
+	if ((setup->flags & SSH_SETUP_FLAG_DISCONNECT) && (flag & SSH_SETUP_FLAG_DISCONNECTING)) flag &= ~SSH_SETUP_FLAG_DISCONNECTING;
+
 	if (flag & all) {
 	    unsigned int common=(setup->flags & flag);
 
@@ -401,31 +406,23 @@ int change_ssh_connection_setup(struct ssh_connection_s *connection, const char 
 
 		    /* undo only the common bits */
 
-		    setup->flags-=common;
-		    flag-=common;
+		    setup->flags &= ~common;
+		    flag &= ~common;
 
 		}
 
 	    }
 
 	    if (flag & SSH_SETUP_FLAG_SETUPTHREAD) setup->thread=pthread_self();
-
-	    if ((flag & SSH_SETUP_FLAG_DISCONNECTED) && (flag & SSH_SETUP_FLAG_DISCONNECTING)==0) {
-
-		if (setup->flags & SSH_SETUP_FLAG_DISCONNECTING) setup->flags -= SSH_SETUP_FLAG_DISCONNECTING;
-
-	    }
-
-	    /* if already disconnected not going disconnecting again */
-
-	    if (flag & SSH_SETUP_FLAG_DISCONNECTING) {
-
-		if (setup->flags & SSH_SETUP_FLAG_DISCONNECT) flag -= SSH_SETUP_FLAG_DISCONNECTING;
-
-	    }
+	    if (flag & SSH_SETUP_FLAG_DISCONNECTED) setup->flags &= ~SSH_SETUP_FLAG_DISCONNECTING;
 
 	    setup->flags|=flag;
 	    if (setup_cb) result=setup_cb(connection, data);
+
+	} else {
+
+	    /* flag not set */
+	    result=-1;
 
 	}
 

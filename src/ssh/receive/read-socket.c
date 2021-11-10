@@ -50,6 +50,19 @@
 #include "ssh-utils.h"
 #include "ssh-connections.h"
 
+static void _disconnect_ssh_connection(struct ssh_connection_s *connection)
+{
+
+    if (change_ssh_connection_setup(connection, "setup", 0, SSH_SETUP_FLAG_DISCONNECTING, SSH_SETUP_OPTION_XOR, NULL, 0)==0) {
+
+	remove_ssh_connection_eventloop(connection);
+	disconnect_ssh_connection(connection);
+	change_ssh_connection_setup(connection, "setup", 0, SSH_SETUP_FLAG_DISCONNECTED, 0, NULL, 0);
+
+    }
+
+}
+
 /*
     read the data coming from server after the connection is created
     and queue it
@@ -85,15 +98,7 @@ static int read_ssh_connection_socket(struct ssh_connection_s *connection, int f
 
 	    /* peer has performed an orderly shutdown */
 
-	    connection->flags |= SSH_CONNECTION_FLAG_TROUBLE;
-	    connection->setup.flags |= SSH_SETUP_FLAG_RECV_EMPTY;
-	    if (error>0) {
-
-		connection->setup.error=error;
-		connection->setup.flags |= SSH_SETUP_FLAG_RECV_ERROR;
-
-	    }
-	    start_thread_ssh_connection_problem(connection);
+	    _disconnect_ssh_connection(connection);
 	    return -1;
 
 	} else if (error==EAGAIN || error==EWOULDBLOCK) {
@@ -156,7 +161,11 @@ void read_ssh_connection_signal(int fd, void *ptr, struct event_s *event)
 	logoutput("read_ssh_connection_signal: data is available (fd=%i)", fd);
 	int result=read_ssh_connection_socket(connection, fd, event);
 
-    } else if (signal_is_error(event) || signal_is_close(event)) {
+    } else if (signal_is_close(event)) {
+
+	goto disconnect;
+
+    } else if (signal_is_error(event)) {
 
 	/* the remote side disconnected */
 
@@ -169,5 +178,10 @@ void read_ssh_connection_signal(int fd, void *ptr, struct event_s *event)
 	logoutput_warning("read_ssh_connection_signal: event not reckognized (fd=%i) value events %i", fd, printf_event_uint(event));
 
     }
+
+    return;
+
+    disconnect:
+    _disconnect_ssh_connection(connection);
 
 }

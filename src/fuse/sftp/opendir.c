@@ -255,7 +255,7 @@ static void _cb_created(struct entry_s *entry, struct create_entry_s *ce)
 
     read_sftp_attributes_ctx(interface, abuff, stat);
     set_nlink_system_stat(stat, 1);
-    inode->nlookup=1;
+    inode->nlookup=0;
     fo->count_created++; /* count the numbers added */
 
     copy_system_time(&inode->stime, &directory->synctime);
@@ -319,7 +319,6 @@ static void _cb_found(struct entry_s *entry, struct create_entry_s *ce)
 
     directory=(* ce->get_directory)(ce);
     opendir->count_found++;
-    inode->nlookup++;
     copy_system_time(&inode->stime, &directory->synctime);
 
     if (S_ISLNK(stat->sst_mode)) {

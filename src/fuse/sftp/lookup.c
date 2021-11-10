@@ -97,12 +97,8 @@ static void _sftp_lookup_cb_created(struct entry_s *entry, struct create_entry_s
 	increase_nlink_system_stat(&inode->stat, 1);
 	increase_nlink_system_stat(&parent->inode->stat, 1);
 	set_ctime_system_stat(&parent->inode->stat, &inode->stime); /* attribute of parent changed */
-	logoutput("_sftp_lookup_cb_created: dir name %s ino %li", entry->name.name, inode->stat.sst_ino);
+	logoutput("_sftp_lookup_cb_created: dir %s ino %li", entry->name.name, inode->stat.sst_ino);
 	set_directory_dump(inode, get_dummy_directory());
-
-    } else {
-
-	logoutput("_sftp_lookup_cb_created: nondir name %s ino %li", entry->name.name, inode->stat.sst_ino);
 
     }
 
@@ -127,6 +123,7 @@ static void _sftp_lookup_cb_found(struct entry_s *entry, struct create_entry_s *
 	struct system_timespec_s mtime;
 	struct attr_buffer_s abuff;
 	struct system_stat_s *stat=&inode->stat;
+	unsigned int type=get_type_system_stat(stat);
 
 	/* received attr buffer differs from the cache: have to parse it */
 
@@ -137,7 +134,21 @@ static void _sftp_lookup_cb_found(struct entry_s *entry, struct create_entry_s *
 	if (stat->sst_mtime.tv_sec > mtime.tv_sec ||
 	    (stat->sst_mtime.tv_sec==mtime.tv_sec && stat->sst_mtime.tv_nsec>mtime.tv_nsec)) {
 
+	    /* if file has been changed on remote side remember this: when opening the file here take care
+		the local cache is not uptodate anymore */
+
 	    inode->flags |= INODE_FLAG_REMOTECHANGED;
+
+	}
+
+	if (!(type==get_type_system_stat(stat))) {
+	    struct directory_s *directory=(* ce->get_directory)(ce);
+	    struct inode_s *pinode=directory->inode;
+
+	    /* type has changed: make sure the fs is set right and entry ops */
+
+	    (* pinode->fs->type.dir.use_fs)(context, inode);
+	    set_entry_ops(entry);
 
 	}
 
@@ -281,41 +292,48 @@ void _fs_sftp_lookup_existing(struct service_context_s *context, struct fuse_req
 
 		    get_mtime_system_stat(stat, &mtime);
 
-		    logoutput("_fs_sftp_lookup_existing: cache differs");
-
 		    set_attr_buffer_read_attr_response(&abuff, response);
 		    read_sftp_attributes_ctx(interface, &abuff, stat);
 
 		    if (stat->sst_mtime.tv_sec > mtime.tv_sec ||
 			(stat->sst_mtime.tv_sec==mtime.tv_sec && stat->sst_mtime.tv_nsec>mtime.tv_nsec)) {
 
+			/* if file has been changed on remote side remember this: when opening the file here take care
+			the local cache is not uptodate anymore */
+
 			inode->flags |= INODE_FLAG_REMOTECHANGED;
 
 		    }
 
-		    if (type != get_type_system_stat(stat)) {
-			struct entry_s *parent=get_parent_entry(entry);
-			struct inode_s *pinode=parent->inode;
+		    if (inode->nlookup==0) {
+
+			adjust_pathmax(workspace, pathinfo->len);
+			add_inode_context(context, inode);
+			set_entry_ops(entry);
+
+		    } else if (type != get_type_system_stat(stat)) {
+			struct directory_s *directory=get_upper_directory_entry(entry);
+			struct inode_s *pinode=directory->inode;
 
 			(* pinode->fs->type.dir.use_fs)(context, inode);
+			set_entry_ops(entry);
 
 		    }
 
 		} else {
 
-		    logoutput("_fs_sftp_lookup_existing: cache the same");
+		    if (inode->nlookup==0) {
+
+			adjust_pathmax(workspace, pathinfo->len);
+			add_inode_context(context, inode);
+			set_entry_ops(entry);
+
+		    }
 
 		}
 
 		get_current_time_system_time(&inode->stime);
 		inode->nlookup++;
-
-		if (inode->nlookup==1) {
-
-		    adjust_pathmax(workspace, pathinfo->len);
-		    add_inode_context(context, inode);
-
-		}
 
 		_fs_common_cached_lookup(context, f_request, inode); /* reply FUSE/VFS*/
 		free(reply->response.attr.buff);

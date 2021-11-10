@@ -119,7 +119,9 @@ void sftp_op_readlink(struct sftp_payload_s *payload)
 	path.ptr=&data[pos];
 	pos+=path.len;
 
-	if (path.len + 8 <= payload->len) {
+	logoutput("sftp_op_readlink: path %.*s", path.len, path.ptr);
+
+	if (path.len + 4 <= payload->len) {
 	    struct fs_location_s location;
 	    struct fs_location_path_s target=FS_LOCATION_PATH_INIT;
 	    struct convert_sftp_path_s convert;
@@ -142,6 +144,7 @@ void sftp_op_readlink(struct sftp_payload_s *payload)
 
 	    if (result==0) {
 
+		logoutput("sftp_op_readlink: target %.*s", target.len, target.ptr);
 		if (reply_sftp_readlink(sftp, payload->id, &target)==-1) logoutput_warning("sftp_op_readlink: error sending target");
 		return;
 
