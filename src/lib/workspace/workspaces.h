@@ -105,6 +105,7 @@ void add_inode_workspace_hashtable(struct workspace_mount_s *workspace, struct i
 void remove_inode_workspace_hashtable(struct workspace_mount_s *workspace, struct inode_s *inode);
 
 void add_inode_context(struct service_context_s *context, struct inode_s *inode);
+void set_inode_fuse_fs(struct service_context_s *context, struct inode_s *inode);
 
 void queue_inode_2forget(struct workspace_mount_s *workspace, ino_t ino, unsigned int flags, uint64_t forget);
 

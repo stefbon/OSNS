@@ -49,6 +49,10 @@
 #define INODE_FLAG_REMOVED					16
 #define INODE_FLAG_REMOTECHANGED				32
 
+#define INODECACHE_CACHE_STAT					0
+#define INODECACHE_CACHE_READDIR				1
+#define INODECACHE_CACHE_XATTR					2
+
 #define INODECACHE_FLAG_STAT					1
 #define INODECACHE_FLAG_READDIR					2
 #define INODECACHE_FLAG_XATTR					4
@@ -59,9 +63,7 @@ struct inodecache_s {
     ino_t				ino;
     unsigned int			flags;
     struct list_element_s		list;
-    struct ssh_string_s			stat;
-    struct ssh_string_s			readdir;
-    struct ssh_string_s			xattr;
+    struct ssh_string_s			data[3];
 };
 
 union datalink_u {

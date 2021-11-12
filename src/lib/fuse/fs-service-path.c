@@ -495,17 +495,28 @@ static void _fs_service_rm_common(struct service_context_s *context, struct fuse
     if (entry) {
 
 	if (op==SERVICE_OP_TYPE_RMDIR) {
-	    struct directory_s *sub_directory=get_directory(entry->inode);
+	    struct inode_s *inode=entry->inode;
 
-	    if (sub_directory && get_directory_count(sub_directory)>0) {
+	    if (inode) {
+		struct directory_s *subd=get_directory(inode);
 
-		reply_VFS_error(request, ENOTEMPTY);
-		return;
+		if (subd && get_directory_count(subd)>0) {
+
+		    reply_VFS_error(request, ENOTEMPTY);
+		    return;
+
+		}
 
 	    }
 
 	    (* fs->rmdir)(context, request, &entry, &pathinfo);
-	    if (entry==NULL && sub_directory) free_directory(sub_directory);
+
+	    if (entry==NULL && inode) {
+		struct directory_s *subd=remove_directory(inode, &error);
+
+		if (subd) free_directory(subd);
+
+	    }
 
 	} else if (op==SERVICE_OP_TYPE_UNLINK) {
 
@@ -548,12 +559,7 @@ static void _fs_service_readlink(struct service_context_s *context, struct fuse_
     struct service_fs_s *fs=NULL;
     unsigned int error=0;
 
-    logoutput("READLINK A");
-
     fs=get_service_context_fs(context);
-
-    logoutput("READLINK B");
-
     error=(* fs->access)(context, request, SERVICE_OP_TYPE_READLINK);
 
     logoutput("READLINK %s (thread %i) %li", context->name, (int) gettid(), inode->stat.sst_ino);
@@ -566,16 +572,12 @@ static void _fs_service_readlink(struct service_context_s *context, struct fuse_
     }
 
     init_fuse_path(fpath, pathlen + 1);
-    logoutput("READLINK C");
     (* entry->ops->append_path)(context, entry, fpath);
-    logoutput("READLINK D");
     pathinfo.path=get_pathinfo_fpath(fpath, &pathinfo.len);
-    logoutput("READLINK E");
 
     context=fpath->context;
     fs=get_service_context_fs(context);
     error=(* fs->access)(context, request, SERVICE_OP_TYPE_READLINK);
-    logoutput("READLINK F");
 
     if (error) {
 
@@ -584,7 +586,6 @@ static void _fs_service_readlink(struct service_context_s *context, struct fuse_
 
     }
 
-    logoutput("READLINK %s (thread %i) %s", context->name, (int) gettid(), pathinfo.path);
     (* fs->readlink)(context, request, inode, &pathinfo);
 
 }

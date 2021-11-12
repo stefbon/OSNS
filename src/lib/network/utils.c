@@ -263,8 +263,32 @@ void init_host_address(struct host_address_s *a)
 
 unsigned char socket_network_connection_error(unsigned int error)
 {
-    return ( error==EBADF || error==ENETDOWN || error==ENETUNREACH || error==ENETRESET || error==ECONNABORTED || error==ECONNRESET ||
-	    error==ENOBUFS || error==ENOTCONN || error==ESHUTDOWN || error==ECONNREFUSED || error==EHOSTDOWN || error==EHOSTUNREACH) ? 1 : 0;
+    unsigned char result=0;
+
+    switch (error) {
+
+	case EBADF:
+	case ENETDOWN:
+	case ENETUNREACH:
+	case ENETRESET:
+	case ECONNABORTED:
+	case ECONNRESET:
+	case ENOBUFS:
+	case ENOTCONN:
+	case ESHUTDOWN:
+	case ECONNREFUSED:
+	case EHOSTDOWN:
+	case EHOSTUNREACH:
+
+	    result=1;
+	    break;
+
+
+
+    }
+
+    return result;
+
 }
 
 char *get_socket_addr_hostname(struct sockaddr *addr, unsigned int len, struct generic_error_s *error)
@@ -404,3 +428,5 @@ char *gethostnamefromspec(struct host_address_s *address, unsigned int flags)
 
     return hostname;
 }
+
+

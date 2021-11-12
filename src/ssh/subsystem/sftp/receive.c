@@ -50,17 +50,18 @@
 #include "eventloop.h"
 #include "users.h"
 #include "mountinfo.h"
-
 #include "misc.h"
+
 #include "osns_sftp_subsystem.h"
+#include "ssh/subsystem/connection.h"
+
 #include "receive.h"
-#include "connect.h"
 #include "init.h"
 
 static void read_sftp_buffer(void *ptr)
 {
     struct sftp_subsystem_s *s=(struct sftp_subsystem_s *) ptr;
-    struct sftp_connection_s *connection=&s->connection;
+    struct ssh_subsystem_connection_s *connection=&s->connection;
     struct sftp_receive_s *receive=&s->receive;
     unsigned int error=0;
     unsigned char headersize=9;
@@ -213,18 +214,18 @@ static void read_sftp_buffer(void *ptr)
     disconnect:
 
     logoutput_warning("read_ssh_buffer_packet: ignoring received data");
-    disconnect_sftp_connection(connection, 1);
+    disconnect_ssh_subsystem_connection(connection);
 
 }
 
-static void start_thread_read_sftp_connection_buffer(struct sftp_subsystem_s *s)
+static void start_thread_read_ssh_subsystem_connection_buffer(struct sftp_subsystem_s *s)
 {
     work_workerthread(NULL, 0, read_sftp_buffer, (void *) s, NULL);
 }
 
-static int read_sftp_connection_socket(struct sftp_subsystem_s *s, int fd, struct event_s *events)
+static int read_ssh_subsystem_connection_socket(struct sftp_subsystem_s *s, int fd, struct event_s *events)
 {
-    struct sftp_connection_s *c=&s->connection;
+    struct ssh_subsystem_connection_s *c=&s->connection;
     struct sftp_receive_s *receive=&s->receive;
     unsigned int error=0;
     int bytesread=0;
@@ -242,7 +243,7 @@ static int read_sftp_connection_socket(struct sftp_subsystem_s *s, int fd, struc
 
 	pthread_mutex_unlock(&receive->mutex);
 
-	logoutput_info("read_sftp_connection_socket: bytesread %i error %i", bytesread, error);
+	logoutput_info("read_ssh_subsystem_connection_socket: bytesread %i error %i", bytesread, error);
 
 	/* handle error */
 
@@ -250,16 +251,16 @@ static int read_sftp_connection_socket(struct sftp_subsystem_s *s, int fd, struc
 
 	    /* peer has performed an orderly shutdown */
 
-	    c->flags |= (SFTP_CONNECTION_FLAG_TROUBLE | SFTP_CONNECTION_FLAG_RECV_EMPTY);
+	    c->flags |= (SSH_SUBSYSTEM_CONNECTION_FLAG_TROUBLE);
 
 	    if (error>0) {
 
 		c->error=error;
-		c->flags |= SFTP_CONNECTION_FLAG_RECV_ERROR;
+		c->flags |= SSH_SUBSYSTEM_CONNECTION_FLAG_RECV_ERROR;
 
 	    }
 
-	    start_thread_sftp_connection_problem(c);
+	    start_thread_ssh_subsystem_connection_problem(c);
 	    return -1;
 
 	} else if (error==EAGAIN || error==EWOULDBLOCK) {
@@ -268,14 +269,14 @@ static int read_sftp_connection_socket(struct sftp_subsystem_s *s, int fd, struc
 
 	} else if (socket_network_connection_error(error)) {
 
-	    logoutput_warning("read_sftp_connection_socket: socket is not connected? error %i:%s", error, strerror(error));
+	    logoutput_warning("read_ssh_subsystem_connection_socket: socket is not connected? error %i:%s", error, strerror(error));
 	    c->error=error;
-	    c->flags |= (SFTP_CONNECTION_FLAG_TROUBLE | SFTP_CONNECTION_FLAG_RECV_ERROR);
-	    start_thread_sftp_connection_problem(c);
+	    c->flags |= (SSH_SUBSYSTEM_CONNECTION_FLAG_TROUBLE | SSH_SUBSYSTEM_CONNECTION_FLAG_RECV_ERROR);
+	    start_thread_ssh_subsystem_connection_problem(c);
 
 	} else {
 
-	    logoutput_warning("read_sftp_connection_socket: error %i:%s", error, strerror(error));
+	    logoutput_warning("read_ssh_subsystem_connection_socket: error %i:%s", error, strerror(error));
 
 	}
 
@@ -285,7 +286,7 @@ static int read_sftp_connection_socket(struct sftp_subsystem_s *s, int fd, struc
 
 	receive->read+=bytesread;
 
-	logoutput_debug("read_sftp_connection_socket: read %i", receive->read);
+	logoutput_debug("read_ssh_subsystem_connection_socket: read %i", receive->read);
 
 	if (receive->flags & SFTP_RECEIVE_STATUS_WAIT) {
 
@@ -297,7 +298,7 @@ static int read_sftp_connection_socket(struct sftp_subsystem_s *s, int fd, struc
 
 	    /* start a thread (but max number of threads may not exceed 2)*/
 
-	    start_thread_read_sftp_connection_buffer(s);
+	    start_thread_read_ssh_subsystem_connection_buffer(s);
 
 	}
 
@@ -309,17 +310,17 @@ static int read_sftp_connection_socket(struct sftp_subsystem_s *s, int fd, struc
 
 }
 
-void read_sftp_connection_signal(int fd, void *ptr, struct event_s *event)
+void read_ssh_subsystem_connection_signal(int fd, void *ptr, struct event_s *event)
 {
-    struct sftp_subsystem_s *sftp=(struct sftp_subsystem_s *) ptr;
-    struct sftp_connection_s *connection=&sftp->connection;
+    struct ssh_subsystem_connection_s *connection=(struct ssh_subsystem_connection_s *) ptr;
+    struct sftp_subsystem_s *sftp=(struct sftp_subsystem_s *) ((char *)connection - offsetof(struct sftp_subsystem_s, connection));
     struct sftp_receive_s *receive=&sftp->receive;
     int result=0;
 
     if (signal_is_error(event)) {
 
-	sftp->connection.flags |= SFTP_CONNECTION_FLAG_TROUBLE;
-	start_thread_sftp_connection_problem(connection);
+	connection->flags |= SSH_SUBSYSTEM_CONNECTION_FLAG_TROUBLE;
+	start_thread_ssh_subsystem_connection_problem(connection);
 
     } else if (signal_is_close(event)) {
 
@@ -327,11 +328,11 @@ void read_sftp_connection_signal(int fd, void *ptr, struct event_s *event)
 
     } else if (signal_is_data(event)) {
 
-	result=read_sftp_connection_socket(sftp, fd, event);
+	result=read_ssh_subsystem_connection_socket(sftp, fd, event);
 
     } else {
 
-	logoutput_warning("read_sftp_connection_signal: event not reckognized (fd=%i) value events %i", fd, printf_event_uint(event));
+	logoutput_warning("read_ssh_subsystem_connection_signal: event not reckognized (fd=%i) value events %i", fd, printf_event_uint(event));
 
     }
 
@@ -351,14 +352,14 @@ void read_sftp_connection_signal(int fd, void *ptr, struct event_s *event)
     receive->flags |= SFTP_RECEIVE_STATUS_DISCONNECTING;
     pthread_mutex_unlock(&receive->mutex);
 
-    remove_sftp_connection_eventloop(connection);
-    disconnect_sftp_connection(connection, 0);
+    remove_ssh_subsystem_connection_eventloop(connection);
+    disconnect_ssh_subsystem_connection(connection);
 
     pthread_mutex_lock(&receive->mutex);
     receive->flags |= SFTP_RECEIVE_STATUS_DISCONNECTED;
     pthread_mutex_unlock(&receive->mutex);
 
-    logoutput("read_sftp_connection_signal: disconnected.. exit..");
+    logoutput("read_ssh_subsystem_connection_signal: disconnected.. exit..");
     stop_beventloop(NULL);
 
     return;
@@ -367,7 +368,7 @@ void read_sftp_connection_signal(int fd, void *ptr, struct event_s *event)
 
 static void process_sftp_payload_dummy(struct sftp_payload_s *p)
 {
-    logoutput("process_sftp_subsystem_dummy");
+    logoutput("process_sftp_payload_dummy");
     free(p);
 }
 

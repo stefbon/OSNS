@@ -56,7 +56,7 @@
 
 int send_sftp_subsystem(struct sftp_subsystem_s *sftp, char *data, unsigned int len)
 {
-    struct sftp_connection_s *c=&sftp->connection;
+    struct ssh_subsystem_connection_s *c=&sftp->connection;
     return (* c->write)(c, data, len);
 }
 
@@ -79,7 +79,6 @@ int reply_sftp_status_simple(struct sftp_subsystem_s *sftp, uint32_t id, unsigne
     store_uint32(&data[0], pos-4);
     return send_sftp_subsystem(sftp, data, pos);
 }
-
 
 int reply_sftp_bytes_common(struct sftp_subsystem_s *sftp, uint32_t id, unsigned char code, char *bytes, unsigned int len)
 {

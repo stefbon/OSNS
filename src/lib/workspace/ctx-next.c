@@ -214,8 +214,6 @@ struct service_context_s *get_next_service_context_workspace(struct service_cont
 {
     struct workspace_mount_s *workspace=NULL;
 
-    logoutput_debug("get_next_service_context_workspace");
-
     if (context) workspace=get_workspace_mount_ctx(context);
     if (workspace==NULL && parent) workspace=get_workspace_mount_ctx(parent);
     if (workspace==NULL) return NULL;
@@ -226,8 +224,6 @@ struct service_context_s *get_next_service_context_workspace(struct service_cont
 
 struct service_context_s *get_next_service_context_tree(struct service_context_s *parent, struct service_context_s *context)
 {
-
-    logoutput_debug("get_next_service_context_tree");
 
     if (context) {
 	struct list_element_s *list=NULL;

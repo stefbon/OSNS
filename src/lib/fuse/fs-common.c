@@ -448,7 +448,7 @@ void _fs_common_virtual_readdirplus(struct fuse_opendir_s *opendir, struct fuse_
 void _fs_common_virtual_releasedir(struct fuse_opendir_s *opendir, struct fuse_request_s *request)
 {
     set_flag_fuse_opendir(opendir, _FUSE_OPENDIR_FLAG_READDIR_FINISH);
-    logoutput("_fs_common_virtual_releasedir");
+    // logoutput("_fs_common_virtual_releasedir");
     reply_VFS_error(request, 0);
 }
 
@@ -514,7 +514,7 @@ struct entry_s *_fs_common_create_entry(struct workspace_mount_s *workspace, str
     struct create_entry_s ce;
     unsigned int dummy=0;
 
-    logoutput("_fs_common_create_entry");
+    // logoutput("_fs_common_create_entry");
 
     if (error==0) error=&dummy;
     init_create_entry(&ce, xname, parent, NULL, NULL, context, stat, NULL);
@@ -527,7 +527,7 @@ struct entry_s *_fs_common_create_entry_unlocked(struct workspace_mount_s *works
     struct create_entry_s ce;
     unsigned int dummy=0;
 
-    logoutput("_fs_common_create_entry_unlocked");
+    // logoutput("_fs_common_create_entry_unlocked");
 
     if (error==0) error=&dummy;
     init_create_entry(&ce, xname, NULL, directory, NULL, context, stat, NULL);

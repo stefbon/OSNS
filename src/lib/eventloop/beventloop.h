@@ -37,6 +37,10 @@ struct event_s {
 #define BEVENT_FLAG_TIMEOUT			4
 #define BEVENT_FLAG_EVENTLOOP			8
 
+#define BEVENT_FLAG_WRITE			16
+#define BEVENT_FLAG_BLOCKED			32
+#define BEVENT_FLAG_WRITABLE			64
+
 struct bevent_s {
     union _loop_type_s {
 	struct _bevent_glib_s {
@@ -95,6 +99,9 @@ struct beventloop_s *get_eventloop_bevent(struct bevent_s *bevent);
 void set_bevent_unix_fd(struct bevent_s *bevent, int fd);
 int get_bevent_unix_fd(struct bevent_s *bevent);
 short get_bevent_events(struct bevent_s *bevent);
+
+void set_bevent_cb(struct bevent_s *bevent, void (* cb)(int fd, void *ptr, struct event_s *event));
+void set_bevent_ptr(struct bevent_s *bevent, void *ptr);
 
 struct bevent_s *get_next_bevent(struct beventloop_s *loop, struct bevent_s *bevent);
 

@@ -77,36 +77,38 @@ static void _sftp_lookup_cb_created(struct entry_s *entry, struct create_entry_s
     struct attr_response_s *response=(struct attr_response_s *) ce->cache.link.link.ptr;
     struct fuse_request_s *r=(struct fuse_request_s *) ce->ptr;
     struct inode_s *inode=entry->inode;
+    struct system_stat_s *stat=&inode->stat;
     struct entry_s *parent=get_parent_entry(entry);
     struct attr_buffer_s abuff;
+
+    logoutput("_sftp_lookup_cb_created: %s ino %li", entry->name.name, stat->sst_ino);
 
     set_sftp_inode_stat_defaults(interface, inode);
 
     /* read attributes */
 
     set_attr_buffer_read_attr_response(&abuff, response);
-    read_sftp_attributes_ctx(interface, &abuff, &inode->stat);
+    read_sftp_attributes_ctx(interface, &abuff, stat);
 
     inode->nlookup=1;
-    set_nlink_system_stat(&inode->stat, 1);
+    set_nlink_system_stat(stat, 1);
     add_inode_context(context, inode);
+    set_inode_fuse_fs(context, inode);
     get_current_time_system_time(&inode->stime);
 
     if (S_ISDIR(inode->stat.sst_mode)) {
 
-	increase_nlink_system_stat(&inode->stat, 1);
+	increase_nlink_system_stat(stat, 1);
 	increase_nlink_system_stat(&parent->inode->stat, 1);
 	set_ctime_system_stat(&parent->inode->stat, &inode->stime); /* attribute of parent changed */
-	logoutput("_sftp_lookup_cb_created: dir %s ino %li", entry->name.name, inode->stat.sst_ino);
 	set_directory_dump(inode, get_dummy_directory());
 
     }
 
     set_mtime_system_stat(&parent->inode->stat, &inode->stime); /* entry added: parent directory is modified */
     _fs_common_cached_lookup(context, r, inode); /* reply FUSE/VFS */
-    adjust_pathmax(workspace, ce->pathlen);
 
-    create_inodecache_stat(inode, response->size, (char *)response->buff);
+    adjust_pathmax(workspace, ce->pathlen);
     set_entry_ops(entry);
 
 }
@@ -118,39 +120,33 @@ static void _sftp_lookup_cb_found(struct entry_s *entry, struct create_entry_s *
     struct attr_response_s *response=(struct attr_response_s *) ce->cache.link.link.ptr;
     struct fuse_request_s *r=(struct fuse_request_s *) ce->ptr;
     struct inode_s *inode=entry->inode;
+    struct system_stat_s *stat=&inode->stat;
+    struct system_timespec_s mtime;
+    struct attr_buffer_s abuff;
+    unsigned int type=get_type_system_stat(stat);
 
-    if (compare_inodecache_stat(inode, response->size, (char *)response->buff, compare_cache_sftp, NULL)) {
-	struct system_timespec_s mtime;
-	struct attr_buffer_s abuff;
-	struct system_stat_s *stat=&inode->stat;
-	unsigned int type=get_type_system_stat(stat);
+    /* received attr buffer differs from the cache: have to parse it */
 
-	/* received attr buffer differs from the cache: have to parse it */
+    get_mtime_system_stat(stat, &mtime);
+    set_attr_buffer_read_attr_response(&abuff, (struct attr_response_s *) ce->cache.link.link.ptr);
+    read_sftp_attributes_ctx(&context->interface, &abuff, stat);
 
-	get_mtime_system_stat(stat, &mtime);
-	set_attr_buffer_read_attr_response(&abuff, (struct attr_response_s *) ce->cache.link.link.ptr);
-	read_sftp_attributes_ctx(&context->interface, &abuff, stat);
+    if (stat->sst_mtime.tv_sec > mtime.tv_sec ||
+	(stat->sst_mtime.tv_sec==mtime.tv_sec && stat->sst_mtime.tv_nsec>mtime.tv_nsec)) {
 
-	if (stat->sst_mtime.tv_sec > mtime.tv_sec ||
-	    (stat->sst_mtime.tv_sec==mtime.tv_sec && stat->sst_mtime.tv_nsec>mtime.tv_nsec)) {
-
-	    /* if file has been changed on remote side remember this: when opening the file here take care
+	/* if file has been changed on remote side remember this: when opening the file here take care
 		the local cache is not uptodate anymore */
 
-	    inode->flags |= INODE_FLAG_REMOTECHANGED;
+	inode->flags |= INODE_FLAG_REMOTECHANGED;
 
-	}
+    }
 
-	if (!(type==get_type_system_stat(stat))) {
-	    struct directory_s *directory=(* ce->get_directory)(ce);
-	    struct inode_s *pinode=directory->inode;
+    if (!(type==get_type_system_stat(stat)) ) {
 
-	    /* type has changed: make sure the fs is set right and entry ops */
+	/* type has changed: make sure the fs is set right and entry ops */
 
-	    (* pinode->fs->type.dir.use_fs)(context, inode);
-	    set_entry_ops(entry);
-
-	}
+	set_inode_fuse_fs(context, inode);
+	set_entry_ops(entry);
 
     }
 
@@ -160,7 +156,7 @@ static void _sftp_lookup_cb_found(struct entry_s *entry, struct create_entry_s *
 
     if (inode->nlookup==1) adjust_pathmax(workspace, ce->pathlen); /* only adjust the maximal path length the first lookup */
 
-    if (S_ISDIR(inode->stat.sst_mode)) {
+    if (S_ISDIR(stat->sst_mode)) {
 	struct directory_s *d=(* ce->get_directory)(ce);
 	struct getpath_s *getpath=d->getpath;
 
@@ -283,52 +279,33 @@ void _fs_sftp_lookup_existing(struct service_context_s *context, struct fuse_req
 	    if (reply->type==SSH_FXP_ATTRS) {
 		struct attr_response_s *response=&reply->response.attr;
 		struct inode_s *inode=entry->inode;
+		struct attr_buffer_s abuff;
+		struct system_timespec_s mtime;
+		struct system_stat_s *stat=&inode->stat;
+		uint16_t type=get_type_system_stat(stat);
 
-		if (compare_inodecache_stat(inode, response->size, (char *)response->buff, compare_cache_sftp, NULL)) {
-		    struct attr_buffer_s abuff;
-		    struct system_timespec_s mtime;
-		    struct system_stat_s *stat=&inode->stat;
-		    uint16_t type=get_type_system_stat(stat);
+		get_mtime_system_stat(stat, &mtime);
 
-		    get_mtime_system_stat(stat, &mtime);
+		set_attr_buffer_read_attr_response(&abuff, response);
+		read_sftp_attributes_ctx(interface, &abuff, stat);
 
-		    set_attr_buffer_read_attr_response(&abuff, response);
-		    read_sftp_attributes_ctx(interface, &abuff, stat);
-
-		    if (stat->sst_mtime.tv_sec > mtime.tv_sec ||
+		if (stat->sst_mtime.tv_sec > mtime.tv_sec ||
 			(stat->sst_mtime.tv_sec==mtime.tv_sec && stat->sst_mtime.tv_nsec>mtime.tv_nsec)) {
 
-			/* if file has been changed on remote side remember this: when opening the file here take care
-			the local cache is not uptodate anymore */
+		    /* if file has been changed on remote side remember this: when opening the file here take care
+		    the local cache is not uptodate anymore */
 
-			inode->flags |= INODE_FLAG_REMOTECHANGED;
+		    inode->flags |= INODE_FLAG_REMOTECHANGED;
 
-		    }
+		}
 
-		    if (inode->nlookup==0) {
+		if (inode->nlookup==0 || (type != get_type_system_stat(stat))) {
+		    struct directory_s *directory=get_upper_directory_entry(entry);
+		    struct inode_s *pinode=directory->inode;
 
-			adjust_pathmax(workspace, pathinfo->len);
-			add_inode_context(context, inode);
-			set_entry_ops(entry);
-
-		    } else if (type != get_type_system_stat(stat)) {
-			struct directory_s *directory=get_upper_directory_entry(entry);
-			struct inode_s *pinode=directory->inode;
-
-			(* pinode->fs->type.dir.use_fs)(context, inode);
-			set_entry_ops(entry);
-
-		    }
-
-		} else {
-
-		    if (inode->nlookup==0) {
-
-			adjust_pathmax(workspace, pathinfo->len);
-			add_inode_context(context, inode);
-			set_entry_ops(entry);
-
-		    }
+		    (* pinode->fs->type.dir.use_fs)(context, inode);
+		    set_entry_ops(entry);
+		    adjust_pathmax(workspace, pathinfo->len);
 
 		}
 

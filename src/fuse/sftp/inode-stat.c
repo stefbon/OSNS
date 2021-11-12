@@ -127,9 +127,18 @@ unsigned int get_attr_buffer_size(struct context_interface_s *interface, struct 
 void set_sftp_inode_stat_defaults(struct context_interface_s *interface, struct inode_s *inode)
 {
     struct system_stat_s *stat=&inode->stat;
+    struct system_timespec_s time=SYSTEM_TIME_INIT;
 
     stat->sst_uid=get_sftp_unknown_userid_ctx(interface);
     stat->sst_gid=get_sftp_unknown_groupid_ctx(interface);
+
+    /* set time to this moment */
+
+    get_current_time_system_time(&time);
+    set_atime_system_stat(stat, &time);
+    set_btime_system_stat(stat, &time);
+    set_ctime_system_stat(stat, &time);
+    set_mtime_system_stat(stat, &time);
 
 }
 

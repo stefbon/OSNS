@@ -53,6 +53,32 @@
 #include "interface/sftp-send.h"
 #include "interface/sftp-wait-response.h"
 
+static void _remove_entry_common(struct entry_s **pentry)
+{
+    struct entry_s *entry=*pentry;
+    struct directory_s *directory=get_upper_directory_entry(entry);
+
+    if (directory) {
+	unsigned int error=0;
+        struct simple_lock_s wlock;
+
+        /* remove entry from directory */
+
+        if (wlock_directory(directory, &wlock)==0) {
+
+    	    remove_entry_batch(directory, entry, &error);
+    	    unlock_directory(directory, &wlock);
+
+	}
+
+    }
+
+    entry->inode->alias=NULL;
+    entry->inode=NULL;
+    destroy_entry(entry);
+    *pentry=NULL;
+}
+
 /* REMOVE a file and a directory */
 
 void _fs_sftp_unlink(struct service_context_s *context, struct fuse_request_s *f_request, struct entry_s **pentry, struct pathinfo_s *pathinfo)
@@ -86,11 +112,8 @@ void _fs_sftp_unlink(struct service_context_s *context, struct fuse_request_s *f
 		logoutput("_fs_sftp_remove: status code %i", reply->response.status.code);
 
 		if (reply->response.status.code==0) {
-		    struct entry_s *entry=*pentry;
-		    struct inode_s *inode=entry->inode;
 
-		    queue_inode_2forget(workspace, get_ino_system_stat(&inode->stat), 0, 0);
-		    *pentry=NULL;
+		    _remove_entry_common(pentry);
 
 		    reply_VFS_error(f_request, 0);
 		    unset_fuse_request_flags_cb(f_request);
@@ -145,11 +168,8 @@ void _fs_sftp_rmdir(struct service_context_s *context, struct fuse_request_s *f_
 	    if (reply->type==SSH_FXP_STATUS) {
 
 		if (reply->response.status.code==0) {
-		    struct entry_s *entry=*pentry;
-		    struct inode_s *inode=entry->inode;
 
-		    queue_inode_2forget(workspace, get_ino_system_stat(&inode->stat), 0, 0);
-		    *pentry=NULL;
+		    _remove_entry_common(pentry);
 
 		    reply_VFS_error(f_request, 0);
 		    unset_fuse_request_flags_cb(f_request);

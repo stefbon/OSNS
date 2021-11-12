@@ -49,15 +49,18 @@
 #include "eventloop.h"
 #include "users.h"
 #include "mountinfo.h"
-
 #include "misc.h"
+
 #include "osns_sftp_subsystem.h"
-#include "connect.h"
+#include "ssh/subsystem/connection.h"
+#include "lib/sftp.h"
+
 #include "receive.h"
 #include "send.h"
 #include "supported.h"
 #include "payload.h"
 #include "protocol.h"
+#include "attr.h"
 
 #include "cb-close.h"
 #include "cb-opendir.h"
@@ -329,10 +332,9 @@ int init_sftp_subsystem(struct sftp_subsystem_s *sftp)
     sftp->flags = SFTP_SUBSYSTEM_FLAG_INIT;
 
     init_sftp_identity(&sftp->identity);
-    init_sftp_connection(&sftp->connection, 0);
+    init_ssh_subsystem_connection(&sftp->connection, 0);
     init_sftp_receive(&sftp->receive);
     init_sftp_payload_queue(&sftp->queue);
-    init_sftp_subsystem_attr_context(sftp);
 
     set_sftp_protocol_version(sftp, 6);
     init_sftp_subsystem_attr_context(sftp);
@@ -363,7 +365,7 @@ void free_sftp_subsystem(struct sftp_subsystem_s *sftp)
     free_sftp_identity(&sftp->identity);
     free_sftp_payload_queue(&sftp->queue);
     free_sftp_receive(&sftp->receive);
-    free_sftp_connection(&sftp->connection);
+    free_ssh_subsystem_connection(&sftp->connection);
 
     clear_hashattr_generic(0);
 }

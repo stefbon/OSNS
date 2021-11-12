@@ -1393,3 +1393,35 @@ char *get_connection_hostname(struct fs_connection_s *conn, int fd, unsigned cha
     return get_socket_addr_hostname(&addr, len, error);
 
 }
+
+unsigned int get_status_socket_connection(struct fs_connection_s *sc)
+{
+    int error=0;
+    int fd=-1;
+
+    if (sc->io.socket.bevent) fd=get_bevent_unix_fd(sc->io.socket.bevent);
+
+    if (fd>=0) {
+	socklen_t len=sizeof(error);
+	struct socket_ops_s *sops=sc->io.socket.sops;
+
+	if ((* sops->getsockopt)(fd, SOL_SOCKET, SO_ERROR, (void *) &error, &len)==0) {
+
+	    logoutput("get_status_socket_connection: got error %i (%s)", error, strerror(error));
+
+	} else {
+
+	    error=errno;
+	    logoutput("get_status_socket_connection: error %i (%s)", errno, strerror(errno));
+
+	}
+
+    } else {
+
+	error=ENOTCONN;
+
+    }
+
+    return (unsigned int) abs(error);
+
+}

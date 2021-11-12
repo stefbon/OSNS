@@ -130,6 +130,7 @@ struct bevent_s *create_fd_bevent(struct beventloop_s *eloop, void (* cb)(int fd
 
 }
 
+
 struct beventloop_s *get_eventloop_bevent(struct bevent_s *bevent)
 {
     struct list_header_s *h=bevent->list.h;
@@ -156,6 +157,30 @@ struct bevent_s *get_next_bevent(struct beventloop_s *loop, struct bevent_s *bev
     }
 
     return ((list) ? (struct bevent_s *)((char *) list - offsetof(struct bevent_s, list)) : NULL);
+}
+
+void set_bevent_cb(struct bevent_s *bevent, void (* cb)(int fd, void *ptr, struct event_s *event))
+{
+    struct beventloop_s *loop=get_eventloop_bevent(bevent);
+
+    if (loop) {
+
+	if (loop->flags & BEVENTLOOP_FLAG_GLIB) bevent->btype.fd.cb=cb;
+
+    }
+
+}
+
+void set_bevent_ptr(struct bevent_s *bevent, void *ptr)
+{
+    struct beventloop_s *loop=get_eventloop_bevent(bevent);
+
+    if (loop) {
+
+	if (loop->flags & BEVENTLOOP_FLAG_GLIB) bevent->ptr=ptr;
+
+    }
+
 }
 
 void set_bevent_unix_fd(struct bevent_s *bevent, int fd)
@@ -463,7 +488,6 @@ static gboolean eloop_glib_check(GSource *source)
     gushort revents=bevent->ltype.glib.pollfd.revents;
 
     if (revents & (G_IO_IN | G_IO_PRI | G_IO_ERR | G_IO_HUP)) return TRUE;
-
     return FALSE;
 }
 

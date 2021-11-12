@@ -54,11 +54,11 @@
 
 #include "misc.h"
 #include "osns_sftp_subsystem.h"
+#include "ssh/subsystem/connection.h"
 
 #include "ssh/subsystem/sftp/send.h"
 #include "ssh/subsystem/sftp/receive.h"
 #include "ssh/subsystem/sftp/init.h"
-#include "ssh/subsystem/sftp/connect.h"
 #include "ssh/subsystem/sftp/payload.h"
 
 #define PIDFILE_PATH							"/run"
@@ -192,7 +192,7 @@ int main(int argc, char *argv[])
 
     }
 
-    if (connect_sftp_connection(&sftp.connection)==0) {
+    if (connect_ssh_subsystem_connection(&sftp.connection)==0) {
 
 	logoutput("MAIN: sftp subsystem connected");
 
@@ -205,7 +205,7 @@ int main(int argc, char *argv[])
 
     set_process_sftp_payload_init(&sftp);
 
-    if (add_sftp_connection_eventloop(&sftp.connection)==0) {
+    if (add_ssh_subsystem_connection_eventloop(&sftp.connection, read_ssh_subsystem_connection_signal)==0) {
 
 	logoutput("MAIN: sftp subsystem added tot eventloop");
 
@@ -224,9 +224,9 @@ int main(int argc, char *argv[])
 
     out:
 
-    remove_sftp_connection_eventloop(&sftp.connection);
-    disconnect_sftp_connection(&sftp.connection, 0);
-    free_sftp_connection(&sftp.connection);
+    remove_ssh_subsystem_connection_eventloop(&sftp.connection);
+    disconnect_ssh_subsystem_connection(&sftp.connection);
+    free_ssh_subsystem_connection(&sftp.connection);
 
     logoutput_info("MAIN: stop workerthreads");
     stop_workerthreads(NULL);

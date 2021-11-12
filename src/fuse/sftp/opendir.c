@@ -260,6 +260,7 @@ static void _cb_created(struct entry_s *entry, struct create_entry_s *ce)
 
     copy_system_time(&inode->stime, &directory->synctime);
     add_inode_context(context, inode);
+    set_inode_fuse_fs(context, inode);
 
     log_inode_information(inode, INODE_INFORMATION_OWNER | INODE_INFORMATION_SIZE | INODE_INFORMATION_MODE);
 

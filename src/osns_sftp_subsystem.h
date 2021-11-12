@@ -24,18 +24,14 @@
 #include "network.h"
 #include "users.h"
 #include "sftp/attr-context.h"
+#include "ssh/subsystem/connection.h"
 
-#define SFTP_PROTOCOL_VERSION_DEFAULT		6
+#define SFTP_PROTOCOL_VERSION_DEFAULT			6
 
 struct sftp_subsystem_s;
 struct sftp_payload_s;
 
 typedef void (* sftp_cb_t)(struct sftp_payload_s *p);
-
-struct sftp_time_s {
-    int64_t					sec;
-    uint32_t					nsec;
-};
 
 #define SFTP_RECEIVE_STATUS_INIT			(1 << 0)
 #define SFTP_RECEIVE_STATUS_PACKET			(1 << 10)
@@ -90,37 +86,6 @@ struct sftp_identity_s {
 
 #define SFTP_SUBSYSTEM_FLAG_FINISH			(1 << 27)
 
-#define SFTP_CONNECTION_FLAG_STD			(1 << 0)
-#define SFTP_CONNECTION_FLAG_RECV_EMPTY			(1 << 1)
-#define SFTP_CONNECTION_FLAG_RECV_ERROR			(1 << 2)
-
-#define SFTP_CONNECTION_FLAG_TROUBLE			(1 << 28)
-#define SFTP_CONNECTION_FLAG_DISCONNECTING		(1 << 30)
-#define SFTP_CONNECTION_FLAG_DISCONNECTED		(1 << 31)
-
-#define SFTP_CONNECTION_FLAG_DISCONNECT			( SFTP_CONNECTION_FLAG_DISCONNECTING | SFTP_CONNECTION_FLAG_DISCONNECTED )
-
-struct sftp_std_connection_s {
-    struct fs_connection_s				stdin;
-    struct fs_connection_s				stdout;
-    struct fs_connection_s				stderr;
-};
-
-struct sftp_connection_s {
-    unsigned int					flags;
-    unsigned int					error;
-    union {
-	struct sftp_std_connection_s			std;
-    } type;
-    int							(* open)(struct sftp_connection_s *c);
-    int							(* read)(struct sftp_connection_s *c, char *buffer, unsigned int size);
-    int							(* write)(struct sftp_connection_s *c, char *data, unsigned int size);
-    int							(* close)(struct sftp_connection_s *c);
-
-    /* TODO:
-	read_extended and write_extended for different data like error messages and other data */
-};
-
 struct sftp_protocol_s {
     unsigned char					version;
 };
@@ -129,7 +94,7 @@ struct sftp_subsystem_s {
     unsigned int					flags;
     struct net_idmapping_s				mapping;
     struct sftp_protocol_s				protocol;
-    struct sftp_connection_s				connection;
+    struct ssh_subsystem_connection_s			connection;
     struct sftp_identity_s				identity;
     struct sftp_receive_s				receive;
     struct attr_context_s				attrctx;

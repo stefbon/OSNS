@@ -356,14 +356,14 @@ void fuse_fs_readlink(struct fuse_request_s *request)
     struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
     struct inode_s *inode=lookup_workspace_inode(workspace, request->ino);
 
+    logoutput("fuse_fs_readlink: ino %li", request->ino);
+
     if (inode) {
 
-	logoutput("fuse_fs_readlink: ino %li fs flags %i", request->ino, inode->fs->flags);
 	(* inode->fs->type.nondir.readlink)(context, request, inode);
 
     } else {
 
-	logoutput("fuse_fs_readlink: ino %li ENOENT", request->ino);
 	reply_VFS_error(request, ENOENT);
 
     }
@@ -1889,8 +1889,6 @@ void finish_get_fuse_direntry(struct fuse_opendir_s *opendir)
 {
     struct common_signal_s *signal=opendir->signal;
 
-    logoutput("finish_get_fuse_direntry: opendir flags %i", opendir->flags);
-
     signal_lock(signal);
 
     if ((opendir->flags & _FUSE_OPENDIR_FLAG_QUEUE_READY)==0) {
@@ -1907,13 +1905,10 @@ void finish_get_fuse_direntry(struct fuse_opendir_s *opendir)
 
 	opendir->flags &= ~ _FUSE_OPENDIR_FLAG_THREAD;
 	opendir->flags |= _FUSE_OPENDIR_FLAG_QUEUE_READY;
-	logoutput("finish_get_fuse_direntry: B opendir flags %i", opendir->flags);
 	signal_broadcast(signal);
 
 
     }
-
-    logoutput("finish_get_fuse_direntry: C opendir flags %i", opendir->flags);
 
     signal_unlock(signal);
 }

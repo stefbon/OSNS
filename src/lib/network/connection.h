@@ -57,13 +57,17 @@
 #define STD_SOCKET_TYPE_STDOUT						2
 #define STD_SOCKET_TYPE_STDERR						3
 
-#define FS_CONNECTION_FLAG_INIT						1
-#define FS_CONNECTION_FLAG_CONNECTING					2
-#define FS_CONNECTION_FLAG_CONNECTED					4
-#define FS_CONNECTION_FLAG_EVENTLOOP					8
-#define FS_CONNECTION_FLAG_DISCONNECTING				16
-#define FS_CONNECTION_FLAG_DISCONNECTED					32
+#define FS_CONNECTION_FLAG_INIT						(1 << 0)
+#define FS_CONNECTION_FLAG_CONNECTING					(1 << 1)
+#define FS_CONNECTION_FLAG_CONNECTED					(1 << 2)
+#define FS_CONNECTION_FLAG_EVENTLOOP					(1 << 3)
+#define FS_CONNECTION_FLAG_DISCONNECTING				(1 << 4)
+#define FS_CONNECTION_FLAG_DISCONNECTED					(1 << 5)
 #define FS_CONNECTION_FLAG_DISCONNECT					( FS_CONNECTION_FLAG_DISCONNECTING | FS_CONNECTION_FLAG_DISCONNECTED )
+
+#define FS_CONNECTION_FLAG_WRITE					(1 << 6)
+#define FS_CONNECTION_FLAG_WAITING					(1 << 7)
+#define FS_CONNECTION_FLAG_WRITABLE					(1 << 8)
 
 #define FS_CONNECTION_COMPARE_HOST					1
 
@@ -206,5 +210,7 @@ int get_connection_info(struct fs_connection_s *a, const char *what);
 char *get_connection_ipv4(struct fs_connection_s *a, int fd, unsigned char what, struct generic_error_s *error);
 char *get_connection_ipv6(struct fs_connection_s *a, int fd, unsigned char what, struct generic_error_s *error);
 char *get_connection_hostname(struct fs_connection_s *a, int fd, unsigned char what, struct generic_error_s *error);
+
+unsigned int get_status_socket_connection(struct fs_connection_s *sc);
 
 #endif

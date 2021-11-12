@@ -386,15 +386,21 @@ void remove_inode_workspace_hashtable(struct workspace_mount_s *workspace, struc
 
 void add_inode_context(struct service_context_s *context, struct inode_s *inode)
 {
-    struct entry_s *parent=get_parent_entry(inode->alias);
-    struct inode_s *pinode=parent->inode;
     struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
     struct system_dev_s dev;
 
     add_inode_workspace_hashtable(workspace, inode);
-    (* pinode->fs->type.dir.use_fs)(context, inode);
     get_dev_system_stat(&workspace->inodes.rootinode.stat, &dev);
     set_dev_system_stat(&inode->stat, &dev);
+
+}
+
+void set_inode_fuse_fs(struct service_context_s *context, struct inode_s *inode)
+{
+    struct directory_s *directory=get_upper_directory_entry(inode->alias);
+    struct inode_s *pinode=directory->inode;
+
+    (* pinode->fs->type.dir.use_fs)(context, inode);
 
 }
 
@@ -426,8 +432,6 @@ static void inode_2delete_thread(void *ptr)
     inode=lookup_workspace_inode(workspace, i2d->ino);
 
     if (inode) {
-        struct entry_s *entry=inode->alias;
-        struct directory_s *directory=get_upper_directory_entry(entry);
 
         if (i2d->flags & FORGET_INODE_FLAG_FORGET) {
 
@@ -443,27 +447,12 @@ static void inode_2delete_thread(void *ptr)
 
         }
 
-        if (directory) {
-            unsigned int error=0;
-            struct simple_lock_s wlock;
-
-            /* remove entry from directory */
-
-            if (wlock_directory(directory, &wlock)==0) {
-
-                remove_entry_batch(directory, entry, &error);
-                unlock_directory(directory, &wlock);
-
-            }
-
-        }
 
         if ((i2d->flags & FORGET_INODE_FLAG_DELETED) && (inode->flags & INODE_FLAG_DELETED)==0) {
 
             /* inform VFS, only when the VFS is not the initiator  */
 
-            logoutput("inode_2delete_thread: remote deleted ino %lli name %s", i2d->ino, (entry) ? entry->name.name : "-UNKNOWN-");
-
+            logoutput("inode_2delete_thread: remote deleted ino %lli", i2d->ino);
 	    notify_VFS_inode_delete(workspace, inode);
 	    inode->flags |= INODE_FLAG_DELETED;
 
@@ -473,36 +462,56 @@ static void inode_2delete_thread(void *ptr)
 
         if (inode->nlookup==0) {
 
-	    if (check_service_path_fs(inode)) {
+	    logoutput("inode_2delete_thread: remove inode ino %lli (nlookup zero)", i2d->ino);
 
-		/* only delete here when on a service related fs: like inodes on a sftp shared directory */
+	    if (S_ISDIR(inode->stat.sst_mode)) {
+		unsigned int error=0;
+		struct directory_s *directory=remove_directory(inode, &error);
 
-        	logoutput("inode_2delete_thread: remove inode ino %lli name %s", i2d->ino, (entry) ? entry->name.name : "-UNKNOWN-");
-		remove_inode_workspace_hashtable(workspace, inode);
-
-        	/* call the inode specific forget which will also release the attached data */
-
-        	(* inode->fs->forget)(inode);
-
-		if (entry) {
-
-            	    entry->inode=NULL;
-            	    inode->alias=NULL;
-            	    destroy_entry(entry);
-
-		}
-
-        	free_inode(inode);
-
-	    } else {
-
-		logoutput("inode_2delete_thread: inode ino %lli name %s nlookup zero", i2d->ino, (entry) ? entry->name.name : "-UNKNOWN-");
+		if (directory) free_directory(directory);
 
 	    }
+
+	    remove_inode_workspace_hashtable(workspace, inode);
+
+    	    /* call the inode specific forget which will also release the attached data */
+
+    	    (* inode->fs->forget)(inode);
+
+	    /* is there an entry??*/
+
+	    if (inode->alias) {
+    		struct entry_s *entry=inode->alias;
+    		struct directory_s *directory=get_upper_directory_entry(entry);
+
+    		if (directory) {
+        	    unsigned int error=0;
+        	    struct simple_lock_s wlock;
+
+        	    /* remove entry from directory */
+
+        	    if (wlock_directory(directory, &wlock)==0) {
+
+            		remove_entry_batch(directory, entry, &error);
+            		unlock_directory(directory, &wlock);
+
+        	    }
+
+    		}
+
+        	entry->inode=NULL;
+        	inode->alias=NULL;
+        	destroy_entry(entry);
+
+	    }
+
+    	    free_inode(inode);
 
         }
 
     }
+
+    out:
 
     free(i2d);
     i2d=NULL;
