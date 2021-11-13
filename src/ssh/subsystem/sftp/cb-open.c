@@ -393,11 +393,14 @@ void sftp_op_open(struct sftp_payload_s *payload)
 
 	    }
 
+	    logoutput("sftp_op_open: path %.*s", location.type.path.len, location.type.path.ptr);
+
 	    /* TODO:
 	    */
 
 	    if (posix & O_CREAT) {
 
+		logoutput("sftp_op_open: creating file is not supported");
 		status=SSH_FX_OP_UNSUPPORTED;
 		goto error;
 
