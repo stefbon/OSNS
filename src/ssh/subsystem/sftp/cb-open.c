@@ -48,10 +48,9 @@
 #include "protocol.h"
 
 #include "osns_sftp_subsystem.h"
+
 #include "init.h"
-#include "connect.h"
-#include "attributes-write.h"
-#include "attributes-read.h"
+#include "attr.h"
 #include "send.h"
 #include "handle.h"
 #include "path.h"
@@ -258,255 +257,28 @@ static unsigned int translate_write_error(unsigned int error)
     return status;
 }
 
-
-    }
-
-    return status;
-}
-
-static int send_sftp_handle(struct sftp_subsystem_s *sftp, uint32_t id, struct sftp_filehandle_s *filehandle)
-{
-    unsigned int size=(unsigned int) get_sftp_handlesize();
-    char bytes[size];
-    write_sftp_commonhandle(filehandle, bytes, size);
-    return reply_sftp_handle(sftp, id, bytes, SFTP_HANDLE_SIZE);
-}
-
-/* open of not existing file: create */
-
-static void sftp_op_open_new(struct sftp_subsystem_s *sftp, struct sftp_payload_s *payload, char *buffer, unsigned int left, char *path, unsigned int sftpaccess, unsigned int sftpflags, unsigned int posix)
+static void sftp_op_open_existing(struct sftp_subsystem_s *sftp, struct sftp_payload_s *payload, struct fs_location_s *location, unsigned int sftp_access, unsigned int sftp_flags, unsigned int posix)
 {
     struct sftp_identity_s *user=&sftp->identity;
     unsigned int status=0;
-    unsigned int valid=0;
-    unsigned int error=0;
-    struct stat st;
-    struct sftp_attr_s attr;
+    int result=0;
+    struct system_stat_s st;
+    struct system_dev_s dev;
     struct commonhandle_s *handle=NULL;
-    struct insert_filehandle_s result;
-    int fd=0;
-    dev_t dev=0;
-    uint64_t ino=0;
-    char *sep=NULL;
-    char *name=NULL;
 
-    sep=memrchr(path, '/', strlen(path));
-    if (sep) {
+    logoutput("sftp_op_open_existing: path %.*s", location->type.path.len, location->type.path.ptr);
 
-	*sep='\0';
-	name=sep+1;
-
-	if (stat(path, &st)==0 && S_ISDIR(st.st_mode)) {
-
-	    dev=st.st_dev;
-	    ino=st.st_ino;
-	    *sep='/';
-
-	} else {
-
-	    /* set status to NO_SUCH_FILE_OR_DIRECTORY */
-	    *sep='/';
-	    goto error;
-
-	}
-
-    } else {
-
-	goto error;
-
-    }
-
-    memset(&result, 0, sizeof(struct insert_filehandle_s));
-    memset(&attr, 0, sizeof(struct sftp_attr_s));
-    memset(&st, 0, sizeof(struct stat));
-
-    st.st_uid=user->pwd.pw_uid; /* sane default */
-    st.st_gid=user->pwd.pw_gid; /* sane default */
-    st.st_mode=S_IFREG | (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH); /* default file with perm 0666 -> make this configurable */
-    st.st_size=0; /* default zero size */
-
-    /* read the attr */
-
-    if (read_attributes_v06(sftp, buffer, left, &attr)==0) {
-
-	status=SSH_FX_INVALID_PARAMETER;
-	logoutput("sftp_op_open_new: error reading attributes");
-	goto error;
-
-    }
-
-    if (attr.valid[SFTP_ATTR_INDEX_USERGROUP]==1) {
-
-	/* check the user and/or group are reckognized
-	    and if set to the connecting user they do not have to be set
-	    since they are set automatically */
-
-	if (attr.flags & SFTP_ATTR_FLAG_USERNOTFOUND) {
-
-	    status=SSH_FX_OWNER_INVALID;
-	    logoutput("sftp_op_open_new: error user not found");
-	    goto error;
-
-	} else if (attr.flags & SFTP_ATTR_FLAG_VALIDUSER) {
-
-	    if (attr.uid==user->pwd.pw_uid) attr.flags -= SFTP_ATTR_FLAG_VALIDUSER;
-
-	}
-
-	if (attr.flags & SFTP_ATTR_FLAG_GROUPNOTFOUND) {
-
-	    status=SSH_FX_GROUP_INVALID;
-	    logoutput("sftp_op_open_new: error group not found");
-	    goto error;
-
-	} else if (attr.flags & SFTP_ATTR_FLAG_VALIDGROUP) {
-
-	    if (attr.gid==user->pwd.pw_gid) attr.flags -= SFTP_ATTR_FLAG_VALIDGROUP;
-
-	}
-
-	if (!(attr.flags & (SFTP_ATTR_FLAG_VALIDGROUP | SFTP_ATTR_FLAG_VALIDUSER))) attr.valid[SFTP_ATTR_INDEX_USERGROUP]=0;
-
-    }
-
-    if (attr.valid[SFTP_ATTR_INDEX_PERMISSIONS]) {
-
-	st.st_mode=attr.type | attr.permissions;
-	attr.valid[SFTP_ATTR_INDEX_PERMISSIONS]=0; /* not needed futher afterwards by the setstat */
-
-	if (! S_ISREG(st.st_mode)) {
-
-	    status=(st.st_mode>0) ? SSH_FX_FILE_IS_A_DIRECTORY : SSH_FX_PERMISSION_DENIED;
-	    logoutput("sftp_op_open_new: error type not file (%i)", (int) st.st_mode);
-	    goto error;
-
-	}
-
-    }
-
-    handle=init_sftp_filehandle(sftp, INSERTHANDLE_TYPE_CREATE, dev, ino, name);
-    if (handle==NULL) {
-
-	status=result.status; /* possibly additional information in result about locking for example */
-	goto error;
-
-    }
-
-    set_sftp_handle_access(sftp, sftpaccess);
-    set_sftp_handle_flags(sftp, sftpflags);
-
-    if (insert_sftp_filehandle(handle, &result)==-1) {
-
-	/* TODO: more info in result */
-	logoutput("sftp_op_open_new: unable to insert filehandle ...");
-	goto error'
-
-    }
-
-    fd=(* handle->open)(handle, path, posix, st.st_mode);
-    error=errno;
-
-    if (fd<0) {
-
-	logoutput("sftp_op_open_new: unable to create %s error %i (%s)", path, errno, strerror(errno));
-	goto error'
-
-    }
-
-    /* when size is zero ignore it */
-    if (attr.valid[SFTP_ATTR_INDEX_SIZE]==1 && attr.size==0) attr.valid[SFTP_ATTR_INDEX_SIZE]=0;
-
-    if (attr.valid[SFTP_ATTR_INDEX_PERMISSIONS] | attr.valid[SFTP_ATTR_INDEX_SIZE] | attr.valid[SFTP_ATTR_INDEX_USERGROUP] | 
-	attr.valid[SFTP_ATTR_INDEX_ATIME] | attr.valid[SFTP_ATTR_INDEX_MTIME]) {
-
-	/* set stat values: some protection to make it atomic... TODO */
-
-	if (_setstat_fd(fd, &attr, &error)==-1) {
-
-	    /* remove the file: protection? */
-
-	    logoutput("sftp_op_open: error setting stat values");
-		close(fd);
-		unlink(path);
-		status=SSH_FX_FAILURE;
-		goto error;
-
-	    }
-
-	}
-
-	memset(&test, 0, sizeof(struct stat));
-
-	if (fstat(fd, &test)==0) {
-
-	    complete_create_filehandle(filehandle, test.st_dev, test.st_ino, fd);
-
-	} else {
-
-	    error=errno;
-	    status=SSH_FX_FAILURE;
-	    status=translate_open_error(error);
-	    goto error;
-
-	}
-
-    } else {
-
-	status=SSH_FX_FAILURE;
-	if (error==0) error=EIO;
-	status=translate_open_error(error);
-	goto error;
-
-    }
-
-    if (send_sftp_handle(sftp, payload->id, filehandle)==-1) logoutput("sftp_op_open_new: error sending handle reply");
-    return;
-    
-
-    error:
-
-    if (fd>=0) {
-
-	if (handle) {
-
-	    (* hande->close)(handle);
-
-	} else {
-
-	    close(fd);
-
-	}
-
-    }
-
-    remove_filehandle(&handle);
-    if (status==0) status=SSH_FX_FAILURE;
-    logoutput("sftp_op_error_new: status %i", status);
-    reply_sftp_status_simple(sftp, payload->id, status);
-
-}
-
-void sftp_op_open_existing(struct sftp_subsystem_s *sftp, struct sftp_payload_s *payload, char *path, unsigned int sftp_access, unsigned int sftp_flags, unsigned int posix)
-{
-    struct sftp_identity_s *user=&sftp->identity;
-    unsigned int status=0;
-    unsigned int valid=0;
-    unsigned int error=0;
-    struct stat st;
-    int fd=0;
-    struct sftp_filehandle_s *filehandle=NULL;
-    struct insert_filehandle_s result;
-
-    memset(&result, 0, sizeof(struct insert_filehandle_s));
     memset(&st, 0, sizeof(struct stat));
 
     /* file must exist, otherwise error */
 
-    if (lstat(path, &st)==-1) {
+    result=system_getstat(&location->type.path, SYSTEM_STAT_SIZE, &st);
 
-	error=errno;
+    if (result<0) {
 
-	if (error==ENOENT) {
+	result=abs(result);
+
+	if (result==ENOENT) {
 
 	    status=SSH_FX_NO_SUCH_FILE;
 
@@ -520,48 +292,41 @@ void sftp_op_open_existing(struct sftp_subsystem_s *sftp, struct sftp_payload_s 
 
     }
 
-    if (S_ISDIR(st.st_mode)) {
+    if (S_ISDIR(st.sst_mode)) {
 
 	status=SSH_FX_FILE_IS_A_DIRECTORY;
 	goto error;
 
     }
 
-    result.server.sftp.access=sftp_access;
-    result.server.sftp.flags=sftp_flags;
+    get_dev_system_stat(&st, &dev);
+    handle=create_sftp_filehandle(sftp, INSERTHANDLE_TYPE_OPEN, get_unique_system_dev(&dev), get_ino_system_stat(&st), NULL, sftp_flags, sftp_access);
 
-    filehandle=start_insert_filehandle(sftp, st.st_dev, st.st_ino, &result);
+    if (handle==NULL) {
 
-    if (filehandle==NULL) {
-
-	status=result.status; /* possibly additional information in result about locking for example */
 	goto error;
 
+    } else {
+	struct filehandle_s *fh=&handle->type.file;
+
+	if ((* fh->open)(fh, location, posix, NULL)==-1) {
+
+	    status=SSH_FX_FAILURE;
+	    goto error;
+
+	}
+
+	if (send_sftp_handle(sftp, payload, handle)==-1) logoutput("_sftp_op_opendir: error sending handle reply");
+	return;
+
     }
-
-    logoutput("sftp_op_open_existing: open path %s", path);
-
-    fd=open(path, posix);
-    error=errno;
-
-    if (fd==-1) {
-
-	status=translate_open_error(error);
-	goto error;
-
-    }
-
-    filehandle->handle.fd=(unsigned int) fd;
-    logoutput("sftp_op_open_existing: fd %i", fd);
-    if (send_sftp_handle(sftp, payload, filehandle)==-1) logoutput("sftp_op_open_existing: error sending handle reply");
-    return;
 
     error:
 
-    remove_filehandle(&filehandle);
+    free_commonhandle(&handle);
     if (status==0) status=SSH_FX_FAILURE;
-    logoutput("sftp_op_error_existing: status %i", status);
     reply_sftp_status_simple(sftp, payload->id, status);
+    logoutput("sftp_op_error_existing: status %i", status);
 
 }
 
@@ -584,36 +349,41 @@ void sftp_op_open(struct sftp_payload_s *payload)
 
     /* message should at least have 4 bytes for the path string, and 4 for the access and 4 for the flags
 	note an empty path is possible */
-
-    if (payload->len>=12) {
-	char *data=payload->data;
-	unsigned int pos=0;
-	unsigned int len=0;
-
-	len=get_uint32(&data[pos]);
-	pos+=4;
-
-	/* sftp packet size is at least:
+    /* sftp packet size is at least:
 	    - 4 + len ... path (len maybe zero)
 	    - 4       ... access
 	    - 4       ... flags
 	    - x       ... ATTR (optional, only required when file is created) */
 
-	if (payload->len >= len + 12) {
+    if (payload->len>=12) {
+	char *data=payload->data;
+	unsigned int pos=0;
+	struct ssh_string_s path=SSH_STRING_INIT;
+
+	path.len=get_uint32(&data[pos]);
+	pos+=4;
+	path.ptr=&data[pos];
+
+	if (payload->len >= path.len + 12) {
 	    struct sftp_identity_s *user=&sftp->identity;
-	    unsigned int size=get_fullpath_len(user, len, &data[pos]); /* get size of buffer for path */
-	    char path[size+1];
+	    struct fs_location_s location;
+	    struct convert_sftp_path_s convert=CONVERT_PATH_INIT;
+	    unsigned int size=get_fullpath_size(user, &path, &convert); /* get size of buffer for path */
+	    char tmp[size+1];
 	    unsigned int sftp_access=0;
 	    unsigned int sftp_flags=0;
 	    unsigned int posix=0;
 	    unsigned int error=0;
 
-	    get_fullpath(user, len, &data[pos], path);
-	    pos+=len;
 	    sftp_access=get_uint32(&data[pos]);
 	    pos+=4;
 	    sftp_flags=get_uint32(&data[pos]);
 	    pos+=4;
+
+	    memset(&location, 0, sizeof(struct fs_location_s));
+	    location.flags=FS_LOCATION_FLAG_PATH;
+	    set_buffer_location_path(&location.type.path, tmp, size+1, 0);
+	    (* convert.complete)(user, &path, &location.type.path);
 
 	    if (translate_sftp2posix(sftp_access, sftp_flags, &posix, &error)==-1) {
 
@@ -628,11 +398,12 @@ void sftp_op_open(struct sftp_payload_s *payload)
 
 	    if (posix & O_CREAT) {
 
-		sftp_op_open_new(sftp, payload, &data[pos], payload->len - pos, path, sftp_access, sftp_flags, posix);
+		status=SSH_FX_OP_UNSUPPORTED;
+		goto error;
 
 	    } else {
 
-		sftp_op_open_existing(sftp, payload, path, sftp_access, sftp_flags, posix);
+		sftp_op_open_existing(sftp, payload, &location, sftp_access, sftp_flags, posix);
 
 	    }
 
@@ -667,7 +438,7 @@ void sftp_op_read(struct sftp_payload_s *payload)
 
     /* message is 4 + 8 + handle size + 4 =  hs + 16 bytes */
 
-    if (payload->len>=SFTP_HANDLE_SIZE + 16) {
+    if (payload->len>=get_sftp_handle_size() + 16) {
 	char *data=payload->data;
 	unsigned int pos=0;
 	unsigned int len=0;
@@ -677,14 +448,23 @@ void sftp_op_read(struct sftp_payload_s *payload)
 	len=get_uint32(&data[pos]);
 	pos+=4;
 
-	if (len==SFTP_HANDLE_SIZE) {
+	if (len==get_sftp_handle_size()) {
 	    unsigned int error=0;
 	    unsigned int count=0;
-	    struct commonhandle_s *handle=find_sftp_commonhandle(sftp, &data[pos], &count);
+	    struct commonhandle_s *handle=find_sftp_commonhandle(sftp, &data[pos], len, &count);
+	    struct sftp_subsystem_s *tmp=NULL;
 	    uint64_t offset=0;
 	    uint32_t size=0;
 
 	    pos+=count;
+
+	    if (handle==NULL) {
+
+		status=SSH_FX_INVALID_HANDLE;
+		logoutput_warning("sftp_op_read: handle not found");
+		goto error;
+
+	    }
 
 	    offset=get_uint64(&data[pos]);
 	    pos+=8;
@@ -693,36 +473,55 @@ void sftp_op_read(struct sftp_payload_s *payload)
 
 	    /* TODO: handle max-read-size (2K?) */
 
-	    if (handle==NULL) {
+	    tmp=get_sftp_subsystem_commonhandle(handle);
 
-		status=SSH_FX_INVALID_HANDLE;
-		logoutput_warning("sftp_op_read: handle not found");
-
-	    } else if ((handle->flags & COMMONHANDLE_FLAG_FILE)==0) {
+	    if ((handle->flags & COMMONHANDLE_FLAG_FILE)==0) {
 
 		status=SSH_FX_INVALID_HANDLE;
 		logoutput_warning("sftp_op_read: handle not a file handle");
+		goto error;
 
-	    /* TODO: additional checks about handle, does is belong to this sftp subsystem and pid ?*/
-
-	    } else if (handle->pid != getpid()) {
+	    } else if (tmp==NULL) {
 
 		status=SSH_FX_INVALID_HANDLE;
-		logoutput_warning("sftp_op_read: handle owned by another process");
+		logoutput_warning("sftp_op_read: handle is not a sftp handle");
+		goto error;
+
+	    } else if (tmp != sftp) {
+
+		status=SSH_FX_INVALID_HANDLE;
+		logoutput_warning("sftp_op_read: handle does belong by other sftp server");
+		goto error;
 
 	    } else {
+		struct filehandle_s *fh=&handle->type.file;
 		char buffer[size];
 		int bytesread=0;
 		unsigned int error=0;
 
-		bytesread=(*handle->type.filehandle.pread)(handle, buffer, size, offset);
+		bytesread=(* fh->pread)(fh, buffer, size, offset);
 		error=errno;
 
 		if (bytesread>=0) {
+		    unsigned char eof=0;
+
+		    /* when less bytes read then requested check the offset + size is past end of file
+			this is usefull for passing the eof parameter to the client */
+
+		    if (bytesread<size) {
+			struct system_stat_s st;
+
+			if ((* fh->fgetstat)(fh, SYSTEM_STAT_SIZE, &st)==0) {
+			    uint64_t check=get_size_system_stat(&st);
+
+			    if ((offset + size > check) && (offset + bytesread == check)) eof=1;
+
+			}
+
+		    }
 
 		    logoutput("sftp_op_read: size %i off %i read %i bytes ", (int) size, (int) offset, bytesread);
-
-		    if (reply_sftp_data(sftp, payload->id, buffer, bytesread, 0)==-1) logoutput("sftp_op_read: error sending data");
+		    if (reply_sftp_data(sftp, payload->id, buffer, bytesread, eof)==-1) logoutput("sftp_op_read: error sending data");
 		    return;
 
 		}
@@ -741,7 +540,7 @@ void sftp_op_read(struct sftp_payload_s *payload)
 
     }
 
-    out:
+    error:
 
     logoutput("sftp_op_read: status %i", status);
     reply_sftp_status_simple(sftp, payload->id, status);
@@ -749,7 +548,7 @@ void sftp_op_read(struct sftp_payload_s *payload)
 
     disconnect:
 
-    finish_session(sftp);
+    finish_sftp_subsystem(sftp);
 
 }
 
@@ -771,7 +570,7 @@ void sftp_op_write(struct sftp_payload_s *payload)
 
     /* message is minimal 4 + handle size + 8 + 4 =  hs + 16 bytes */
 
-    if (payload->len>=SFTP_HANDLE_SIZE + 16) {
+    if (payload->len>=get_sftp_handle_size() + 16) {
 	char *data=payload->data;
 	unsigned int pos=0;
 	unsigned int len=0;
@@ -779,21 +578,28 @@ void sftp_op_write(struct sftp_payload_s *payload)
 	len=get_uint32(&data[pos]);
 	pos+=4;
 
-	if (len==SFTP_HANDLE_SIZE) {
+	if (len==get_sftp_handle_size()) {
 	    unsigned int error=0;
 	    unsigned int count=0;
-	    struct commonhandle_s *handle=find_sftp_commonhandle(sftp, &data[pos], &count);
+	    struct commonhandle_s *handle=find_sftp_commonhandle(sftp, &data[pos], len, &count);
+	    struct sftp_subsystem_s *tmp=NULL;
 	    uint64_t offset=0;
 	    uint32_t size=0;
 
-	    pos+=16;
+	    if (handle==NULL) {
 
-	    offset=get_uint64(&buffer[pos]);
+		status=SSH_FX_INVALID_HANDLE;
+		logoutput_warning("sftp_op_write: handle not found");
+		goto error;
+
+	    }
+
+	    pos+=count;
+
+	    offset=get_uint64(&data[pos]);
 	    pos+=8;
-	    size=get_uint32(&buffer[pos]);
+	    size=get_uint32(&data[pos]);
 	    pos+=4;
-
-	    /* check the size parameter: add a max write size */
 
 	    if (size==0) {
 
@@ -802,30 +608,38 @@ void sftp_op_write(struct sftp_payload_s *payload)
 
 	    }
 
-	    if (handle==NULL) {
+	    /* check the size parameter: add a max write size */
 
-		status=SSH_FX_INVALID_HANDLE;
-		logoutput_warning("sftp_op_write: handle not found");
+	    tmp=get_sftp_subsystem_commonhandle(handle);
 
-	    } else if ((handle->flags & COMMONHANDLE_FLAG_FILE)==0) {
+	    if ((handle->flags & COMMONHANDLE_FLAG_FILE)==0) {
 
 		status=SSH_FX_INVALID_HANDLE;
 		logoutput_warning("sftp_op_write: handle not a file handle");
+		goto error;
 
-	    /* TODO: additional checks about handle, does is belong to this sftp subsystem and pid ?*/
-
-	    } else if (handle->pid != getpid()) {
+	    } else if (tmp==NULL) {
 
 		status=SSH_FX_INVALID_HANDLE;
-		logoutput_warning("sftp_op_write: handle owned by another process");
+		logoutput_warning("sftp_op_write: handle is not a sftp handle");
+		goto error;
+
+	    } else if (tmp != sftp) {
+
+		status=SSH_FX_INVALID_HANDLE;
+		logoutput_warning("sftp_op_write: handle does belong by other sftp server");
+		goto error;
 
 	    } else {
+		struct filehandle_s *fh=&handle->type.file;
 		int byteswritten=0;
 
-		byteswritten=(* handle->type.filehandle.pwrite)(filehandle->handle.fd, &data[pos], size, offset);
+		byteswritten=(* fh->pwrite)(fh, &data[pos], size, offset);
 		error=errno;
 
-		if (count>0) {
+		/* here: */
+
+		if (byteswritten>0) {
 
 		    reply_sftp_status_simple(sftp, payload->id, SSH_FX_OK);
 		    return;
@@ -854,7 +668,7 @@ void sftp_op_write(struct sftp_payload_s *payload)
     return;
 
     disconnect:
-    finish_session(sftp);
+    finish_sftp_subsystem(sftp);
 
 }
 

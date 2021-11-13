@@ -62,6 +62,7 @@
 #include "protocol.h"
 #include "attr.h"
 
+#include "cb-open.h"
 #include "cb-close.h"
 #include "cb-opendir.h"
 #include "cb-stat.h"
@@ -346,14 +347,18 @@ int init_sftp_subsystem(struct sftp_subsystem_s *sftp)
 
     sftp->cb[SSH_FXP_OPENDIR]=sftp_op_opendir;
     sftp->cb[SSH_FXP_READDIR]=sftp_op_readdir;
+
     sftp->cb[SSH_FXP_CLOSE]=sftp_op_close;
+
+    sftp->cb[SSH_FXP_OPEN]=sftp_op_open;
+    sftp->cb[SSH_FXP_READ]=sftp_op_read;
+    sftp->cb[SSH_FXP_WRITE]=sftp_op_write;
 
     sftp->cb[SSH_FXP_LSTAT]=sftp_op_lstat;
     sftp->cb[SSH_FXP_STAT]=sftp_op_stat;
+    sftp->cb[SSH_FXP_FSTAT]=sftp_op_fstat;
 
     sftp->cb[SSH_FXP_READLINK]=sftp_op_readlink;
-
-    /* sftp->cb[SSH_FXP_FSTAT]=sftp_op_fstat; */
 
     return 0;
 

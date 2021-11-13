@@ -61,16 +61,6 @@
 
 static unsigned int default_mask=(SYSTEM_STAT_TYPE | SYSTEM_STAT_MODE | SYSTEM_STAT_UID | SYSTEM_STAT_GID | SYSTEM_STAT_ATIME | SYSTEM_STAT_MTIME | SYSTEM_STAT_CTIME | SYSTEM_STAT_SIZE);
 
-static int send_sftp_dirhandle(struct sftp_subsystem_s *sftp, struct sftp_payload_s *payload, struct commonhandle_s *handle)
-{
-    unsigned int size=(unsigned int) get_sftp_handle_size();
-    char bytes[size];
-
-    logoutput_info("send_sftp_dirhandle");
-    write_sftp_commonhandle(handle, bytes, size);
-    return reply_sftp_handle(sftp, payload->id, bytes, size);
-}
-
 static void _sftp_op_opendir(struct sftp_subsystem_s *sftp, struct sftp_payload_s *payload, struct fs_location_s *location)
 {
     struct sftp_identity_s *user=&sftp->identity;
@@ -131,7 +121,7 @@ static void _sftp_op_opendir(struct sftp_subsystem_s *sftp, struct sftp_payload_
 
 	}
 
-	if (send_sftp_dirhandle(sftp, payload, handle)==-1) logoutput("_sftp_op_opendir: error sending handle reply");
+	if (send_sftp_handle(sftp, payload, handle)==-1) logoutput("_sftp_op_opendir: error sending handle reply");
 	return;
 
     }

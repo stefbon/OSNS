@@ -233,7 +233,8 @@ osns_sftp_subsystem_SOURCES	=	osns_sftp_subsystem.c \
 					ssh/subsystem/connection.c \
 					ssh/subsystem/sftp/attr.c \
 					ssh/subsystem/sftp/cb-opendir.c ssh/subsystem/sftp/cb-stat.c \
-					ssh/subsystem/sftp/cb-close.c ssh/subsystem/sftp/cb-readlink.c \
+					ssh/subsystem/sftp/cb-close.c ssh/subsystem/sftp/cb-open.c \
+					ssh/subsystem/sftp/cb-readlink.c \
 					ssh/subsystem/sftp/path.c ssh/subsystem/sftp/payload.c \
 					ssh/subsystem/sftp/handle.c ssh/subsystem/sftp/init.c \
 					ssh/subsystem/sftp/receive.c ssh/subsystem/sftp/send.c \

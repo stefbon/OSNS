@@ -50,6 +50,7 @@
 #include "protocol.h"
 
 #include "osns_sftp_subsystem.h"
+
 #include "send.h"
 #include "path.h"
 #include "handle.h"
@@ -160,4 +161,129 @@ void sftp_op_lstat(struct sftp_payload_s *payload)
 {
     struct sftp_subsystem_s *sftp=payload->sftp;
     sftp_op_stat_generic(sftp, payload, system_getlstat);
+}
+
+void sftp_op_fstat(struct sftp_payload_s *payload)
+{
+    struct sftp_subsystem_s *sftp=payload->sftp; 
+    unsigned int status=SSH_FX_BAD_MESSAGE;
+
+    logoutput("sftp_op_fstat (%i)", (int) gettid());
+
+    if (payload->len >= 8 + get_sftp_handle_size()) {
+	char *data=payload->data;
+	unsigned int len=0;
+	unsigned int pos=0;
+
+	len=get_uint32(&data[pos]);
+	pos+=4;
+
+	if (len==get_sftp_handle_size()) {
+	    struct system_stat_s stat;
+	    struct sftp_valid_s valid;
+	    int result=0;
+	    unsigned int count=0;
+	    struct commonhandle_s *handle=find_sftp_commonhandle(sftp, &data[4], len, &count);
+	    struct sftp_subsystem_s *tmp=NULL;
+	    unsigned int mask=0;
+	    uint32_t validbits=0;
+
+	    pos+=count;
+
+	    validbits=get_uint32(&data[pos]);
+	    convert_sftp_valid_w(&sftp->attrctx, &valid, validbits);
+
+	    if (handle==NULL) {
+
+		status=SSH_FX_INVALID_HANDLE;
+		logoutput_warning("sftp_op_fstat: handle not found");
+		goto error;
+
+	    }
+
+	    tmp=get_sftp_subsystem_commonhandle(handle);
+
+	    if (tmp==NULL) {
+
+		status=SSH_FX_INVALID_HANDLE;
+		logoutput_warning("sftp_op_fstat: handle is not a sftp handle");
+		goto error;
+
+	    } else if (tmp != sftp) {
+
+		status=SSH_FX_INVALID_HANDLE;
+		logoutput_warning("sftp_op_fstat: handle does belong by other sftp server");
+		goto error;
+
+	    }
+
+	    mask=translate_valid_2_stat_mask(&sftp->attrctx, &valid, 'w');
+
+	    if (handle->flags & COMMONHANDLE_FLAG_DIR) {
+		struct dirhandle_s *dh=&handle->type.dir;
+
+		result=(* dh->fstatat)(dh, NULL, mask, &stat);
+
+	    } else {
+		struct filehandle_s *fh=&handle->type.file;
+
+		result=(* fh->fgetstat)(fh, mask, &stat);
+
+	    }
+
+	    logoutput("sftp_op_fstat: result %i valid %i", result, valid.mask);
+
+	    if (result==0) {
+		struct rw_attr_result_s r=RW_ATTR_RESULT_INIT;
+		unsigned int size=get_size_buffer_write_attributes(&sftp->attrctx, &r, &valid);
+		char tmp[size];
+		struct attr_buffer_s abuff;
+
+		set_attr_buffer_write(&abuff, tmp, size);
+		(* abuff.ops->rw.write.write_uint32)(&abuff, (r.valid.mask | r.valid.flags));
+		write_attributes_generic(&sftp->attrctx, &abuff, &r, &stat, &valid);
+
+		if (reply_sftp_attrs(sftp, payload->id, tmp, abuff.len)==-1) logoutput_warning("sftp_op_stat: error sending attr");
+		return;
+
+	    } else {
+
+		result=abs(result);
+		status=SSH_FX_FAILURE;
+
+		if (result==ENOENT) {
+
+		    status=SSH_FX_NO_SUCH_FILE;
+
+		} else if (result==ENOTDIR) {
+
+		    status=SSH_FX_NO_SUCH_PATH;
+
+		} else if (result==EACCES) {
+
+		    status=SSH_FX_PERMISSION_DENIED;
+
+		}
+
+	    }
+
+	} else {
+
+	    logoutput_warning("sftp_op_fstat: invalid handle size %i", len);
+	    status=SSH_FX_INVALID_HANDLE;
+
+	}
+
+    }
+
+    error:
+
+    logoutput("sftp_op_fstat: status %i", status);
+    reply_sftp_status_simple(sftp, payload->id, status);
+    return;
+
+    disconnect:
+
+    finish_sftp_subsystem(sftp);
+
 }

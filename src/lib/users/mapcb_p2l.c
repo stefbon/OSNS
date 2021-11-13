@@ -214,6 +214,8 @@ void get_group_p2l_nonshared_byname(struct net_idmapping_s *mapping, struct net_
     char *sep=NULL;
     unsigned int error=0;
 
+    logoutput_debug("get_group_p2l_nonshared_byname: %.*s", group->net.name.len, group->net.name.ptr);
+
     group->local.gid=mapping->unknown_gid;
     sep=memchr(group->net.name.ptr, group->net.name.len, '@');
 

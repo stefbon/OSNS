@@ -80,11 +80,30 @@ void sftp_op_close(struct sftp_payload_s *payload)
 	    unsigned int error=0;
 	    unsigned int count=0;
 	    struct commonhandle_s *handle=find_sftp_commonhandle(sftp, &data[4], len, NULL);
+	    struct sftp_subsystem_s *tmp=NULL;
 
 	    if (handle==NULL) {
 
 		status=SSH_FX_INVALID_HANDLE;
 		logoutput_warning("sftp_op_close: handle not found");
+		goto error;
+
+	    }
+
+	    tmp=get_sftp_subsystem_commonhandle(handle);
+
+	    if (tmp==NULL) {
+
+		status=SSH_FX_INVALID_HANDLE;
+		logoutput_warning("sftp_op_close: handle is not a sftp handle");
+		goto error;
+
+	    } else if (tmp != sftp) {
+
+		status=SSH_FX_INVALID_HANDLE;
+		logoutput_warning("sftp_op_close: handle does belong by other sftp server");
+		goto error;
+
 
 	    } else {
 
@@ -97,10 +116,13 @@ void sftp_op_close(struct sftp_payload_s *payload)
 	} else {
 
 	    logoutput_warning("sftp_op_close: invalid handle size %i", len);
+	    status=SSH_FX_INVALID_HANDLE;
 
 	}
 
     }
+
+    error:
 
     logoutput("sftp_op_close: status %i", status);
     reply_sftp_status_simple(sftp, payload->id, status);

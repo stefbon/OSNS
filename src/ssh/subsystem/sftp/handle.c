@@ -157,12 +157,8 @@ static unsigned int translate_sftp_access_2_commonshared(unsigned int sftpaccess
 struct sftp_subsystem_s *get_sftp_subsystem_commonhandle(struct commonhandle_s *handle)
 {
 
-    logoutput_debug("get_sftp_subsystem_commonhandle: handle flags %i", handle->flags);
-
     if (handle->flags & COMMONHANDLE_FLAG_SFTP) {
 	struct sftp_handle_s *sftp_handle=(struct sftp_handle_s *) handle->buffer;
-
-	logoutput_debug("get_sftp_subsystem_commonhandle: is sftp");
 
 	return sftp_handle->sftp;
 
@@ -329,8 +325,23 @@ static struct commonhandle_s *find_sftp_handle_common(struct sftp_subsystem_s *s
 
 	} else if (get_pid_commonhandle(handle) != getpid()) {
 
-	    logoutput_warning("find_sftp_filehandle: handle found is of different process");
+	    logoutput_warning("find_sftp_handle_common: handle found is of different process");
 	    return NULL;
+
+	} else {
+	    struct sftp_subsystem_s *tmp=get_sftp_subsystem_commonhandle(handle);
+
+	    if (tmp==NULL) {
+
+		logoutput_warning("find_sftp_handle_common: handle found is not a sftp handle");
+		return NULL;
+
+	    } else if ( tmp != sftp) {
+
+		logoutput_warning("find_sftp_handle_common: handle found does not belong to this sftp process");
+		return NULL;
+
+	    }
 
 	}
 
@@ -402,7 +413,7 @@ struct commonhandle_s *create_sftp_filehandle(struct sftp_subsystem_s *sftp, uns
 
     }
 
-    return NULL;
+    return handle;
 
     failed:
 
@@ -495,4 +506,13 @@ struct sftp_valid_s *get_valid_sftp_dirhandle(struct commonhandle_s *handle)
 {
     struct sftp_handle_s *sftp_handle=(struct sftp_handle_s *) handle->buffer;
     return &sftp_handle->type.dirhandle.valid;
+}
+
+int send_sftp_handle(struct sftp_subsystem_s *sftp, struct sftp_payload_s *payload, struct commonhandle_s *handle)
+{
+    unsigned int size=(unsigned int) get_sftp_handle_size();
+    char bytes[size];
+
+    write_sftp_commonhandle(handle, bytes, size);
+    return reply_sftp_handle(sftp, payload->id, bytes, size);
 }

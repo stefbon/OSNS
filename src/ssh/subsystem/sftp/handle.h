@@ -27,6 +27,8 @@
 unsigned char write_sftp_commonhandle(struct commonhandle_s *handle, char *buffer, unsigned int size);
 unsigned char get_sftp_handle_size();
 
+struct sftp_subsystem_s *get_sftp_subsystem_commonhandle(struct commonhandle_s *handle);
+
 void set_sftp_handle_access(struct commonhandle_s *handle, unsigned int access);
 void set_sftp_handle_flags(struct commonhandle_s *handle, unsigned int flags);
 
@@ -38,5 +40,6 @@ void release_sftp_handle(struct commonhandle_s **p_handle);
 struct commonhandle_s *create_sftp_dirhandle(struct sftp_subsystem_s *sftp, struct fs_location_devino_s *devino);
 
 struct sftp_valid_s *get_valid_sftp_dirhandle(struct commonhandle_s *handle);
+int send_sftp_handle(struct sftp_subsystem_s *sftp, struct sftp_payload_s *payload, struct commonhandle_s *handle);
 
 #endif

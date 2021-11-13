@@ -26,6 +26,8 @@ struct convert_sftp_path_s {
     void				(* complete)(struct sftp_identity_s *user, struct ssh_string_s *path, struct fs_location_path_s *localpath);
 };
 
+#define CONVERT_PATH_INIT		{NULL}
+
 /* prototypes */
 
 unsigned int get_fullpath_size(struct sftp_identity_s *user, struct ssh_string_s *path, struct convert_sftp_path_s *convert_path);
