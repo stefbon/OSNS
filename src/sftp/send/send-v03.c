@@ -60,41 +60,43 @@
     https://tools.ietf.org/html/draft-ietf-secsh-filexfer-02#section-6.3
 */
 
-static void get_sftp_openmode_v03(unsigned int posix_flags, unsigned int *sftp_flags)
+static void get_sftp_openmode_v03(unsigned int posix_flags, struct sftp_openmode_s *openmode)
 {
+
     /* convert the posix flags to sftp openmode */
 
-    *sftp_flags=0;
 
     if (posix_flags & O_WRONLY) {
 
-	*sftp_flags |= SSH_FXF_WRITE;
+	openmode->flags |= SSH_FXF_WRITE;
 
     } else if (posix_flags & O_RDWR) {
 
-	*sftp_flags |= (SSH_FXF_WRITE | SSH_FXF_READ);
+	openmode->flags |= (SSH_FXF_WRITE | SSH_FXF_READ);
 
     } else {
 
-	*sftp_flags |= SSH_FXF_READ;
+	openmode->flags |= SSH_FXF_READ;
 
     }
 
     if (posix_flags & O_APPEND) {
 
-	*sftp_flags |= SSH_FXF_APPEND;
+	openmode->flags |= SSH_FXF_APPEND;
 
     }
 
     if (posix_flags & O_CREAT) {
 
+	openmode->flags |= SSH_FXF_CREAT;
+
 	if (posix_flags & O_EXCL) {
 
-	    *sftp_flags |= (SSH_FXF_CREAT | SSH_FXF_EXCL);
+	    openmode->flags |= SSH_FXF_EXCL;
 
 	} else if (posix_flags & O_TRUNC) {
 
-	    *sftp_flags |= (SSH_FXF_CREAT | SSH_FXF_TRUNC);
+	    openmode->flags |= SSH_FXF_TRUNC;
 
 	}
 
@@ -145,13 +147,16 @@ int send_sftp_open_v03(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r
 {
     char data[22 + sftp_r->call.open.len];
     unsigned int pos=0;
-    unsigned int pflags=0;
+    struct sftp_openmode_s openmode;
 
-    get_sftp_openmode_v03(sftp_r->call.open.posix_flags, &pflags);
+    openmode.access=0;
+    openmode.flags=0;
+
+    get_sftp_openmode_v03(sftp_r->call.open.posix_flags, &openmode);
 
     sftp_r->id=get_sftp_request_id(sftp);
 
-    logoutput_debug("send_sftp_open: pflags %i", pflags);
+    logoutput_debug("send_sftp_open: flags %i", openmode.flags);
 
     store_uint32(&data[pos], 18 + sftp_r->call.open.len);
     pos+=4;
@@ -164,7 +169,7 @@ int send_sftp_open_v03(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r
     memcpy((char *) &data[pos], sftp_r->call.open.path, sftp_r->call.open.len);
     pos+=sftp_r->call.open.len;
 
-    store_uint32(&data[pos], pflags);
+    store_uint32(&data[pos], openmode.flags);
     pos+=4;
 
     store_uint32(&data[pos], 0); /* valid attributes: no attributes */
@@ -191,13 +196,15 @@ int send_sftp_create_v03(struct sftp_client_s *sftp, struct sftp_request_s *sftp
 {
     char data[17 + sftp_r->call.create.len + sftp_r->call.create.size];
     unsigned int pos=0;
-    unsigned int access=0;
-    unsigned int pflags=0;
+    struct sftp_openmode_s openmode;
 
-    get_sftp_openmode_v03(sftp_r->call.open.posix_flags, &pflags);
+    openmode.access=0;
+    openmode.flags=0;
+
+    get_sftp_openmode_v03(sftp_r->call.open.posix_flags, &openmode);
     sftp_r->id=get_sftp_request_id(sftp);
 
-    logoutput_debug("send_sftp_create: pflags %i", pflags);
+    logoutput_debug("send_sftp_create: flags %i", openmode.flags);
 
     store_uint32(&data[pos], 13 + sftp_r->call.create.len + sftp_r->call.create.size);
     pos+=4;
@@ -209,7 +216,7 @@ int send_sftp_create_v03(struct sftp_client_s *sftp, struct sftp_request_s *sftp
     pos+=4;
     memcpy((char *) &data[pos], sftp_r->call.create.path, sftp_r->call.create.len);
     pos+=sftp_r->call.create.len;
-    store_uint32(&data[pos], pflags);
+    store_uint32(&data[pos], openmode.flags);
     pos+=4;
     memcpy((char *) &data[pos], sftp_r->call.create.buff, sftp_r->call.create.size);
     pos+=sftp_r->call.create.size;

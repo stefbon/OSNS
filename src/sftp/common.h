@@ -47,6 +47,11 @@ struct sftp_header_s {
     char						*buffer;
 };
 
+struct sftp_openmode_s {
+    uint32_t						access;
+    uint32_t						flags;
+};
+
 /* interface specific data like prefix */
 
 struct sftp_send_ops_s {

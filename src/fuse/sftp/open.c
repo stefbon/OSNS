@@ -196,7 +196,7 @@ void _fs_sftp_create(struct fuse_openfile_s *openfile, struct fuse_request_s *f_
 
     sftp_r.call.create.path=(unsigned char *) pathinfo->path;
     sftp_r.call.create.len=pathinfo->len;
-    sftp_r.call.create.posix_flags=flags;
+    sftp_r.call.create.posix_flags=(flags | O_CREAT);
     sftp_r.call.create.size=(unsigned int)(abuff.pos - abuff.buffer);
     sftp_r.call.create.buff=(unsigned char *)abuff.buffer;
 

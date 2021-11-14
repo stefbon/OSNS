@@ -55,118 +55,109 @@
 #include "handle.h"
 #include "path.h"
 
-#define _SFTP_OPENACCESS_READ				( ACE4_READ_DATA | ACE4_READ_ATTRIBUTES )
-#define _SFTP_OPENACCESS_WRITE				( ACE4_WRITE_DATA | ACE4_WRITE_ATTRIBUTES )
-#define _SFTP_OPENACCESS_READWRITE			( ACE4_READ_DATA | ACE4_READ_ATTRIBUTES | ACE4_WRITE_DATA | ACE4_WRITE_ATTRIBUTES )
-#define _SFTP_OPENACCESS_APPEND				( ACE4_APPEND_DATA )
+struct local_openmode_s {
+    unsigned int			posix_flags;
+};
+
+#define LOCAL_OPENMODE_INIT		{0}
+
+struct sftp_openmode_s {
+    unsigned int			flags;
+    unsigned int			access;
+};
+
+#define SFTP_OPENMODE_INIT		{0, 0}
 
 /* translate the access and flags sftp parameters into posix
     do also some sane checking (write access is required for append etc) */
 
-static int translate_sftp2posix(unsigned int access, unsigned int flags, unsigned int *posix, unsigned int *error)
+static int translate_sftp2local(struct sftp_openmode_s *openmode, struct local_openmode_s *local, unsigned int *error)
 {
-    int result=0;
 
-    if ((access & _SFTP_OPENACCESS_READ) && (access & _SFTP_OPENACCESS_WRITE)) {
+    if (openmode->access & ACE4_APPEND_DATA) {
 
-	*posix|=O_RDWR;
+	/* flags must have a bit about how to append */
 
-	if (access & _SFTP_OPENACCESS_APPEND) {
+	if ((openmode->flags & (SSH_FXF_APPEND_DATA | SSH_FXF_APPEND_DATA_ATOMIC))==0) {
 
-	    if (flags & (SSH_FXF_APPEND_DATA | SSH_FXF_APPEND_DATA_ATOMIC)) {
-
-		*posix|=O_APPEND;
-
-	    } else {
-
-		*error=EINVAL;
-		goto error;
-
-	    }
+	    logoutput_debug("translate_sftp2local: append data without append flags");
+	    goto errorinval;
 
 	}
 
-    } else if (access & _SFTP_OPENACCESS_WRITE) {
+	if ((openmode->access & ACE4_WRITE_DATA)==0) {
 
-	*posix|=O_WRONLY;
-
-	if (access & _SFTP_OPENACCESS_APPEND) {
-
-	    if (flags & (SSH_FXF_APPEND_DATA | SSH_FXF_APPEND_DATA_ATOMIC)) {
-
-		*posix|=O_APPEND;
-
-	    } else {
-
-		*error=EINVAL;
-		goto error;
-
-	    }
+	    logoutput_debug("translate_sftp2local: append data without write access");
+	    goto errorinval;
 
 	}
 
-    } else if (access & _SFTP_OPENACCESS_READ) {
-	unsigned int openflags=flags & SSH_FXF_ACCESS_DISPOSITION;
-
-	*posix|=O_RDONLY;
-
-	if (access & _SFTP_OPENACCESS_APPEND) {
-
-	    *error=EINVAL;
-	    goto error;
-
-	}
-
-	if (openflags != SSH_FXF_OPEN_EXISTING) {
-
-	    *error=EINVAL;
-	    goto error;
-
-	}
-
-    } else {
-
-	*error=EINVAL;
-	goto error;
+	local->posix_flags |= O_APPEND;
+	openmode->access &= ~ACE4_APPEND_DATA;
+	openmode->flags &= ~(SSH_FXF_APPEND_DATA | SSH_FXF_APPEND_DATA_ATOMIC);
 
     }
 
-    if (flags & SSH_FXF_ACCESS_DISPOSITION) {
+    if ((openmode->access & (ACE4_WRITE_DATA | ACE4_WRITE_ATTRIBUTES | ACE4_READ_DATA | ACE4_READ_ATTRIBUTES)) ==
+	(ACE4_WRITE_DATA | ACE4_WRITE_ATTRIBUTES | ACE4_READ_DATA | ACE4_READ_ATTRIBUTES)) {
 
-	if (flags & SSH_FXF_CREATE_NEW) {
+	local->posix_flags |= O_RDWR;
+	openmode->access &= ~(ACE4_WRITE_DATA | ACE4_WRITE_ATTRIBUTES | ACE4_READ_DATA | ACE4_READ_ATTRIBUTES);
 
-	    *posix |= (O_EXCL | O_CREAT);
+    } else if ((openmode->access & (ACE4_WRITE_DATA | ACE4_WRITE_ATTRIBUTES | ACE4_READ_DATA | ACE4_READ_ATTRIBUTES)) ==
+	(ACE4_WRITE_DATA | ACE4_WRITE_ATTRIBUTES)) {
 
-	} else if (flags & SSH_FXF_CREATE_TRUNCATE) {
+	local->posix_flags |= O_WRONLY;
+	openmode->access &= ~(ACE4_WRITE_DATA | ACE4_WRITE_ATTRIBUTES | ACE4_READ_DATA | ACE4_READ_ATTRIBUTES);
 
-	    *posix |= (O_CREAT | O_TRUNC);
+    } else if ((openmode->access & (ACE4_WRITE_DATA | ACE4_WRITE_ATTRIBUTES | ACE4_READ_DATA | ACE4_READ_ATTRIBUTES)) ==
+	(ACE4_READ_DATA | ACE4_READ_ATTRIBUTES)) {
 
-	} else if (flags & SSH_FXF_OPEN_EXISTING) {
-
-	    /* no additional posix flags ... */
-
-	} else if (flags & SSH_FXF_OPEN_OR_CREATE) {
-
-	    *posix |= O_CREAT;
-
-	} else if (flags & SSH_FXF_TRUNCATE_EXISTING) {
-
-	    *posix |= O_TRUNC;
-
-	}
+	local->posix_flags |= O_RDONLY;
+	openmode->access &= ~(ACE4_WRITE_DATA | ACE4_WRITE_ATTRIBUTES | ACE4_READ_DATA | ACE4_READ_ATTRIBUTES);
 
     } else {
 
-	*error=EINVAL;
+	logoutput_debug("translate_sftp2local: not enough WRITE or READ access flags");
+	goto errorinval;
 
     }
 
-    out:
-    logoutput("translate_sftp2posix: access %i flags %i posix %i", access, flags, *posix);
+    if ((openmode->flags & SSH_FXF_ACCESS_DISPOSITION)==0) {
+
+	logoutput_debug("translate_sftp2local: no access flags set");
+	goto errorinval;
+
+    } else if (openmode->flags & SSH_FXF_CREATE_TRUNCATE) {
+
+	local->posix_flags |= (O_CREAT | O_TRUNC);
+	openmode->flags &= ~SSH_FXF_CREATE_TRUNCATE;
+
+    } else if (openmode->flags & SSH_FXF_CREATE_NEW) {
+
+	local->posix_flags |= (O_CREAT | O_EXCL);
+	openmode->flags &= ~SSH_FXF_CREATE_NEW;
+
+    } else if (openmode->flags & SSH_FXF_OPEN_OR_CREATE) {
+
+	local->posix_flags |= (O_CREAT);
+	openmode->flags &= ~SSH_FXF_OPEN_OR_CREATE;
+
+    } else if (openmode->flags & SSH_FXF_TRUNCATE_EXISTING) {
+
+	local->posix_flags |= (O_TRUNC);
+	openmode->flags &= ~SSH_FXF_TRUNCATE_EXISTING;
+
+    }
+
+    if (openmode->flags>0) logoutput("translate_sftp2local: sftp flags not supported %i", openmode->flags);
+    if (openmode->access>0) logoutput("translate_sftp2local: sftp access not supported %i", openmode->access);
+
+    logoutput("translate_sftp2local: posix %i", local->posix_flags);
     return 0;
 
-    error:
-    logoutput("translate_sftp2posix: received incompatible/incomplete open access and flags");
+    errorinval:
+    logoutput("translate_sftp2local: received incompatible/incomplete open access and flags (access %i flags %i)", openmode->access, openmode->flags);
     return -1;
 
 }
@@ -257,7 +248,7 @@ static unsigned int translate_write_error(unsigned int error)
     return status;
 }
 
-static void sftp_op_open_existing(struct sftp_subsystem_s *sftp, struct sftp_payload_s *payload, struct fs_location_s *location, unsigned int sftp_access, unsigned int sftp_flags, unsigned int posix)
+static void sftp_op_open_existing(struct sftp_subsystem_s *sftp, struct sftp_payload_s *payload, struct fs_location_s *location, struct sftp_openmode_s *openmode, struct local_openmode_s *local)
 {
     struct sftp_identity_s *user=&sftp->identity;
     unsigned int status=0;
@@ -300,7 +291,7 @@ static void sftp_op_open_existing(struct sftp_subsystem_s *sftp, struct sftp_pay
     }
 
     get_dev_system_stat(&st, &dev);
-    handle=create_sftp_filehandle(sftp, INSERTHANDLE_TYPE_OPEN, get_unique_system_dev(&dev), get_ino_system_stat(&st), NULL, sftp_flags, sftp_access);
+    handle=create_sftp_filehandle(sftp, INSERTHANDLE_TYPE_OPEN, get_unique_system_dev(&dev), get_ino_system_stat(&st), NULL, openmode->flags, openmode->access);
 
     if (handle==NULL) {
 
@@ -309,7 +300,7 @@ static void sftp_op_open_existing(struct sftp_subsystem_s *sftp, struct sftp_pay
     } else {
 	struct filehandle_s *fh=&handle->type.file;
 
-	if ((* fh->open)(fh, location, posix, NULL)==-1) {
+	if ((* fh->open)(fh, location, local->posix_flags, NULL)==-1) {
 
 	    status=SSH_FX_FAILURE;
 	    goto error;
@@ -349,6 +340,7 @@ void sftp_op_open(struct sftp_payload_s *payload)
 
     /* message should at least have 4 bytes for the path string, and 4 for the access and 4 for the flags
 	note an empty path is possible */
+
     /* sftp packet size is at least:
 	    - 4 + len ... path (len maybe zero)
 	    - 4       ... access
@@ -363,6 +355,7 @@ void sftp_op_open(struct sftp_payload_s *payload)
 	path.len=get_uint32(&data[pos]);
 	pos+=4;
 	path.ptr=&data[pos];
+	pos+=path.len;
 
 	if (payload->len >= path.len + 12) {
 	    struct sftp_identity_s *user=&sftp->identity;
@@ -370,14 +363,13 @@ void sftp_op_open(struct sftp_payload_s *payload)
 	    struct convert_sftp_path_s convert=CONVERT_PATH_INIT;
 	    unsigned int size=get_fullpath_size(user, &path, &convert); /* get size of buffer for path */
 	    char tmp[size+1];
-	    unsigned int sftp_access=0;
-	    unsigned int sftp_flags=0;
-	    unsigned int posix=0;
+	    struct sftp_openmode_s openmode=SFTP_OPENMODE_INIT;
+	    struct local_openmode_s local=LOCAL_OPENMODE_INIT;
 	    unsigned int error=0;
 
-	    sftp_access=get_uint32(&data[pos]);
+	    openmode.access=get_uint32(&data[pos]);
 	    pos+=4;
-	    sftp_flags=get_uint32(&data[pos]);
+	    openmode.flags=get_uint32(&data[pos]);
 	    pos+=4;
 
 	    memset(&location, 0, sizeof(struct fs_location_s));
@@ -385,7 +377,7 @@ void sftp_op_open(struct sftp_payload_s *payload)
 	    set_buffer_location_path(&location.type.path, tmp, size+1, 0);
 	    (* convert.complete)(user, &path, &location.type.path);
 
-	    if (translate_sftp2posix(sftp_access, sftp_flags, &posix, &error)==-1) {
+	    if (translate_sftp2local(&openmode, &local, &error)==-1) {
 
 		status=SSH_FX_PERMISSION_DENIED;
 		logoutput("sftp_op_open: error %i translating sftp to posix (%s)", error, strerror(error));
@@ -398,7 +390,7 @@ void sftp_op_open(struct sftp_payload_s *payload)
 	    /* TODO:
 	    */
 
-	    if (posix & O_CREAT) {
+	    if (local.posix_flags & O_CREAT) {
 
 		logoutput("sftp_op_open: creating file is not supported");
 		status=SSH_FX_OP_UNSUPPORTED;
@@ -406,7 +398,7 @@ void sftp_op_open(struct sftp_payload_s *payload)
 
 	    } else {
 
-		sftp_op_open_existing(sftp, payload, &location, sftp_access, sftp_flags, posix);
+		sftp_op_open_existing(sftp, payload, &location, &openmode, &local);
 
 	    }
 
