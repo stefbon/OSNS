@@ -390,7 +390,7 @@ void sftp_op_open(struct sftp_payload_s *payload)
 	    /* TODO:
 	    */
 
-	    if (local.posix_flags & O_CREAT) {
+	    if ((local.posix_flags & (O_CREAT | O_EXCL))==(O_CREAT | O_EXCL)) {
 
 		logoutput("sftp_op_open: creating file is not supported");
 		status=SSH_FX_OP_UNSUPPORTED;

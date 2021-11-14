@@ -66,9 +66,9 @@ void _fs_sftp_open(struct fuse_openfile_s *openfile, struct fuse_request_s *f_re
     unsigned int pathlen=(* interface->backend.sftp.get_complete_pathlen)(interface, pathinfo->len);
     char path[pathlen];
 
-    logoutput("_fs_sftp_open");
-
     pathinfo->len += (* interface->backend.sftp.complete_path)(interface, path, pathinfo);
+
+    logoutput("_fs_sftp_open: path %.*s flags %i", pathinfo->len, pathinfo->path, flags);
 
     init_sftp_request(&sftp_r, interface, f_request);
     sftp_r.call.open.path=(unsigned char *) pathinfo->path;
