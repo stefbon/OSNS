@@ -166,22 +166,38 @@ static int _open_handle(struct filehandle_s *fh, struct fs_location_s *location,
 
     /* creating file depends on via a path or a filedescriptor */
 
-    if (location->flags & FS_LOCATION_FLAG_PATH) {
-	unsigned int len=append_location_path_get_required_size(&location->type.path, 'c', location->name);
-	char buffer[len];
-	struct fs_location_path_s tmp;
+    if (fh->flags & FILEHANDLE_FLAG_CREATE) {
 
-	set_buffer_location_path(&tmp, buffer, len, 0);
+	if (location->flags & FS_LOCATION_FLAG_PATH) {
+	    unsigned int len=append_location_path_get_required_size(&location->type.path, 'c', location->name);
+	    char buffer[len];
+	    struct fs_location_path_s tmp;
 
-	if (combine_location_path(&tmp, &location->type.path, 'c', location->name)>0) {
+	    set_buffer_location_path(&tmp, buffer, len, 0);
 
-	    result = ((fh->flags & FILEHANDLE_FLAG_CREATE) ? system_create(&tmp, flags, init, &fh->socket) : system_open(&tmp, flags, &fh->socket));
+	    if (combine_location_path(&tmp, &location->type.path, 'c', location->name)>0) {
+
+		result = system_create(&tmp, flags, init, &fh->socket);
+
+	    }
+
+	} else if (location->flags & FS_LOCATION_FLAG_AT) {
+
+	    result = system_creatat(&location->type.socket, location->name, flags, init, &fh->socket);
 
 	}
 
-    } else if (location->flags & FS_LOCATION_FLAG_AT) {
+    } else {
 
-	result = ((fh->flags & FILEHANDLE_FLAG_CREATE) ? system_creatat(&location->type.socket, location->name, flags, init, &fh->socket) : system_openat(&location->type.socket, location->name, flags, &fh->socket));
+	if (location->flags & FS_LOCATION_FLAG_PATH) {
+
+	    result = system_open(&location->type.path, flags, &fh->socket);
+
+	} else if (location->flags & FS_LOCATION_FLAG_AT) {
+
+	    result = system_openat(&location->type.socket, location->name, flags, &fh->socket);
+
+	}
 
     }
 

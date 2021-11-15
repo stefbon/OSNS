@@ -224,9 +224,9 @@ if BUILD_SFTP_SUBSYSTEM
 
 bin_PROGRAMS += osns_sftp_subsystem
 
-osns_sftp_subsystem_CFLAGS = $(CFLAGS) $(GLIB_CFLAGS) $(SYSTEMD_CFLAGS) $(AVAHI_CORE_CFLAGS) $(AVAHI_CLIENT_CFLAGS) -ggdb -Og  -D_FILE_OFFSET_BITS=64 -lz -lpthread -fPIC -lm -I . -I . -I ./lib -Wall -Wno-unused-but-set-variable -Wno-uninitialized -Wno-unused-variable -Wno-unused-label -Wno-unused-function
-osns_sftp_subsystem_CPPFLAGS = $(CXXFLAGS) $(GLIB_CFLAGS) $(SYSTEMD_CFLAGS) -ggdb -Og -D_FILE_OFFSET_BITS=64 -lz -lpthread -fPIC -lm -I . -I ./lib -Wall -Wno-unused-but-set-variable -Wno-uninitialized -Wno-unused-variable -Wno-unused-label -Wno-unused-function
-osns_sftp_subsystem_LDADD = $(GLIB_LIBS) $(SYSTEMD_LIBS) $(LDFLAGS)
+osns_sftp_subsystem_CFLAGS = $(CFLAGS) $(GLIB_CFLAGS) -ggdb -Og  -D_FILE_OFFSET_BITS=64 -lz -lpthread -fPIC -lm -I . -I . -I ./lib -Wall -Wno-unused-but-set-variable -Wno-uninitialized -Wno-unused-variable -Wno-unused-label -Wno-unused-function
+osns_sftp_subsystem_CPPFLAGS = $(CXXFLAGS) $(GLIB_CFLAGS) -ggdb -Og -D_FILE_OFFSET_BITS=64 -lz -lpthread -fPIC -lm -I . -I ./lib -Wall -Wno-unused-but-set-variable -Wno-uninitialized -Wno-unused-variable -Wno-unused-label -Wno-unused-function
+osns_sftp_subsystem_LDADD = $(GLIB_LIBS) $(LDFLAGS)
 
 
 osns_sftp_subsystem_SOURCES	=	osns_sftp_subsystem.c \
