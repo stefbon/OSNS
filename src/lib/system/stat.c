@@ -224,7 +224,7 @@ int system_fgetstat(struct fs_socket_s *socket, unsigned int mask, struct system
     struct statx *stx=&stat->stx;
     int fd=get_unix_fd_fs_socket(socket);
 
-    if (statx(fd, NULL, AT_EMPTY_PATH, mask, stx)==-1) {
+    if (statx(fd, "", AT_EMPTY_PATH, mask, stx)==-1) {
 
 	logoutput_warning("system_fgetstat: error %i on fd %i (%s)", errno, fd, strerror(errno));
 	return -errno;

@@ -67,7 +67,7 @@ struct insert_filehandle_s {
 
 struct filehandle_s {
     unsigned int					flags;
-    int							(* open)(struct filehandle_s *fh, struct fs_location_s *location, unsigned int flags, struct fs_init_s *init);
+    int							(* open)(struct filehandle_s *fh, struct fs_location_s *l, unsigned int flags, struct fs_init_s *init);
     int							(* pwrite)(struct filehandle_s *fh, char *data, unsigned int size, off_t offset);
     int							(* pread)(struct filehandle_s *fh, char *data, unsigned int size, off_t offset);
     int							(* flush)(struct filehandle_s *fh);
@@ -100,9 +100,11 @@ struct fs_dentry_s {
 
 struct dirhandle_s {
     unsigned int					flags;
-    int							(* open)(struct dirhandle_s *dh, struct fs_location_s *location, unsigned int flags);
+    int							(* open)(struct dirhandle_s *dh, struct fs_location_s *l, unsigned int flags);
     struct fs_dentry_s					*(* readdentry)(struct dirhandle_s *dh);
     int							(* fstatat)(struct dirhandle_s *dh, char *name, unsigned int mask, struct system_stat_s *st);
+    int							(* unlinkat)(struct dirhandle_s *dh, const char *name);
+    int							(* rmdirat)(struct dirhandle_s *dh, const char *name);
     void						(* fsyncdir)(struct dirhandle_s *dh, unsigned int flags);
     void						(* close)(struct dirhandle_s *dh);
     void						(* set_keep_dentry)(struct dirhandle_s *dh);

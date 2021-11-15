@@ -228,6 +228,25 @@ static int _open_handle(struct filehandle_s *fh, struct fs_location_s *location,
 
 #endif
 
+int system_remove_file(struct fs_location_path_s *path)
+{
+
+#ifdef __linux__
+
+    char tmp[path->len + 1];
+
+    memcpy(tmp, path->ptr, path->len);
+    tmp[path->len]='\0';
+    return unlink(tmp);
+
+#else
+
+    return -1;
+
+#endif
+
+}
+
 void init_filehandle(struct filehandle_s *fh)
 {
 

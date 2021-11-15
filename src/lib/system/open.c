@@ -307,3 +307,31 @@ int system_creatat(struct fs_socket_s *ref, const char *name, unsigned int flags
     return fd;
 
 }
+
+int system_unlinkat(struct fs_socket_s *ref, const char *name)
+{
+#ifdef __linux__
+
+    return unlinkat(ref->fd, name, 0);
+
+#else
+
+    return -1;
+
+#endif
+
+}
+
+int system_rmdirat(struct fs_socket_s *ref, const char *name)
+{
+#ifdef __linux__
+
+    return unlinkat(ref->fd, name, AT_REMOVEDIR);
+
+#else
+
+    return -1;
+
+#endif
+
+}

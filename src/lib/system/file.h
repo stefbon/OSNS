@@ -25,4 +25,6 @@ void init_filehandle(struct filehandle_s *fh);
 void enable_filehandle(struct filehandle_s *fh);
 void free_filehandle(struct filehandle_s *fh);
 
+int system_remove_file(struct fs_location_path_s *path);
+
 #endif

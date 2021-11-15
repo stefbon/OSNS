@@ -122,7 +122,7 @@ void sftp_op_readlink(struct sftp_payload_s *payload)
 	logoutput("sftp_op_readlink: path %.*s", path.len, path.ptr);
 
 	if (path.len + 4 <= payload->len) {
-	    struct fs_location_s location;
+	    struct fs_location_path_s location;
 	    struct fs_location_path_s target=FS_LOCATION_PATH_INIT;
 	    struct convert_sftp_path_s convert;
 	    unsigned int size=get_fullpath_size(user, &path, &convert);
@@ -131,14 +131,12 @@ void sftp_op_readlink(struct sftp_payload_s *payload)
 
 	    /* get the fullpath on the local system */
 
-	    memset(&location, 0, sizeof(struct fs_location_s));
-	    location.flags=FS_LOCATION_FLAG_PATH;
-	    set_buffer_location_path(&location.type.path, pathtmp, size+1, 0);
-	    (* convert.complete)(user, &path, &location.type.path);
+	    set_buffer_location_path(&location, pathtmp, size+1, 0);
+	    (* convert.complete)(user, &path, &location);
 
 #ifdef __linux__
 
-	    result=get_target_unix_symlink(location.type.path.ptr, location.type.path.len, 0, &target);
+	    result=get_target_unix_symlink(location.ptr, location.len, 0, &target);
 
 #endif
 

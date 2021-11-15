@@ -66,6 +66,7 @@
 #include "cb-close.h"
 #include "cb-opendir.h"
 #include "cb-stat.h"
+#include "cb-rm.h"
 #include "cb-readlink.h"
 
 #include "init.h"
@@ -359,6 +360,9 @@ int init_sftp_subsystem(struct sftp_subsystem_s *sftp)
     sftp->cb[SSH_FXP_FSTAT]=sftp_op_fstat;
 
     sftp->cb[SSH_FXP_READLINK]=sftp_op_readlink;
+
+    sftp->cb[SSH_FXP_REMOVE]=sftp_op_remove;
+    sftp->cb[SSH_FXP_RMDIR]=sftp_op_rmdir;
 
     return 0;
 

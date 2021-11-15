@@ -16,15 +16,13 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
-#ifndef LIB_SYSTEM_DIRECTORY_H
-#define LIB_SYSTEM_DIRECTORY_H
 
-/* Prototypes */
+#ifndef SSH_SUBSYSTEM_SFTP_CB_RM_H
+#define SSH_SUBSYSTEM_SFTP_CB_RM_H
 
-void init_dirhandle(struct dirhandle_s *dh);
-void enable_dirhandle(struct dirhandle_s *dh);
-void free_dirhandle(struct dirhandle_s *dh);
+/* prototypes */
 
-int system_remove_dir(struct fs_location_path_s *path);
+void sftp_op_remove(struct sftp_payload_s *p);
+void sftp_op_rmdir(struct sftp_payload_s *p);
 
 #endif

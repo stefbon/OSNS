@@ -127,7 +127,6 @@ static void _sftp_op_opendir(struct sftp_subsystem_s *sftp, struct sftp_payload_
     }
 
     error:
-
     logoutput("_sftp_op_opendir: status %i", status);
     free_commonhandle(&handle);
     reply_sftp_status_simple(sftp, payload->id, status);
@@ -176,8 +175,8 @@ void sftp_op_opendir(struct sftp_payload_s *payload)
 	    set_buffer_location_path(&location.type.path, tmp, size+1, 0);
 	    (* convert.complete)(user, &path, &location.type.path);
 	    pos+=len;
-
 	    _sftp_op_opendir(sftp, payload, &location);
+
 	    return;
 
 	}

@@ -68,6 +68,12 @@ static int _fstatat_error(struct dirhandle_s *dh, char *name, unsigned int mask,
     return -1;
 }
 
+static int _rmat_error(struct dirhandle_s *dh, const char *name)
+{
+    logoutput_warning("_rmat_error: handle not open");
+    return -1;
+}
+
 static void _fsyncdir_error(struct dirhandle_s *dh, unsigned int flags)
 {
     logoutput_warning("_fsyncdir_error: handle not open");
@@ -160,6 +166,16 @@ static int _fstatat_handle(struct dirhandle_s *dh, char *name, unsigned int mask
     return system_fgetstatat(&dh->socket, name, mask, st);
 }
 
+static int _unlinkat_handle(struct dirhandle_s *dh, const char *name)
+{
+    return system_unlinkat(&dh->socket, name);
+}
+
+static int _rmdirat_handle(struct dirhandle_s *dh, const char *name)
+{
+    return system_rmdirat(&dh->socket, name);
+}
+
 static void _fsyncdir_handle(struct dirhandle_s *dh, unsigned int flags)
 {
     int fd=get_unix_fd_fs_socket(&dh->socket);
@@ -235,6 +251,8 @@ static int _open_handle(struct dirhandle_s *dh, struct fs_location_s *location, 
     dh->readdentry=_readdentry_handle;
     dh->set_keep_dentry=_set_keep_current_dentry_handle;
     dh->fstatat=_fstatat_handle;
+    dh->unlinkat=_unlinkat_handle;
+    dh->rmdirat=_rmdirat_handle;
     dh->fsyncdir=_fsyncdir_handle;
 
     return fd;
@@ -276,6 +294,8 @@ void init_dirhandle(struct dirhandle_s *dh)
     dh->readdentry=_readdentry_error;
     dh->set_keep_dentry=_set_keep_current_dentry_error;
     dh->fstatat=_fstatat_error;
+    dh->unlinkat=_rmat_error;
+    dh->rmdirat=_rmat_error;
     dh->fsyncdir=_fsyncdir_error;
 
     dh->buffer=NULL;
@@ -301,6 +321,25 @@ void enable_dirhandle(struct dirhandle_s *dh)
 #ifdef __linux__
 
     dh->open=_open_handle;
+
+#endif
+
+}
+
+int system_remove_dir(struct fs_location_path_s *path)
+{
+
+#ifdef __linux__
+
+    char tmp[path->len + 1];
+
+    memcpy(tmp, path->ptr, path->len);
+    tmp[path->len]='\0';
+    return rmdir(tmp);
+
+#else
+
+    return -1;
 
 #endif
 
