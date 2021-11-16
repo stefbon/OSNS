@@ -155,7 +155,7 @@ void init_ssh_channels_table(struct ssh_session_s *session, unsigned int size)
     table->flags=0;
 
     for (unsigned int i=0; i<size; i++) init_list_header(&table->hash[i], SIMPLE_LIST_TYPE_EMPTY, NULL);
-    init_simple_locking(&table->locking);
+    init_simple_locking(&table->locking, 0);
     table->lock=0;
 
 }

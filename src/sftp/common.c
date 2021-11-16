@@ -179,7 +179,7 @@ int start_init_sftp_client(struct sftp_client_s *sftp)
 
     set_sftp_protocol_version(sftp, 6); /* start with -> 6 <- */
     set_sftp_protocol(sftp);
-    init_sftp_extensions(sftp);
+    init_fs_sftp_extensions(sftp);
 
     memset(&sftp_r, 0, sizeof(struct sftp_request_s));
     sftp_r.id=(uint32_t) -1; /* use a custom id */

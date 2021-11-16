@@ -26,5 +26,6 @@ void enable_dirhandle(struct dirhandle_s *dh);
 void free_dirhandle(struct dirhandle_s *dh);
 
 int system_remove_dir(struct fs_location_path_s *path);
+int system_create_dir(struct fs_location_path_s *path, struct fs_init_s *init);
 
 #endif

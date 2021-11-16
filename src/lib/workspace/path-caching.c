@@ -148,6 +148,7 @@ void init_fuse_path(struct fuse_path_s *fpath, unsigned int len)
 
 void append_name_fpath(struct fuse_path_s *fpath, struct name_s *xname)
 {
+
     /* entry */
     fpath->pathstart-=xname->len;
     memcpy(fpath->pathstart, xname->name, xname->len);

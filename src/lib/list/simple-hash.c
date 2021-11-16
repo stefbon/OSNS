@@ -115,7 +115,7 @@ int initialize_group(struct simple_hash_s *group, unsigned int (*hashfunction) (
 
     if (error) *error=ENOMEM;
 
-    if (init_simple_locking(&group->locking)==-1) goto error;
+    if (init_simple_locking(&group->locking, 0)==-1) goto error;
 
     group->hashfunction=hashfunction;
     group->len=len;

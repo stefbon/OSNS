@@ -345,6 +345,27 @@ int system_remove_dir(struct fs_location_path_s *path)
 
 }
 
+int system_create_dir(struct fs_location_path_s *path, struct fs_init_s *init)
+{
+
+#ifdef __linux__
+
+    char tmp[path->len + 1];
+
+    memcpy(tmp, path->ptr, path->len);
+    tmp[path->len]='\0';
+    return mkdir(tmp, init->mode);
+
+#else
+
+    return -1;
+
+#endif
+
+}
+
+
+
 void free_dirhandle(struct dirhandle_s *dh)
 {
 

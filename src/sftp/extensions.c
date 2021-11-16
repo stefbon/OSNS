@@ -681,6 +681,8 @@ int send_sftp_statvfs(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r,
     sftp_r->call.extension.data=data;
     sftp_r->call.extension.size=len + 4;
 
+    logoutput_debug("send_sftp_statvfs: ext def %s", (extension) ? "def" : "undef");
+
     return (* extension->send_extension)(sftp, extension, sftp_r, error);
 }
 

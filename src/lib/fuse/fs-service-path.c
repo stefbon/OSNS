@@ -463,10 +463,11 @@ static void _fs_service_rm_common(struct service_context_s *context, struct fuse
     struct service_fs_s *fs=get_service_context_fs(context);
     unsigned int error=(* fs->access)(context, request, op);
 
-    logoutput("_fs_service_rm_common: context %s (thread %i) %.*s", context->name, (int) gettid(), len, name);
+    logoutput("_fs_service_rm_common: context %s (thread %i) %.*s op %i", context->name, (int) gettid(), len, name, op);
 
     if (error) {
 
+	logoutput("_fs_service_rm_common: context %s error %i", context->name, error);
 	reply_VFS_error(request, error);
 	return;
 
@@ -474,6 +475,7 @@ static void _fs_service_rm_common(struct service_context_s *context, struct fuse
 
     init_fuse_path(fpath, pathlen + 1);
     append_name_fpath(fpath, &xname);
+    
     get_service_context_path(context, directory, fpath);
     pathinfo.path=get_pathinfo_fpath(fpath, &pathinfo.len);
 
@@ -483,6 +485,7 @@ static void _fs_service_rm_common(struct service_context_s *context, struct fuse
 
     if (error) {
 
+	logoutput("_fs_service_rm_common: context %s error %i", context->name, error);
 	reply_VFS_error(request, error);
 	return;
 

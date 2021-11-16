@@ -174,7 +174,7 @@ int init_directory(struct directory_s *directory, unsigned char maxlanes)
     directory->synctime.tv_nsec=0;
     directory->inode=NULL;
 
-    result=init_simple_locking(&directory->locking);
+    result=init_simple_locking(&directory->locking, 0);
 
     if (result==-1) {
 

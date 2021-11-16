@@ -154,8 +154,6 @@ struct discover_resource_s *get_next_hashed_discover_resource(void **p_index, un
 
     getnext:
 
-    logoutput_debug("get_next_hashed_discover_resource: hashvalue %i", hashvalue);
-
     if (hashvalue < DISCOVER_NETWORK_HASHSIZE) {
 
 	resource=(struct discover_resource_s *) get_next_hashed_resource(p_index, hashvalue);
@@ -738,7 +736,7 @@ int init_discover_group(void (* cb)(struct discover_resource_s *r, void *ptr), v
 
     network.ctr=1;
     init_list_header(&network.header, SIMPLE_LIST_TYPE_EMPTY, NULL);
-    init_simple_locking(&network.locking);
+    init_simple_locking(&network.locking, 0);
     network.changed.tv_sec=0;
     network.changed.tv_nsec=0;
     network.process_new_service=cb;

@@ -122,7 +122,7 @@ struct bevent_s *open_mountmonitor()
     int fd=-1;
     struct bevent_s *bevent=NULL;
 
-    init_simple_locking(&monitor.locking);
+    init_simple_locking(&monitor.locking, 0);
 
     /* current_mounts_m: list of mounts with same order as provided by the kernel (==mountinfo) */
     init_list_header(&current_mounts_m, SIMPLE_LIST_TYPE_EMPTY, NULL);

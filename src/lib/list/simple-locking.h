@@ -33,12 +33,16 @@
 #define SIMPLE_LOCK_FLAG_ALLOCATED	8
 #define SIMPLE_LOCK_FLAG_UPGRADED	16
 
-#define SIMPLE_LOCKING_FLAG_UPGRADE	1
+#define SIMPLE_LOCKING_FLAG_ALLOC_LOCK	1
+#define SIMPLE_LOCKING_FLAG_ALLOC_MUTEX 2
+#define SIMPLE_LOCKING_FLAG_ALLOC_COND	4
+
+#define SIMPLE_LOCKING_FLAG_UPGRADE	8
 
 struct simple_locking_s {
     unsigned int			flags;
-    pthread_mutex_t			mutex;
-    pthread_cond_t			cond;
+    pthread_mutex_t			*mutex;
+    pthread_cond_t			*cond;
     struct list_header_s		readlocks;
     unsigned int			readers;
     struct list_header_s		writelocks;
@@ -64,7 +68,7 @@ void init_simple_nonelock(struct simple_locking_s *locking, struct simple_lock_s
 void init_simple_readlock(struct simple_locking_s *locking, struct simple_lock_s *rlock);
 void init_simple_writelock(struct simple_locking_s *locking, struct simple_lock_s *wlock);
 
-int init_simple_locking(struct simple_locking_s *locking);
+int init_simple_locking(struct simple_locking_s *locking, unsigned int flags);
 void clear_simple_locking(struct simple_locking_s *locking);
 
 int simple_lock(struct simple_lock_s *lock);

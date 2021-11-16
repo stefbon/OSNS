@@ -111,6 +111,13 @@ static void _sftp_lookup_cb_created(struct entry_s *entry, struct create_entry_s
     adjust_pathmax(workspace, ce->pathlen);
     set_entry_ops(entry);
 
+    if (S_ISDIR(stat->sst_mode)) {
+	struct directory_s *d=(* ce->get_directory)(ce);
+
+	if (d->getpath==NULL) set_directory_pathcache(context, d, NULL);
+
+    }
+
 }
 
 static void _sftp_lookup_cb_found(struct entry_s *entry, struct create_entry_s *ce)
@@ -158,9 +165,8 @@ static void _sftp_lookup_cb_found(struct entry_s *entry, struct create_entry_s *
 
     if (S_ISDIR(stat->sst_mode)) {
 	struct directory_s *d=(* ce->get_directory)(ce);
-	struct getpath_s *getpath=d->getpath;
 
-	if (getpath==NULL) set_directory_pathcache(context, d, NULL);
+	if (d->getpath==NULL) set_directory_pathcache(context, d, NULL);
 
     }
 
@@ -214,11 +220,10 @@ void _fs_sftp_lookup_new(struct service_context_s *context, struct fuse_request_
 		ce.cb_cache_size=_sftp_cb_cache_size;
 		entry=create_entry_extended(&ce);
 
-		// logoutput("_fs_sftp_lookup_new: %i %s", pathinfo->len, pathinfo->path);
-
 		free(reply->response.attr.buff);
 		reply->response.attr.buff=NULL;
 		unset_fuse_request_flags_cb(f_request);
+
 		return;
 
 	    } else if (reply->type==SSH_FXP_STATUS) {
@@ -313,9 +318,18 @@ void _fs_sftp_lookup_existing(struct service_context_s *context, struct fuse_req
 		inode->nlookup++;
 
 		_fs_common_cached_lookup(context, f_request, inode); /* reply FUSE/VFS*/
+		unset_fuse_request_flags_cb(f_request);
+
 		free(reply->response.attr.buff);
 		reply->response.attr.buff=NULL;
-		unset_fuse_request_flags_cb(f_request);
+
+		if (S_ISDIR(stat->sst_mode)) {
+		    struct directory_s *d=get_directory(inode);
+
+		    if (d->getpath==NULL) set_directory_pathcache(context, d, NULL);
+
+		}
+
 		return;
 
 	    } else if (reply->type==SSH_FXP_STATUS) {

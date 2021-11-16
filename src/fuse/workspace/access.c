@@ -92,6 +92,8 @@ int _fs_workspace_access(struct service_context_s *context, struct fuse_request_
 
 	case SERVICE_OP_TYPE_MKDIR:
 	case SERVICE_OP_TYPE_MKNOD:
+	case SERVICE_OP_TYPE_UNLINK:
+	case SERVICE_OP_TYPE_RMDIR:
 	case SERVICE_OP_TYPE_SYMLINK:
 	case SERVICE_OP_TYPE_SETATTR:
 
@@ -111,6 +113,7 @@ int _fs_workspace_access(struct service_context_s *context, struct fuse_request_
 
 	    error=EPERM;
 	    if (user->pwd.pw_uid==request->uid) error=0;
+	    break;
 
 
 	}
