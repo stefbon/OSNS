@@ -203,8 +203,20 @@ void parse_attributes_generic(struct attr_context_s *actx, struct attr_buffer_s 
 
 }
 
+struct _hlp_read_s {
+    unsigned char			*cb;
+    unsigned char			index;
+    unsigned int			len;
+};
+
 static void _attr_read_cb(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat, unsigned char ctr)
 {
+    struct _hlp_read_s *hlp=(struct _hlp_read_s *) r->ptr;
+
+    hlp->cb[hlp->index]=ctr;
+    hlp->len += actx->attrcb[ctr].maxlength;
+    hlp->index++;
+
     r->stat_mask |= actx->attrcb[ctr].stat_mask;
     r->done |= actx->attrcb[ctr].code;
     r->todo &= ~actx->attrcb[ctr].code;
@@ -215,11 +227,16 @@ static void _attr_read_cb(struct attr_context_s *actx, struct attr_buffer_s *buf
 void read_attributes_generic(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat, unsigned int valid_bits)
 {
     struct sftp_valid_s valid=SFTP_VALID_INIT;
+    unsigned char cb[ATTR_CONTEXT_COUNT_ATTR_CB];
+    struct _hlp_read_s hlp;
 
-    logoutput_debug("read_attributes_generic: valid_bits %u", valid_bits);
+    hlp.index=0;
+    hlp.cb=cb;
+    hlp.len=0;
 
     r->flags |= RW_ATTR_RESULT_FLAG_READ;
     r->parse_attribute=_attr_read_cb;
+    r->ptr=(void *) &hlp;
 
     /* read_attributes_generic is called typically direct from the sftp protocol where all bits (inluding SUBSECOND_TIMES) are set in valid_bits
 	here split those into the internal struct with mask and flags */
@@ -227,9 +244,17 @@ void read_attributes_generic(struct attr_context_s *actx, struct attr_buffer_s *
     valid.mask = valid_bits & ~attr_subsecond_times;
     valid.flags = valid_bits & attr_subsecond_times;
 
-    logoutput_debug("read_attributes_generic: valid %u:%u", valid.mask, valid.flags);
+    logoutput_debug("read_attributes_generic: valid_bits %u valid %u:%u", valid_bits, valid.mask, valid.flags);
 
     parse_attributes_generic(actx, buffer, r, stat, &valid);
+
+    if (hlp.index>0 && (r->flags & RW_ATTR_RESULT_FLAG_CACHED)==0) {
+	unsigned char version=(* actx->get_sftp_protocol_version)(actx);
+
+	create_hashed_attrcb(version, &r->valid, cb, hlp.index, hlp.len, r->stat_mask);
+
+    }
+
 }
 
 static void _attr_write_cb(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat, unsigned char ctr)
@@ -247,7 +272,6 @@ void write_attributes_generic(struct attr_context_s *actx, struct attr_buffer_s 
     r->parse_attribute=_attr_write_cb;
 
     logoutput_debug("write_attributes_generic: valid %u:%u", valid->mask, valid->flags);
-
     parse_attributes_generic(actx, buffer, r, stat, valid);
 }
 
@@ -275,7 +299,7 @@ static void _prepare_write_cb(struct attr_context_s *actx, struct attr_buffer_s 
 
 unsigned int get_size_buffer_write_attributes(struct attr_context_s *actx, struct rw_attr_result_s *r, struct sftp_valid_s *valid)
 {
-    unsigned char cb[36];
+    unsigned char cb[ATTR_CONTEXT_COUNT_ATTR_CB];
     struct _prepare_write_s tmp;
 
     tmp.cb=cb;

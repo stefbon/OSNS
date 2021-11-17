@@ -84,6 +84,7 @@ static void sftp_op_remove_common(struct sftp_payload_s *payload, unsigned char 
 	path.len=get_uint32(&buffer[pos]);
 	pos+=4;
 	path.ptr=&buffer[pos];
+	pos+=path.len;
 
 	/* sftp packet size is at least:
 	    - 4 + len ... path (len maybe zero) */
@@ -98,7 +99,8 @@ static void sftp_op_remove_common(struct sftp_payload_s *payload, unsigned char 
 
 	    set_buffer_location_path(&location, tmp, size+1, 0);
 	    (* convert.complete)(user, &path, &location);
-	    pos+=path.len;
+
+	    logoutput("sftp_op_remove_common : %.*s", location.len, location.ptr);
 
 	    if (what==REMOVE_TYPE_DIR) {
 

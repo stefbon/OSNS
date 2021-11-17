@@ -104,6 +104,8 @@ void sftp_op_mkdir(struct sftp_payload_s *payload)
 	    set_buffer_location_path(&location, tmp, size+1, 0);
 	    (* convert.complete)(user, &path, &location);
 
+	    logoutput("sftp_op_mkdir : %.*s", location.len, location.ptr);
+
 	    /* initialize the stat with sane values */
 
 	    memset(&stat, 0, sizeof(struct system_stat_s));

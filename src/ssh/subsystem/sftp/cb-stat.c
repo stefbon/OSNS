@@ -106,7 +106,7 @@ static void sftp_op_stat_generic(struct sftp_subsystem_s *sftp, struct sftp_payl
 	    mask=translate_valid_2_stat_mask(&sftp->attrctx, &valid, 'w');
 	    result=(* cb_stat)(&location.type.path, mask, &stat);
 
-	    logoutput("sftp_op_stat: result %i valid %i", result, valid.mask);
+	    logoutput("sftp_op_stat: %.*s result %i valid %i", location.type.path.len, location.type.path.ptr, result, valid.mask);
 
 	    if (result==0) {
 		struct rw_attr_result_s r=RW_ATTR_RESULT_INIT;
@@ -118,7 +118,7 @@ static void sftp_op_stat_generic(struct sftp_subsystem_s *sftp, struct sftp_payl
 		(* abuff.ops->rw.write.write_uint32)(&abuff, (r.valid.mask | r.valid.flags));
 		write_attributes_generic(&sftp->attrctx, &abuff, &r, &stat, &valid);
 
-		if (reply_sftp_attrs(sftp, payload->id, tmp, abuff.len)==-1) logoutput_warning("sftp_op_stat: error sending attr");
+		if (reply_sftp_attrs(sftp, payload->id, abuff.buffer, abuff.len)==-1) logoutput_warning("sftp_op_stat: error sending attr");
 		return;
 
 	    } else {

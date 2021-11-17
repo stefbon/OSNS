@@ -1461,6 +1461,7 @@ static void get_fusefs_flags(struct fuse_init_in *in, struct fuse_init_out *out,
 		if (defaulton) {
 
 		    logoutput("get_fusefs_flags: kernel supports %s but fs does not: taking default = on", what);
+		    out->flags |= code;
 
 		} else {
 

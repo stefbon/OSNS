@@ -208,114 +208,91 @@ static int get_mount_context_option(struct context_interface_s *interface, const
 {
     struct service_context_s *context=get_service_context(interface);
 
+    option->type=_CTX_OPTION_TYPE_INT;
+
     if (strcmp(name, "async-read")==0) {
 
-	option->type=_CTX_OPTION_TYPE_INT;
-	option->value.integer=0;
+	option->value.integer=1;
 
     } else if (strcmp(name, "posix-locks")==0) {
 
-	option->type=_CTX_OPTION_TYPE_INT;
 	option->value.integer=0;
 
     } else if (strcmp(name, "file-ops")==0) {
 
-	option->type=_CTX_OPTION_TYPE_INT;
 	option->value.integer=1;
 
     } else if (strcmp(name, "atomic-o-trunc")==0) {
 
-	option->type=_CTX_OPTION_TYPE_INT;
 	option->value.integer=0; /* test this ... */
 
     } else if (strcmp(name, "export-support")==0) {
 
-	option->type=_CTX_OPTION_TYPE_INT;
 	option->value.integer=0;
 
     } else if (strcmp(name, "big-writes")==0) {
 
-	option->type=_CTX_OPTION_TYPE_INT;
 	option->value.integer=1;
 
     } else if (strcmp(name, "dont-mask")==0) {
 
-	option->type=_CTX_OPTION_TYPE_INT;
 	option->value.integer=0;
 
     } else if (strcmp(name, "splice-write")==0) {
 
-	option->type=_CTX_OPTION_TYPE_INT;
 	option->value.integer=0;
 
     } else if (strcmp(name, "splice-move")==0) {
 
-	option->type=_CTX_OPTION_TYPE_INT;
 	option->value.integer=0;
 
     } else if (strcmp(name, "splice-read")==0) {
 
-	option->type=_CTX_OPTION_TYPE_INT;
 	option->value.integer=0;
 
     } else if (strcmp(name, "flock-locks")==0) {
 
-	option->type=_CTX_OPTION_TYPE_INT;
-
-	// if (base->type==WORKSPACE_TYPE_NETWORK) {
-
-	    option->value.integer=1;
-
-	// } else {
-
-	    // option->value.integer=0;
-
-	// }
+	option->value.integer=1;
 
     } else if (strcmp(name, "has-ioctl-dir")==0) {
 
-	option->type=_CTX_OPTION_TYPE_INT;
 	option->value.integer=0;
 
     } else if (strcmp(name, "auto-inval-data")==0) {
 
-	option->type=_CTX_OPTION_TYPE_INT;
 	option->value.integer=0;
 
     } else if (strcmp(name, "do-readdirplus")==0) {
 
-	option->type=_CTX_OPTION_TYPE_INT;
 	option->value.integer=0;
 
     } else if (strcmp(name, "readdirplus-auto")==0) {
 
-	option->type=_CTX_OPTION_TYPE_INT;
 	option->value.integer=0;
 
     } else if (strcmp(name, "async-dio")==0) {
 
-	option->type=_CTX_OPTION_TYPE_INT;
-	option->value.integer=0;
+	option->value.integer=1;
 
     } else if (strcmp(name, "writeback-cache")==0) {
 
-	option->type=_CTX_OPTION_TYPE_INT;
 	option->value.integer=1;
 
     } else if (strcmp(name, "no-open-support")==0) {
 
-	option->type=_CTX_OPTION_TYPE_INT;
 	option->value.integer=0;
 
     } else if (strcmp(name, "parallel-dirops")==0) {
 
-	option->type=_CTX_OPTION_TYPE_INT;
-	option->value.integer=0; /* try */
+	option->value.integer=1;
 
     } else if (strcmp(name, "posix-acl")==0) {
 
-	option->type=_CTX_OPTION_TYPE_INT;
-	option->value.integer=0; /* todo ... */
+	option->value.integer=0;
+
+    } else if (strcmp(name, "cache-symlinks")==0) {
+
+	option->value.integer=1;
 
     }
 

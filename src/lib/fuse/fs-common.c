@@ -332,7 +332,6 @@ static void _fs_common_virtual_readdir_common(struct fuse_opendir_s *opendir, st
     if (opendir->flags & _FUSE_OPENDIR_FLAG_READDIR_FINISH) {
 
 	char dummy='\0';
-
 	logoutput("_fs_common_virtual_readdir_common: finish");
 	reply_VFS_data(request, &dummy, 0);
 	return;

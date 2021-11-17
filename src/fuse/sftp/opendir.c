@@ -527,6 +527,7 @@ static void get_sftp_readdir_thread(void *ptr)
 
 		}
 
+		set_flag_fuse_opendir(opendir, _FUSE_OPENDIR_FLAG_READDIR_FINISH);
 		break;
 
 	    } else if (result==0) {
