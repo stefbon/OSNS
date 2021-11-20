@@ -74,9 +74,14 @@ struct sftp_payload_queue_s {
 
 struct sftp_identity_s {
     struct passwd					pwd;
+    struct ssh_string_s 				home;
     unsigned int					size;
-    unsigned int 					len_home;
     char						*buffer;
+};
+
+struct sftp_extensions_s {
+    unsigned int					mask;
+    unsigned char					mapnr;
 };
 
 #define SFTP_SUBSYSTEM_FLAG_INIT			(1 << 0)
@@ -90,8 +95,23 @@ struct sftp_protocol_s {
     unsigned char					version;
 };
 
+#define SFTP_PREFIX_FLAG_IGNORE_XDEV_SYMLINKS		1
+#define SFTP_PREFIX_FLAG_IGNORE_SPECIAL_FILES		2
+
+struct convert_sftp_path_s {
+    void						(* complete)(struct sftp_subsystem_s *sftp, struct ssh_string_s *path, struct fs_location_path_s *l);
+};
+
+struct sftp_prefix_s {
+    unsigned int					flags;
+    struct ssh_string_s					path;
+    unsigned int					(* get_length_fullpath)(struct sftp_subsystem_s *sftp, struct ssh_string_s *p, struct convert_sftp_path_s *c);
+};
+
 struct sftp_subsystem_s {
     unsigned int					flags;
+    struct sftp_prefix_s				prefix;
+    struct sftp_extensions_s				extensions;
     struct net_idmapping_s				mapping;
     struct sftp_protocol_s				protocol;
     struct ssh_subsystem_connection_s			connection;

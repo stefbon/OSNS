@@ -22,6 +22,12 @@
 
 #include "osns_sftp_subsystem.h"
 
+struct sftp_init_extensions_s {
+    unsigned int				count;
+    char					*buffer;
+    unsigned int				len;
+};
+
 /* prototypes */
 
 int send_sftp_init(struct sftp_subsystem_s *sftp);

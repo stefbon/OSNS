@@ -137,6 +137,31 @@ struct system_timespec_s {
 
 #define SYSTEM_TIME_INIT	{0, 0}
 
+#ifdef __linux__
+
+#include <sys/statvfs.h>
+
+struct system_statvfs_s {
+    struct statvfs		stvfs;
+};
+
+#define stvfs_blocksize				stvfs.f_bsize
+#define stvfs_fragmentsize			stvfs.f_frsize
+
+#define stvfs_nrblocks				stvfs.f_blocks
+#define stvfs_freeblocks			stvfs.f_bfree
+#define stvfs_availblocks			stvfs.f_bavail
+
+#define stvfs_nrinodes				stvfs.f_files
+#define stvfs_freeinodes			stvfs.f_ffree
+#define stvfs_availinodes			stvfs.f_favail
+
+#define stvfs_fsid				stvfs.f_fsid
+#define stvfs_mountflags			stvfs.f_flag
+#define stvfs_namemax				stvfs.f_namemax
+
+#endif
+
 /* Prototypes */
 
 /* system calls */
@@ -229,3 +254,6 @@ void copy_system_time(struct system_timespec_s *to, struct system_timespec_s *fr
 void calc_blocks_system_stat(struct system_stat_s *stat);
 
 uint32_t get_unique_system_dev(struct system_dev_s *dev);
+int system_stat_test_ISDIR(struct system_stat_s *stat);
+
+int system_getstatvfs(struct fs_location_path_s *path, struct system_statvfs_s *s);

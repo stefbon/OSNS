@@ -53,81 +53,31 @@
 #include "misc.h"
 #include "osns_sftp_subsystem.h"
 #include "protocol.h"
+#include "init.h"
+#include "extensions.h"
 
-unsigned int get_attrib_extensions(struct sftp_subsystem_s *sftp, char *buffer, unsigned int size, unsigned int *count)
+unsigned int get_supported_attr_valid_mask(struct sftp_subsystem_s *sftp)
 {
-    /* extensions to the attrib structure
-	not supported */
+    /* send the valid the server can read == the valid the client can write */
 
-    *count=0;
-    return 0;
+    return (sftp->attrctx.r_valid.flags | sftp->attrctx.r_valid.mask);
 }
 
-    /* TODO:
-	extension which gives the extension a (free) number 210-255
-	which is much more efficient than using the names
-	something like "mapextension@bononline.nl"
-
-	client sends:
-	- byte 			SSH_FXP_EXTENDED
-	- uint32		id
-	- string		"mapextension@bononline.nl"
-	- string		"name of extension to map"
-
-	server replies:
-	- byte			SSH_FXP_EXTENDED_REPLY
-	- uint32		id
-	- byte			number to use
-
-	or when error:
-	- byte			SSH_FXP_STATUS
-	- uint32		id
-	- uint32		error code
-	- string		error string
-	like:
-	- SSH_FX_OP_UNSUPPORTED: extension not supported
-	- SSH_FX_INVALID_PARAMETER: name of extension to map not reckognized or extension already mapped
-	- SSH_FX_FAILURE: failed like too many extensions to map
-
-
-*/
-
-unsigned int get_sftp_extensions(struct sftp_subsystem_s *sftp, char *buffer, unsigned int size, unsigned int *count)
+unsigned int get_supported_attr_attr_bits(struct sftp_subsystem_s *sftp)
 {
-
-    logoutput("get_sftp_extensions");
-
-    /* names of supported extensions */
-    return 0;
-
+    return 0; /* ignored */
 }
 
-unsigned int get_supported_attribute_flags(struct sftp_subsystem_s *session)
+unsigned int get_supported_open_flags(struct sftp_subsystem_s *sftp)
 {
-    return SSH_FILEXFER_ATTR_SIZE | SSH_FILEXFER_ATTR_PERMISSIONS | SSH_FILEXFER_ATTR_ACCESSTIME | SSH_FILEXFER_ATTR_MODIFYTIME | SSH_FILEXFER_ATTR_OWNERGROUP | SSH_FILEXFER_ATTR_SUBSECOND_TIMES | SSH_FILEXFER_ATTR_CTIME;
+    /* sftp open flags */
+    return (SSH_FXF_ACCESS_DISPOSITION | SSH_FXF_APPEND_DATA | SSH_FXF_APPEND_DATA_ATOMIC | SSH_FXF_BLOCK_READ | SSH_FXF_BLOCK_WRITE | SSH_FXF_BLOCK_DELETE);
 }
 
-unsigned int get_supported_attribute_bits(struct sftp_subsystem_s *session)
+unsigned int get_supported_open_access(struct sftp_subsystem_s *sftp)
 {
-    return 0;
-}
-
-unsigned int get_supported_open_flags(struct sftp_subsystem_s *session)
-{
-    /*
-	sftp open flags
-	TODO:
-	- SSH_FXF_BLOCK_READ/WRITE etc. */
-
-    return SSH_FXF_ACCESS_DISPOSITION | SSH_FXF_APPEND_DATA;
-}
-
-unsigned int get_supported_acl_access_mask(struct sftp_subsystem_s *session)
-{
-    /*
-	sftp write acl mask */
-
-    return 0;
+    /* sftp open access bits */
+    return (ACE4_READ_DATA | ACE4_READ_ATTRIBUTES | ACE4_WRITE_DATA | ACE4_WRITE_ATTRIBUTES | ACE4_APPEND_DATA | ACE4_DELETE);
 }
 
 unsigned int get_supported_max_readsize(struct sftp_subsystem_s *session)
@@ -139,17 +89,6 @@ unsigned int get_supported_max_readsize(struct sftp_subsystem_s *session)
 
 }
 
-unsigned int get_supported_open_block_flags(struct sftp_subsystem_s *session)
-{
-    /*
-	16-bit masks specifying which combinations of blocking flags are supported with open
-	TODO: find out how this works */
-
-    return 1;
-}
-
-unsigned int get_supported_block_flags(struct sftp_subsystem_s *session)
-{
     /*
 	16-bit masks specifying which combinations of blocking flags are supported
 	TODO: find out how this works */
@@ -161,8 +100,83 @@ unsigned int get_supported_block_flags(struct sftp_subsystem_s *session)
 	- BLOCK_ADVISORY	     1000000000		->   1000
 	*/
 
+
+unsigned int get_supported_open_block_flags(struct sftp_subsystem_s *session)
+{
+    /* 16-bit masks specifying which combinations of blocking flags are supported with open
+	NOTE: these flags indicate that there is no other client gets access using this flags: they are blocking flags
+	so when you want to write to a file: set BLOCK_READ means no other client/process may read in this byte range
+	NOTE: an exclusive lock is blcoking every other access BLOCK_READ | BLOCK_WRITE | BLOCK_DELETE */
+
+    /* 	no locking					->		0000
+	READ						->		0001
+	WRITE						->		0010
+	DELETE						->		0100
+	ADVISORY					->		1000
+
+    just read: block writers and delete			->		0010 | 0100 = 0110 = 6
+    just want write access: block delete, read, write	->		0100 | 0010 | 0001 = 7
+
+    read & write block: 2 and 4						bit 8
+
+    no block are always supported: 1 shifted 0  is 1	->		0001
+
+    result:								0111
+    */
+
     return 1;
 }
+
+unsigned int get_supported_block_flags(struct sftp_subsystem_s *sftp)
+{
+
+    return 1;
+}
+
+unsigned int get_sftp_attrib_extensions(struct sftp_subsystem_s *sftp, struct sftp_init_extensions_s *init)
+{
+    /* extensions to the attr structure
+	not supported */
+
+    init->count=0;
+    return 0;
+}
+
+unsigned int get_sftp_protocol_extensions(struct sftp_subsystem_s *sftp, struct sftp_init_extensions_s *init)
+{
+    unsigned int pos=0;
+
+    /* names of ALL available extensions */
+
+    struct sftp_protocol_extension_s *ext=get_next_sftp_protocol_extension(NULL, 0);
+
+    while (ext) {
+	unsigned int len=0;
+
+	logoutput("get_sftp_protocol_extensions: add %s", ext->name);
+
+	if (init->buffer) {
+
+	    len=write_ssh_string(init->buffer, init->len, 'c', (void *) ext->name);
+	    init->buffer += len;
+	    init->len -= len;
+
+	} else {
+
+	    len = 4 + strlen(ext->name);
+
+	}
+
+	pos += len;
+	init->count++;
+	ext=get_next_sftp_protocol_extension(ext, 0);
+
+    }
+
+    return pos;
+
+}
+
 
 unsigned int get_supported_acl_cap(struct sftp_subsystem_s *session)
 {

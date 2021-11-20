@@ -153,30 +153,27 @@ void sftp_op_opendir(struct sftp_payload_s *payload)
     if (payload->len>=4) {
 	char *buffer=payload->data;
 	unsigned int pos=0;
-	unsigned int len=0;
+	struct ssh_string_s path=SSH_STRING_INIT;
 
-	len=get_uint32(&buffer[pos]);
+	path.len=get_uint32(&buffer[pos]);
 	pos+=4;
+	path.ptr=&buffer[pos];
+	pos+=path.len;
 
 	/* sftp packet size is at least:
 	    - 4 + len ... path (len maybe zero) */
 
-	if (payload->len >= len + 4) {
-	    struct sftp_identity_s *user=&sftp->identity;
-	    struct ssh_string_s path={.len=len, .ptr=&buffer[pos]};
+	if (payload->len >= path.len + 4) {
 	    struct fs_location_s location;
-	    struct convert_sftp_path_s convert={NULL};
-	    unsigned int size=get_fullpath_size(user, &path, &convert); /* get size of buffer for path */
+	    struct convert_sftp_path_s convert;
+	    unsigned int size=(* sftp->prefix.get_length_fullpath)(sftp, &path, &convert); /* get size of buffer for path */
 	    char tmp[size+1];
-	    unsigned int error=0;
 
 	    memset(&location, 0, sizeof(struct fs_location_s));
 	    location.flags=FS_LOCATION_FLAG_PATH;
 	    set_buffer_location_path(&location.type.path, tmp, size+1, 0);
-	    (* convert.complete)(user, &path, &location.type.path);
-	    pos+=len;
+	    (* convert.complete)(sftp, &path, &location.type.path);
 	    _sftp_op_opendir(sftp, payload, &location);
-
 	    return;
 
 	}

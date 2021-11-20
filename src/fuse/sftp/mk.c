@@ -125,13 +125,14 @@ void _fs_sftp_mkdir(struct service_context_s *context, struct fuse_request_s *f_
 
 		    inode->nlookup++;
 		    set_nlink_system_stat(&inode->stat, 2);
-
-		    get_current_time_system_time(&inode->stime);
-		    add_inode_context(context, inode);
 		    _fs_common_cached_lookup(context, f_request, inode);
+
+		    add_inode_context(context, inode);
+		    set_inode_fuse_fs(context, inode);
 		    adjust_pathmax(workspace, pathinfo->len);
 		    set_directory_dump(inode, get_dummy_directory());
 		    unset_fuse_request_flags_cb(f_request);
+		    get_current_time_system_time(&inode->stime);
 		    return;
 
 		}
@@ -164,17 +165,149 @@ void _fs_sftp_mkdir(struct service_context_s *context, struct fuse_request_s *f_
 
 /* mknod not supported in sftp; emulate with create? */
 
-void _fs_sftp_mknod(struct service_context_s *context, struct fuse_request_s *f_request, struct entry_s *entry, struct pathinfo_s *pathinfo, struct stat *st)
+void _fs_sftp_mknod(struct service_context_s *context, struct fuse_request_s *f_request, struct entry_s *entry, struct pathinfo_s *pathinfo, struct system_stat_s *stat)
 {
-    reply_VFS_error(f_request, ENOSYS);
+    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
+    struct context_interface_s *interface=&context->interface;
+    struct sftp_request_s sftp_r;
+    unsigned int error=EIO;
+    struct rw_attr_result_s r=RW_ATTR_RESULT_INIT;
+    struct get_supported_sftp_attr_s gssa;
+    unsigned int size=get_attr_buffer_size(interface, &r, stat, &gssa) + 5;
+    char buffer[size];
+    unsigned int pathlen=(* interface->backend.sftp.get_complete_pathlen)(interface, pathinfo->len);
+    char path[pathlen];
+    struct attr_buffer_s abuff;
+
+    /* compare the stat mask as asked by FUSE and the ones SFTP can set using this protocol version */
+
+    if (gssa.stat_mask_result != gssa.stat_mask_asked) logoutput_warning("_fs_sftp_mknod: not able to set every stat attr: asked %i to set %i", gssa.stat_mask_asked, gssa.stat_mask_result);
+
+    /* enable writing of subseconds (only of course if one of the time attr is included)*/
+
+    if (gssa.stat_mask_result & (SYSTEM_STAT_ATIME | SYSTEM_STAT_MTIME | SYSTEM_STAT_BTIME | SYSTEM_STAT_CTIME)) {
+
+	if (enable_attributes_ctx(interface, &gssa.valid, "subseconds")==1) {
+
+	    logoutput_info("_fs_sftp_mknod: enabled setting subseconds");
+
+	} else {
+
+	    logoutput_info("_fs_sftp_mknod: subseconds not supported");
+
+	}
+
+    }
+
+
+    pathinfo->len += (* interface->backend.sftp.complete_path)(interface, path, pathinfo);
+    logoutput("_fs_sftp_mknod: path %s len %i", pathinfo->path, pathinfo->len);
+
+    set_attr_buffer_write(&abuff, buffer, size);
+    (* abuff.ops->rw.write.write_uint32)(&abuff, gssa.valid.mask);
+    write_attributes_ctx(interface, &abuff, &r, stat, &gssa.valid);
+
+    init_sftp_request(&sftp_r, interface, f_request);
+
+    sftp_r.call.create.path=(unsigned char *) pathinfo->path;
+    sftp_r.call.create.len=pathinfo->len;
+    sftp_r.call.create.posix_flags=(O_CREAT | O_EXCL);
+    sftp_r.call.create.size=(unsigned int)(abuff.pos - abuff.buffer);
+    sftp_r.call.create.buff=(unsigned char *)abuff.buffer;
+
+    if (send_sftp_create_ctx(interface, &sftp_r)>0) {
+	struct timespec timeout;
+
+	get_sftp_request_timeout_ctx(interface, &timeout);
+
+	if (wait_sftp_response_ctx(interface, &sftp_r, &timeout)==1) {
+	    struct sftp_reply_s *reply=&sftp_r.reply;
+
+	    unset_fuse_request_flags_cb(f_request);
+
+	    if (reply->type==SSH_FXP_HANDLE) {
+		struct handle_response_s handle;
+		struct inode_s *inode=entry->inode;
+
+		add_inode_context(context, inode);
+		_fs_common_cached_lookup(context, f_request, inode);
+
+		set_inode_fuse_fs(context, inode);
+		adjust_pathmax(workspace, pathinfo->len);
+		get_current_time_system_time(&inode->stime);
+
+		/* send here a fgetstat to get the attributes as set on the server ?? */
+
+		/* send a close ... reuse sftp request */
+
+		handle.len=reply->response.handle.len;
+		handle.name=reply->response.handle.name;
+		init_sftp_request_minimal(&sftp_r, interface);
+
+		sftp_r.call.close.handle=(unsigned char *) handle.name;
+		sftp_r.call.close.len=handle.len;
+		get_sftp_request_timeout_ctx(interface, &timeout);
+
+		if (send_sftp_close_ctx(interface, &sftp_r)>0) {
+		    struct timespec timeout;
+
+		    get_sftp_request_timeout_ctx(interface, &timeout);
+
+		    if (wait_sftp_response_ctx(interface, &sftp_r, &timeout)==1) {
+			struct sftp_reply_s *reply=&sftp_r.reply;
+
+			if (reply->type==SSH_FXP_STATUS) {
+
+			    if (reply->response.status.code!=0) {
+
+				error=reply->response.status.linux_error;
+
+			    } else {
+
+				logoutput_notice("_fs_sftp_mknod: filehandle closed");
+
+			    }
+
+			} else {
+
+			    logoutput_warning("_fs_sftp_mknod: received reply type %i expecting %i", reply->type, SSH_FXP_STATUS);
+
+			}
+
+		    }
+
+		}
+
+		free(handle.name);
+		handle.name=NULL;
+		handle.len=0;
+		return;
+
+	    } else {
+
+		error=EPROTO;
+
+	    }
+
+	}
+
+    } else {
+
+	error=(sftp_r.reply.error) ? sftp_r.reply.error : EIO;
+
+    }
+
+    out:
+    reply_VFS_error(f_request, error);
+    unset_fuse_request_flags_cb(f_request);
 }
 
-void _fs_sftp_mkdir_disconnected(struct service_context_s *context, struct fuse_request_s *f_request, struct entry_s *entry, struct pathinfo_s *pathinfo, struct stat *st)
+void _fs_sftp_mkdir_disconnected(struct service_context_s *context, struct fuse_request_s *f_request, struct entry_s *entry, struct pathinfo_s *pathinfo, struct system_stat_s *st)
 {
     reply_VFS_error(f_request, ENOTCONN);
 }
 
-void _fs_sftp_mknod_disconnected(struct service_context_s *context, struct fuse_request_s *f_request, struct entry_s *entry, struct pathinfo_s *pathinfo, struct stat *st)
+void _fs_sftp_mknod_disconnected(struct service_context_s *context, struct fuse_request_s *f_request, struct entry_s *entry, struct pathinfo_s *pathinfo, struct system_stat_s *st)
 {
     reply_VFS_error(f_request, ENOTCONN);
 }

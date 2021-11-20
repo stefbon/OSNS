@@ -89,10 +89,9 @@ void sftp_op_mkdir(struct sftp_payload_s *payload)
 	    - 4 + len ... path (len maybe zero) */
 
 	if (payload->len >= path.len + 8) {
-	    struct sftp_identity_s *user=&sftp->identity;
 	    struct fs_location_path_s location=FS_LOCATION_PATH_INIT;
-	    struct convert_sftp_path_s convert={NULL};
-	    unsigned int size=get_fullpath_size(user, &path, &convert); /* get size of buffer for path */
+	    struct convert_sftp_path_s convert;
+	    unsigned int size=(* sftp->prefix.get_length_fullpath)(sftp, &path, &convert); /* get size of buffer for path */
 	    char tmp[size+1];
 	    unsigned int error=0;
 	    struct attr_buffer_s abuff;
@@ -102,7 +101,7 @@ void sftp_op_mkdir(struct sftp_payload_s *payload)
 	    unsigned int valid_bits=0;
 
 	    set_buffer_location_path(&location, tmp, size+1, 0);
-	    (* convert.complete)(user, &path, &location);
+	    (* convert.complete)(sftp, &path, &location);
 
 	    logoutput("sftp_op_mkdir : %.*s", location.len, location.ptr);
 

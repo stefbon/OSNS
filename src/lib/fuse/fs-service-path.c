@@ -277,50 +277,20 @@ static void _fs_service_mk_common(struct service_context_s *context, struct fuse
 
 	case SERVICE_OP_TYPE_MKDIR:
 
-	    type=(mk->mk.mkdir.mode & S_IFMT);
-
-	    if (S_ISDIR(type)) {
-
-		perm=get_masked_permissions(request->root, mk->mk.mkdir.mode - type, mk->mk.mkdir.mask);
-
-	    } else {
-
-		type=0;
-
-	    }
-
+	    type=S_IFDIR;
+	    perm=get_masked_permissions(request->root, mk->mk.mkdir.mode & ~S_IFMT, mk->mk.mkdir.mask);
 	    break;
 
 	case SERVICE_OP_TYPE_MKNOD:
 
-	    type=(mk->mk.mknod.mode & S_IFMT);
-
-	    if (S_ISREG(type)) {
-
-		perm=get_masked_permissions(request->root, mk->mk.mknod.mode - type, mk->mk.mknod.mask);
-
-	    } else {
-
-		type=0;
-
-	    }
-
+	    type=S_IFREG;
+	    perm=get_masked_permissions(request->root, mk->mk.mknod.mode & ~S_IFMT, mk->mk.mknod.mask);
 	    break;
 
 	case SERVICE_OP_TYPE_CREATE:
 
-	    type=(mk->mk.create.mode & S_IFMT);
-
-	    if (S_ISREG(type)) {
-
-		perm=get_masked_permissions(request->root, mk->mk.create.mode - type, mk->mk.create.mask);
-
-	    } else {
-
-		type=0;
-
-	    }
-
+	    type=S_IFREG;
+	    perm=get_masked_permissions(request->root, mk->mk.create.mode & ~S_IFMT, mk->mk.create.mask);
 	    break;
 
     }

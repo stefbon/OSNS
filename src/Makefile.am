@@ -238,7 +238,8 @@ osns_sftp_subsystem_SOURCES	=	osns_sftp_subsystem.c \
 					ssh/subsystem/sftp/path.c ssh/subsystem/sftp/payload.c \
 					ssh/subsystem/sftp/handle.c ssh/subsystem/sftp/init.c \
 					ssh/subsystem/sftp/receive.c ssh/subsystem/sftp/send.c \
-					ssh/subsystem/sftp/supported.c \
+					ssh/subsystem/sftp/supported.c ssh/subsystem/sftp/extensions.c \
+					ssh/subsystem/sftp/extensions/setprefix.c ssh/subsystem/sftp/extensions/statvfs.c \
 					lib/sftp/attr-context.c \
 					lib/sftp/attr/init-attr-v03.c lib/sftp/attr/init-attr-v04.c lib/sftp/attr/init-attr-v05.c lib/sftp/attr/init-attr-v06.c \
 					lib/sftp/attr/read-attr-v03.c lib/sftp/attr/read-attr-v04.c lib/sftp/attr/read-attr-v05.c lib/sftp/attr/read-attr-v06.c \

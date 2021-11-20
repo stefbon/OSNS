@@ -175,7 +175,7 @@ int send_sftp_create_v05(struct sftp_client_s *sftp, struct sftp_request_s *sftp
     get_sftp_openmode(sftp_r->call.create.posix_flags, &openmode);
     sftp_r->id=get_sftp_request_id(sftp);
 
-    logoutput_debug("send_sftp_create: access %i flags %i", openmode.access, openmode.flags);
+    logoutput_debug("send_sftp_create: posix %i access %i flags %i", sftp_r->call.create.posix_flags, openmode.access, openmode.flags);
 
     store_uint32(&data[pos], 17 + sftp_r->call.create.len + sftp_r->call.create.size);
     pos+=4;

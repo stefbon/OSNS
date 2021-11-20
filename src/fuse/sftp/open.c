@@ -218,7 +218,6 @@ void _fs_sftp_create(struct fuse_openfile_s *openfile, struct fuse_request_s *f_
 		reply->response.handle.len=0;
 
 		add_inode_context(context, openfile->inode);
-		set_directory_dump(openfile->inode, get_dummy_directory());
 
 		/* note: how the entry is created on the remote server does not have to be the same .... */
 

@@ -48,7 +48,6 @@
 #include "network.h"
 
 #include "protocol.h"
-
 #include "osns_sftp_subsystem.h"
 
 #include "send.h"
@@ -68,14 +67,12 @@
 static void sftp_op_stat_generic(struct sftp_subsystem_s *sftp, struct sftp_payload_s *payload, int (* cb_stat)(struct fs_location_path_s *p, unsigned int mask, struct system_stat_s *s))
 {
     unsigned int status=SSH_FX_BAD_MESSAGE;
-    char *data=payload->data;
 
     /* message should at least have 4 bytes for the path string, and 4 for the flags
 	note an empty path is possible */
 
     if (payload->len>=8) {
 	char *data=payload->data;
-	struct sftp_identity_s *user=&sftp->identity;
 	unsigned int pos=0;
 	struct ssh_string_s path=SSH_STRING_INIT;
 
@@ -89,7 +86,7 @@ static void sftp_op_stat_generic(struct sftp_subsystem_s *sftp, struct sftp_payl
 	    struct sftp_valid_s valid;
 	    struct fs_location_s location;
 	    struct convert_sftp_path_s convert;
-	    unsigned int size=get_fullpath_size(user, &path, &convert);
+	    unsigned int size=(* sftp->prefix.get_length_fullpath)(sftp, &path, &convert);
 	    char pathtmp[size+1];
 	    int result=0;
 	    unsigned int mask=0;
@@ -101,7 +98,7 @@ static void sftp_op_stat_generic(struct sftp_subsystem_s *sftp, struct sftp_payl
 	    memset(&location, 0, sizeof(struct fs_location_s));
 	    location.flags=FS_LOCATION_FLAG_PATH;
 	    set_buffer_location_path(&location.type.path, pathtmp, size+1, 0);
-	    (* convert.complete)(user, &path, &location.type.path);
+	    (* convert.complete)(sftp, &path, &location.type.path);
 
 	    mask=translate_valid_2_stat_mask(&sftp->attrctx, &valid, 'w');
 	    result=(* cb_stat)(&location.type.path, mask, &stat);

@@ -49,7 +49,6 @@
 #include "location.h"
 #include "stat.h"
 
-
 #ifdef HAVE_STATX
 
 int system_getstat(struct fs_location_path_s *path, unsigned int mask, struct system_stat_s *stat)
@@ -1364,3 +1363,37 @@ uint32_t get_unique_system_dev(struct system_dev_s *dev)
 {
     return makedev(dev->major, dev->minor);
 }
+
+int system_stat_test_ISDIR(struct system_stat_s *stat)
+{
+
+#ifdef __linux__
+
+    return S_ISDIR(stat->sst_mode);
+
+#else
+
+    return 0;
+
+#endif
+
+}
+
+int system_getstatvfs(struct fs_location_path_s *path, struct system_statvfs_s *s)
+{
+#ifdef __linux__
+    char tmp[path->len + 1];
+
+    memcpy(tmp, path->ptr, path->len);
+    tmp[path->len]='\0';
+
+    return statvfs(tmp, &s->stvfs);
+
+#else
+
+    return -1;
+
+#endif
+
+}
+

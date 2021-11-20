@@ -17,18 +17,20 @@
 
 */
 
-#ifndef OSNS_SSH_SUBSYSTEM_SFTP_PATH_H
-#define OSNS_SSH_SUBSYSTEM_SFTP_PATH_H
+#ifndef OSNS_SSH_SUBSYSTEM_SFTP_EXTENSIONS_H
+#define OSNS_SSH_SUBSYSTEM_SFTP_EXTENSIONS_H
 
-#include "system.h"
-
-void path_append_none(struct sftp_subsystem_s *sftp, struct ssh_string_s *path, struct fs_location_path_s *localpath);
-
-#define CONVERT_PATH_INIT		{path_append_none}
+struct sftp_protocol_extension_s {
+    unsigned int					flags;
+    const char						*name;
+    unsigned char					code;
+    void						(* cb)(struct sftp_payload_s *p, unsigned int pos);
+};
 
 /* prototypes */
 
-unsigned int get_length_fullpath_prefix(struct sftp_subsystem_s *sftp, struct ssh_string_s *path, struct convert_sftp_path_s *convert);
-unsigned int get_length_fullpath_noprefix(struct sftp_subsystem_s *sftp, struct ssh_string_s *path, struct convert_sftp_path_s *convert);
+struct sftp_protocol_extension_s *get_next_sftp_protocol_extension(struct sftp_protocol_extension_s *ext, unsigned int mask);
+struct sftp_protocol_extension_s *find_sftp_protocol_extension(struct ssh_string_s *name, unsigned int mask);
+void sftp_op_extension(struct sftp_payload_s *payload);
 
 #endif

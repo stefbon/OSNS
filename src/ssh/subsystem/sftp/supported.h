@@ -22,15 +22,19 @@
 
 /* prototypes */
 
-unsigned int get_attrib_extensions(struct sftp_subsystem_s *sftp, char *buffer, unsigned int size, unsigned int *count);
-unsigned int get_sftp_extensions(struct sftp_subsystem_s *sftp, char *buffer, unsigned int size, unsigned int *count);
-unsigned int get_supported_attribute_flags(struct sftp_subsystem_s *sftp);
-unsigned int get_supported_attribute_bits(struct sftp_subsystem_s *sftp);
+unsigned int get_supported_attr_valid_mask(struct sftp_subsystem_s *sftp);
+unsigned int get_supported_attr_attr_bits(struct sftp_subsystem_s *sftp);
+
 unsigned int get_supported_open_flags(struct sftp_subsystem_s *sftp);
-unsigned int get_supported_acl_access_mask(struct sftp_subsystem_s *sftp);
+unsigned int get_supported_open_access(struct sftp_subsystem_s *sftp);
+
 unsigned int get_supported_max_readsize(struct sftp_subsystem_s *sftp);
+
 unsigned int get_supported_open_block_flags(struct sftp_subsystem_s *sftp);
 unsigned int get_supported_block_flags(struct sftp_subsystem_s *sftp);
+
+unsigned int get_sftp_attrib_extensions(struct sftp_subsystem_s *sftp, struct sftp_init_extensions_s *init);
+unsigned int get_sftp_protocol_extensions(struct sftp_subsystem_s *sftp, struct sftp_init_extensions_s *init);
 
 unsigned int get_supported_acl_cap(struct sftp_subsystem_s *sftp);
 

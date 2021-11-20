@@ -110,7 +110,6 @@ void sftp_op_readlink(struct sftp_payload_s *payload)
 
     if (payload->len>=4) {
 	char *data=payload->data;
-	struct sftp_identity_s *user=&sftp->identity;
 	unsigned int pos=0;
 	struct ssh_string_s path=SSH_STRING_INIT;
 
@@ -125,14 +124,14 @@ void sftp_op_readlink(struct sftp_payload_s *payload)
 	    struct fs_location_path_s location;
 	    struct fs_location_path_s target=FS_LOCATION_PATH_INIT;
 	    struct convert_sftp_path_s convert;
-	    unsigned int size=get_fullpath_size(user, &path, &convert);
-	    char pathtmp[size+1];
+	    unsigned int size=(* sftp->prefix.get_length_fullpath)(sftp, &path, &convert);
+	    char tmp[size+1];
 	    int result=-ENOSYS;
 
 	    /* get the fullpath on the local system */
 
-	    set_buffer_location_path(&location, pathtmp, size+1, 0);
-	    (* convert.complete)(user, &path, &location);
+	    set_buffer_location_path(&location, tmp, size+1, 0);
+	    (* convert.complete)(sftp, &path, &location);
 
 #ifdef __linux__
 

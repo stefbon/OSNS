@@ -102,19 +102,16 @@ static int translate_sftp2local(struct sftp_openmode_s *openmode, struct local_o
 	(ACE4_WRITE_DATA | ACE4_WRITE_ATTRIBUTES | ACE4_READ_DATA | ACE4_READ_ATTRIBUTES)) {
 
 	local->posix_flags |= O_RDWR;
-	openmode->access &= ~(ACE4_WRITE_DATA | ACE4_WRITE_ATTRIBUTES | ACE4_READ_DATA | ACE4_READ_ATTRIBUTES);
 
     } else if ((openmode->access & (ACE4_WRITE_DATA | ACE4_WRITE_ATTRIBUTES | ACE4_READ_DATA | ACE4_READ_ATTRIBUTES)) ==
 	(ACE4_WRITE_DATA | ACE4_WRITE_ATTRIBUTES)) {
 
 	local->posix_flags |= O_WRONLY;
-	openmode->access &= ~(ACE4_WRITE_DATA | ACE4_WRITE_ATTRIBUTES | ACE4_READ_DATA | ACE4_READ_ATTRIBUTES);
 
     } else if ((openmode->access & (ACE4_WRITE_DATA | ACE4_WRITE_ATTRIBUTES | ACE4_READ_DATA | ACE4_READ_ATTRIBUTES)) ==
 	(ACE4_READ_DATA | ACE4_READ_ATTRIBUTES)) {
 
 	local->posix_flags |= O_RDONLY;
-	openmode->access &= ~(ACE4_WRITE_DATA | ACE4_WRITE_ATTRIBUTES | ACE4_READ_DATA | ACE4_READ_ATTRIBUTES);
 
     } else {
 
@@ -122,6 +119,8 @@ static int translate_sftp2local(struct sftp_openmode_s *openmode, struct local_o
 	goto errorinval;
 
     }
+
+    openmode->access &= ~(ACE4_WRITE_DATA | ACE4_WRITE_ATTRIBUTES | ACE4_READ_DATA | ACE4_READ_ATTRIBUTES);
 
     if ((openmode->flags & SSH_FXF_ACCESS_DISPOSITION)==0) {
 
@@ -358,10 +357,9 @@ void sftp_op_open(struct sftp_payload_s *payload)
 	pos+=path.len;
 
 	if (payload->len >= path.len + 12) {
-	    struct sftp_identity_s *user=&sftp->identity;
 	    struct fs_location_s location;
 	    struct convert_sftp_path_s convert=CONVERT_PATH_INIT;
-	    unsigned int size=get_fullpath_size(user, &path, &convert); /* get size of buffer for path */
+	    unsigned int size=(* sftp->prefix.get_length_fullpath)(sftp, &path, &convert); /* get size of buffer for path */
 	    char tmp[size+1];
 	    struct sftp_openmode_s openmode=SFTP_OPENMODE_INIT;
 	    struct local_openmode_s local=LOCAL_OPENMODE_INIT;
@@ -375,7 +373,7 @@ void sftp_op_open(struct sftp_payload_s *payload)
 	    memset(&location, 0, sizeof(struct fs_location_s));
 	    location.flags=FS_LOCATION_FLAG_PATH;
 	    set_buffer_location_path(&location.type.path, tmp, size+1, 0);
-	    (* convert.complete)(user, &path, &location.type.path);
+	    (* convert.complete)(sftp, &path, &location.type.path);
 
 	    if (translate_sftp2local(&openmode, &local, &error)==-1) {
 

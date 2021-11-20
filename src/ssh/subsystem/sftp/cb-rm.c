@@ -90,15 +90,14 @@ static void sftp_op_remove_common(struct sftp_payload_s *payload, unsigned char 
 	    - 4 + len ... path (len maybe zero) */
 
 	if (payload->len >= path.len + 4) {
-	    struct sftp_identity_s *user=&sftp->identity;
 	    struct fs_location_path_s location=FS_LOCATION_PATH_INIT;
 	    struct convert_sftp_path_s convert={NULL};
-	    unsigned int size=get_fullpath_size(user, &path, &convert); /* get size of buffer for path */
+	    unsigned int size=(* sftp->prefix.get_length_fullpath)(sftp, &path, &convert); /* get size of buffer for path */
 	    char tmp[size+1];
 	    unsigned int error=0;
 
 	    set_buffer_location_path(&location, tmp, size+1, 0);
-	    (* convert.complete)(user, &path, &location);
+	    (* convert.complete)(sftp, &path, &location);
 
 	    logoutput("sftp_op_remove_common : %.*s", location.len, location.ptr);
 

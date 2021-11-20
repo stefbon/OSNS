@@ -61,9 +61,6 @@ static int send_sftp_request_data_default(struct sftp_request_s *r, char *data, 
 {
     struct context_interface_s *interface=r->interface;
     struct sftp_client_s *sftp=(struct sftp_client_s *) (* interface->get_interface_buffer)(interface);
-
-    logoutput("send_sftp_request_data_default: size %i", size);
-
     return (* sftp->context.send_data)(sftp, data, size, seq, list);
 }
 

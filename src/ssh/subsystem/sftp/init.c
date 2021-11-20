@@ -57,10 +57,13 @@
 
 #include "receive.h"
 #include "send.h"
+#include "init.h"
 #include "supported.h"
 #include "payload.h"
 #include "protocol.h"
 #include "attr.h"
+#include "path.h"
+#include "extensions.h"
 
 #include "cb-open.h"
 #include "cb-close.h"
@@ -69,8 +72,6 @@
 #include "cb-rm.h"
 #include "cb-mk.h"
 #include "cb-readlink.h"
-
-#include "init.h"
 
 /*
     for sftp init data looks like:
@@ -91,10 +92,12 @@
 
 int send_sftp_init(struct sftp_subsystem_s *sftp)
 {
+    struct sftp_init_extensions_s attr_extensions={0, NULL, 0};
+    struct sftp_init_extensions_s protocol_extensions={0, NULL, 0};
     unsigned int attrib_extensions_count=0;
     unsigned int extensions_count=0;
     unsigned int len_h=4 + strlen("supported2");
-    unsigned int len_hs=32 + get_attrib_extensions(sftp, NULL, 0, &attrib_extensions_count) + get_sftp_extensions(sftp, NULL, 0, &extensions_count);
+    unsigned int len_hs=32 + get_sftp_attrib_extensions(sftp, &attr_extensions) + get_sftp_protocol_extensions(sftp, &protocol_extensions);
     unsigned int len_a=4 + strlen("acl-supported");
     unsigned int len_as=4;
     unsigned int len=9 + len_h + len_hs + len_a + len_as;
@@ -126,12 +129,12 @@ int send_sftp_init(struct sftp_subsystem_s *sftp)
 
     /* valid attribute flags */
 
-    store_uint32(&data[pos], get_supported_attribute_flags(sftp));
+    store_uint32(&data[pos], get_supported_attr_valid_mask(sftp));
     pos+=4;
 
     /* valid attribute bits */
 
-    store_uint32(&data[pos], get_supported_attribute_bits(sftp));
+    store_uint32(&data[pos], get_supported_attr_attr_bits(sftp));
     pos+=4;
 
     /* supported open flags */
@@ -141,7 +144,7 @@ int send_sftp_init(struct sftp_subsystem_s *sftp)
 
     /* supported access mask */
 
-    store_uint32(&data[pos], get_supported_acl_access_mask(sftp));
+    store_uint32(&data[pos], get_supported_open_access(sftp));
     pos+=4;
 
     /* max read size */
@@ -161,17 +164,29 @@ int send_sftp_init(struct sftp_subsystem_s *sftp)
 
     /* attrib extension count */
 
-    store_uint32(&data[pos], attrib_extensions_count);
+    store_uint32(&data[pos], attr_extensions.count);
     pos+=4;
 
-    pos+=get_attrib_extensions(sftp, &data[pos], len - pos, &attrib_extensions_count);
+    /* attrib names */
 
-    /* attrib extension count */
+    attr_extensions.len=len - pos;
+    attr_extensions.buffer=&data[pos];
+    attr_extensions.count=0;
 
-    store_uint32(&data[pos], extensions_count);
+    pos+=get_sftp_attrib_extensions(sftp, &attr_extensions);
+
+    /* protocol extension count */
+
+    store_uint32(&data[pos], protocol_extensions.count);
     pos+=4;
 
-    pos+=get_sftp_extensions(sftp, &data[pos], len - pos, &extensions_count);
+    /* protocol extension names */
+
+    protocol_extensions.len=len - pos;
+    protocol_extensions.buffer=&data[pos];
+    protocol_extensions.count=0;
+
+    pos+=get_sftp_protocol_extensions(sftp, &protocol_extensions);
 
     /* acl supported */
 
@@ -215,6 +230,7 @@ static int init_sftp_identity(struct sftp_identity_s *user)
     char *name=NULL;
 
     memset(user, 0, sizeof(struct sftp_identity_s));
+    init_ssh_string(&user->home); /* homedirectory of connecting user (==user under which this subsystem is running)*/
 
     user->buffer=NULL;
     user->size=128;
@@ -255,7 +271,8 @@ static int init_sftp_identity(struct sftp_identity_s *user)
 
 	}
 
-	user->len_home=strlen(user->pwd.pw_dir);
+	user->home.ptr=user->pwd.pw_dir;
+	user->home.len=strlen(user->home.ptr);
 
     }
 
@@ -326,6 +343,16 @@ void setup_sftp_idmapping(struct sftp_subsystem_s *sftp)
 
 }
 
+void init_sftp_prefix(struct sftp_subsystem_s *sftp)
+{
+    struct sftp_prefix_s *prefix=&sftp->prefix;
+
+    prefix->flags=0;
+    init_ssh_string(&prefix->path);
+    prefix->get_length_fullpath=get_length_fullpath_noprefix;
+
+}
+
 int init_sftp_subsystem(struct sftp_subsystem_s *sftp)
 {
 
@@ -334,6 +361,7 @@ int init_sftp_subsystem(struct sftp_subsystem_s *sftp)
     memset(sftp, 0, sizeof(struct sftp_subsystem_s));
     sftp->flags = SFTP_SUBSYSTEM_FLAG_INIT;
 
+    init_sftp_prefix(sftp);
     init_sftp_identity(&sftp->identity);
     init_ssh_subsystem_connection(&sftp->connection, 0);
     init_sftp_receive(&sftp->receive);

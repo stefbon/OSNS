@@ -52,12 +52,12 @@
 #include "osns_sftp_subsystem.h"
 #include "path.h"
 
-void path_append_home_directory(struct sftp_identity_s *user, struct ssh_string_s *path, struct fs_location_path_s *localpath)
+void path_append_home(struct sftp_subsystem_s *sftp, struct ssh_string_s *path, struct fs_location_path_s *localpath)
 {
     char *ptr=localpath->ptr;
 
-    memcpy(ptr, user->pwd.pw_dir, user->len_home);
-    ptr+=user->len_home;
+    memcpy(ptr, sftp->identity.home.ptr, sftp->identity.home.len);
+    ptr+=sftp->identity.home.len;
     *ptr='/';
     ptr++;
 
@@ -66,13 +66,33 @@ void path_append_home_directory(struct sftp_identity_s *user, struct ssh_string_
     memcpy(ptr, path->ptr, path->len);
     ptr+=path->len;
     *ptr='\0';
-    localpath->len+=path->len + user->len_home + 1;
+    localpath->len+=path->len + sftp->identity.home.len + 1;
 
-    logoutput("path_append_home_directory: ");
+    logoutput("path_append_home: %.*s", localpath->len, ptr);
 
 }
 
-void path_append_none(struct sftp_identity_s *user, struct ssh_string_s *path, struct fs_location_path_s *localpath)
+void path_append_prefix(struct sftp_subsystem_s *sftp, struct ssh_string_s *path, struct fs_location_path_s *localpath)
+{
+    char *ptr=localpath->ptr;
+
+    memcpy(ptr, sftp->prefix.path.ptr, sftp->prefix.path.len);
+    ptr+=sftp->prefix.path.len;
+    *ptr='/';
+    ptr++;
+
+    /* TODO: add convert from UTF-8 to local encoding */
+
+    memcpy(ptr, path->ptr, path->len);
+    ptr+=path->len;
+    *ptr='\0';
+    localpath->len+=path->len + sftp->prefix.path.len + 1;
+
+    logoutput("path_append_prefix: %.*s", localpath->len, ptr);
+
+}
+
+void path_append_none(struct sftp_subsystem_s *sftp, struct ssh_string_s *path, struct fs_location_path_s *localpath)
 {
     char *ptr=localpath->ptr;
 
@@ -83,7 +103,14 @@ void path_append_none(struct sftp_identity_s *user, struct ssh_string_s *path, s
 
 }
 
-unsigned int get_fullpath_size(struct sftp_identity_s *user, struct ssh_string_s *path, struct convert_sftp_path_s *convert)
+/* get length of buffer when no prefix is used .. two cases:
+
+    - path is starting with a slash -> no prefix at all
+    - path is not starting with a slash -> relative to home directory, so prefix is $HOME of connecting user
+
+    NOTE: no conversion from format used by sftp (is UTF-8 for versions 4-6) to the local format yet */
+
+unsigned int get_length_fullpath_noprefix(struct sftp_subsystem_s *sftp, struct ssh_string_s *path, struct convert_sftp_path_s *convert)
 {
     char *ptr=path->ptr;
 
@@ -94,7 +121,23 @@ unsigned int get_fullpath_size(struct sftp_identity_s *user, struct ssh_string_s
 
     }
 
-    convert->complete=&path_append_home_directory;
-    return path->len + 1 + user->len_home;
+    convert->complete=&path_append_home;
+    return path->len + 1 + sftp->identity.home.len;
+
+}
+
+unsigned int get_length_fullpath_prefix(struct sftp_subsystem_s *sftp, struct ssh_string_s *path, struct convert_sftp_path_s *convert)
+{
+    char *ptr=path->ptr;
+
+    if (path->len>0 && ptr[0]=='/') {
+
+	convert->complete=&path_append_prefix;
+	return path->len + 1 + sftp->prefix.path.len;
+
+    }
+
+    convert->complete=&path_append_home;
+    return path->len + 1 + sftp->identity.home.len;
 
 }
