@@ -23,5 +23,6 @@
 /* prototypes */
 
 void cb_ext_statvfs(struct sftp_payload_s *payload, unsigned int pos);
+void sftp_op_statvfs(struct sftp_payload_s *payload);
 
 #endif

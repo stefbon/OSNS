@@ -101,6 +101,8 @@ static void read_default_features_v06(struct sftp_client_s *sftp, struct ssh_str
     supported->version.v06.attrib_extension_count=get_uint32(&buff[pos]);
     pos+=4;
 
+    logoutput_debug("read_default_features_v06: attr count %i", supported->version.v06.attrib_extension_count);
+
     for (unsigned int i=0; i<supported->version.v06.attrib_extension_count; i++) {
 
 	if (pos<size) {
@@ -129,25 +131,20 @@ static void read_default_features_v06(struct sftp_client_s *sftp, struct ssh_str
     supported->version.v06.extension_count=get_uint32(&buff[pos]);
     pos+=4;
 
+    logoutput_debug("read_default_features_v06: ext count %i", supported->version.v06.extension_count);
+
     for (unsigned int i=0; i<supported->version.v06.extension_count; i++) {
 
 	if (pos<size) {
 	    struct ssh_string_s name=SSH_STRING_INIT;
 
 	    pos+=read_ssh_string(&buff[pos], size-pos, &name);
+	    logoutput("read_default_features_v06: found server extension %.*s", name.len, name.ptr);
 
 	    if (name.len>0 && name.ptr) {
-		struct sftp_protocolextension_s *extension=add_sftp_protocolextension(sftp, &name, NULL);
+		int result=add_protocol_extension_server(sftp, &name, NULL);
 
-		if (extension) {
-
-		    logoutput("read_default_features_v06: (%i - %i) found extension %.*s", i, supported->version.v06.extension_count, name.len, name.ptr);
-
-		} else {
-
-		    logoutput("read_default_features_v06: (%i - %i) extension %.*s not found", i, supported->version.v06.extension_count, name.len, name.ptr);
-
-		}
+		if ((result&SFTP_EXTENSION_ADD_RESULT_EXIST)==0) logoutput("read_default_features_v06: extension %.*s not created", name.len, name.ptr);
 
 	    } else {
 
@@ -211,13 +208,15 @@ static void process_sftp_extension(struct sftp_client_s *sftp, struct ssh_string
 
     } else {
 
-	if (get_sftp_protocol_version(sftp) < 6) {
+	int result=add_protocol_extension_server(sftp, name, data);
 
-	    if (compare_ssh_string(name, 'c', "statfs@openssh.org")==0 || compare_ssh_string(name, 'c', "statvfs@openssh.com")==0 || compare_ssh_string(name, 'c', "fsync@openshh.com")==0) {
+	if (result==SFTP_EXTENSION_ADD_RESULT_EXIST) {
 
-		struct sftp_protocolextension_s *extension=add_sftp_protocolextension(sftp, name, data);
+	    logoutput("process_sftp_extension: found server extension %.*s", name->len, name->ptr);
 
-	    }
+	} else {
+
+	    logoutput("process_sftp_extension: extension %.*s not created", name->len, name->ptr);
 
 	}
 
@@ -265,6 +264,7 @@ int process_sftp_version(struct sftp_client_s *sftp, struct sftp_reply_s *reply)
 	if (name.ptr) {
 	    struct ssh_string_s data=SSH_STRING_INIT;
 
+	    logoutput_debug("process_sftp_version: found %.*s", name.len, name.ptr);
 	    pos+=read_ssh_string((char *) &buffer[pos], size-pos, &data);
 	    process_sftp_extension(sftp, &name, &data);
 

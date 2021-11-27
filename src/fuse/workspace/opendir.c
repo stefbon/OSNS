@@ -153,6 +153,7 @@ void _fs_workspace_opendir(struct fuse_opendir_s *opendir, struct fuse_request_s
 
     logoutput("_fs_workspace_opendir: ino %li finish direntry", get_ino_system_stat(&opendir->inode->stat));
 
+    // set_flag_fuse_opendir(opendir, _FUSE_OPENDIR_FLAG_READDIR_FINISH);
     finish_get_fuse_direntry(opendir);
 
     if (parent->type==SERVICE_CTX_TYPE_WORKSPACE) {

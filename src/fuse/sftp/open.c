@@ -421,7 +421,6 @@ void _fs_sftp_fsync(struct fuse_openfile_s *openfile, struct fuse_request_s *f_r
 		if (reply->response.status.linux_error==EOPNOTSUPP) {
 
 		    logoutput_warning("_fs_sftp_fsync: server response fsync not supported");
-		    set_sftp_fsync_unsupp_ctx(interface);
 
 		} else if (reply->response.status.code>0) {
 

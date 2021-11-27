@@ -30,6 +30,9 @@ struct sftp_init_extensions_s {
 
 /* prototypes */
 
+int check_sftp_cb_is_taken(struct sftp_subsystem_s *sftp, unsigned char code);
+void set_sftp_cb(struct sftp_subsystem_s *sftp, unsigned char code, void (* cb)(struct sftp_payload_s *p));
+
 int send_sftp_init(struct sftp_subsystem_s *sftp);
 
 unsigned char get_sftp_protocol_version(struct sftp_subsystem_s *sftp);

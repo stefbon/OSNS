@@ -96,16 +96,16 @@ void _fs_sftp_statfs(struct service_context_s *context, struct fuse_request_s *f
     char path[pathlen];
     struct sftp_request_s sftp_r;
 
-    logoutput("_fs_sftp_statfs");
-
     pathinfo->len += (* interface->backend.sftp.complete_path)(interface, path, pathinfo);
+
+    logoutput("_fs_sftp_statfs: path %.*s", pathinfo->len, pathinfo->path);
 
     init_sftp_request(&sftp_r, interface, f_request);
 
     sftp_r.call.statvfs.path=(unsigned char *)pathinfo->path;
     sftp_r.call.statvfs.len=pathinfo->len;
 
-    if (send_sftp_statvfs_ctx(interface, &sftp_r, &error)>0) {
+    if (send_sftp_statvfs_ctx(interface, &sftp_r, &error)>=0) {
 	struct timespec timeout;
 
 	get_sftp_request_timeout_ctx(interface, &timeout);
@@ -184,7 +184,8 @@ void _fs_sftp_statfs(struct service_context_s *context, struct fuse_request_s *f
 
 		if (reply->response.status.linux_error==EOPNOTSUPP) {
 
-		    set_sftp_statvfs_unsupp_ctx(interface);
+		    logoutput("_fs_sftp_statfs: statvfs is unsupported ... ");
+
 		    _fs_sftp_statfs_unsupp(context, f_request, pathinfo);
 		    unset_fuse_request_flags_cb(f_request);
 		    return;

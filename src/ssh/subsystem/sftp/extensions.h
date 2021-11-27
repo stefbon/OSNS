@@ -20,17 +20,21 @@
 #ifndef OSNS_SSH_SUBSYSTEM_SFTP_EXTENSIONS_H
 #define OSNS_SSH_SUBSYSTEM_SFTP_EXTENSIONS_H
 
+#define SFTP_PROTOCOL_EXTENSION_FLAG_MAPPED		1
+
 struct sftp_protocol_extension_s {
     unsigned int					flags;
     const char						*name;
     unsigned char					code;
     void						(* cb)(struct sftp_payload_s *p, unsigned int pos);
+    void						(* op)(struct sftp_payload_s *p);
 };
 
 /* prototypes */
 
 struct sftp_protocol_extension_s *get_next_sftp_protocol_extension(struct sftp_protocol_extension_s *ext, unsigned int mask);
 struct sftp_protocol_extension_s *find_sftp_protocol_extension(struct ssh_string_s *name, unsigned int mask);
+
 void sftp_op_extension(struct sftp_payload_s *payload);
 
 #endif

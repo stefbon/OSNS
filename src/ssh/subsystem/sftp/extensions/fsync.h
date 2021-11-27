@@ -1,5 +1,5 @@
 /*
-  2010, 2011, 2012, 2013, 2014, 2015 Stef Bon <stefbon@gmail.com>
+  2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017 Stef Bon <stefbon@gmail.com>
 
   This program is free software; you can redistribute it and/or
   modify it under the terms of the GNU General Public License
@@ -14,18 +14,15 @@
   You should have received a copy of the GNU General Public License
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+
 */
 
-#ifndef INTERFACE_SFTP_EXTENSIONS_H
-#define INTERFACE_SFTP_EXTENSIONS_H
+#ifndef SSH_SUBSYSTEM_SFTP_EXTENSIONS_FSYNC_H
+#define SSH_SUBSYSTEM_SFTP_EXTENSIONS_FSYNC_H
 
 /* prototypes */
 
-int send_sftp_statvfs_ctx(struct context_interface_s *interface, struct sftp_request_s *sftp_r, unsigned int *error);
-int send_sftp_fsync_ctx(struct context_interface_s *interface, struct sftp_request_s *sftp_r, unsigned int *error);
-
-unsigned int get_index_sftp_extension_statvfs(struct context_interface_s *interface);
-unsigned int get_index_sftp_extension_fsync(struct context_interface_s *interface);
-
+void cb_ext_fsync(struct sftp_payload_s *payload, unsigned int pos);
+void sftp_op_fsync(struct sftp_payload_s *payload);
 
 #endif

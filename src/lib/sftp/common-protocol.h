@@ -23,13 +23,14 @@
 #include "list.h"
 #include "sftp/protocol.h"
 
-#define SFTP_REQUEST_STATUS_WAITING		1
-#define SFTP_REQUEST_STATUS_RESPONSE		2
-#define SFTP_REQUEST_STATUS_FINISH		6
-#define SFTP_REQUEST_STATUS_INTERRUPT		8
-#define SFTP_REQUEST_STATUS_TIMEDOUT		16
-#define SFTP_REQUEST_STATUS_DISCONNECT		32
-#define SFTP_REQUEST_STATUS_ERROR		64
+#define SFTP_REQUEST_STATUS_SEND		1
+#define SFTP_REQUEST_STATUS_WAITING		2
+#define SFTP_REQUEST_STATUS_RESPONSE		4
+#define SFTP_REQUEST_STATUS_FINISH		8
+#define SFTP_REQUEST_STATUS_INTERRUPT		16
+#define SFTP_REQUEST_STATUS_TIMEDOUT		32
+#define SFTP_REQUEST_STATUS_DISCONNECT		64
+#define SFTP_REQUEST_STATUS_ERROR		128
 
 #define SFTP_EXTENSION_TYPE_DEFAULT						1
 #define SFTP_EXTENSION_TYPE_CUSTOM						2
@@ -264,6 +265,7 @@ struct sftp_data_s {
 
 struct sftp_extension_s {
     unsigned char		type;
+    void			*ptr;
     union {
 	struct _extension_name_s {
 	    unsigned char		*name;

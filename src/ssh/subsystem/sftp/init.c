@@ -73,6 +73,8 @@
 #include "cb-mk.h"
 #include "cb-readlink.h"
 
+#include "extensions.h"
+
 /*
     for sftp init data looks like:
 
@@ -223,6 +225,19 @@ int send_sftp_init(struct sftp_subsystem_s *sftp)
 static void reply_sftp_notsupported(struct sftp_payload_s *p)
 {
     int result=reply_sftp_status_simple(p->sftp, p->id, SSH_FX_OP_UNSUPPORTED);
+}
+
+int check_sftp_cb_is_taken(struct sftp_subsystem_s *sftp, unsigned char code)
+{
+    return ((sftp->cb[code]==reply_sftp_notsupported) ? 0 : 1);
+}
+
+/* use with care, this can override a default callback
+    (there is no check here) */
+
+void set_sftp_cb(struct sftp_subsystem_s *sftp, unsigned char code, void (* cb)(struct sftp_payload_s *p))
+{
+    sftp->cb[code]=((cb) ? cb : reply_sftp_notsupported);
 }
 
 static int init_sftp_identity(struct sftp_identity_s *user)
@@ -393,6 +408,8 @@ int init_sftp_subsystem(struct sftp_subsystem_s *sftp)
     sftp->cb[SSH_FXP_REMOVE]=sftp_op_remove;
     sftp->cb[SSH_FXP_RMDIR]=sftp_op_rmdir;
     sftp->cb[SSH_FXP_MKDIR]=sftp_op_mkdir;
+
+    sftp->cb[SSH_FXP_EXTENDED]=sftp_op_extension;
 
     return 0;
 

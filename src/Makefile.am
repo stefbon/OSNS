@@ -59,7 +59,8 @@ osns_client_SOURCES =  	lib/fuse/directory.c lib/fuse/dentry.c lib/fuse/dentry-o
 			lib/sftp/rw-attr-generic.c \
 			sftp/recv.c sftp/recv/recv-v03.c sftp/recv/recv-v04.c sftp/recv/recv-v05.c sftp/recv/recv-v06.c \
 			sftp/send.c sftp/send/send-v03.c sftp/send/send-v04.c sftp/send/send-v05.c sftp/send/send-v06.c \
-			sftp/attr.c sftp/context.c sftp/common.c sftp/extensions.c sftp/init.c   \
+			sftp/attr.c sftp/context.c sftp/common.c sftp/extensions.c sftp/extensions/fsync.c sftp/extensions/statvfs.c \
+			sftp/init.c   \
 			sftp/request-hash.c sftp/time.c sftp/usermapping.c sftp/utils.c \
 			ssh/channel/init.c ssh/channel/payload.c ssh/channel/shell.c ssh/channel/startclose.c \
 			ssh/channel/table.c ssh/channel/uri.c ssh/channel/utils.c \
@@ -240,6 +241,7 @@ osns_sftp_subsystem_SOURCES	=	osns_sftp_subsystem.c \
 					ssh/subsystem/sftp/receive.c ssh/subsystem/sftp/send.c \
 					ssh/subsystem/sftp/supported.c ssh/subsystem/sftp/extensions.c \
 					ssh/subsystem/sftp/extensions/setprefix.c ssh/subsystem/sftp/extensions/statvfs.c \
+					ssh/subsystem/sftp/extensions/fsync.c ssh/subsystem/sftp/extensions/mapextension.c \
 					lib/sftp/attr-context.c \
 					lib/sftp/attr/init-attr-v03.c lib/sftp/attr/init-attr-v04.c lib/sftp/attr/init-attr-v05.c lib/sftp/attr/init-attr-v06.c \
 					lib/sftp/attr/read-attr-v03.c lib/sftp/attr/read-attr-v04.c lib/sftp/attr/read-attr-v05.c lib/sftp/attr/read-attr-v06.c \

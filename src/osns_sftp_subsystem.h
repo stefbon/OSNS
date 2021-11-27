@@ -81,7 +81,7 @@ struct sftp_identity_s {
 
 struct sftp_extensions_s {
     unsigned int					mask;
-    unsigned char					mapnr;
+    unsigned int					mapped;
 };
 
 #define SFTP_SUBSYSTEM_FLAG_INIT			(1 << 0)

@@ -51,23 +51,33 @@
 int send_sftp_statvfs_ctx(struct context_interface_s *interface, struct sftp_request_s *sftp_r, unsigned int *error)
 {
     struct sftp_client_s *sftp=(struct sftp_client_s *) (* interface->get_interface_buffer)(interface);
-    return send_sftp_statvfs(sftp, sftp_r, error);
+    unsigned int index=interface->backend.sftp.statvfs_index;
+    return send_sftp_extension_index(sftp, index, sftp_r);
+}
+
+unsigned int get_index_sftp_extension_statvfs(struct context_interface_s *interface)
+{
+    struct sftp_client_s *sftp=(struct sftp_client_s *) (* interface->get_interface_buffer)(interface);
+    struct ssh_string_s name=SSH_STRING_SET(0, "statvfs@openssh.com");
+    unsigned int index=get_sftp_protocol_extension_index(sftp, &name);
+
+    logoutput_debug("get_index_sftp_extension_statvfs: index %u", index);
+    return index;
 }
 
 int send_sftp_fsync_ctx(struct context_interface_s *interface, struct sftp_request_s *sftp_r, unsigned int *error)
 {
     struct sftp_client_s *sftp=(struct sftp_client_s *) (* interface->get_interface_buffer)(interface);
-    return send_sftp_fsync(sftp, sftp_r, error);
+    unsigned int index=interface->backend.sftp.fsync_index;
+    return send_sftp_extension_index(sftp, index, sftp_r);
 }
 
-void set_sftp_fsync_unsupp_ctx(struct context_interface_s *interface)
+unsigned int get_index_sftp_extension_fsync(struct context_interface_s *interface)
 {
     struct sftp_client_s *sftp=(struct sftp_client_s *) (* interface->get_interface_buffer)(interface);
-    set_sftp_fsync_unsupp(sftp);
-}
+    struct ssh_string_s name=SSH_STRING_SET(0, "fsync@openssh.com");
+    unsigned int index=get_sftp_protocol_extension_index(sftp, &name);
 
-void set_sftp_statvfs_unsupp_ctx(struct context_interface_s *interface)
-{
-    struct sftp_client_s *sftp=(struct sftp_client_s *) (* interface->get_interface_buffer)(interface);
-    set_sftp_statvfs_unsupp(sftp);
+    logoutput_debug("get_index_sftp_extension_fsync: index %u", index);
+    return index;
 }

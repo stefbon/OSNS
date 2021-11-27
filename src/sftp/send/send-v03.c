@@ -823,9 +823,9 @@ int send_sftp_extension_v03(struct sftp_client_s *sftp, struct sftp_request_s *s
     char data[13 + len + size];
     unsigned int pos=0;
 
-    logoutput_debug("send_sftp_extension_v03: name %.*s", len, sftp_r->call.extension.id.name.name);
-
     sftp_r->id=get_sftp_request_id(sftp);
+
+    logoutput_debug("send_sftp_extension_v03: id %u name %.*s", sftp_r->id, len, sftp_r->call.extension.id.name.name);
 
     store_uint32(&data[pos], 9 + len + size);
     pos+=4;

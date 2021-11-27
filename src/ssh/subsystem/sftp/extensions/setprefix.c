@@ -187,3 +187,20 @@ void cb_ext_setprefix(struct sftp_payload_s *payload, unsigned int pos)
     reply_sftp_status_simple(sftp, payload->id, status);
 
 }
+
+/* set prefix when being called having a code (mapped to this extension) of it's own
+
+    SSH_FXP_custom
+    message has the form:
+    - byte 				custom
+    - uint32				id
+    - string				path
+    - uint32				flags
+
+*/
+
+void sftp_op_setprefix(struct sftp_payload_s *payload)
+{
+    cb_ext_setprefix(payload, 0);
+}
+

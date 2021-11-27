@@ -249,6 +249,8 @@ static struct service_context_s *create_start_sftp_client_context(struct service
     }
 
     set_sftp_interface_prefix(interface, service->name, service->prefix);
+    interface->backend.sftp.statvfs_index=get_index_sftp_extension_statvfs(interface);
+    interface->backend.sftp.fsync_index=get_index_sftp_extension_fsync(interface);
     return context;
 
     error:

@@ -388,3 +388,69 @@ void set_sftp_recv_version(struct sftp_client_s *sftp)
     }
 
 }
+
+int handle_sftp_reply(struct sftp_request_s *sftp_r, struct sftp_reply_s *reply, unsigned int *error)
+{
+    int result=0;
+
+    reply->type=sftp_r->reply.type;
+
+    if (reply->type==SSH_FXP_STATUS) {
+
+	reply->response.status.code=sftp_r->reply.response.status.code;
+	reply->response.status.linux_error=sftp_r->reply.response.status.linux_error;
+	reply->response.status.buff=sftp_r->reply.response.status.buff;
+	reply->response.status.size=sftp_r->reply.response.status.size;
+	sftp_r->reply.response.status.buff=NULL;
+	sftp_r->reply.response.status.size=0;
+
+    } else if (reply->type==SSH_FXP_HANDLE) {
+
+	reply->response.handle.name=sftp_r->reply.response.handle.name;
+	reply->response.handle.len=sftp_r->reply.response.handle.len;
+	sftp_r->reply.response.handle.name=NULL;
+	sftp_r->reply.response.handle.len=0;
+
+    } else if (reply->type==SSH_FXP_DATA) {
+
+	reply->response.data.data=sftp_r->reply.response.data.data;
+	reply->response.data.size=sftp_r->reply.response.data.size;
+	reply->response.data.flags=sftp_r->reply.response.data.flags;
+	sftp_r->reply.response.data.data=NULL;
+	sftp_r->reply.response.data.size=0;
+
+    } else if (reply->type==SSH_FXP_NAME) {
+
+	reply->response.names.count=sftp_r->reply.response.names.count;
+	reply->response.names.size=sftp_r->reply.response.names.size;
+	reply->response.names.flags=sftp_r->reply.response.names.flags;
+	reply->response.names.buff=sftp_r->reply.response.names.buff;
+	sftp_r->reply.response.names.buff=NULL;
+	sftp_r->reply.response.names.size=0;
+
+    } else if (reply->type==SSH_FXP_ATTRS) {
+
+	reply->response.attr.buff=sftp_r->reply.response.attr.buff;
+	reply->response.attr.size=sftp_r->reply.response.attr.size;
+	sftp_r->reply.response.attr.buff=NULL;
+	sftp_r->reply.response.attr.size=0;
+
+    } else if (reply->type==SSH_FXP_EXTENDED_REPLY) {
+
+	reply->response.extension.buff=sftp_r->reply.response.extension.buff;
+	reply->response.extension.size=sftp_r->reply.response.extension.size;
+	sftp_r->reply.response.extension.buff=NULL;
+	sftp_r->reply.response.extension.size=0;
+
+    } else {
+
+	*error=EPROTO;
+	result=-1;
+
+    }
+
+    reply->error=sftp_r->reply.error;
+
+    return result;
+
+}

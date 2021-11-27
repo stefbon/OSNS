@@ -74,9 +74,10 @@ static int _rmat_error(struct dirhandle_s *dh, const char *name)
     return -1;
 }
 
-static void _fsyncdir_error(struct dirhandle_s *dh, unsigned int flags)
+static int _fsyncdir_error(struct dirhandle_s *dh, unsigned int flags)
 {
     logoutput_warning("_fsyncdir_error: handle not open");
+    return -1;
 }
 
 static void _close_error(struct dirhandle_s *dh)
@@ -176,19 +177,22 @@ static int _rmdirat_handle(struct dirhandle_s *dh, const char *name)
     return system_rmdirat(&dh->socket, name);
 }
 
-static void _fsyncdir_handle(struct dirhandle_s *dh, unsigned int flags)
+static int _fsyncdir_handle(struct dirhandle_s *dh, unsigned int flags)
 {
     int fd=get_unix_fd_fs_socket(&dh->socket);
+    int result=-1;
 
     if (flags & FSYNC_FLAG_DATASYNC) {
 
-	fdatasync(fd);
+	result=fdatasync(fd);
 
     } else {
 
-	fsync(fd);
+	result=fsync(fd);
 
     }
+
+    return result;
 
 }
 

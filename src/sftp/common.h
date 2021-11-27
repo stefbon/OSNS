@@ -97,31 +97,52 @@ struct sftp_time_ops_s {
     void						(* correct_time_c2s)(struct sftp_client_s *sftp, struct timespec *time);
 };
 
-#define SFTP_EXTENSION_FLAG_SUPPORTED						1
-#define SFTP_EXTENSION_FLAG_MAPPED						2
-#define SFTP_EXTENSION_FLAG_CREATE						4
-#define SFTP_EXTENSION_FLAG_OVERRIDE_DATA					8
+#define SFTP_EXTENSION_FLAG_SUPPORTED			1
+#define SFTP_EXTENSION_FLAG_MAPPED			2
 
-struct sftp_protocolextension_s {
-    unsigned int					flags;
-    unsigned int					nr;
-    unsigned char					mapped;
-    int							(* send_extension)(struct sftp_client_s *sftp, struct sftp_protocolextension_s *e, struct sftp_request_s *sftp_r, unsigned int *error);
+#define SFTP_EXTENSION_ADD_RESULT_CREATED		1
+#define SFTP_EXTENSION_ADD_RESULT_EXIST			2
+#define SFTP_EXTENSION_ADD_RESULT_NO_SUPP_SERVER	3
+#define SFTP_EXTENSION_ADD_RESULT_NO_SUPP_CLIENT	4
+
+#define SFTP_EXTENSION_ADD_RESULT_ERROR			20
+
+#define SFTP_EXTENSION_FIND_RESULT_EXIST		1
+#define SFTP_EXTENSION_FIND_RESULT_NO_SUPP_SERVER	2
+#define SFTP_EXTENSION_FIND_RESULT_NOT_FOUND		4
+
+struct sftp_protocol_extension_s;
+
+struct sftp_protocol_extension_client_s {
+    struct list_element_s				list;
+    struct ssh_string_s					name;
+    unsigned int					(* get_data_len)(struct sftp_client_s *s, struct sftp_protocol_extension_s *ext, struct sftp_request_s *r);
+    unsigned int					(* fill_data)(struct sftp_client_s *s, struct sftp_protocol_extension_s *ext, struct sftp_request_s *r, char *data, unsigned int len);
+    unsigned int					(* get_size_buffer)(struct sftp_client_s *s, struct ssh_string_s *name, struct ssh_string_s *data);
+    void						(* init)(struct sftp_client_s *s, struct sftp_protocol_extension_s *ext);
+};
+
+struct sftp_protocol_extension_server_s {
+    struct list_element_s				list;
     struct ssh_string_s					name;
     struct ssh_string_s					data;
-    void						*ptr;
-    void						(* event_cb)(struct ssh_string_s *name, struct ssh_string_s *data, void *ptr, unsigned int event);
-    struct list_element_s				list;
+};
+
+struct sftp_protocol_extension_s {
+    unsigned int					flags;
+    struct sftp_protocol_extension_server_s		*esbs;
+    struct sftp_protocol_extension_client_s		*esbc;
+    unsigned char					code;
+    int							(* send)(struct sftp_client_s *s, struct sftp_protocol_extension_s *e, struct sftp_request_s *r);
+    unsigned int					size;
     char						buffer[];
 };
 
 struct sftp_extensions_s {
-    unsigned int					count;
-    unsigned char					mapped;
-    struct sftp_protocolextension_s			*mapextension;
-    struct sftp_protocolextension_s			*fsync;
-    struct sftp_protocolextension_s			*statvfs;
-    struct list_header_s				header;
+    struct sftp_protocol_extension_s			*aextensions;
+    unsigned int					size;
+    struct list_header_s				supported_server;
+    struct list_header_s				supported_client;
 };
 
 struct sftp_supported_s {

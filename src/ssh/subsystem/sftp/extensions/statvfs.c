@@ -87,7 +87,7 @@ void cb_ext_statvfs(struct sftp_payload_s *payload, unsigned int pos)
 	    (* convert.complete)(sftp, &path, &location);
 	    result=system_getstatvfs(&location, &statvfs);
 
-	    logoutput("sftp extension: statvfs (%i) path %.*s %i", (int) gettid(), location.len, location.ptr, result);
+	    logoutput("cb_ext_statvfs (%i) path %.*s %i", (int) gettid(), location.len, location.ptr, result);
 
 	    if (result==0) {
 		char data[88];
@@ -147,8 +147,25 @@ void cb_ext_statvfs(struct sftp_payload_s *payload, unsigned int pos)
 
     }
 
-    logoutput("sftp extension: statvfs status %i", status);
+    logoutput("cb_ext_statvfs: status %i", status);
     reply_sftp_status_simple(sftp, payload->id, status);
     return;
 
 }
+
+/* get statvfs when being called having a code (mapped to this extension) of it's own
+
+    SSH_FXP_custom
+    message has the form:
+    - byte 				custom
+    - uint32				id
+    - string				path
+    - uint32				flags
+
+*/
+
+void sftp_op_statvfs(struct sftp_payload_s *payload)
+{
+    cb_ext_statvfs(payload, 0);
+}
+

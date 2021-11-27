@@ -133,9 +133,6 @@ int init_sftp_client(struct sftp_client_s *sftp, uid_t uid, struct net_idmapping
     sftp->mapping=mapping;
     init_sftp_client_attr_context(sftp);
 
-    /* here link the attr_context->get_remote_uid/get_local_uid... functions 
-	to the function in usermapping */
-
     init_hashattr_generic();
 
     return 0;
@@ -179,7 +176,6 @@ int start_init_sftp_client(struct sftp_client_s *sftp)
 
     set_sftp_protocol_version(sftp, 6); /* start with -> 6 <- */
     set_sftp_protocol(sftp);
-    init_fs_sftp_extensions(sftp);
 
     memset(&sftp_r, 0, sizeof(struct sftp_request_s));
     sftp_r.id=(uint32_t) -1; /* use a custom id */
@@ -251,7 +247,7 @@ int start_init_sftp_client(struct sftp_client_s *sftp)
 
     enable_timecorrection(sftp);
     get_sftp_usermapping(sftp);
-    complete_sftp_protocolextensions(sftp, NULL);
+    complete_sftp_extensions(sftp);
 
     return 0;
 

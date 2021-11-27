@@ -329,6 +329,7 @@ static int _send_data_ssh_channel(struct sftp_client_s *sftp, char *buffer, unsi
 {
     struct ssh_channel_s *channel=(struct ssh_channel_s *) sftp->context.conn;
 
+    /* ignore the list ... do not put on send list */
     // pthread_mutex_lock(&sftp->mutex);
     // add_list_element_last(&sftp->pending, list);
     // pthread_mutex_unlock(&sftp->mutex);

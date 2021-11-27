@@ -403,7 +403,13 @@ static void _fs_common_virtual_readdir_common(struct fuse_opendir_s *opendir, st
 
 	    if (entry==NULL) {
 
-		if ((entry=_fs_service_get_fuse_direntry(opendir, request))==NULL) break;
+		if ((entry=_fs_service_get_fuse_direntry(opendir, request))==NULL) {
+
+		    set_flag_fuse_opendir(opendir, _FUSE_OPENDIR_FLAG_READDIR_FINISH);
+		    break;
+
+		}
+
 		inode=entry->inode;
 		memcpy(&inode->stime, &directory->synctime, sizeof (struct timespec));
 

@@ -61,7 +61,9 @@ static int send_sftp_request_data_default(struct sftp_request_s *r, char *data, 
 {
     struct context_interface_s *interface=r->interface;
     struct sftp_client_s *sftp=(struct sftp_client_s *) (* interface->get_interface_buffer)(interface);
-    return (* sftp->context.send_data)(sftp, data, size, seq, list);
+    int result=(* sftp->context.send_data)(sftp, data, size, seq, list);
+    r->status |= SFTP_REQUEST_STATUS_SEND;
+    return result;
 }
 
 static int send_sftp_request_data_blocked(struct sftp_request_s *r, char *data, unsigned int size, uint32_t *seq, struct list_element_s *list)
@@ -125,5 +127,3 @@ void get_sftp_request_timeout_ctx(struct context_interface_s *interface, struct 
     struct sftp_client_s *sftp=(struct sftp_client_s *) (* interface->get_interface_buffer)(interface);
     get_sftp_request_timeout(sftp, timeout);
 }
-
-

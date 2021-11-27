@@ -125,6 +125,8 @@ struct context_interface_s {
 	    unsigned int				flags;
 	    unsigned int				fattr_supported;
 	    char					*name;
+	    unsigned int				statvfs_index;
+	    unsigned int				fsync_index;
 	    int						(* complete_path)(struct context_interface_s *interface, char *buffer, struct pathinfo_s *pathinfo);
 	    unsigned int				(* get_complete_pathlen)(struct context_interface_s *interface, unsigned int len);
 	    struct prefix_s {

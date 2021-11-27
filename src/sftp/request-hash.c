@@ -136,7 +136,7 @@ static struct sftp_request_s *lookup_request_hashtable(struct sftp_client_s *sft
 	sftp_r=get_container_sftp_r(list);
 	tmp=sftp_r->interface;
 
-	if (sftp_r->id==id && ((struct sftp_client_s *)(tmp->buffer)==sftp)) {
+	if (sftp_r->id==id) {
 
 	    remove_list_element(list);
 	    break;
@@ -244,6 +244,7 @@ unsigned char wait_sftp_response(struct sftp_client_s *sftp, struct sftp_request
     sftp_r->timeout.tv_nsec=timeout->tv_nsec;
 
     /* add to the hash table */
+    logoutput_debug("wait_sftp_response: add %u to hashtable", sftp_r->id);
     add_request_hashtable(sftp_r);
 
     signal_lock(signal);

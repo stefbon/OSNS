@@ -53,47 +53,21 @@
 #include "misc.h"
 #include "osns_sftp_subsystem.h"
 #include "protocol.h"
+
 #include "extensions.h"
 #include "extensions/setprefix.h"
 #include "extensions/statvfs.h"
-
-    /* TODO:
-	extension which gives the extension a (free) number 210-255
-	which is much more efficient than using the names
-	something like "mapextension@bononline.nl"
-
-	client sends:
-	- byte 			SSH_FXP_EXTENDED
-	- uint32		id
-	- string		"mapextension@bononline.nl"
-	- string		"name of extension to map"
-
-	server replies:
-	- byte			SSH_FXP_EXTENDED_REPLY
-	- uint32		id
-	- byte			number to use
-
-	or when error:
-	- byte			SSH_FXP_STATUS
-	- uint32		id
-	- uint32		error code
-	- string		error string
-
-	like:
-
-	- SSH_FX_OP_UNSUPPORTED			: extension not supported
-	- SSH_FX_INVALID_PARAMETER		: name of extension to map not reckognized or extension already mapped
-	- SSH_FX_FAILURE			: failed like too many extensions to map
-
-*/
-
+#include "extensions/fsync.h"
+#include "extensions/mapextension.h"
 
 static struct sftp_protocol_extension_s extensions[] = {
-    {.flags=0, .name="setprefix@osns.net", .code=0, .cb=cb_ext_setprefix},
-    {.flags=0, .name="statvfs@openssh.com", .code=0, .cb=cb_ext_statvfs},
-//    {.flags=0, .name="opendir@osns.net", .code=0, .cb=cb_ext_opendir},
-//    {.flags=0, .name="mapextension@osns.net", .code=0, .cb=cb_ext_mapextension}
+    {.flags=0, .name="setprefix@sftp.osns.net", 	.code=0, .cb=cb_ext_setprefix,		.op=sftp_op_setprefix},
+    {.flags=0, .name="statvfs@openssh.com", 		.code=0, .cb=cb_ext_statvfs, 		.op=sftp_op_statvfs},
+    {.flags=0, .name="statvfs@openssh.com", 		.code=0, .cb=cb_ext_fsync, 		.op=sftp_op_fsync},
+    {.flags=0, .name="mapextension@sftp.osns.net", 	.code=0, .cb=cb_ext_mapextension, 	.op=sftp_op_mapextension}
     };
+
+//    {.flags=0, .name="opendir@osns.net", .code=0, .cb=cb_ext_opendir},
 
 static unsigned ext_maxnr=(sizeof(extensions)/sizeof(struct sftp_protocol_extension_s)) - 1; /* starting at zero */
 
@@ -109,8 +83,6 @@ struct sftp_protocol_extension_s *get_next_sftp_protocol_extension(struct sftp_p
 
     } else {
 	unsigned int size=sizeof(extensions);
-
-	getnext:
 
 	if (((char *) ext >= (char *) &extensions[0]) && ((char *) ext < ((char *)&extensions + size))) {
 
@@ -134,6 +106,8 @@ struct sftp_protocol_extension_s *get_next_sftp_protocol_extension(struct sftp_p
 	}
 
     }
+
+    /* only if mask is set and there is an extension found: test it is set in the mask ... */
 
     if (mask && ext) {
 
@@ -175,9 +149,10 @@ void sftp_op_extension(struct sftp_payload_s *payload)
     struct ssh_string_s name=SSH_STRING_INIT;
     unsigned int len=read_ssh_string(payload->data, payload->len, &name);
 
-    /* message should at least have 4 bytes for the name string; an empty name is not allowed */
+    /* message should at least have 4 bytes for the name string; an empty name is not allowed
+	note that no extension data is allowed */
 
-    if (len>4 && len<payload->len) {
+    if (len>4 && len<=payload->len) {
 
 	struct sftp_protocol_extension_s *ext=find_sftp_protocol_extension(&name, payload->sftp->extensions.mask);
 
@@ -185,6 +160,10 @@ void sftp_op_extension(struct sftp_payload_s *payload)
 
 	    (* ext->cb)(payload, len);
 	    return;
+
+	} else {
+
+	    status=SSH_FX_OP_UNSUPPORTED;
 
 	}
 
@@ -194,4 +173,3 @@ void sftp_op_extension(struct sftp_payload_s *payload)
     reply_sftp_status_simple(payload->sftp, payload->id, status);
 
 }
-

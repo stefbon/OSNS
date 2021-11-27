@@ -115,23 +115,14 @@ struct service_context_s *get_next_network_browse_context(struct workspace_mount
 {
     struct service_context_s *root=get_root_context_workspace(workspace);
 
+    logoutput_debug("get_next_network_browse_context");
+
     context=get_next_service_context(root, context, "workspace");
 
     while (context) {
 
-	if (get_workspace_mount_ctx(context) != workspace) {
-
-	    goto next;
-
-	} else if (context->type != SERVICE_CTX_TYPE_BROWSE) {
-
-	    goto next;
-
-	} else if (unique>0 && context->service.browse.unique != unique) {
-
-	    goto next;
-
-	} else if ((networkctx->flags & SERVICE_CTX_FLAGS_REMOTEBACKEND) == (context->flags & SERVICE_CTX_FLAGS_REMOTEBACKEND)) {
+	if ((get_workspace_mount_ctx(context) == workspace) && (context->type == SERVICE_CTX_TYPE_BROWSE) && (unique==0 || context->service.browse.unique == unique) &&
+	    ((networkctx->flags & SERVICE_CTX_FLAGS_REMOTEBACKEND) == (context->flags & SERVICE_CTX_FLAGS_REMOTEBACKEND))) {
 
 	    break;
 
@@ -626,25 +617,35 @@ static struct service_context_s *connect_resource_via_host(struct discover_resou
 
     fd=(* interface->connect)(uid, interface, host, &service);
 
-    if (fd==-1) {
-
-	logoutput_warning("connect_resource_via_host: unable not to connect to %s:%s:%i", ((port->type==_NETWORK_PORT_UDP) ? "udp" : "tcp"), name, port->nr);
-	goto error;
-
-    } else {
+    if (fd>=0) {
 
 	logoutput("connect_resource_via_host: connected to %s:%s:%i", ((port->type==_NETWORK_PORT_UDP) ? "udp" : "tcp"), name, port->nr);
 
+	if ((* interface->start)(interface, fd, NULL)==0) {
+
+	    logoutput("connect_resource_via_host: service started");
+
+	} else {
+
+	    logoutput("connect_resource_via_host: unable to start service");
+	    (* interface->signal_interface)(interface, "command:disconnect:", NULL);
+	    (* interface->signal_interface)(interface, "command:free:", NULL);
+	    fd=-1;
+
+	}
+
     }
 
-    if ((* interface->start)(interface, fd, NULL)==0) {
+    if (fd<0) {
 
-	logoutput("connect_resource_via_host: service started");
+	free_service_context(hostctx);
+	hostctx=NULL;
+	logoutput_warning("connect_resource_via_host: unable not to connect to %s:%s:%i", ((port->type==_NETWORK_PORT_UDP) ? "udp" : "tcp"), name, port->nr);
 
-    } else {
+	/* replace the service context used to connect to resource (example: a ssh server) by a context used to browse only ... */
 
-	logoutput("connect_resource_via_host: unable to start service");
-	goto error;
+	hostctx=create_network_browse_context(workspace, NULL, (networkctx->flags & SERVICE_CTX_FLAGS_REMOTEBACKEND), SERVICE_CTX_TYPE_BROWSE, nethost->unique);
+	if (hostctx==NULL) goto error;
 
     }
 
@@ -702,6 +703,7 @@ static struct service_context_s *connect_resource_via_host(struct discover_resou
 
 	/* make nethost's parent this netgroup */
 	remove_list_element(&nethost->list);
+	logoutput_debug("connect_resource_via_host: add nethost %s to domain resource %s domainname", hostname, domainname);
 	add_list_element_first(&netgroup->service.group.header, &nethost->list);
 	nethost->flags &= ~DISCOVER_RESOURCE_FLAG_NODOMAIN;
 
@@ -720,32 +722,37 @@ static struct service_context_s *connect_resource_via_host(struct discover_resou
 
 	if (domainctx==NULL) {
 
+	    logoutput_debug("connect_resource_via_host: no domainctx found");
+
 	    domainctx=create_network_browse_context(workspace, networkctx, (networkctx->flags & SERVICE_CTX_FLAGS_REMOTEBACKEND), SERVICE_BROWSE_TYPE_NETGROUP, netgroup->unique);
 	    if (domainctx==NULL) {
 
+		logoutput_debug("connect_resource_via_host: unable to create domainctx");
 		unlock_service_context(&ctxlock, "w", "p");
 		goto error;
 
 	    }
 
+	    logoutput_debug("connect_resource_via_host: set parent domainctx");
 	    set_parent_service_context_unlocked(parentctx, domainctx, "add");
 
 	}
 
 	unlock_service_context(&ctxlock, "w", "p");
 	parentctx=domainctx;
+	logoutput_debug("connect_resource_via_host: reset parant and update netgroup refresh");
 	update_service_ctx_refresh(domainctx, &netgroup->changed);
 
     }
 
     /* add to tree only when not done before */
+    logoutput_debug("connect_resource_via_host: set parent");
     set_parent_service_context(parentctx, hostctx);
     return hostctx;
 
     error:
 
     logoutput("connect_resource_via_host: error ... cannot continue");
-    /* additional actions like close and free if hostctx is defined */
     return NULL;
 }
 
@@ -1013,7 +1020,6 @@ void start_discover_service_context_connect(struct workspace_mount_s *workspace)
 			do_discover=1;
 
 		    unlock_service_context(&ctxlock, "w", "c");
-
 		    if (do_discover) start_discover_service_thread(ctx);
 
 		}
