@@ -66,6 +66,8 @@ void cb_ext_statvfs(struct sftp_payload_s *payload, unsigned int pos)
     struct sftp_subsystem_s *sftp=payload->sftp;
     unsigned int status=SSH_FX_BAD_MESSAGE;
 
+    logoutput_debug("cb_ext_statvfs (%i) pos %i payload len %i", (int) gettid(), pos, payload->len);
+
     if (payload->len >= pos + 4) {
 	char *data=payload->data;
 	struct ssh_string_s path=SSH_STRING_INIT;
@@ -75,7 +77,7 @@ void cb_ext_statvfs(struct sftp_payload_s *payload, unsigned int pos)
 	path.ptr=&data[pos];
 	pos+=path.len;
 
-	if (pos + path.len + 8 <= payload->len) {
+	if (pos <= payload->len) {
 	    struct system_statvfs_s statvfs;
 	    struct fs_location_path_s location=FS_LOCATION_PATH_INIT;
 	    struct convert_sftp_path_s convert;
@@ -87,7 +89,7 @@ void cb_ext_statvfs(struct sftp_payload_s *payload, unsigned int pos)
 	    (* convert.complete)(sftp, &path, &location);
 	    result=system_getstatvfs(&location, &statvfs);
 
-	    logoutput("cb_ext_statvfs (%i) path %.*s %i", (int) gettid(), location.len, location.ptr, result);
+	    logoutput_debug("cb_ext_statvfs (%i) path %.*s %i", (int) gettid(), location.len, location.ptr, result);
 
 	    if (result==0) {
 		char data[88];
