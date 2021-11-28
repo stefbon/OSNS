@@ -111,7 +111,7 @@ int get_target_unix_symlink(char *path, unsigned int len, unsigned int extra, st
 
 #endif
 
-static int get_target_fs_socket(struct fs_socket_s *socket, char *name, struct fs_location_path_s *result)
+int get_target_fs_socket(struct fs_socket_s *socket, char *name, struct fs_location_path_s *result)
 {
     unsigned int extra=(name) ? strlen(name) : 0;
     int tmp=-1;
@@ -125,7 +125,11 @@ static int get_target_fs_socket(struct fs_socket_s *socket, char *name, struct f
     if (tmp>0) {
 
 	if (get_target_unix_symlink(procpath, (unsigned int) tmp, extra + 2, result)==0) {
-	    unsigned int len=append_location_path(result, 'c', name);
+
+	    if (name) {
+		unsigned int len=append_location_path(result, 'c', name);
+
+	    }
 
 	    tmp=(int) result->len;
 
@@ -136,6 +140,35 @@ static int get_target_fs_socket(struct fs_socket_s *socket, char *name, struct f
 #endif
 
     return tmp;
+
+}
+
+int get_realpath_fs_location_path(struct fs_location_path_s *result, struct fs_location_path_s *path)
+{
+
+#ifdef __linux__
+
+    char *target=NULL;
+    char tmp[path->len + 1];
+
+    memcpy(tmp, path->ptr, path->len);
+    tmp[path->len]='\0';
+
+    if (realpath(tmp, &target)) {
+
+	logoutput("get_realpath_fs_location_path: path %s realpath %s", tmp, target);
+
+	result->ptr=target;
+	result->len=strlen(target);
+	result->size=result->len+1;
+	result->flags=FS_LOCATION_PATH_FLAG_PTR_ALLOC;
+	return 0;
+
+    }
+
+#endif
+
+    return -1;
 
 }
 

@@ -35,6 +35,7 @@ struct fs_location_path_s {
 #ifdef __linux__
 
 #define FS_LOCATION_PATH_INIT					{0, NULL, 0, 0}
+#define FS_LOCATION_PATH_SET(a, b)				{.flags=0, .size=(a ? a : strlen(b) + 1), .len=0, .ptr=b}
 
 #endif
 
@@ -56,5 +57,8 @@ unsigned int copy_unix_location_path(struct fs_location_path_s *path, char *buff
 
 char *get_filename_location_path(struct fs_location_path_s *path);
 void detach_filename_location_path(struct fs_location_path_s *path, struct ssh_string_s *filename);
+
+unsigned char test_location_path_absolute(struct fs_location_path_s *path);
+unsigned char test_location_path_subdirectory(struct fs_location_path_s *path, const unsigned char type, void *ptr);
 
 #endif

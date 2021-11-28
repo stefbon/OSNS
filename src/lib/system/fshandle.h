@@ -106,6 +106,7 @@ struct dirhandle_s {
     int							(* unlinkat)(struct dirhandle_s *dh, const char *name);
     int							(* rmdirat)(struct dirhandle_s *dh, const char *name);
     int							(* fsyncdir)(struct dirhandle_s *dh, unsigned int flags);
+    ssize_t						(* readlinkat)(struct dirhandle_s *dh, const char *name, struct fs_location_path_s *target);
     void						(* close)(struct dirhandle_s *dh);
     void						(* set_keep_dentry)(struct dirhandle_s *dh);
     struct fs_socket_s					socket;

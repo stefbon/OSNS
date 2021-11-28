@@ -63,5 +63,6 @@ void system_close(struct fs_socket_s *s);
 
 int system_unlinkat(struct fs_socket_s *ref, const char *name);
 int system_rmdirat(struct fs_socket_s *ref, const char *name);
+int system_readlinkat(struct fs_socket_s *ref, const char *name, struct fs_location_path_s *target);
 
 #endif

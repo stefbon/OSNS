@@ -74,6 +74,12 @@ static int _rmat_error(struct dirhandle_s *dh, const char *name)
     return -1;
 }
 
+static ssize_t _readlinkat_error(struct dirhandle_s *dh, const char *name, struct fs_location_path_s *t)
+{
+    logoutput_warning("_readlink_at_error: handle not open");
+    return -1;
+}
+
 static int _fsyncdir_error(struct dirhandle_s *dh, unsigned int flags)
 {
     logoutput_warning("_fsyncdir_error: handle not open");
@@ -175,6 +181,11 @@ static int _unlinkat_handle(struct dirhandle_s *dh, const char *name)
 static int _rmdirat_handle(struct dirhandle_s *dh, const char *name)
 {
     return system_rmdirat(&dh->socket, name);
+}
+
+static ssize_t _readlinkat_handle(struct dirhandle_s *dh, const char *name, struct fs_location_path_s *t)
+{
+    return system_readlinkat(&dh->socket, name, t);
 }
 
 static int _fsyncdir_handle(struct dirhandle_s *dh, unsigned int flags)

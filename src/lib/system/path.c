@@ -51,20 +51,33 @@ unsigned int append_location_path_get_required_size(struct fs_location_path_s *p
 {
     unsigned int len=0;
 
-#ifdef __linux__
-
     switch (type) {
 
 	case 'c' : {
 	    char *name=(char *) ptr;
 
 	    len=path->len + 2 + strlen(name);
+	    break;
+
+	}
+
+	case 'p' : {
+	    struct fs_location_path_s *other=(struct fs_location_path_s *) ptr;
+
+	    len=path->len + 2 + other->len;
+	    break;
+
+	}
+
+	case 's' : {
+	    struct ssh_string_s *other=(struct ssh_string_s *) ptr;
+
+	    len=path->len + 2 + other->len;
+	    break;
 
 	}
 
     }
-
-#endif
 
     return len;
 
@@ -112,6 +125,40 @@ unsigned int combine_location_path(struct fs_location_path_s *result, struct fs_
 	    if (tmp<0) {
 
 		logoutput("combine_location_path: error %i appending %s (%s)", errno, name, strerror(errno));
+		return 0;
+
+	    }
+#endif
+
+	}
+
+	case 's' : {
+	    struct ssh_string_s *other=(struct ssh_string_s *) ptr;
+
+#ifdef __linux__
+
+	    tmp=snprintf(result->ptr, result->size, "%.*s/%.*s", path->len, path->ptr, other->len, other->ptr);
+
+	    if (tmp<0) {
+
+		logoutput("combine_location_path: error %i appending %.*s (%s)", errno, other->len, other->ptr, strerror(errno));
+		return 0;
+
+	    }
+#endif
+
+	}
+
+	case 'p' : {
+	    struct fs_location_path_s *other=(struct fs_location_path_s *) ptr;
+
+#ifdef __linux__
+
+	    tmp=snprintf(result->ptr, result->size, "%.*s/%.*s", path->len, path->ptr, other->len, other->ptr);
+
+	    if (tmp<0) {
+
+		logoutput("combine_location_path: error %i appending %.*s (%s)", errno, other->len, other->ptr, strerror(errno));
 		return 0;
 
 	    }
@@ -350,3 +397,55 @@ void detach_filename_location_path(struct fs_location_path_s *path, struct ssh_s
     }
 
 }
+
+unsigned char test_location_path_absolute(struct fs_location_path_s *path)
+{
+
+#ifdef __linux__
+
+    return ((path->ptr[0]=='/') ? 1 : 0);
+
+#else
+
+    return 0;
+
+#endif
+
+}
+
+unsigned char test_location_path_subdirectory(struct fs_location_path_s *path, const unsigned char type, void *ptr)
+{
+    unsigned char result=0;
+
+    switch (type) {
+
+	case 's' : {
+	    struct ssh_string_s *prefix=(struct ssh_string_s *) ptr;
+
+#ifdef __linux__
+
+	    result=(((path->len > prefix->len) && (strncmp(path->ptr, prefix->ptr, prefix->len)==0) && (path->ptr[prefix->len]=='/')) ? 1 : 0);
+
+#endif
+
+	    break;
+	}
+
+	case 'p' : {
+	    struct fs_location_path_s *prefix=(struct fs_location_path_s *) ptr;
+
+#ifdef __linux__
+
+	    result=(((path->len > prefix->len) && (strncmp(path->ptr, prefix->ptr, prefix->len)==0) && (path->ptr[prefix->len]=='/')) ? 1 : 0);
+
+#endif
+
+	    break;
+	}
+
+    }
+
+    return result;
+
+}
+

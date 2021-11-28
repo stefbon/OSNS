@@ -96,7 +96,8 @@ struct sftp_protocol_s {
 };
 
 #define SFTP_PREFIX_FLAG_IGNORE_XDEV_SYMLINKS		1
-#define SFTP_PREFIX_FLAG_IGNORE_SPECIAL_FILES		2
+#define SFTP_PREFIX_FLAG_IGNORE_BROKEN_SYMLINKS		2
+#define SFTP_PREFIX_FLAG_IGNORE_SPECIAL_FILES		4
 
 struct convert_sftp_path_s {
     void						(* complete)(struct sftp_subsystem_s *sftp, struct ssh_string_s *path, struct fs_location_path_s *l);

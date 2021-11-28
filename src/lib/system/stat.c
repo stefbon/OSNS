@@ -380,6 +380,8 @@ int system_fgetstatat(struct fs_socket_s *socket, char *name, unsigned int mask,
     int flags=(name) ? 0 : AT_EMPTY_PATH;
     int fd=get_unix_fd_fs_socket(socket);
 
+    flags |= ((stat->flags & SYSTEM_STAT_FLAG_FOLLOW_SYMLINK) ? 0 : AT_SYMLINK_NOFOLLOW);
+
     if (statx(fd, name, flags, mask, stx)==-1) {
 
 	logoutput_warning("system_fgetstatat: error %i on fd %i (%s)", errno, fd, strerror(errno));
@@ -1021,6 +1023,8 @@ int system_fgetstatat(struct fs_socket_s *socket, char *name, unsigned int mask,
     int flags=(name) ? 0 : AT_EMPTY_PATH;
     int fd=get_unix_fd_fssocket(socket);
 
+    flags |= ((stat->flags & SYSTEM_STAT_FLAG_FOLLOW_SYMLINK) ? 0 : AT_SYMLINK_NOFOLLOW);
+
     if (fstatat(fd, name, st, flags)==-1) {
 
 	logoutput_warning("system_fgetstatat: error %i on fd %i (%s)", errno, fd, strerror(errno));
@@ -1378,6 +1382,23 @@ int system_stat_test_ISDIR(struct system_stat_s *stat)
 #endif
 
 }
+
+int system_stat_test_ISLNK(struct system_stat_s *stat)
+{
+
+#ifdef __linux__
+
+    return S_ISLNK(stat->sst_mode);
+
+#else
+
+    return 0;
+
+#endif
+
+}
+
+
 
 int system_getstatvfs(struct fs_location_path_s *path, struct system_statvfs_s *s)
 {

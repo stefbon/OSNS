@@ -210,6 +210,62 @@ static unsigned int get_write_max_buffersize(struct attr_context_s *actx, struct
 
 }
 
+static int check_target_symlink(struct sftp_subsystem_s *sftp, struct dirhandle_s *dh, char *name)
+{
+    struct fs_location_path_s target=FS_LOCATION_PATH_INIT;
+    int len=0;
+    int result=0;
+
+    len=(* dh->readlinkat)(dh, name, &target);
+
+    if (len>0) {
+
+	if (test_location_path_absolute(&target)) {
+	    struct fs_location_path_s path=FS_LOCATION_PATH_INIT;
+
+	    if (get_realpath_fs_location_path(&path, &target)==0) {
+
+		/* absolute path, compare with prefix */
+
+		result=(int) test_location_path_subdirectory(&path, 's', (void *) &sftp->prefix.path);
+
+	    }
+
+	    clear_location_path(&path);
+
+	} else {
+	    struct fs_location_path_s root=FS_LOCATION_PATH_INIT;
+	    int tmp=get_target_fs_socket(&dh->socket, NULL, &root);
+
+	    if (tmp>0) {
+		unsigned int len=append_location_path_get_required_size(&root, 'p', &target);
+		char extra[len];
+		struct fs_location_path_s full=FS_LOCATION_PATH_SET(len, extra);
+		struct fs_location_path_s test=FS_LOCATION_PATH_INIT;
+
+		len=combine_location_path(&full, &root, 'd', &target);
+
+		if (get_realpath_fs_location_path(&test, &full)==0) {
+
+		    result=(int) test_location_path_subdirectory(&test, 's', (void *) &sftp->prefix.path);
+
+		}
+
+		clear_location_path(&test);
+
+	    }
+
+	    clear_location_path(&root);
+
+	}
+
+    }
+
+    clear_location_path(&target);
+    return result;
+
+}
+
 static void _sftp_op_readdir(struct sftp_subsystem_s *sftp, struct commonhandle_s *handle, struct sftp_payload_s *payload)
 {
     struct dirhandle_s *dh=&handle->type.dir;
@@ -241,7 +297,19 @@ static void _sftp_op_readdir(struct sftp_subsystem_s *sftp, struct commonhandle_
 
 	if (dentry) {
 
+	    memset(&stat, 0, sizeof(struct system_stat_s));
+	    /* test the symlink target does exist ... do not list broken symlinks */
+	    stat.flags = SYSTEM_STAT_FLAG_FOLLOW_SYMLINK;
+
 	    if ((* dh->fstatat)(dh, dentry->name, mask, &stat)==0) {
+
+		if (system_stat_test_ISLNK(&stat) && (sftp->prefix.flags & (SFTP_PREFIX_FLAG_IGNORE_XDEV_SYMLINKS))) {
+
+		    /* if target points outside */
+
+		    if (check_target_symlink(sftp, dh, dentry->name)==0) continue;
+
+		}
 
 		/* write name as ssh string to temporary buffer */
 

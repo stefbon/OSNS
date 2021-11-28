@@ -335,3 +335,47 @@ int system_rmdirat(struct fs_socket_s *ref, const char *name)
 #endif
 
 }
+
+int system_readlinkat(struct fs_socket_s *ref, const char *name, struct fs_location_path_s *target)
+{
+
+#ifdef __linux__
+
+    int len=-1;
+    unsigned int size=512;
+
+    target->ptr=realloc(target->ptr, size);
+    if (target->ptr==NULL) return -1;
+    target->len=0;
+    target->size=size;
+    target->flags=FS_LOCATION_PATH_FLAG_PTR_ALLOC;
+
+    while (size < 4096) {
+
+	len=readlinkat(ref->fd, name, target->ptr, size);
+
+	if (len==-1) {
+
+	    return -errno;
+
+	} else if (len<size) {
+
+	    target->len=len;
+	    target->ptr[len]='\0';
+	    break;
+
+	}
+
+	size+=512;
+
+    }
+
+    return len;
+
+#else
+
+    return -1;
+
+#endif
+
+}

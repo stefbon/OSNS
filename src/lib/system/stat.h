@@ -24,6 +24,8 @@
 #include "path.h"
 #include "open.h"
 
+#define SYSTEM_STAT_FLAG_FOLLOW_SYMLINK		1
+
 #define SYSTEM_STAT_INDEX_TYPE			0
 #define SYSTEM_STAT_INDEX_MODE			1
 #define SYSTEM_STAT_INDEX_NLINK			2
@@ -70,6 +72,7 @@ struct system_dev_s {
 #define SYSTEM_STAT_ALL				(SYSTEM_STAT_BASIC_STATS | SYSTEM_STAT_BTIME | SYSTEM_STAT_MNTID)
 
 struct system_stat_s {
+	unsigned char	flags;
 	unsigned int	mask;
 	struct statx 	stx;
 };
@@ -108,6 +111,7 @@ struct system_stat_s {
 #define SYSTEM_STAT_ALL				SYSTEM_STAT_BASIC_STATS
 
 struct system_stat_s {
+	unsigned char	flags;
 	unsigned int	mask;
 	struct stat	st;
 	struct timespec	dummy
@@ -255,5 +259,6 @@ void calc_blocks_system_stat(struct system_stat_s *stat);
 
 uint32_t get_unique_system_dev(struct system_dev_s *dev);
 int system_stat_test_ISDIR(struct system_stat_s *stat);
+int system_stat_test_ISLNK(struct system_stat_s *stat);
 
 int system_getstatvfs(struct fs_location_path_s *path, struct system_statvfs_s *s);
