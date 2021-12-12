@@ -222,7 +222,7 @@ void write_ssh_subsystem_connection_signal(int fd, void *ptr, struct event_s *ev
     return;
 
     close:
-    finish_ssh_subsystem_connection_eventloop(-1, connection);
+    finish_ssh_subsystem_connection(-1, connection);
     logoutput("read_ssh_subsystem_connection_signal: disconnected.. exit..");
     stop_beventloop(NULL);
     return;
