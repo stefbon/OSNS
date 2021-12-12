@@ -67,7 +67,7 @@ void _fs_workspace_opendir(struct fuse_opendir_s *opendir, struct fuse_request_s
     reply_VFS_data(request, (char *) &open_out, sizeof(open_out));
 
     logoutput("_fs_workspace_opendir: ino %li", get_ino_system_stat(&opendir->inode->stat));
-    directory=get_directory(opendir->inode);
+    directory=get_directory(workspace, opendir->inode, 0);
 
     /* here build the list of direntries */
 
@@ -114,30 +114,39 @@ void _fs_workspace_opendir(struct fuse_opendir_s *opendir, struct fuse_request_s
 	    if (fs) {
 		unsigned int len=(* fs->get_name)(ctx, NULL, 0);
 		char buffer[len+1];
-		struct entry_s *entry=NULL;
 
 		memset(buffer, 0, len+1);
 		len=(* fs->get_name)(ctx, buffer, len);
 
-		if (len>0) entry=install_virtualnetwork_map(ctx, inode->alias, buffer, what, NULL);
+		if (len>0) {
 
-		if (entry) {
-		    struct data_link_s *link=NULL;
-		    struct directory_s *d=NULL;
+		    struct entry_s *entry=install_virtualnetwork_map(ctx, inode->alias, buffer, what, NULL);
 
-		    queue_fuse_direntry(opendir, entry);
+		    if (entry) {
+			struct directory_s *d=NULL;
 
-		    fs_get_data_link(entry->inode, &link);
+			queue_fuse_direntry(opendir, entry);
 
-		    if (link->type==0) {
+			d=get_directory(workspace, entry->inode, 0);
 
-			link->type=DATA_LINK_TYPE_CONTEXT;
-			link->link.ptr=(void *) ctx;
+			if (d) {
+
+			    set_directory_pathcache_zero(d);
+
+			    pthread_mutex_lock(&workspace->mutex);
+
+			    if (d->ptr==NULL) {
+
+				d->ptr=&ctx->link;
+				ctx->link.refcount++;
+
+			    }
+
+			    pthread_mutex_unlock(&workspace->mutex);
+
+			}
 
 		    }
-
-		    d=get_directory(entry->inode);
-		    if (d) set_directory_pathcache_zero(d);
 
 		}
 
@@ -151,9 +160,6 @@ void _fs_workspace_opendir(struct fuse_opendir_s *opendir, struct fuse_request_s
 
     }
 
-    logoutput("_fs_workspace_opendir: ino %li finish direntry", get_ino_system_stat(&opendir->inode->stat));
-
-    // set_flag_fuse_opendir(opendir, _FUSE_OPENDIR_FLAG_READDIR_FINISH);
     finish_get_fuse_direntry(opendir);
 
     if (parent->type==SERVICE_CTX_TYPE_WORKSPACE) {

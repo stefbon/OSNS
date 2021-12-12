@@ -21,6 +21,7 @@
 
 #include "misc.h"
 #include "network.h"
+#include "datatypes.h"
 
 #define _INTERFACE_TYPE_SSH_SESSION			1
 #define _INTERFACE_TYPE_SSH_CHANNEL			2
@@ -110,9 +111,10 @@ struct service_address_s {
 struct context_interface_s {
     unsigned char					type;
     unsigned int					flags;
+    unsigned int					unique;
     int 						(* connect)(uid_t uid, struct context_interface_s *interface, struct host_address_s *address, struct service_address_s *service);
     int							(* start)(struct context_interface_s *interface, int fd, struct ctx_option_s *option);
-    int							(* free)(struct context_interface_s *interface, const char *what);
+    void						(* free)(struct context_interface_s *interface);
     int							(* signal_context)(struct context_interface_s *interface, const char *what, struct ctx_option_s *option);
     int							(* signal_interface)(struct context_interface_s *interface, const char *what, struct ctx_option_s *option);
     char						*(* get_interface_buffer)(struct context_interface_s *interface);
@@ -131,8 +133,7 @@ struct context_interface_s {
 	    unsigned int				(* get_complete_pathlen)(struct context_interface_s *interface, unsigned int len);
 	    struct prefix_s {
 		unsigned char				type;
-		char					*path;
-		unsigned int				len;
+		struct ssh_string_s			path;
 	    } prefix;
 	} sftp;
 	struct _ssh_channel_s {

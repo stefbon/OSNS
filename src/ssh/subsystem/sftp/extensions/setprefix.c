@@ -103,7 +103,7 @@ void cb_ext_setprefix(struct sftp_payload_s *payload, unsigned int pos)
 	    int result=0;
 	    unsigned int flags=get_uint32(&data[pos]);
 
-	    set_buffer_location_path(&location, tmp, size+1, 0);
+	    assign_buffer_location_path(&location, tmp, size+1);
 	    (* convert.complete)(sftp, &path, &location);
 	    result=system_getstat(&location, SYSTEM_STAT_TYPE | SYSTEM_STAT_MODE, &stat);
 

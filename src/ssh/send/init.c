@@ -61,8 +61,7 @@ int init_ssh_connection_send(struct ssh_connection_s *connection)
     send->flags=0;
     pthread_mutex_init(&send->mutex, NULL);
     pthread_cond_init(&send->cond, NULL);
-    send->newkeys.tv_sec=0;
-    send->newkeys.tv_nsec=0;
+    set_system_time(&send->newkeys, 0, 0);
     set_ssh_send_behaviour(connection, "default"); /* start with serialized handling of the send queue */
     send->sequence_number=0;
     init_list_header(&send->senders, SIMPLE_LIST_TYPE_EMPTY, NULL);

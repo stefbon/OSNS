@@ -278,10 +278,8 @@ static struct discover_resource_s *create_discover_resource(unsigned char type, 
 	r->type=type;
 	r->flags=0;
 	init_list_element(&r->list, NULL);
-	r->found.tv_sec=0;
-	r->found.tv_nsec=0;
-	r->changed.tv_sec=0;
-	r->changed.tv_nsec=0;
+	set_system_time(&r->found, 0, 0);
+	set_system_time(&r->changed, 0, 0);
 
 	if (type==DISCOVER_RESOURCE_TYPE_NETWORK_GROUP) {
 
@@ -297,8 +295,7 @@ static struct discover_resource_s *create_discover_resource(unsigned char type, 
 	} else if (type==DISCOVER_RESOURCE_TYPE_NETWORK_SOCKET) {
 
 	    init_list_header(&r->service.socket.header, SIMPLE_LIST_TYPE_EMPTY, NULL);
-	    r->service.socket.refresh.tv_sec=0;
-	    r->service.socket.refresh.tv_nsec=0;
+	    set_system_time(&r->service.socket.refresh, 0, 0);
 
 	}
 
@@ -400,16 +397,16 @@ void free_discover_resource(struct discover_resource_s *r)
 
 }
 
-static void update_single_timespec(struct timespec *changed, struct timespec *r)
+static void update_single_timespec(struct system_timespec_s *changed, struct system_timespec_s *r)
 {
-    if (r->tv_sec < changed->tv_sec || ((r->tv_sec == changed->tv_sec) && r->tv_nsec < changed->tv_nsec)) memcpy(r, changed, sizeof(struct timespec));
+    if (compare_system_times(r, changed)==1) copy_system_time(r, changed);
 }
 
 static void update_changed_times_resources(struct discover_resource_s *r_netsocket)
 {
     struct discover_resource_s *r_netgroup=NULL;
     struct discover_resource_s *r_nethost=NULL;
-    struct timespec *changed=NULL;
+    struct system_timespec_s *changed=NULL;
 
     if (r_netsocket==NULL || r_netsocket->type != DISCOVER_RESOURCE_TYPE_NETWORK_SOCKET) return;
     changed=&r_netsocket->changed;
@@ -420,8 +417,8 @@ static void update_changed_times_resources(struct discover_resource_s *r_netsock
 
     r_netgroup=get_discover_netgroup(r_nethost);
     if (r_netgroup==NULL) return;
-    update_single_timespec(changed, &r_netgroup->changed);
 
+    update_single_timespec(changed, &r_netgroup->changed);
     update_single_timespec(changed, &network.changed);
 }
 
@@ -486,8 +483,8 @@ void add_net_service(unsigned int method, char *name, struct host_address_s *hos
 		resource_netgroup->unique=network.ctr;
 		network.ctr++;
 
-		get_current_time(&resource_netgroup->found);
-		memcpy(&resource_netgroup->changed, &resource_netgroup->found, sizeof(struct timespec));
+		get_current_time_system_time(&resource_netgroup->found);
+		copy_system_time(&resource_netgroup->changed, &resource_netgroup->found);
 
 		strncpy(resource_netgroup->service.group.name, domain, HOST_HOSTNAME_FQDN_MAX_LENGTH);
 		add_list_element_last(header, &resource_netgroup->list);
@@ -534,8 +531,8 @@ void add_net_service(unsigned int method, char *name, struct host_address_s *hos
 
 	    resource_nethost->flags = (resource_netgroup) ? 0 : DISCOVER_RESOURCE_FLAG_NODOMAIN;
 
-	    get_current_time(&resource_nethost->found);
-	    memcpy(&resource_nethost->changed, &resource_nethost->found, sizeof(struct timespec));
+	    get_current_time_system_time(&resource_nethost->found);
+	    copy_system_time(&resource_nethost->changed, &resource_nethost->found);
 
 	    memcpy(&resource_nethost->service.host.address, host, sizeof(struct host_address_s));
 	    strcpy(resource_nethost->service.host.address.hostname, hostname);
@@ -583,8 +580,8 @@ void add_net_service(unsigned int method, char *name, struct host_address_s *hos
 
 	    resource_netsocket->service.socket.port.nr=port->nr;
 	    resource_netsocket->service.socket.port.type=port->type;
-	    get_current_time(&resource_netsocket->found);
-	    memcpy(&resource_netsocket->changed, &resource_netsocket->found, sizeof(struct timespec));
+	    get_current_time_system_time(&resource_netsocket->found);
+	    copy_system_time(&resource_netsocket->changed, &resource_netsocket->found);
 
 	    add_list_element_first(header, &resource_netsocket->list);
 	    add_resource_hash(resource_netsocket);
@@ -629,11 +626,11 @@ void add_net_service(unsigned int method, char *name, struct host_address_s *hos
 /* get all the current services
 */
 
-void get_net_services(struct timespec *since)
+void get_net_services(struct system_timespec_s *since)
 {
     struct list_element_s *slist=NULL;
     struct simple_lock_s rlock;
-    struct timespec dummy;
+    struct system_timespec_s dummy=SYSTEM_TIME_INIT;
     void *index=NULL;
     unsigned int hashvalue=0;
     struct discover_resource_s *resource=NULL;
@@ -641,14 +638,7 @@ void get_net_services(struct timespec *since)
     logoutput("get_net_services");
 
     init_simple_readlock(&network.locking, &rlock);
-
-    if (since==NULL) {
-
-	dummy.tv_sec=0;
-	dummy.tv_nsec=0;
-	since=&dummy;
-
-    }
+    if (since==NULL) since=&dummy;
 
     processlist:
 
@@ -676,7 +666,7 @@ void get_net_services(struct timespec *since)
 
     } else {
 
-	if (resource->changed.tv_sec > since->tv_sec || (resource->changed.tv_sec == since->tv_sec && resource->changed.tv_nsec > since->tv_nsec)) {
+	if (compare_system_times(since, &resource->changed)==1) {
 
 	    /* service is "new" */
 
@@ -737,8 +727,7 @@ int init_discover_group(void (* cb)(struct discover_resource_s *r, void *ptr), v
     network.ctr=1;
     init_list_header(&network.header, SIMPLE_LIST_TYPE_EMPTY, NULL);
     init_simple_locking(&network.locking, 0);
-    network.changed.tv_sec=0;
-    network.changed.tv_nsec=0;
+    set_system_time(&network.changed, 0, 0);
     network.process_new_service=cb;
     network.ptr=ptr;
     for (unsigned int i=0; i<DISCOVER_NETWORK_HASHSIZE; i++) init_list_header(&network.hash[i], SIMPLE_LIST_TYPE_EMPTY, NULL);
@@ -752,8 +741,8 @@ int init_discover_group(void (* cb)(struct discover_resource_s *r, void *ptr), v
     nodomain.flags=0;
     init_list_header(&nodomain.service.group.header, SIMPLE_LIST_TYPE_EMPTY, NULL);
     init_list_element(&nodomain.list, NULL);
-    get_current_time(&nodomain.found);
-    memcpy(&nodomain.changed, &nodomain.found, sizeof(struct timespec));
+    get_current_time_system_time(&nodomain.found);
+    copy_system_time(&nodomain.changed, &nodomain.found);
     nodomain.flags=DISCOVER_RESOURCE_FLAG_NODOMAIN;
 
     add_list_element_first(&network.header, &nodomain.list);
@@ -850,7 +839,7 @@ struct discover_resource_s *get_next_discover_resource(struct discover_resource_
 
 }
 
-struct timespec *get_discover_network_changed(unsigned char type, uint32_t unique)
+struct system_timespec_s *get_discover_network_changed(unsigned char type, uint32_t unique)
 {
 
     if (type==0) {

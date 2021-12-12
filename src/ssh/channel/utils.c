@@ -66,10 +66,10 @@ const char *get_openfailure_reason(unsigned int reason)
     return "Open unknown failure.";
 }
 
-void get_channel_expire_init(struct ssh_channel_s *channel, struct timespec *expire)
+void get_channel_expire_init(struct ssh_channel_s *channel, struct system_timespec_s *expire)
 {
-    get_current_time(expire);
-    expire->tv_sec+=4;
+    get_current_time_system_time(expire);
+    system_time_add(expire, SYSTEM_TIME_ADD_ZERO, 4);
 }
 
 unsigned int get_channel_interface_info(struct ssh_channel_s *channel, char *buffer, unsigned int size)

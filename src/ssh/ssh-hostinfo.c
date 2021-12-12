@@ -51,73 +51,45 @@
 #include "ssh-utils.h"
 #include "users/mapping.h"
 
-static void correct_time_none(struct ssh_session_s *session, struct timespec *time)
+static void correct_time_none(struct ssh_session_s *session, struct system_timespec_s *time)
 {
     /* does nothing */
 }
 
 /* correct the time when difference is positive (other side is behind) */
 
-static void correct_time_positive(struct ssh_session_s *session, struct timespec *time)
+static void correct_time_positive(struct ssh_session_s *session, struct system_timespec_s *time)
 {
-    struct ssh_hostinfo_s *hostinfo=&session->hostinfo;
-
-    time->tv_nsec+=hostinfo->delta.tv_nsec;
-
-    if (time->tv_nsec>1000000000) {
-
-	time->tv_sec++;
-	time->tv_nsec-=1000000000;
-
-    }
-
-    time->tv_sec+=hostinfo->delta.tv_sec;
-
+    system_time_add_time(time, &session->hostinfo.delta);
 }
 
 /* correct the time when difference is negative (other side is ahead) */
 
-static void correct_time_negative(struct ssh_session_s *session, struct timespec *time)
+static void correct_time_negative(struct ssh_session_s *session, struct system_timespec_s *time)
 {
-    struct ssh_hostinfo_s *hostinfo=&session->hostinfo;
-
-    time->tv_nsec-=hostinfo->delta.tv_nsec;
-
-    if (time->tv_nsec<0) {
-
-	time->tv_sec+=1000000000;
-	time->tv_nsec=-time->tv_nsec;
-
-    }
-
-    time->tv_sec-=hostinfo->delta.tv_sec;
-
+    system_time_substract_time(time, &session->hostinfo.delta);
 }
 
 /* set functions used when time on server is behind compared to the client*/
 
-void set_time_correction_server_behind(struct ssh_session_s *session, struct timespec *delta)
+void set_time_correction_server_behind(struct ssh_session_s *session, struct system_timespec_s *delta)
 {
     struct ssh_hostinfo_s *hostinfo=&session->hostinfo;
 
     hostinfo->correct_time_s2c=correct_time_positive;
     hostinfo->correct_time_c2s=correct_time_negative;
-    hostinfo->delta.tv_sec=delta->tv_sec;
-    hostinfo->delta.tv_nsec=delta->tv_nsec;
-
+    copy_system_time(&hostinfo->delta, delta);
 }
 
 /* set functions used when time on server is ahead compared the client*/
 
-void set_time_correction_server_ahead(struct ssh_session_s *session, struct timespec *delta)
+void set_time_correction_server_ahead(struct ssh_session_s *session, struct system_timespec_s *delta)
 {
     struct ssh_hostinfo_s *hostinfo=&session->hostinfo;
 
     hostinfo->correct_time_s2c=correct_time_negative;
     hostinfo->correct_time_c2s=correct_time_positive;
-    hostinfo->delta.tv_sec=delta->tv_sec;
-    hostinfo->delta.tv_nsec=delta->tv_nsec;
-
+    copy_system_time(&hostinfo->delta, delta);
 }
 
 /* initialize the mapping of the local users to remote users */
@@ -129,8 +101,9 @@ void init_ssh_hostinfo(struct ssh_session_s *session)
     /* correction function for differences in time */
 
     hostinfo->flags=0;
-    hostinfo->delta.tv_sec=0;
-    hostinfo->delta.tv_nsec=0;
+    hostinfo->delta.st_sec=0;
+    hostinfo->delta.st_nsec=0;
+
     hostinfo->correct_time_s2c=correct_time_none;
     hostinfo->correct_time_c2s=correct_time_none;
 
@@ -147,36 +120,34 @@ void free_ssh_hostinfo(struct ssh_session_s *ssh_session)
 /*
     after receiving time from server calculate the time difference to apply to time related messages */
 
-static void set_time_delta(struct ssh_session_s *session, struct timespec *send, struct timespec *recv, struct timespec *output)
+static void set_time_delta(struct ssh_session_s *session, struct system_timespec_s *send, struct system_timespec_s *recv, struct system_timespec_s *server)
 {
-    struct timespec delta;
-    double send_d=send->tv_sec + ((double) send->tv_nsec ) / 1000000000;
-    double recv_d=recv->tv_sec + ((double) recv->tv_nsec ) / 1000000000;
-    double output_d=output->tv_sec + ((double) output->tv_nsec ) / 1000000000;
-    double delta_d=0;
+    struct system_timespec_s delta=SYSTEM_TIME_INIT;
+    double send_d=convert_system_time_to_double(send);
+    double recv_d=convert_system_time_to_double(recv);
+    double server_d=convert_system_time_to_double(server);
+    double average_d=0;
 
-    delta_d=((recv_d + send_d ) / 2 ) - output_d;
+    /* send_d and recv_d undicate the time (in double format) when sending and receiving the time correction message
+	server_d is the time (double_d) the server has set when responding to this message
+	the idea is that the average of the first two is about the same as server_d */
 
-    logoutput("set_time_delta: out %.3f send %.3f recv %.3f delta %.3f", output_d, send_d, recv_d, delta_d);
+    average_d=((recv_d + send_d) / 2 );
 
-    if (delta_d>0) {
+    logoutput("set_time_delta: out %.3f send %.3f recv %.3f delta %.3f", server_d, send_d, recv_d, average_d);
+
+    if (average_d > server_d) {
 
 	/* server is behind */
 
-	delta.tv_sec=(time_t) delta_d;
-	delta.tv_nsec=(long) ((delta_d - delta.tv_sec) * 1000000000);
-
+	convert_system_time_from_double(&delta, (average_d - server_d));
 	set_time_correction_server_behind(session, &delta);
 
-    } else if (delta_d<0) {
+    } else {
 
 	/* server is ahead */
 
-	delta_d=abs(delta_d);
-
-	delta.tv_sec=(time_t) delta_d;
-	delta.tv_nsec=(long) ((delta_d - delta.tv_sec) * 1000000000);
-
+	convert_system_time_from_double(&delta, (server_d - average_d));
 	set_time_correction_server_ahead(session, &delta);
 
     }
@@ -191,9 +162,7 @@ static void set_time_delta(struct ssh_session_s *session, struct timespec *send,
 void start_timecorrection_ssh_server(struct ssh_session_s *session)
 {
     struct ssh_connection_s *connection=session->connections.main;
-    struct timespec send_client;
-    struct timespec recv_client;
-    struct timespec set_server;
+    struct system_timespec_s send_c=SYSTEM_TIME_INIT;
     struct ctx_option_s option;
 
     signal_lock(connection->setup.signal);
@@ -209,7 +178,7 @@ void start_timecorrection_ssh_server(struct ssh_session_s *session)
     signal_unlock(connection->setup.signal);
 
     init_ctx_option(&option, _CTX_OPTION_TYPE_BUFFER);
-    get_current_time(&send_client);
+    get_current_time_system_time(&send_c);
 
     if ((* session->context.signal_ssh2remote)(session, "info:remotetime:", &option)>=0) {
 
@@ -232,6 +201,7 @@ void start_timecorrection_ssh_server(struct ssh_session_s *session)
 	    }
 
 	} else if (ctx_option_buffer(&option)) {
+	    struct system_timespec_s recv_c=SYSTEM_TIME_INIT;
 	    unsigned int len=0;
 	    char *data=ctx_option_get_buffer(&option, &len);
 	    char tmp[len + 1];
@@ -240,7 +210,7 @@ void start_timecorrection_ssh_server(struct ssh_session_s *session)
 	    /* buffer is in the form:
 		1524159292.579901450 */
 
-	    get_current_time(&recv_client);
+	    get_current_time_system_time(&recv_c);
 
 	    memset(tmp, 0, len+1);
 	    memcpy(tmp, data, len);
@@ -249,12 +219,12 @@ void start_timecorrection_ssh_server(struct ssh_session_s *session)
 	    sep=memchr(tmp, '.', len);
 
 	    if (sep) {
+		struct system_timespec_s server=SYSTEM_TIME_INIT;
 
 		*sep='\0';
 
-		set_server.tv_sec=(time_t) atol(tmp);
-		set_server.tv_nsec=(time_t) atol(sep+1);
-		set_time_delta(session, &send_client, &recv_client, &set_server);
+		set_system_time(&server, (system_time_sec_t) atol(tmp), (system_time_nsec_t) atol(sep+1));
+		set_time_delta(session, &send_c, &recv_c, &server);
 
 	    } else {
 

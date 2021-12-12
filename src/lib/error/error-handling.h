@@ -60,6 +60,13 @@ extern struct generic_error_s				initge;
 char *get_error_description(struct generic_error_s *error);
 void init_generic_error(struct generic_error_s *error);
 void set_generic_error_application(struct generic_error_s *error, int errnum, char *(* get_desc)(struct generic_error_s *e), const char *function);
+
+#ifdef __linux__
+
+/* linux (and other x'ses) use a unsigned integer to indicate the system error */
+
 void set_generic_error_system(struct generic_error_s *error, int errnum, const char *function);
+
+#endif
 
 #endif

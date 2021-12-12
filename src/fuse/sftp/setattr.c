@@ -171,7 +171,7 @@ void _fs_sftp_setattr(struct service_context_s *context, struct fuse_request_s *
     sftp_r.call.setstat.buff=(unsigned char *)abuff.buffer;
 
     if (send_sftp_setstat_ctx(interface, &sftp_r)>0) {
-	struct timespec timeout;
+	struct system_timespec_s timeout=SYSTEM_TIME_INIT;
 
 	get_sftp_request_timeout_ctx(interface, &timeout);
 
@@ -281,7 +281,7 @@ void _fs_sftp_fsetattr(struct fuse_openfile_s *openfile, struct fuse_request_s *
     /* send fsetstat cause a handle is available */
 
     if (send_sftp_fsetstat_ctx(interface, &sftp_r)>0) {
-	struct timespec timeout;
+	struct system_timespec_s timeout=SYSTEM_TIME_INIT;
 
 	get_sftp_request_timeout_ctx(interface, &timeout);
 

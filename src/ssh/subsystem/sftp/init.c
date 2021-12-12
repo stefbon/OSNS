@@ -378,9 +378,10 @@ int init_sftp_subsystem(struct sftp_subsystem_s *sftp)
 
     init_sftp_prefix(sftp);
     init_sftp_identity(&sftp->identity);
-    init_ssh_subsystem_connection(&sftp->connection, 0);
+    init_ssh_subsystem_connection(&sftp->connection, 0, sftp->signal);
     init_sftp_receive(&sftp->receive);
     init_sftp_payload_queue(&sftp->queue);
+    sftp->signal=get_default_common_signal();
 
     set_sftp_protocol_version(sftp, 6);
     init_sftp_subsystem_attr_context(sftp);

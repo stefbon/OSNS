@@ -112,7 +112,7 @@ void _fs_sftp_mkdir(struct service_context_s *context, struct fuse_request_s *f_
     sftp_r.call.mkdir.buff=(unsigned char *) abuff.buffer;
 
     if (send_sftp_mkdir_ctx(interface, &sftp_r)>0) {
-	struct timespec timeout;
+	struct system_timespec_s timeout=SYSTEM_TIME_INIT;
 
 	get_sftp_request_timeout_ctx(interface, &timeout);
 
@@ -130,7 +130,7 @@ void _fs_sftp_mkdir(struct service_context_s *context, struct fuse_request_s *f_
 		    add_inode_context(context, inode);
 		    set_inode_fuse_fs(context, inode);
 		    adjust_pathmax(workspace, pathinfo->len);
-		    set_directory_dump(inode, get_dummy_directory());
+		    assign_directory_inode(workspace, inode);
 		    unset_fuse_request_flags_cb(f_request);
 		    get_current_time_system_time(&inode->stime);
 		    return;
@@ -216,7 +216,7 @@ void _fs_sftp_mknod(struct service_context_s *context, struct fuse_request_s *f_
     sftp_r.call.create.buff=(unsigned char *)abuff.buffer;
 
     if (send_sftp_create_ctx(interface, &sftp_r)>0) {
-	struct timespec timeout;
+	struct system_timespec_s timeout=SYSTEM_TIME_INIT;
 
 	get_sftp_request_timeout_ctx(interface, &timeout);
 
@@ -249,7 +249,7 @@ void _fs_sftp_mknod(struct service_context_s *context, struct fuse_request_s *f_
 		get_sftp_request_timeout_ctx(interface, &timeout);
 
 		if (send_sftp_close_ctx(interface, &sftp_r)>0) {
-		    struct timespec timeout;
+		    struct system_timespec_s timeout=SYSTEM_TIME_INIT;
 
 		    get_sftp_request_timeout_ctx(interface, &timeout);
 

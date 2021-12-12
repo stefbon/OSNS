@@ -21,6 +21,7 @@
 
 #include "datatypes/ssh-string.h"
 #include "list.h"
+#include "system.h"
 #include "sftp/protocol.h"
 
 #define SFTP_REQUEST_STATUS_SEND		1
@@ -280,12 +281,13 @@ struct sftp_extension_s {
 struct sftp_request_s {
     unsigned int			status;
     unsigned int			id;
+    unsigned int			unique;
     struct context_interface_s		*interface;
     void				*ptr;
     struct list_element_s		list;
     struct list_element_s		slist;
-    struct timespec			started;
-    struct timespec			timeout;
+    struct system_timespec_s		started;
+    struct system_timespec_s		timeout;
     union {
 	struct sftp_init_s		init;
 	struct sftp_path_s		stat;

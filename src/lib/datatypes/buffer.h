@@ -78,5 +78,7 @@ void set_attr_buffer_nowrite(struct attr_buffer_s *ab);
 void set_attr_buffer_write(struct attr_buffer_s *ab, char *buffer, unsigned int len);
 
 void reset_attr_buffer_write(struct attr_buffer_s *ab);
+void set_attr_buffer_count(struct attr_buffer_s *ab, int count);
+void set_attr_buffer_flags(struct attr_buffer_s *ab, unsigned int flags);
 
 #endif

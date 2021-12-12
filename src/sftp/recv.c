@@ -122,7 +122,7 @@ static void process_receive_sftp_reply_error(struct sftp_client_s *sftp, char *b
     signal_lock(signal->signal);
     signal->seq=seq;
     signal->seqtype=type;
-    get_current_time(&signal->seqset);
+    get_current_time_system_time(&signal->seqset);
     set_generic_error_application(&signal->error, _ERROR_APPLICATION_TYPE_PROTOCOL, NULL, __PRETTY_FUNCTION__);
     signal_broadcast(signal->signal);
     signal_unlock(signal->signal);

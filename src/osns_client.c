@@ -73,122 +73,184 @@
 struct fs_options_s fs_options;
 char *program_name=NULL;
 
-struct finish_script_s {
-    void 			(* finish)(void *ptr);
-    void			*ptr;
-    char			*name;
-    struct finish_script_s	*next;
-};
-
-static struct finish_script_s *finish_scripts=NULL;
-static pthread_mutex_t finish_scripts_mutex=PTHREAD_MUTEX_INITIALIZER;
-
-void add_finish_script(void (* finish_cb)(void *ptr), void *ptr, char *name)
+static void remove_inodes_workspace_thread(void *ptr)
 {
-    struct finish_script_s *script=NULL;
+    struct workspace_mount_s *workspace=(struct workspace_mount_s *) ptr;
+    struct workspace_inodes_s *inodes=&workspace->inodes;
 
-    script=malloc(sizeof(struct finish_script_s));
+    /* remove all inodes on this workspace by walink through the hashtable */
 
-    if (script) {
+    for (unsigned int i=0; i<WORKSPACE_INODE_HASHTABLE_SIZE; i++) {
+	struct list_element_s *list=get_list_head(&inodes->hashtable[i], SIMPLE_LIST_FLAG_REMOVE);
 
-	script->finish=finish_cb;
-	script->ptr=ptr;
-	script->name=name;
-	script->next=NULL;
+	while (list) {
+	    struct inode_s *inode=(struct inode_s *)((char *) list - offsetof(struct inode_s, list));
 
-	pthread_mutex_lock(&finish_scripts_mutex);
+	    if (inode->ptr) {
+		struct data_link_s *link=inode->ptr;
 
-	script->next=finish_scripts;
-	finish_scripts=script;
+		if (link->type == DATA_LINK_TYPE_SPECIAL_ENTRY) {
+		    struct fuse_fs_s *fs=inode->fs;
 
-	pthread_mutex_unlock(&finish_scripts_mutex);
+		    (* fs->forget)(NULL, inode);
 
-    } else {
+		}
 
-	logoutput_warning("add_finish_script: error allocating memory to add finish script");
+	    }
+
+	    inode->ptr=NULL;
+
+	    if (inode->alias) {
+		struct entry_s *entry=inode->alias;
+
+		destroy_entry(entry);
+		inode->alias=NULL;
+
+	    }
+
+	    free(inode);
+	    list=get_list_head(&inodes->hashtable[i], SIMPLE_LIST_FLAG_REMOVE);
+
+	}
 
     }
 
 }
 
-void run_finish_scripts()
+static void remove_workspace_symlinks(struct workspace_mount_s *workspace)
 {
-    struct finish_script_s *script=NULL;
+    struct workspace_inodes_s *inodes=&workspace->inodes;
+    struct list_element_s *list=get_list_head(&inodes->symlinks, SIMPLE_LIST_FLAG_REMOVE);
 
-    pthread_mutex_lock(&finish_scripts_mutex);
+    while (list) {
+	struct fuse_symlink_s *syml=(struct fuse_symlink_s *)((char *) list - offsetof(struct fuse_symlink_s, list));
 
-    script=finish_scripts;
-
-    while (script) {
-
-	finish_scripts=script->next;
-
-	if (script->name) logoutput_info("run_finish_scripts: run script %s", script->name);
-
-	(* script->finish)(script->ptr);
-	free(script);
-
-	script=finish_scripts;
+	free_fuse_symlink(syml);
+	list=get_list_head(&inodes->symlinks, SIMPLE_LIST_FLAG_REMOVE);
 
     }
 
-    pthread_mutex_unlock(&finish_scripts_mutex);
+}
+
+static void remove_workspace_directories(struct workspace_mount_s *workspace)
+{
+    struct workspace_inodes_s *inodes=&workspace->inodes;
+    struct list_element_s *list=get_list_head(&inodes->directories, SIMPLE_LIST_FLAG_REMOVE);
+
+    while (list) {
+	struct directory_s *d=(struct directory_s *)((char *) list - offsetof(struct directory_s, list));
+
+	free_directory(d);
+	list=get_list_head(&inodes->directories, SIMPLE_LIST_FLAG_REMOVE);
+
+    }
 
 }
 
-void end_finish_scripts()
+static void free_workspace_contexts(struct service_context_s *pctx, unsigned int level)
 {
-    pthread_mutex_destroy(&finish_scripts_mutex);
+    struct service_context_s *ctx=get_next_service_context(pctx, NULL, "tree");
+
+    /* free the children ctx's */
+
+    while (ctx) {
+
+	if (ctx->type==SERVICE_CTX_TYPE_FILESYSTEM) {
+	    struct context_interface_s *interface=&ctx->interface;
+
+	    /* a filesystem context is the endpoint, has no children context's
+		so not neccesary to go another level deeper */
+
+	    logoutput_debug("free_workspace_contexts: disconnect and close %s (level=%i)", ctx->name, level);
+
+	    (* interface->signal_interface)(interface, "command:close:", NULL);
+	    (* interface->signal_interface)(interface, "command:free:", NULL);
+	    (* interface->free)(interface);
+
+	    remove_list_element(&ctx->service.filesystem.clist);
+	    pthread_mutex_destroy(&ctx->service.filesystem.mutex);
+
+	    if (ctx->service.filesystem.pathcaches.count>0) {
+		struct list_element_s *list=get_list_head(&ctx->service.filesystem.pathcaches, SIMPLE_LIST_FLAG_REMOVE);
+
+		while (list) {
+
+		    free_pathcache(list);
+		    list=get_list_head(&ctx->service.filesystem.pathcaches, SIMPLE_LIST_FLAG_REMOVE);
+
+		}
+
+	    }
+
+	    remove_list_element(&ctx->wlist);
+	    free(ctx);
+
+	} else if (ctx->type==SERVICE_CTX_TYPE_BROWSE) {
+	    struct context_interface_s *interface=&ctx->interface;
+
+	    /* context is part of browse context (==hosts, groups etc,)
+		can have children ctx's */
+
+	    free_workspace_contexts(ctx, level+1);
+
+	    (* interface->free)(interface);
+	    remove_list_element(&ctx->service.browse.clist);
+	    remove_list_element(&ctx->wlist);
+	    free(ctx);
+
+	} else {
+
+	    logoutput_warning("free_workspace_contexts: context %s not reckognized", ctx->name);
+
+	}
+
+	ctx=get_next_service_context(pctx, NULL, "tree");
+
+    }
+
 }
 
-static void _disconnect_workspace(struct context_interface_s *interface)
+static void _disconnect_remove_workspace(struct workspace_mount_s *workspace)
 {
-    struct service_context_s *root=get_service_context(interface);
-    struct workspace_mount_s *workspace=NULL;
+    struct workspace_inodes_s *inodes=&workspace->inodes;
+    struct service_context_s *context=get_root_context_workspace(workspace);
+    struct context_interface_s *interface=&context->interface;
+    struct directory_s *directory=NULL;
     unsigned int error=0;
-    struct directory_s *root_directory=NULL;
-    struct list_element_s *list=NULL;
 
-    logoutput_info("_disconnect_workspace");
-
-    workspace=get_workspace_mount_ctx(root);
-    if (! workspace) return;
+    logoutput_debug("_disconnect_workspace: disconnect and close");
 
     (* interface->signal_interface)(interface, "command:disconnect:", NULL);
     (* interface->signal_interface)(interface, "command:close:", NULL);
+    (* interface->signal_interface)(interface, "command:free:", NULL);
 
-    logoutput_info("_disconnect_workspace: umount");
+    logoutput_debug("_disconnect_workspace: umount");
 
     umount_fuse_interface(&workspace->mountpoint);
 
-    logoutput_info("_disconnect_workspace: remove inodes, entries and directories");
+    logoutput_debug("_disconnect_workspace: start thread to remove inodes, entries and directories");
 
-    root_directory=remove_directory(&workspace->inodes.rootinode, &error);
+    work_workerthread(NULL, 0, remove_inodes_workspace_thread, (void *) workspace, NULL);
+    pthread_mutex_destroy(&inodes->mutex);
+    pthread_cond_destroy(&inodes->cond);
 
-    if (root_directory) {
+    logoutput_debug("_disconnect_workspace: free service contexts");
 
-	/* this will also close and free connections */
-	clear_directory_recursive(interface, root_directory);
-	free_directory(root_directory);
+    free_workspace_contexts(context, 0);
+    remove_workspace_symlinks(workspace);
+    remove_workspace_directories(workspace);
 
-    }
+    remove_list_element(&context->wlist);
+    free(context);
 
-    /* remove contexes in reverse order than added */
+    logoutput_debug("_disconnect_workspace: free workspace");
 
-    list=get_list_tail(&workspace->contexes, SIMPLE_LIST_FLAG_REMOVE);
+    remove_list_element(&workspace->list);
+    remove_list_element(&workspace->list_g);
 
-    while (list) {
-	struct service_context_s *context=(struct service_context_s *)((char *) list - offsetof(struct service_context_s, wlist));
-
-	logoutput_info("_disconnect_workspace: disconnect service %s context", context->name);
-
-	(* context->interface.signal_interface)(&context->interface, "command:disconnect:", NULL);
-	(* context->interface.signal_interface)(&context->interface, "command:close:", NULL);
-	(* context->interface.signal_interface)(&context->interface, "command:free:", NULL);
-	free_service_context(context);
-	list=get_list_tail(&workspace->contexes, SIMPLE_LIST_FLAG_REMOVE);
-
-    }
+    free_path_pathinfo(&workspace->mountpoint);
+    pthread_mutex_destroy(&workspace->mutex);
+    free(workspace);
 
 }
 
@@ -387,10 +449,8 @@ struct service_context_s *create_mount_context(struct osns_user_s *user, char **
 
     interface=&context->interface;
     interface->signal_context=signal_fuse2ctx;
-    logoutput("create_mount_context: register fuse cb");
     register_fuse_functions(interface);
-    logoutput("create_mount_context: set directory dump");
-    set_directory_dump(&workspace->inodes.rootinode, get_dummy_directory());
+    assign_directory_inode(workspace, &workspace->inodes.rootinode);
 
     /* connect to the fuse interface: mount */
     /* target address of interface is a local mountpoint */
@@ -417,15 +477,14 @@ struct service_context_s *create_mount_context(struct osns_user_s *user, char **
     if ((* context->interface.start)(interface, fd, NULL)==0) {
 	struct inode_s *inode=&workspace->inodes.rootinode;
 	struct simple_lock_s wlock;
-	struct directory_s *d=get_directory(inode);
+	struct directory_s *d=get_directory(workspace, inode, 0);
 
 	(* user->add)(user, &workspace->list);
 	logoutput("create_mount_context: FUSE mountpoint %s mounted", workspace->mountpoint.path);
 
 	if (wlock_directory(d, &wlock)==0) {
 
-	    d->link.type=DATA_LINK_TYPE_CONTEXT;
-	    d->link.link.ptr=(void *) context;
+	    d->ptr=&context->link;
 	    unlock_directory(d, &wlock);
 
 	    use_service_fs(context, inode);
@@ -453,7 +512,6 @@ struct service_context_s *create_mount_context(struct osns_user_s *user, char **
 
 static void terminate_user_workspaces(struct osns_user_s *user)
 {
-    struct workspace_mount_s *workspace=NULL;
     struct list_element_s *list=NULL;
 
     logoutput("terminate_user_workspaces");
@@ -461,16 +519,9 @@ static void terminate_user_workspaces(struct osns_user_s *user)
     list=get_list_head(&user->header, SIMPLE_LIST_FLAG_REMOVE);
 
     while (list) {
-	struct service_context_s *context=NULL;
+	struct workspace_mount_s *workspace=(struct workspace_mount_s *)((char *) list - offsetof(struct workspace_mount_s, list));
 
-	workspace=(struct workspace_mount_s *)((char *) list - offsetof(struct workspace_mount_s, list));
-	context=get_root_context_workspace(workspace);
-
-	_disconnect_workspace(&context->interface);
-
-	logoutput("terminate_user_workspaces: free mount");
-	free_workspace_mount(workspace);
-
+	_disconnect_remove_workspace(workspace);
 	list=get_list_head(&user->header, SIMPLE_LIST_FLAG_REMOVE);
 
     }
@@ -889,7 +940,6 @@ int main(int argc, char *argv[])
     logoutput_info("MAIN: initializing directory calls");
 
     init_dentry_once();
-    init_directory_calls();
     init_workspaces_once();
 
     logoutput_info("MAIN: initializing various fuse fs's");
@@ -1044,9 +1094,6 @@ int main(int argc, char *argv[])
 
     free_special_fs();
     // stop_workerthreads(NULL);
-
-    run_finish_scripts();
-    end_finish_scripts();
 
     terminate_workerthreads(NULL, 0);
 

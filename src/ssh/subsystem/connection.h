@@ -21,15 +21,17 @@
 #define SSH_SUBSYSTEM_CONNECTION_H
 
 #include "network.h"
+#include "commonsignal.h"
 
 #define SSH_SUBSYSTEM_CONNECTION_FLAG_STD			(1 << 0)
 #define SSH_SUBSYSTEM_CONNECTION_FLAG_RECV_ERROR		(1 << 2)
+#define SSH_SUBSYSTEM_CONNECTION_FLAG_SEND_BLOCKED		(1 << 3)
+
+#define SSH_SUBSYSTEM_CONNECTION_FLAG_DISCONNECTING		(1 << 4)
+#define SSH_SUBSYSTEM_CONNECTION_FLAG_DISCONNECTED		(1 << 5)
+#define SSH_SUBSYSTEM_CONNECTION_FLAG_DISCONNECT		( SSH_SUBSYSTEM_CONNECTION_FLAG_DISCONNECTING | SSH_SUBSYSTEM_CONNECTION_FLAG_DISCONNECTED )
 
 #define SSH_SUBSYSTEM_CONNECTION_FLAG_TROUBLE			(1 << 28)
-#define SSH_SUBSYSTEM_CONNECTION_FLAG_DISCONNECTING		(1 << 30)
-#define SSH_SUBSYSTEM_CONNECTION_FLAG_DISCONNECTED		(1 << 31)
-
-#define SSH_SUBSYSTEM_CONNECTION_FLAG_DISCONNECT		( SSH_SUBSYSTEM_CONNECTION_FLAG_DISCONNECTING | SSH_SUBSYSTEM_CONNECTION_FLAG_DISCONNECTED )
 
 struct subsystem_std_connection_s {
     struct fs_connection_s				stdin;
@@ -42,6 +44,7 @@ struct subsystem_std_connection_s {
 struct ssh_subsystem_connection_s {
     unsigned int					flags;
     unsigned int					error;
+    struct common_signal_s				*signal;
     union {
 	struct subsystem_std_connection_s		std;
     } type;
@@ -53,14 +56,16 @@ struct ssh_subsystem_connection_s {
 
 /* prototypes */
 
-int init_ssh_subsystem_connection(struct ssh_subsystem_connection_s *connection, unsigned char type);
+int init_ssh_subsystem_connection(struct ssh_subsystem_connection_s *connection, unsigned char type, struct common_signal_s *signal);
 int connect_ssh_subsystem_connection(struct ssh_subsystem_connection_s *c);
 
-int add_ssh_subsystem_connection_eventloop(struct ssh_subsystem_connection_s *connection, void (* read_connection_signal)(int fd, void *ptr, struct event_s *event));
-void remove_ssh_subsystem_connection_eventloop(struct ssh_subsystem_connection_s *connection);
+unsigned char signal_outgoing_connection_unblock(struct ssh_subsystem_connection_s *connection);
+
+int add_ssh_subsystem_connection_eventloop(struct ssh_subsystem_connection_s *connection, void (* read_connection_signal)(int fd, void *ptr, struct event_s *event), void (* write_connection_signal)(int fd, void *ptr, struct event_s *event));
+void remove_ssh_subsystem_connection_eventloop(int fd, struct ssh_subsystem_connection_s *connection);
 
 void free_ssh_subsystem_connection(struct ssh_subsystem_connection_s *connection);
-void disconnect_ssh_subsystem_connection(struct ssh_subsystem_connection_s *connection);
+void finish_ssh_subsystem_connection(int fd, struct ssh_subsystem_connection_s *connection);
 
 int start_thread_ssh_subsystem_connection_problem(struct ssh_subsystem_connection_s *connection);
 

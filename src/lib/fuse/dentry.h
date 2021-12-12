@@ -66,14 +66,9 @@ struct inodecache_s {
     struct ssh_string_s			data[3];
 };
 
-union datalink_u {
-    void				*ptr;
-    uint64_t				id;
-};
-
 struct data_link_s {
     unsigned char			type;
-    union datalink_u			link;
+    int					refcount;
 };
 
 struct inode_s {
@@ -84,7 +79,7 @@ struct inode_s {
     struct system_stat_s		stat;
     struct system_timespec_s		stime;
     struct fuse_fs_s			*fs;
-    struct data_link_s			link;
+    struct data_link_s			*ptr;
     struct inodecache_s			*cache;
 };
 
@@ -92,13 +87,15 @@ struct entry_s {
     struct name_s			name;
     struct inode_s 			*inode;
     struct list_element_s		list;
-    struct data_link_s			link;
+    struct data_link_s			*ptr;
     struct entry_ops_s			*ops;
     unsigned char			flags;
     char				buffer[];
 };
 
-// Prototypes
+/* Prototypes */
+
+void init_data_link(struct data_link_s *link);
 
 void init_entry(struct entry_s *entry);
 struct entry_s *create_entry(struct name_s *xname);

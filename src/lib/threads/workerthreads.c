@@ -43,6 +43,7 @@
 #include "list.h"
 #include "error.h"
 #include "workerthreads.h"
+#include "system.h"
 
 struct threadjob_s {
     void 						(*cb) (void *data);
@@ -476,13 +477,15 @@ void terminate_workerthreads(void *ptr, unsigned int timeout)
 	}
 
     } else {
-	struct timespec expire;
+	struct system_timespec_s expire;
 	int result=0;
 
-	get_current_time(&expire);
-	expire.tv_sec+=timeout;
+	/* TODO: create a osns pthread library using system_timespec_s */
 
-	while(queue->nrthreads>0) {
+	get_current_time_system_time(&expire);
+	system_time_add(&expire, SYSTEM_TIME_ADD_ZERO, timeout);
+
+	while (queue->nrthreads>0) {
 
 	    result=pthread_cond_timedwait(&queue->cond, &queue->mutex, &expire);
 

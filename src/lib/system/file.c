@@ -173,7 +173,7 @@ static int _open_handle(struct filehandle_s *fh, struct fs_location_s *location,
 	    char buffer[len];
 	    struct fs_location_path_s tmp;
 
-	    set_buffer_location_path(&tmp, buffer, len, 0);
+	    assign_buffer_location_path(&tmp, buffer, len);
 
 	    if (combine_location_path(&tmp, &location->type.path, 'c', location->name)>0) {
 

@@ -169,7 +169,63 @@ int reply_sftp_names(struct sftp_subsystem_s *sftp, uint32_t id, unsigned int co
     return send_sftp_subsystem(sftp, data, pos);
 }
 
-int reply_sftp_extension(struct sftp_subsystem_s *sftp, uint32_t id, char *data, unsigned int len)
+int reply_sftp_extension(struct sftp_subsystem_s *sftp, uint32_t id, char *bytes, unsigned int len)
 {
-    return reply_sftp_bytes_common(sftp, id, SSH_FXP_EXTENDED_REPLY, data, len);
+    char data[9+len];
+    unsigned int pos=4;
+
+    data[pos]=SSH_FXP_EXTENDED_REPLY;
+    pos++;
+    store_uint32(&data[pos], id);
+    pos+=4;
+    memcpy(&data[pos], bytes, len);
+    pos+=len;
+
+    store_uint32(&data[0], pos-4);
+    return send_sftp_subsystem(sftp, data, pos);
 }
+
+void write_ssh_subsystem_connection_signal(int fd, void *ptr, struct event_s *event)
+{
+    struct ssh_subsystem_connection_s *connection=(struct ssh_subsystem_connection_s *) ptr;
+    struct common_signal_s *signal=connection->signal;
+    int result=0;
+
+    if (signal_is_error(event)) {
+
+	/* TODO: there is trouble with the outgoing channel ... not with the whole connection */
+
+	connection->flags |= SSH_SUBSYSTEM_CONNECTION_FLAG_TROUBLE;
+	start_thread_ssh_subsystem_connection_problem(connection);
+
+    } else if (signal_is_close(event)) {
+
+	goto close;
+
+    } else if (signal_is_buffer(event)) {
+
+	/* signal write buffer is available (again after being blocked)
+	    use the common signal for that to let any waiting thread know the buffer is available again */
+
+	if (signal_outgoing_connection_unblock(connection)) {
+
+	    logoutput("write_ssh_subsystem_connection_signal:");
+
+	}
+
+    } else {
+
+	logoutput_warning("write_ssh_subsystem_connection_signal: event not reckognized (fd=%i) value events %i", fd, printf_event_uint(event));
+
+    }
+
+    return;
+
+    close:
+    finish_ssh_subsystem_connection_eventloop(-1, connection);
+    logoutput("read_ssh_subsystem_connection_signal: disconnected.. exit..");
+    stop_beventloop(NULL);
+    return;
+
+}
+

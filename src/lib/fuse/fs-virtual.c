@@ -56,30 +56,9 @@
 
 static struct fuse_fs_s virtual_dir_fs;
 static struct fuse_fs_s virtual_nondir_fs;
-static pthread_mutex_t datalink_mutex=PTHREAD_MUTEX_INITIALIZER;
 static struct statfs default_statfs;
 
-static int _lock_datalink(struct inode_s *inode)
-{
-    return pthread_mutex_lock(&datalink_mutex);
-}
-static int _unlock_datalink(struct inode_s *inode)
-{
-    return pthread_mutex_unlock(&datalink_mutex);
-}
-
-static void _fs_get_data_link_nondir(struct inode_s *inode, struct data_link_s **p_link)
-{
-    *p_link=&inode->link;
-}
-
-static void _fs_get_data_link_dir(struct inode_s *inode, struct data_link_s **p_link)
-{
-    struct directory_s *d=get_directory(inode);
-    *p_link=&d->link;
-}
-
-static void _fs_forget(struct inode_s *inode)
+static void _fs_forget(struct service_context_s *context, struct inode_s *inode)
 {
 }
 static void _fs_lookup(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, const char *name, unsigned int len)
@@ -281,16 +260,12 @@ void use_virtual_fs(struct service_context_s *context, struct inode_s *inode)
 static void _set_virtual_fs(struct fuse_fs_s *fs)
 {
 
-    fs->lock_datalink=_lock_datalink;
-    fs->unlock_datalink=_unlock_datalink;
-
     fs->forget=_fs_forget;
     fs->getattr=_fs_getattr;
     fs->setattr=_fs_setattr;
 
     if ((fs->flags & FS_SERVICE_FLAG_DIR) || (fs->flags & FS_SERVICE_FLAG_ROOT)) {
 
-	fs->get_data_link=_fs_get_data_link_dir;
 	fs->type.dir.use_fs=use_virtual_fs;
 	fs->type.dir.lookup=_fs_lookup;
 
@@ -312,8 +287,6 @@ static void _set_virtual_fs(struct fuse_fs_s *fs)
 	fs->type.dir.get_fuse_direntry=get_fuse_direntry_virtual;
 
     } else {
-
-	fs->get_data_link=_fs_get_data_link_nondir;
 
 	fs->type.nondir.readlink=_fs_readlink;
 

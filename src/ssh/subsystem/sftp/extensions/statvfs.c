@@ -85,7 +85,7 @@ void cb_ext_statvfs(struct sftp_payload_s *payload, unsigned int pos)
 	    char tmp[size +1];
 	    int result=0;
 
-	    set_buffer_location_path(&location, tmp, size+1, 0);
+	    assign_buffer_location_path(&location, tmp, size+1);
 	    (* convert.complete)(sftp, &path, &location);
 	    result=system_getstatvfs(&location, &statvfs);
 

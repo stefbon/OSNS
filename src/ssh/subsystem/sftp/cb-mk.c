@@ -100,7 +100,7 @@ void sftp_op_mkdir(struct sftp_payload_s *payload)
 	    struct rw_attr_result_s r=RW_ATTR_RESULT_INIT;
 	    unsigned int valid_bits=0;
 
-	    set_buffer_location_path(&location, tmp, size+1, 0);
+	    assign_buffer_location_path(&location, tmp, size+1);
 	    (* convert.complete)(sftp, &path, &location);
 
 	    logoutput("sftp_op_mkdir : %.*s", location.len, location.ptr);

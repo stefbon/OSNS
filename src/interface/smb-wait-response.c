@@ -233,16 +233,20 @@ void init_smb_request_minimal(struct smb_request_s *r, struct context_interface_
 
 }
 
-unsigned char wait_smb_response_ctx(struct context_interface_s *interface, struct smb_request_s *r, struct timespec *timeout)
+unsigned char wait_smb_response_ctx(struct context_interface_s *interface, struct smb_request_s *r, struct system_timespec_s *timeout)
 {
     struct smb_signal_s *signal=get_smb_signal_ctx(interface);
     unsigned int hash = (r->id % hashsize);
     struct list_header_s *header=&hashtable[hash];
-    struct timespec expire;
+    struct system_timespec_s expire=SYSTEM_TIME_INIT;
     int result=0;
 
-    get_expire_time(&expire, timeout);
-    get_current_time(&r->started);
+    get_current_time_system_time(&r->started);
+
+    /* reuse the system time set above */
+
+    copy_system_time(&expire, &r->started);
+    system_time_add_time(&expire, timeout);
     r->timeout.tv_sec=timeout->tv_sec;
     r->timeout.tv_nsec=timeout->tv_nsec;
 

@@ -465,7 +465,7 @@ void set_ssh_receive_behaviour(struct ssh_connection_s *connection, const char *
     } else if (strcmp(phase, "newkeys")==0) {
 
 	receive->status |= SSH_RECEIVE_STATUS_NEWKEYS;
-	get_current_time(&receive->newkeys);
+	get_current_time_system_time(&receive->newkeys);
 
     } else if (strcmp(phase, "kexfinish")==0) {
 

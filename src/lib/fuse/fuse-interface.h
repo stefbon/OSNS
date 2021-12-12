@@ -87,9 +87,9 @@ void set_fuse_request_interrupted(struct fuse_request_s *request, uint64_t ino);
 
 struct common_signal_s *get_fusesocket_signal(struct context_interface_s *root);
 
-struct timespec *get_fuse_attr_timeout(struct context_interface_s *root);
-struct timespec *get_fuse_entry_timeout(struct context_interface_s *root);
-struct timespec *get_fuse_negative_timeout(struct context_interface_s *root);
+struct system_timespec_s *get_fuse_attr_timeout(struct context_interface_s *root);
+struct system_timespec_s *get_fuse_entry_timeout(struct context_interface_s *root);
+struct system_timespec_s *get_fuse_negative_timeout(struct context_interface_s *root);
 
 int add_direntry_buffer(struct context_interface_s *root, struct direntry_buffer_s *buffer, struct name_s *xname, struct system_stat_s *stat);
 int add_direntry_plus_buffer(struct context_interface_s *root, struct direntry_buffer_s *buffer, struct name_s *xname, struct system_stat_s *st);

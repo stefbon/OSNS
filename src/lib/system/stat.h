@@ -23,6 +23,7 @@
 
 #include "path.h"
 #include "open.h"
+#include "time.h"
 
 #define SYSTEM_STAT_FLAG_FOLLOW_SYMLINK		1
 
@@ -133,13 +134,6 @@ struct system_stat_s {
 #endif
 
 #endif /* __linux__ */
-
-struct system_timespec_s {
-    int64_t			tv_sec;
-    uint32_t			tv_nsec;
-};
-
-#define SYSTEM_TIME_INIT	{0, 0}
 
 #ifdef __linux__
 
@@ -254,7 +248,6 @@ void decrease_nlink_system_stat(struct system_stat_s *stat, uint32_t count);
 */
 
 uint32_t calc_amount_blocks(uint64_t size, uint32_t blksize);
-void copy_system_time(struct system_timespec_s *to, struct system_timespec_s *from);
 void calc_blocks_system_stat(struct system_stat_s *stat);
 
 uint32_t get_unique_system_dev(struct system_dev_s *dev);

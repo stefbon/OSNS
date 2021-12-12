@@ -33,7 +33,10 @@ struct name_s {
 void init_name(struct name_s *a);
 void set_name(struct name_s *a, char *s, unsigned int len);
 void set_name_from(struct name_s *a, unsigned char type, void *ptr);
+
 int compare_names(struct name_s *a, struct name_s *b);
+int compare_name(struct name_s *a, const unsigned char type, void *ptr);
+
 void calculate_nameindex(struct name_s *name);
 
 #endif

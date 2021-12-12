@@ -104,12 +104,12 @@ void read_attr_acmodtime_v03(struct attr_context_s *actx, struct attr_buffer_s *
 
     /* access time */
 
-    time.tv_sec=(* buffer->ops->rw.read.read_uint32)(buffer);
+    time.st_sec=(* buffer->ops->rw.read.read_uint32)(buffer);
     set_atime_system_stat(stat, &time);
 
     /* modify time */
 
-    time.tv_sec=(* buffer->ops->rw.read.read_uint32)(buffer);
+    time.st_sec=(* buffer->ops->rw.read.read_uint32)(buffer);
     set_mtime_system_stat(stat, &time);
 
 }

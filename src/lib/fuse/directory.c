@@ -42,8 +42,8 @@
 #include "list.h"
 #include "dentry.h"
 #include "directory.h"
+#include "workspace.h"
 
-extern struct directory_s *get_dummy_directory();
 extern void set_directory_getpath(struct directory_s *d);
 extern void release_directory_pathcache(struct directory_s *d);
 
@@ -170,10 +170,8 @@ int init_directory(struct directory_s *directory, unsigned char maxlanes)
 
     logoutput("init_directory: sl maxlanes %i", maxlanes);
 
-    directory->synctime.tv_sec=0;
-    directory->synctime.tv_nsec=0;
-    directory->inode=NULL;
-
+    set_system_time(&directory->synctime, 0, 0);
+    init_list_element(&directory->list, NULL);
     result=init_simple_locking(&directory->locking, 0);
 
     if (result==-1) {
@@ -183,10 +181,10 @@ int init_directory(struct directory_s *directory, unsigned char maxlanes)
 
     }
 
-    directory->dops=NULL;
-    directory->link.type=0;
-    directory->link.link.ptr=NULL;
-    set_directory_getpath(directory);
+    directory->link.type=DATA_LINK_TYPE_DIRECTORY;
+    directory->link.refcount=0;
+
+    if ((directory->flags & _DIRECTORY_FLAG_DUMMY)==0) set_directory_getpath(directory);
 
     if (directory->size>0) {
 	struct sl_skiplist_s *sl=(struct sl_skiplist_s *) directory->buffer;
@@ -202,18 +200,7 @@ int init_directory(struct directory_s *directory, unsigned char maxlanes)
 
 }
 
-struct directory_s *get_directory_dump(struct inode_s *inode)
-{
-    return (struct directory_s *) inode->link.link.ptr;
-}
-
-void set_directory_dump(struct inode_s *inode, struct directory_s *d)
-{
-    inode->link.type=DATA_LINK_TYPE_DIRECTORY;
-    inode->link.link.ptr=(void *) d;
-}
-
-struct directory_s *_create_directory(struct inode_s *inode, void (* init_cb)(struct directory_s *directory))
+struct directory_s *_create_directory(struct inode_s *inode)
 {
     struct directory_s *directory=NULL;
     unsigned char maxlanes=0;
@@ -222,22 +209,21 @@ struct directory_s *_create_directory(struct inode_s *inode, void (* init_cb)(st
     logoutput("_create_directory: inode %li size %li", inode->stat.sst_ino, size);
 
     directory=malloc(sizeof(struct directory_s) + size);
-    if (directory==NULL) return NULL;
+    if (directory==NULL) goto failed;
 
     memset(directory, 0, sizeof(struct directory_s) + size);
     directory->flags=_DIRECTORY_FLAG_ALLOC;
     directory->size=size;
 
-    if (init_directory(directory, maxlanes)==-1) {
-
-	free_directory(directory);
-	return NULL;
-
-    }
-
+    if (init_directory(directory, maxlanes)==-1) goto failed;
     directory->inode=inode;
-    if (init_cb) (* init_cb)(directory);
+
     return directory;
+
+    failed:
+
+    if (directory) free_directory(directory);
+    return NULL;
 
 }
 
@@ -256,6 +242,341 @@ void clear_directory(struct directory_s *directory)
 
 void free_directory(struct directory_s *directory)
 {
-    clear_directory(directory);
-    if (directory->flags & _DIRECTORY_FLAG_ALLOC) free(directory);
+
+    if (directory && (directory->flags & _DIRECTORY_FLAG_DUMMY)==0) {
+
+	clear_directory(directory);
+	if (directory->flags & _DIRECTORY_FLAG_ALLOC) free(directory);
+
+    }
+
+}
+
+static struct dops_s dummy_dops;
+static struct dops_s default_dops;
+static struct dops_s removed_dops;
+
+/* DUMMY DIRECTORY OPS */
+
+static struct directory_s *get_directory_dummy(struct workspace_mount_s *w, struct inode_s *inode, unsigned int flags, struct simple_lock_s *lock)
+{
+    struct directory_s *directory=NULL;
+
+    if (flags & GET_DIRECTORY_FLAG_NOCREATE) return &w->inodes.dummy_directory;
+
+    if (simple_upgradelock(lock)==0) {
+
+	directory=_create_directory(inode);
+
+	if (directory) {
+
+	    inode->ptr=&directory->link;
+	    directory->link.refcount++;
+	    directory->dops=&default_dops;
+	    set_directory_pathcache_x(directory);
+
+	    add_list_element_first(&w->inodes.directories, &directory->list);
+
+	    w->inodes.dummy_directory.link.refcount--;
+
+	} else {
+
+	    /* fall back on dummy directory */
+
+	    directory=&w->inodes.dummy_directory;
+
+	}
+
+	/* done with upgrade lock */
+	simple_downgradelock(lock);
+
+    }
+
+    return directory;
+}
+
+static struct directory_s *remove_directory_dummy(struct workspace_mount_s *w, struct directory_s *d, struct simple_lock_s *lock)
+{
+    return NULL;
+}
+
+static unsigned int get_count_dummy(struct directory_s *d)
+{
+    return 0;
+}
+
+static struct entry_s *find_entry_dummy(struct directory_s *d, struct name_s *ln, unsigned int *error, unsigned int flags)
+{
+    *error=ENOENT;
+    return NULL;
+}
+
+static void remove_entry_dummy(struct directory_s *d, struct entry_s *e, unsigned int *error, unsigned int flags)
+{
+    *error=ENOTDIR;
+}
+
+static struct entry_s *insert_entry_dummy(struct directory_s *d, struct entry_s *e, unsigned int *error, unsigned int flags)
+{
+    *error=ENOTDIR;
+    return NULL;
+}
+
+static struct dops_s dummy_dops = {
+    .get_directory		= get_directory_dummy,
+    .remove_directory		= remove_directory_dummy,
+    .get_count			= get_count_dummy,
+    .find_entry			= find_entry_dummy,
+    .remove_entry		= remove_entry_dummy,
+    .insert_entry		= insert_entry_dummy,
+};
+
+/* DEFAULT DIRECTORY OPS */
+
+static struct directory_s *get_directory_default(struct workspace_mount_s *w, struct inode_s *inode, unsigned int flags, struct simple_lock_s *lock)
+{
+    struct data_link_s *link=inode->ptr;
+
+    return ((struct directory_s *) ((char *) link - offsetof(struct directory_s, link)));
+}
+
+static struct directory_s *remove_directory_default(struct workspace_mount_s *w, struct directory_s *directory, struct simple_lock_s *lock)
+{
+
+    if (directory->flags & _DIRECTORY_FLAG_DUMMY) return NULL;
+
+    if (simple_upgradelock(lock)==0) {
+	struct inode_s *inode=NULL;
+
+	inode=directory->inode;
+	directory->inode=NULL;
+	directory->link.refcount--;
+
+	if (directory->link.refcount<=0) {
+
+	    directory->flags |= _DIRECTORY_FLAG_REMOVE;
+	    directory->dops=&removed_dops;
+	    remove_list_element(&directory->list);
+
+	}
+
+	if (inode) inode->ptr=NULL;
+	simple_downgradelock(lock);
+
+    }
+
+    return directory;
+}
+
+static unsigned int get_count_default(struct directory_s *d)
+{
+    if (d->size>0) {
+	struct sl_skiplist_s *sl=(struct sl_skiplist_s *) d->buffer;
+
+	return sl->header.count;
+
+    }
+
+    return 0;
+}
+
+static struct entry_s *find_entry_default(struct directory_s *d, struct name_s *ln, unsigned int *error, unsigned int flags)
+{
+    struct sl_skiplist_s *sl=(struct sl_skiplist_s *) d->buffer;
+    struct sl_searchresult_s result;
+    struct entry_s *e=NULL;
+    unsigned int slflags=((flags & DIRECTORY_OP_FLAG_LOCKED) ? SL_SEARCHRESULT_FLAG_EXCLUSIVE : 0);
+
+    init_sl_searchresult(&result, (void *) ln, slflags);
+    sl_find(sl, &result);
+    if (result.flags & SL_SEARCHRESULT_FLAG_EXACT) {
+
+	e=(struct entry_s *)((char *) result.found - offsetof(struct entry_s, list));
+
+    } else {
+
+	*error=(result.flags & SL_SEARCHRESULT_FLAG_ERROR) ? EIO : ENOENT;
+
+    }
+
+    return e;
+}
+
+static void remove_entry_default(struct directory_s *d, struct entry_s *e, unsigned int *error, unsigned int flags)
+{
+    struct sl_skiplist_s *sl=(struct sl_skiplist_s *) d->buffer;
+    struct sl_searchresult_s result;
+    unsigned int slflags=((flags & DIRECTORY_OP_FLAG_LOCKED) ? SL_SEARCHRESULT_FLAG_EXCLUSIVE : 0);
+
+    init_sl_searchresult(&result, (void *) &e->name, slflags);
+    sl_delete(sl, &result);
+    *error=(result.flags & SL_SEARCHRESULT_FLAG_EXACT) ? 0 : ENOENT;
+}
+
+static struct entry_s *insert_entry_default(struct directory_s *d, struct entry_s *e, unsigned int *error, unsigned int flags)
+{
+    struct sl_skiplist_s *sl=(struct sl_skiplist_s *) d->buffer;
+    struct sl_searchresult_s result;
+    unsigned int slflags=((flags & DIRECTORY_OP_FLAG_LOCKED) ? SL_SEARCHRESULT_FLAG_EXCLUSIVE : 0);
+
+    init_sl_searchresult(&result, (void *) &e->name, slflags);
+    sl_insert(sl, &result);
+
+    if (result.flags & SL_SEARCHRESULT_FLAG_OK) {
+
+	*error=0;
+	e=(struct entry_s *)((char *) result.found - offsetof(struct entry_s, list));
+
+    } else if (result.flags & SL_SEARCHRESULT_FLAG_EXACT) {
+
+	*error=EEXIST;
+	e=(struct entry_s *)((char *) result.found - offsetof(struct entry_s, list));
+
+    } else {
+
+	*error=EIO;
+	e=NULL;
+
+    }
+
+    return e;
+}
+
+static struct dops_s default_dops = {
+    .get_directory		= get_directory_default,
+    .remove_directory		= remove_directory_default,
+    .get_count			= get_count_default,
+    .find_entry			= find_entry_default,
+    .remove_entry		= remove_entry_default,
+    .insert_entry		= insert_entry_default,
+};
+
+/* REMOVED DIRECTORY OPS */
+
+static struct directory_s *remove_directory_removed(struct workspace_mount_s *w, struct directory_s *directory, struct simple_lock_s *lock)
+{
+    return NULL;
+}
+
+static struct dops_s removed_dops = {
+    .get_directory		= get_directory_default,
+    .remove_directory		= remove_directory_removed,
+    .get_count			= get_count_default,
+    .find_entry			= find_entry_default,
+    .remove_entry		= remove_entry_default,
+    .insert_entry		= insert_entry_dummy,
+};
+
+/* functions which call the right function for the directory */
+
+struct directory_s *get_directory(struct workspace_mount_s *w, struct inode_s *inode, unsigned int flags)
+{
+    struct simple_lock_s rlock;
+    struct directory_s *directory=&w->inodes.dummy_directory;
+
+    init_simple_readlock(w->locking, &rlock);
+
+    if (simple_lock(&rlock)==0) {
+	struct data_link_s *link=inode->ptr;
+	struct directory_s *tmp=((link && link->type==DATA_LINK_TYPE_DIRECTORY) ? ((struct directory_s *) ((char *) link - offsetof(struct directory_s, link))) : directory);
+
+	directory=(* tmp->dops->get_directory)(w, inode, flags, &rlock);
+	simple_unlock(&rlock);
+
+    }
+
+    return directory;
+
+}
+
+struct directory_s *remove_directory(struct workspace_mount_s *w, struct inode_s *inode)
+{
+    struct simple_lock_s rlock;
+    struct directory_s *directory=&w->inodes.dummy_directory;
+
+    init_simple_readlock(w->locking, &rlock);
+
+    if (simple_lock(&rlock)==0) {
+	struct data_link_s *link=inode->ptr;
+	struct directory_s *tmp=((link && link->type==DATA_LINK_TYPE_DIRECTORY) ? ((struct directory_s *) ((char *) link - offsetof(struct directory_s, link))) : directory);
+
+	directory=(* tmp->dops->remove_directory)(w, tmp, &rlock);
+	simple_unlock(&rlock);
+
+    }
+
+    return directory;
+
+}
+
+unsigned int get_directory_count(struct directory_s *d)
+{
+    return (* d->dops->get_count)(d);
+}
+
+struct entry_s *find_entry(struct directory_s *d, struct name_s *ln, unsigned int *error)
+{
+    return (* d->dops->find_entry)(d, ln, error, 0);
+}
+
+struct entry_s *find_entry_batch(struct directory_s *d, struct name_s *ln, unsigned int *error)
+{
+    return (* d->dops->find_entry)(d, ln, error, DIRECTORY_OP_FLAG_LOCKED);
+}
+
+void remove_entry(struct directory_s *d, struct entry_s *e, unsigned int *error)
+{
+    (* d->dops->remove_entry)(d, e, error, 0);
+}
+
+void remove_entry_batch(struct directory_s *d, struct entry_s *e, unsigned int *error)
+{
+    (* d->dops->remove_entry)(d, e, error, DIRECTORY_OP_FLAG_LOCKED);
+}
+
+struct entry_s *insert_entry(struct directory_s *d, struct entry_s *e, unsigned int *error)
+{
+    return (* d->dops->insert_entry)(d, e, error, 0);
+}
+
+struct entry_s *insert_entry_batch(struct directory_s *d, struct entry_s *e, unsigned int *error)
+{
+    return (* d->dops->insert_entry)(d, e, error, DIRECTORY_OP_FLAG_LOCKED);
+}
+
+void assign_directory_inode(struct workspace_mount_s *w, struct inode_s *inode)
+{
+    struct directory_s *d=&w->inodes.dummy_directory;
+    struct simple_lock_s wlock;
+
+    init_simple_writelock(&w->locking, &wlock);
+
+    if (simple_lock(&wlock)==0) {
+
+	inode->ptr=&d->link;
+	d->link.refcount++;
+
+	simple_unlock(&wlock);
+
+    }
+
+}
+
+void init_dummy_directory(struct directory_s *directory)
+{
+    memset(directory, 0, sizeof(struct directory_s));
+    directory->flags=_DIRECTORY_FLAG_DUMMY;
+    directory->size=0;
+
+    if (init_directory(directory, 0)==-1) {
+
+	logoutput_error("init_dummy_directory: error initializing dummy directory");
+
+    } else {
+
+	logoutput("init_dummy_directory: initialized dummy directory");
+
+    }
+
+    directory->dops=&dummy_dops;
 }

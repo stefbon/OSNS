@@ -130,7 +130,7 @@ void sftp_op_readlink(struct sftp_payload_s *payload)
 
 	    /* get the fullpath on the local system */
 
-	    set_buffer_location_path(&location, tmp, size+1, 0);
+	    assign_buffer_location_path(&location, tmp, size+1);
 	    (* convert.complete)(sftp, &path, &location);
 
 #ifdef __linux__

@@ -59,7 +59,7 @@
 /*
     function to correct the timestamps in the various attributes fields */
 
-static void correct_time_ignore(struct sftp_client_s *sftp, struct timespec *time)
+static void correct_time_ignore(struct sftp_client_s *sftp, struct system_timespec_s *time)
 {
     /* does nothing */
 }
@@ -70,12 +70,12 @@ void init_sftp_timecorrection(struct sftp_client_s *sftp)
     sftp->time_ops.correct_time_c2s=correct_time_ignore;
 }
 
-void correct_time_s2c(struct sftp_client_s *sftp, struct timespec *time)
+void correct_time_s2c(struct sftp_client_s *sftp, struct system_timespec_s *time)
 {
     (* sftp->time_ops.correct_time_s2c)(sftp, time);
 }
 
-void correct_time_c2s(struct sftp_client_s *sftp, struct timespec *time)
+void correct_time_c2s(struct sftp_client_s *sftp, struct system_timespec_s *time)
 {
     (* sftp->time_ops.correct_time_c2s)(sftp, time);
 }

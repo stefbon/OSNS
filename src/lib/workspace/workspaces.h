@@ -28,6 +28,7 @@
 #include "list.h"
 #include "misc.h"
 #include "fuse/dentry.h"
+#include "fuse/directory.h"
 
 struct service_context_s;
 
@@ -50,14 +51,19 @@ struct service_context_s;
 #define WORKSPACE_MOUNT_EVENT_MOUNT		1
 #define WORKSPACE_MOUNT_EVENT_UMOUNT		2
 
+struct directory_s;
+
 struct workspace_inodes_s {
     struct inode_s 				rootinode;
     struct entry_s				rootentry;
+    struct directory_s				dummy_directory;
     unsigned long long 				nrinodes;
     uint64_t					inoctr;
     pthread_mutex_t				mutex;
     pthread_cond_t				cond;
     unsigned char				thread;
+    struct list_header_s			directories;
+    struct list_header_s			symlinks;
     struct list_header_s			forget;
     struct list_header_s			hashtable[WORKSPACE_INODE_HASHTABLE_SIZE];
 };
@@ -66,14 +72,15 @@ struct workspace_inodes_s {
 
 struct workspace_mount_s {
     unsigned int				flags;
-    struct osns_user_s 				*user;
+    unsigned int				status;
     unsigned char 				type;
+    struct osns_user_s 				*user;
     unsigned int				pathmax;
     pthread_mutex_t				mutex;
     struct pathinfo_s 				mountpoint;
-    struct timespec				syncdate;
-    unsigned int				status;
+    struct system_timespec_s			syncdate;
     struct list_header_s			contexes;
+    struct simple_locking_s			*locking;
     void					(* mountevent)(struct workspace_mount_s *mount, unsigned char event);
     void					(* remove_context)(struct list_element_s *l);
     void					(* free)(struct workspace_mount_s *mount);
@@ -94,8 +101,6 @@ void adjust_pathmax(struct workspace_mount_s *w, unsigned int len);
 unsigned int get_pathmax(struct workspace_mount_s *w);
 
 int init_workspace_mount(struct workspace_mount_s *w, unsigned int *error);
-void clear_workspace_mount(struct workspace_mount_s *workspace);
-
 void free_workspace_mount(struct workspace_mount_s *workspace);
 
 struct workspace_mount_s *get_container_workspace(struct list_element_s *list);

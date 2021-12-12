@@ -43,17 +43,6 @@ void free_common_buffer(struct common_buffer_s *c_buffer);
 void unslash(char *p);
 void convert_to(char *string, int flags);
 
-int is_later(struct timespec *ats, struct timespec *bts, int sec, long nsec);
-int compare_stat_time(struct stat *ast, struct stat *bst, unsigned char ntype);
-void copy_stat_times(struct stat *st_to, struct stat *st_from);
-void copy_stat(struct stat *st_to, struct stat *st_from);
-
-void get_current_time(struct timespec *rightnow);
-void get_expire_time(struct timespec *expire, struct timespec *timeout);
-
-unsigned char issubdirectory(const char *path1, const char *path2, unsigned char maybethesame);
-char *check_path(char *path);
-
 unsigned char belongtosameprocess(pid_t process_id, pid_t thread_id);
 pid_t getprocess_id(pid_t thread_id);
 

@@ -101,14 +101,16 @@ int get_service_path_default(struct directory_s *directory, struct fuse_path_s *
     unsigned int pathlen=0;
     struct name_s *xname=NULL;
     struct data_link_s *link=NULL;
+    unsigned char type=0;
 
     logoutput_debug("get_service_path_default");
 
-    fs_get_data_link(inode, &link);
+    link=directory->ptr;
 
-    /* walk back to the root of the context or the root of the mountpoint: whatever comes first */
+    /* walk back to the root of the context or
+	the first entry which inode points to a context (via a directory ...) : whatever comes first */
 
-    while (get_ino_system_stat(&inode->stat) > FUSE_ROOT_ID && link->type!=DATA_LINK_TYPE_CONTEXT) {
+    while (get_ino_system_stat(&inode->stat) > FUSE_ROOT_ID && (link==NULL || (link->type != DATA_LINK_TYPE_CONTEXT))) {
 
 	xname=&entry->name;
 
@@ -120,15 +122,15 @@ int get_service_path_default(struct directory_s *directory, struct fuse_path_s *
 
 	/* go one entry higher */
 
-	entry=get_parent_entry(entry);
+	directory=get_upper_directory_entry(entry);
 	inode=entry->inode;
-	fs_get_data_link(inode, &link);
+	link=directory->ptr;
 
     }
 
     /* inode is the "root" of the service: data is holding the context */
 
-    fpath->context=(struct service_context_s *) link->link.ptr;
+    fpath->context=((link && (link->type==DATA_LINK_TYPE_CONTEXT)) ? ((struct service_context_s *)((char *) &link - offsetof(struct service_context_s, link))) : NULL);
     return pathlen;
 
 }
@@ -137,12 +139,11 @@ void init_fuse_path(struct fuse_path_s *fpath, unsigned int len)
 {
 
     /* init */
-    fpath->len=len; /* size of buffer, not the path*/
-    fpath->pathstart=&fpath->path[len - 1]; /* start at the end and append backwards */
+    fpath->len=len; 					/* size of buffer, not the path*/
+    fpath->pathstart=&fpath->path[len - 1]; 		/* start at the end and append backwards */
 
     /* trailing zero */
     *fpath->pathstart='\0';
-    // fpath->pathstart--;
 
 }
 
@@ -168,8 +169,7 @@ static unsigned int get_pathlen_0(struct service_context_s *ctx, struct director
 
 static void append_path_0(struct service_context_s *ctx, struct directory_s *d, struct fuse_path_s *fpath)
 {
-    struct data_link_s *link=NULL;
-    struct inode_s *inode=d->inode;
+    struct data_link_s *link=d->ptr;
 
     /* only append the /. path part when path is empty */
 
@@ -186,9 +186,7 @@ static void append_path_0(struct service_context_s *ctx, struct directory_s *d, 
     }
 
     /* service context */
-    fs_get_data_link(inode, &link);
-    fpath->context=(struct service_context_s *)(link->link.ptr);
-    logoutput_debug("append_path_0: parent entry . context %s", ((fpath->context) ? fpath->context->name : "NULL"));
+    fpath->context=((link && (link->type==DATA_LINK_TYPE_CONTEXT)) ? ((struct service_context_s *)((char *) &link - offsetof(struct service_context_s, link))) : NULL);
 
 }
 
@@ -204,7 +202,6 @@ static void append_path_1(struct service_context_s *ctx, struct directory_s *dir
 {
     struct entry_s *entry=directory->inode->alias;
     struct data_link_s *link=NULL;
-    struct entry_s *parent=get_parent_entry(entry);
 
     /* entry */
     fpath->pathstart-=entry->name.len;
@@ -215,11 +212,9 @@ static void append_path_1(struct service_context_s *ctx, struct directory_s *dir
     *fpath->pathstart='/';
 
     /* service context */
-    fs_get_data_link(parent->inode, &link);
-    fpath->context=(link->type==DATA_LINK_TYPE_CONTEXT) ? (struct service_context_s *)(link->link.ptr) : NULL;
-    entry=parent->inode->alias;
-    logoutput_debug("append_path_1: parent entry %.*s context %s", entry->name.len, entry->name.name, ((fpath->context) ? fpath->context->name : "NULL"));
-
+    directory=get_upper_directory_entry(entry);
+    link=directory->ptr;
+    fpath->context=((link && (link->type==DATA_LINK_TYPE_CONTEXT)) ? ((struct service_context_s *)((char *) &link - offsetof(struct service_context_s, link))) : NULL);
 }
 
 /* functions when depth (distance to root) is bigger than 1: x>1 */
@@ -234,38 +229,27 @@ static void append_path_x(struct service_context_s *ctx, struct directory_s *dir
 {
     struct entry_s *entry=directory->inode->alias;
     struct data_link_s *link=NULL;
-    struct entry_s *parent=get_parent_entry(entry);
 
     /* entry */
     fpath->pathstart-=entry->name.len;
     memcpy(fpath->pathstart, entry->name.name, entry->name.len);
-    logoutput_debug("append_path_x: entry %.*s", entry->name.len, entry->name.name);
 
-    /* (root) slash */
+    /* slash */
     fpath->pathstart--;
     *fpath->pathstart='/';
 
     /* service context */
-    fs_get_data_link(parent->inode, &link);
 
-    entry=parent->inode->alias;
-    fpath->context=(link->type==DATA_LINK_TYPE_CONTEXT) ? (struct service_context_s *)(link->link.ptr) : NULL;
-    logoutput_debug("append_path_x: parent entry %.*s context %s", entry->name.len, entry->name.name, ((fpath->context) ? fpath->context->name : "NULL"));
+    directory=get_upper_directory_entry(entry);
+    link=directory->ptr;
+    fpath->context=((link && (link->type==DATA_LINK_TYPE_CONTEXT)) ? ((struct service_context_s *)((char *) &link - offsetof(struct service_context_s, link))) : NULL);
 
 }
 
 void get_service_context_path(struct service_context_s *ctx, struct directory_s *directory, struct fuse_path_s *fpath)
 {
-    struct data_link_s *link=NULL;
-
-    logoutput_debug("get_service_context_path");
-
-    /* get path :
-	    append and walk back or get path from a cache */
 
     (* directory->getpath->append_path)(ctx, directory, fpath);
-    fs_get_data_link(directory->inode, &link);
-    fpath->context=(link->type==DATA_LINK_TYPE_CONTEXT) ? (struct service_context_s *)(link->link.ptr) : NULL;
 
     while (fpath->context==NULL) {
 	struct entry_s *entry=directory->inode->alias;
@@ -273,13 +257,7 @@ void get_service_context_path(struct service_context_s *ctx, struct directory_s 
 	/* go one level higher */
 
 	directory=get_upper_directory_entry(entry);
-	entry=directory->inode->alias;
-
-	logoutput_debug("get_service_context_path: entry %.*s", entry->name.len, entry->name.name);
-
 	(* directory->getpath->append_path)(ctx, directory, fpath);
-	fs_get_data_link(directory->inode, &link);
-	fpath->context=(link->type==DATA_LINK_TYPE_CONTEXT) ? (struct service_context_s *)(link->link.ptr) : NULL;
 
     }
 
@@ -327,8 +305,6 @@ void set_directory_pathcache_x(struct directory_s *d)
 {
     d->getpath=&getpath_x;
 }
-
-
 
 /* functions when path is cached */
 
@@ -382,6 +358,7 @@ void set_directory_pathcache(struct service_context_s *ctx, struct directory_s *
 {
     struct getpath_s *getpath=NULL;
 
+    if (d==NULL || (d->flags & _DIRECTORY_FLAG_DUMMY)) return;
     if (ctx && (ctx->type != SERVICE_CTX_TYPE_FILESYSTEM)) return;
 
     if ((getpath=d->getpath)) {
@@ -463,23 +440,23 @@ void set_directory_pathcache(struct service_context_s *ctx, struct directory_s *
 
 void release_directory_pathcache(struct directory_s *d)
 {
-    struct getpath_s *getpath=d->getpath;
 
-    if (getpath==NULL) {
+    if (d && (d->flags & _DIRECTORY_FLAG_DUMMY)==0) {
+	struct getpath_s *getpath=d->getpath;
 
-	return;
+	if (getpath && (getpath->type==GETPATH_TYPE_CUSTOM)) {
+	    struct getpath_buffer_s *gb=(struct getpath_buffer_s *) getpath->buffer;
 
-    } else if (getpath->type==GETPATH_TYPE_CUSTOM) {
-	struct getpath_buffer_s *gb=(struct getpath_buffer_s *) getpath->buffer;
+	    gb->refcount--;
 
-	gb->refcount--;
+	    if (gb->refcount<=0) {
 
-	if (gb->refcount<=0) {
+		remove_list_element(&gb->list);
+		free(getpath);
+		d->getpath=NULL;
+		set_directory_getpath(d);
 
-	    remove_list_element(&gb->list);
-	    free(getpath);
-	    d->getpath=NULL;
-	    set_directory_getpath(d);
+	    }
 
 	}
 
@@ -487,42 +464,47 @@ void release_directory_pathcache(struct directory_s *d)
 
 }
 
+void free_pathcache(struct list_element_s *list)
+{
+    struct getpath_buffer_s *gb=(struct getpath_buffer_s *) ((char *) list - offsetof(struct getpath_buffer_s, list));
+    struct getpath_s *getpath=(struct getpath_s *)((char *) gb - offsetof(struct getpath_s, buffer));
+
+    free(getpath);
+}
+
 void set_directory_getpath(struct directory_s *d)
 {
-    struct inode_s *inode=NULL;
-    struct entry_s *entry=NULL;
 
-    if (d==NULL || d->getpath) {
+    if (d && (d->flags & _DIRECTORY_FLAG_DUMMY)==0) {
 
-	return;
+	if (d->getpath) return;
 
-    }
+	if (d->inode) {
+	    struct inode_s *inode=d->inode;
+	    struct entry_s *entry=inode->alias;
+	    struct entry_s *parent=NULL;
 
-    inode=d->inode;
+	    if (get_ino_system_stat(&inode->stat)==FUSE_ROOT_ID) {
 
-    if (inode) {
-	struct entry_s *entry=inode->alias;
-	struct entry_s *parent=NULL;
+		d->getpath=&getpath_0;
+		return;
 
-	if (get_ino_system_stat(&inode->stat)==FUSE_ROOT_ID) {
+	    }
 
-	    d->getpath=&getpath_0;
-	    return;
+	    parent=get_parent_entry(entry);
+	    inode=parent->inode;
 
-	}
+	    if (get_ino_system_stat(&inode->stat)==FUSE_ROOT_ID) {
 
-	parent=get_parent_entry(entry);
-	inode=parent->inode;
+		d->getpath=&getpath_1;
+		return;
 
-	if (get_ino_system_stat(&inode->stat)==FUSE_ROOT_ID) {
-
-	    d->getpath=&getpath_1;
-	    return;
+	    }
 
 	}
 
-    }
+	d->getpath=&getpath_x;
 
-    d->getpath=&getpath_x;
+    }
 
 }

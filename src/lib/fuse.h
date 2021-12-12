@@ -22,6 +22,7 @@
 
 #include "fuse/dentry.h"
 #include "fuse/directory.h"
+#include "fuse/symlink.h"
 
 #include "fuse/fuse-interface.h"
 #include "fuse/fs.h"

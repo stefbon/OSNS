@@ -433,8 +433,8 @@ uint32_t get_size_system_stat(struct system_stat_s *stat)
 
 void get_atime_system_stat(struct system_stat_s *stat, struct system_timespec_s *atime)
 {
-    atime->tv_sec=(int64_t) stat->stx.stx_atime.tv_sec;
-    atime->tv_nsec=(uint32_t) stat->stx.stx_atime.tv_nsec;
+    atime->st_sec=(int64_t) stat->stx.stx_atime.tv_sec;
+    atime->st_nsec=(uint32_t) stat->stx.stx_atime.tv_nsec;
 }
 
 int64_t get_atime_sec_system_stat(struct system_stat_s *stat)
@@ -449,8 +449,8 @@ uint32_t get_atime_nsec_system_stat(struct system_stat_s *stat)
 
 void get_mtime_system_stat(struct system_stat_s *stat, struct system_timespec_s *mtime)
 {
-    mtime->tv_sec=(int64_t) stat->stx.stx_mtime.tv_sec;
-    mtime->tv_nsec=(uint32_t) stat->stx.stx_mtime.tv_nsec;
+    mtime->st_sec=(int64_t) stat->stx.stx_mtime.tv_sec;
+    mtime->st_nsec=(uint32_t) stat->stx.stx_mtime.tv_nsec;
 }
 
 int64_t get_mtime_sec_system_stat(struct system_stat_s *stat)
@@ -465,8 +465,8 @@ uint32_t get_mtime_nsec_system_stat(struct system_stat_s *stat)
 
 void get_ctime_system_stat(struct system_stat_s *stat, struct system_timespec_s *ctime)
 {
-    ctime->tv_sec=(int64_t) stat->stx.stx_ctime.tv_sec;
-    ctime->tv_nsec=(uint32_t) stat->stx.stx_ctime.tv_nsec;
+    ctime->st_sec=(int64_t) stat->stx.stx_ctime.tv_sec;
+    ctime->st_nsec=(uint32_t) stat->stx.stx_ctime.tv_nsec;
 }
 
 int64_t get_ctime_sec_system_stat(struct system_stat_s *stat)
@@ -481,8 +481,8 @@ uint32_t get_ctime_nsec_system_stat(struct system_stat_s *stat)
 
 void get_btime_system_stat(struct system_stat_s *stat, struct system_timespec_s *btime)
 {
-    btime->tv_sec=(int64_t) stat->stx.stx_btime.tv_sec;
-    btime->tv_nsec=(uint32_t) stat->stx.stx_btime.tv_nsec;
+    btime->st_sec=(int64_t) stat->stx.stx_btime.tv_sec;
+    btime->st_nsec=(uint32_t) stat->stx.stx_btime.tv_nsec;
 }
 
 int64_t get_btime_sec_system_stat(struct system_stat_s *stat)
@@ -589,8 +589,8 @@ void set_size_system_stat(struct system_stat_s *stat, uint64_t size)
 
 void set_atime_system_stat(struct system_stat_s *stat, struct system_timespec_s *time)
 {
-    stat->stx.stx_atime.tv_sec=(int64_t) time->tv_sec;
-    stat->stx.stx_atime.tv_nsec=(uint32_t) time->tv_nsec;
+    stat->stx.stx_atime.tv_sec=(int64_t) time->st_sec;
+    stat->stx.stx_atime.tv_nsec=(uint32_t) time->st_nsec;
     stat->mask |= SYSTEM_STAT_ATIME;
 }
 
@@ -606,8 +606,8 @@ void set_atime_nsec_system_stat(struct system_stat_s *stat, uint32_t nsec)
 
 void set_mtime_system_stat(struct system_stat_s *stat, struct system_timespec_s *time)
 {
-    stat->stx.stx_mtime.tv_sec=(int64_t) time->tv_sec;
-    stat->stx.stx_mtime.tv_nsec=(uint32_t) time->tv_nsec;
+    stat->stx.stx_mtime.tv_sec=(int64_t) time->st_sec;
+    stat->stx.stx_mtime.tv_nsec=(uint32_t) time->st_nsec;
     stat->mask |= SYSTEM_STAT_MTIME;
 }
 
@@ -623,8 +623,8 @@ void set_mtime_nsec_system_stat(struct system_stat_s *stat, uint32_t nsec)
 
 void set_ctime_system_stat(struct system_stat_s *stat, struct system_timespec_s *time)
 {
-    stat->stx.stx_ctime.tv_sec=(int64_t) time->tv_sec;
-    stat->stx.stx_ctime.tv_nsec=(uint32_t) time->tv_nsec;
+    stat->stx.stx_ctime.tv_sec=(int64_t) time->st_sec;
+    stat->stx.stx_ctime.tv_nsec=(uint32_t) time->st_nsec;
     stat->mask |= SYSTEM_STAT_CTIME;
 }
 
@@ -640,8 +640,8 @@ void set_ctime_nsec_system_stat(struct system_stat_s *stat, uint32_t nsec)
 
 void set_btime_system_stat(struct system_stat_s *stat, struct system_timespec_s *time)
 {
-    stat->stx.stx_btime.tv_sec=(int64_t) time->tv_sec;
-    stat->stx.stx_btime.tv_nsec=(uint32_t) time->tv_nsec;
+    stat->stx.stx_btime.tv_sec=(int64_t) time->st_sec;
+    stat->stx.stx_btime.tv_nsec=(uint32_t) time->st_nsec;
     stat->mask |= SYSTEM_STAT_BTIME;
 }
 
@@ -1075,8 +1075,8 @@ uint32_t get_size_system_stat(struct system_stat_s *stat)
 
 void get_atime_system_stat(struct system_stat_s *stat, struct system_timespec_s *atime)
 {
-    atime->tv_sec=(int64_t) stat->st.st_atim.tv_sec;
-    atime->tv_nsec=(uint32_t) stat->st.st_atim.tv_nsec;
+    atime->st_sec=(int64_t) stat->st.st_atim.tv_sec;
+    atime->st_nsec=(uint32_t) stat->st.st_atim.tv_nsec;
 }
 
 int64_t get_atime_sec_system_stat(struct system_stat_s *stat)
@@ -1091,8 +1091,8 @@ uint32_t get_atime_nsec_system_stat(struct system_stat_s *stat)
 
 void get_mtime_system_stat(struct system_stat_s *stat, struct system_timespec_s *mtime)
 {
-    mtime->tv_sec=(int64_t) stat->st.st_mtim.tv_sec;
-    mtime->tv_nsec=(uint32_t) stat->st.st_mtim.tv_nsec;
+    mtime->st_sec=(int64_t) stat->st.st_mtim.tv_sec;
+    mtime->st_nsec=(uint32_t) stat->st.st_mtim.tv_nsec;
 }
 
 int64_t get_mtime_sec_system_stat(struct system_stat_s *stat)
@@ -1108,8 +1108,8 @@ uint32_t get_mtime_nsec_system_stat(struct system_stat_s *stat)
 
 void get_ctime_system_stat(struct system_stat_s *stat, struct system_timespec_s *ctime)
 {
-    ctime->tv_sec=(int64_t) stat->st.st_ctim.tv_sec;
-    ctime->tv_nsec=(uint32_t) stat->st.st_ctim.tv_nsec;
+    ctime->st_sec=(int64_t) stat->st.st_ctim.tv_sec;
+    ctime->st_nsec=(uint32_t) stat->st.st_ctim.tv_nsec;
 }
 
 int64_t get_ctime_sec_system_stat(struct system_stat_s *stat)
@@ -1124,8 +1124,8 @@ uint32_t get_ctime_nsec_system_stat(struct system_stat_s *stat)
 
 void get_btime_system_stat(struct system_stat_s *stat, struct system_timespec_s *btime)
 {
-    btime->tv_sec=0;
-    btime->tv_nsec=0;
+    btime->st_sec=0;
+    btime->st_nsec=0;
 }
 
 int64_t get_btime_sec_system_stat(struct system_stat_s *stat)
@@ -1232,8 +1232,8 @@ void decrease_nlink_system_stat(struct system_stat_s *stat, int32_t count)
 
 void set_atime_system_stat(struct system_stat_s *stat, struct system_timespec_s *time)
 {
-    stat->st.st_atim.tv_sec=(time_t) time->sec;
-    stat->st.st_atim.tv_nsec=(long) time->nsec;
+    stat->st.st_atim.tv_sec=(time_t) time->st_sec;
+    stat->st.st_atim.tv_nsec=(long) time->st_nsec;
     stat->mask |= SYSTEM_STAT_ATIME;
 }
 
@@ -1249,8 +1249,8 @@ void set_atime_nsec_system_stat(struct system_stat_s *stat, uint32_t nsec)
 
 void set_mtime_system_stat(struct system_stat_s *stat, struct system_timespec_s *time)
 {
-    stat->st.st_btim.tv_sec=(time_t) time->tv_sec;
-    stat->st.st_btim.tv_nsec=(long) time->tv_nsec;
+    stat->st.st_btim.tv_sec=(time_t) time->st_sec;
+    stat->st.st_btim.tv_nsec=(long) time->st_nsec;
     stat->mask |= SYSTEM_STAT_MTIME;
 }
 
@@ -1266,8 +1266,8 @@ void set_mtime_nsec_system_stat(struct system_stat_s *stat, uint32_t nsec)
 
 void set_ctime_system_stat(struct system_stat_s *stat, struct system_timespec_s *time)
 {
-    stat->st.st_ctim.tv_sec=(time_t) time->tv_sec;
-    stat->st.st_ctim.tv_nsec=(long) time->tv_nsec;
+    stat->st.st_ctim.tv_sec=(time_t) time->st_sec;
+    stat->st.st_ctim.tv_nsec=(long) time->st_nsec;
     stat->mask |= SYSTEM_STAT_CTIME;
 }
 
@@ -1345,11 +1345,6 @@ uint32_t calc_amount_blocks(uint64_t size, uint32_t blksize)
     return count;
 }
 
-void copy_system_time(struct system_timespec_s *to, struct system_timespec_s *from)
-{
-    memcpy(to, from, sizeof(struct system_timespec_s));
-}
-
 void calc_blocks_system_stat(struct system_stat_s *stat)
 {
     uint32_t blksize=get_blksize_system_stat(stat);
@@ -1397,8 +1392,6 @@ int system_stat_test_ISLNK(struct system_stat_s *stat)
 #endif
 
 }
-
-
 
 int system_getstatvfs(struct fs_location_path_s *path, struct system_statvfs_s *s)
 {

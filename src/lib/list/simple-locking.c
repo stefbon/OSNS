@@ -373,7 +373,6 @@ static int _simple_downgrade_readlock(struct simple_lock_s *rlock)
 
     }
 
-    /* add as first in writers list, otherwise a deadlock is possible */
     add_list_element_first(&locking->readlocks, &rlock->list);
     rlock->flags |= SIMPLE_LOCK_FLAG_LIST;
     locking->readers++;

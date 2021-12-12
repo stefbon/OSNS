@@ -49,8 +49,7 @@
 #include "workspace-interface.h"
 #include "workspace.h"
 #include "fuse.h"
-
-#undef LOGGING
+#include "system.h"
 #include "log.h"
 
 extern const char *dotdotname;
@@ -105,23 +104,6 @@ unsigned int get_pathmax(struct workspace_mount_s *w)
     return w->pathmax;
 }
 
-void clear_workspace_mount(struct workspace_mount_s *workspace)
-{
-    unsigned int error=0;
-    struct directory_s *directory=remove_directory(&workspace->inodes.rootinode, &error);
-
-    logoutput("clear_workspace_mount: mountpoint %s", workspace->mountpoint.path);
-
-    if (directory) {
-	struct service_context_s *context=get_root_context_workspace(workspace);
-
-	clear_directory_recursive(&context->interface, directory);
-	free_directory(directory);
-
-    }
-
-}
-
 static void init_workspace_inodes(struct workspace_mount_s *workspace)
 {
     struct workspace_inodes_s *inodes=&workspace->inodes;
@@ -164,6 +146,12 @@ static void init_workspace_inodes(struct workspace_mount_s *workspace)
     inodes->nrinodes=1;
     inodes->inoctr=FUSE_ROOT_ID;
     init_list_header(&inodes->forget, SIMPLE_LIST_TYPE_EMPTY, NULL);
+    init_list_header(&inodes->directories, SIMPLE_LIST_TYPE_EMPTY, NULL);
+    init_list_header(&inodes->symlinks, SIMPLE_LIST_TYPE_EMPTY, NULL);
+
+    /* dummy directory */
+
+    init_dummy_directory(&inodes->dummy_directory);
 
     /* a mutex and cond combination for protection and signalling */
 
@@ -171,25 +159,40 @@ static void init_workspace_inodes(struct workspace_mount_s *workspace)
     pthread_cond_init(&inodes->cond, NULL);
     inodes->thread=0;
 
+    workspace->locking=&inodes->dummy_directory.locking;
+
 }
 
 static void free_workspace_inodes(struct workspace_mount_s *workspace)
 {
     struct workspace_inodes_s *inodes=&workspace->inodes;
+    struct list_element_s *list=NULL;
 
     for (unsigned int i=0; i<WORKSPACE_INODE_HASHTABLE_SIZE; i++) {
-	struct list_element_s *list=get_list_head(&inodes->hashtable[i], SIMPLE_LIST_FLAG_REMOVE);
+
+	list=get_list_head(&inodes->hashtable[i], SIMPLE_LIST_FLAG_REMOVE);
 
 	while (list) {
-	    struct list_element_s *next=get_next_element(list);
 	    struct inode_s *inode=(struct inode_s *)((char *) list - offsetof(struct inode_s, list));
 
 	    free(inode);
-	    list=next;
+	    list=get_list_head(&inodes->hashtable[i], SIMPLE_LIST_FLAG_REMOVE);
 
 	}
 
     }
+
+    list=get_list_head(&inodes->directories, SIMPLE_LIST_FLAG_REMOVE);
+
+    while (list) {
+	struct directory_s *d=(struct directory_s *)((char *) list - offsetof(struct directory_s, list));
+
+	free_directory(d);
+	list=get_list_head(&inodes->directories, SIMPLE_LIST_FLAG_REMOVE);
+
+    }
+
+    /* TODO: forget list */
 
     pthread_mutex_destroy(&inodes->mutex);
     pthread_cond_destroy(&inodes->cond);
@@ -234,10 +237,10 @@ int init_workspace_mount(struct workspace_mount_s *workspace, unsigned int *erro
     workspace->mountpoint.flags=0;
     workspace->mountpoint.refcount=0;
 
-    workspace->syncdate.tv_sec=0;
-    workspace->syncdate.tv_nsec=0;
+    set_system_time(&workspace->syncdate, 0, 0);
 
     init_list_header(&workspace->contexes, SIMPLE_LIST_TYPE_EMPTY, NULL);
+
     init_list_element(&workspace->list, NULL);
     init_list_element(&workspace->list_g, NULL);
     workspace->mountevent=mountevent_dummy;
@@ -464,11 +467,11 @@ static void inode_2delete_thread(void *ptr)
 
 	    logoutput("inode_2delete_thread: remove inode ino %lli (nlookup zero)", i2d->ino);
 
-	    if (S_ISDIR(inode->stat.sst_mode)) {
+	    if (system_stat_test_ISDIR(&inode->stat)) {
 		unsigned int error=0;
-		struct directory_s *directory=remove_directory(inode, &error);
+		struct directory_s *directory=get_directory(workspace, inode, GET_DIRECTORY_FLAG_NOCREATE);
 
-		if (directory) free_directory(directory);
+		free_directory(directory);
 
 	    }
 
@@ -476,7 +479,7 @@ static void inode_2delete_thread(void *ptr)
 
     	    /* call the inode specific forget which will also release the attached data */
 
-    	    (* inode->fs->forget)(inode);
+    	    (* inode->fs->forget)(NULL, inode);
 
 	    /* is there an entry??*/
 
@@ -485,19 +488,11 @@ static void inode_2delete_thread(void *ptr)
     		struct directory_s *directory=get_upper_directory_entry(entry);
 
     		if (directory) {
-        	    unsigned int error=0;
-        	    struct simple_lock_s wlock;
+    		    unsigned int error=0;
 
-        	    /* remove entry from directory */
+		    remove_entry(directory, entry, &error);
 
-        	    if (wlock_directory(directory, &wlock)==0) {
-
-            		remove_entry_batch(directory, entry, &error);
-            		unlock_directory(directory, &wlock);
-
-        	    }
-
-    		}
+		}
 
         	entry->inode=NULL;
         	inode->alias=NULL;

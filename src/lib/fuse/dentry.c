@@ -48,8 +48,8 @@ static pthread_mutex_t cachemutex=PTHREAD_MUTEX_INITIALIZER;
 
 void init_data_link(struct data_link_s *link)
 {
-    memset(link, 0, sizeof(struct data_link_s));
     link->type=0;
+    link->refcount=0;
 }
 
 void init_entry(struct entry_s *entry)
@@ -59,7 +59,7 @@ void init_entry(struct entry_s *entry)
     entry->name.len=0;
     entry->name.index=0;
     init_list_element(&entry->list, NULL);
-    init_data_link(&entry->link);
+    entry->ptr=NULL;
     entry->flags=0;
     entry->ops=NULL;
 }
@@ -258,12 +258,9 @@ void init_inode(struct inode_s *inode)
     set_ctime_system_stat(stat, &time);
 
     /* synctime */
-    inode->stime.tv_sec=0;
-    inode->stime.tv_nsec=0;
+    set_system_time(&inode->stime, 0, 0);
 
-    /* data link */
-    init_data_link(&inode->link);
-
+    inode->ptr=NULL;
     inode->cache=NULL;
     inode->fs=NULL;
 
@@ -335,7 +332,7 @@ void log_inode_information(struct inode_s *inode, uint64_t what)
     if (what & INODE_INFORMATION_MTIM) logoutput("log_inode_information: mtim %li.%li", get_mtime_sec_system_stat(&inode->stat), get_mtime_nsec_system_stat(&inode->stat));
     if (what & INODE_INFORMATION_CTIM) logoutput("log_inode_information: ctim %li.%li", get_ctime_sec_system_stat(&inode->stat), get_ctime_nsec_system_stat(&inode->stat));
     if (what & INODE_INFORMATION_ATIM) logoutput("log_inode_information: atim %li.%li", get_atime_sec_system_stat(&inode->stat), get_atime_nsec_system_stat(&inode->stat));
-    if (what & INODE_INFORMATION_STIM) logoutput("log_inode_information: stim %li.%li", inode->stime.tv_sec, inode->stime.tv_nsec);
+    if (what & INODE_INFORMATION_STIM) logoutput("log_inode_information: stim %li.%li", inode->stime.st_sec, inode->stime.st_nsec);
 
 }
 

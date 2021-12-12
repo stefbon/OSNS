@@ -124,8 +124,7 @@ int init_ssh_connection_receive(struct ssh_connection_s *connection, unsigned in
 
     set_ssh_receive_behaviour(connection, "greeter");
     receive->process_ssh_packet=process_ssh_packet_nodecompress;
-    receive->newkeys.tv_sec=0;
-    receive->newkeys.tv_nsec=0;
+    set_system_time(&receive->newkeys, 0, 0);
 
     /* decrypt */
 

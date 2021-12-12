@@ -105,7 +105,7 @@ void _fs_sftp_getattr(struct service_context_s *context, struct fuse_request_s *
     /* send lstat cause not interested in target when dealing with symlink */
 
     if (send_sftp_lstat_ctx(interface, &sftp_r)>0) {
-	struct timespec timeout;
+	struct system_timespec_s timeout=SYSTEM_TIME_INIT;
 
 	get_sftp_request_timeout_ctx(interface, &timeout);
 	error=0;
@@ -162,7 +162,7 @@ void _fs_sftp_fgetattr(struct fuse_openfile_s *openfile, struct fuse_request_s *
     /* send fstat cause a handle is available */
 
     if (send_sftp_fstat_ctx(interface, &sftp_r)>0) {
-	struct timespec timeout;
+	struct system_timespec_s timeout=SYSTEM_TIME_INIT;
 
 	get_sftp_request_timeout_ctx(interface, &timeout);
 	error=0;

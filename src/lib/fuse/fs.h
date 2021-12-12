@@ -137,11 +137,7 @@ struct fuse_fs_s {
 
     unsigned int flags;
 
-    int (* lock_datalink)(struct inode_s *inode);
-    int (* unlock_datalink)(struct inode_s *inode);
-    void (* get_data_link)(struct inode_s *inode, struct data_link_s **link);
-
-    void (* forget) (struct inode_s *inode);
+    void (* forget) (struct service_context_s *context, struct inode_s *inode);
 
     void (* getattr) (struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode);
     void (* setattr) (struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, struct system_stat_s *stat);
@@ -208,11 +204,6 @@ struct fuse_fs_s {
 
 void copy_fuse_fs(struct fuse_fs_s *to, struct fuse_fs_s *from);
 unsigned char fuse_request_interrupted(struct fuse_request_s *request);
-
-int fs_lock_datalink(struct inode_s *inode);
-int fs_unlock_datalink(struct inode_s *inode);
-
-void fs_get_data_link(struct inode_s *inode, struct data_link_s **p_link);
 
 void fuse_fs_forget(struct fuse_request_s *request);
 void fuse_fs_forget_multi(struct fuse_request_s *request);

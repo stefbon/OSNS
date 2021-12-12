@@ -115,6 +115,7 @@ struct service_context_s {
     unsigned char				type;
     uint32_t					flags;
     char					name[32];
+    struct data_link_s				link;
     union {
 	struct workspace_context_s {
 	    struct service_fs_s				*fs; 		/* the fs used for the workspace/root: networkfs or devicefs */
@@ -125,7 +126,7 @@ struct service_context_s {
 	    struct service_fs_s				*fs; 		/* the fs used for this service: pseudo, sftp, webdav, smb ... */
 	    struct list_element_s			clist;		/* the list of the parent: part of a tree */
 	    struct list_header_s			header;		/* has children */
-	    struct timespec				refresh;
+	    struct system_timespec_s			refresh;
 	    pthread_t					threadid;
 	} network;
 	struct browse_context_s {
@@ -134,7 +135,7 @@ struct service_context_s {
 	    unsigned int				type;		/* type: network, netgroup or nethost or netsocket */
 	    uint32_t					unique;		/* unique id of the related resource record */
 	    struct list_header_s			header;		/* has children */
-	    struct timespec				refresh;	/* time of latest refresh: to keep cache and contexes in sync */
+	    struct system_timespec_s			refresh;	/* time of latest refresh: to keep cache and contexes in sync */
 	    pthread_t					threadid;
 	} browse;
 	struct filesystem_context_s {
@@ -164,8 +165,8 @@ struct service_fs_s {
 
     void (*mkdir) (struct service_context_s *context, struct fuse_request_s *request, struct entry_s *entry, struct pathinfo_s *pathinfo, struct system_stat_s *stat);
     void (*mknod) (struct service_context_s *context, struct fuse_request_s *request, struct entry_s *entry, struct pathinfo_s *pathinfo, struct system_stat_s *stat);
-    void (*symlink) (struct service_context_s *context, struct fuse_request_s *request, struct entry_s *entry, struct pathinfo_s *pathinfo, const char *link);
-    int  (*symlink_validate)(struct service_context_s *context, struct pathinfo_s *pathinfo, char *target, char **remote_target);
+    void (*symlink) (struct service_context_s *context, struct fuse_request_s *request, struct entry_s *entry, struct pathinfo_s *pathinfo, struct fs_location_path_s *link);
+    int  (*symlink_validate)(struct service_context_s *context, struct pathinfo_s *pathinfo, char *target, struct fs_location_path_s *sub);
 
     void (*unlink) (struct service_context_s *context, struct fuse_request_s *request, struct entry_s **entry, struct pathinfo_s *pathinfo);
     void (*rmdir) (struct service_context_s *context, struct fuse_request_s *request, struct entry_s **entry, struct pathinfo_s *pathinfo);

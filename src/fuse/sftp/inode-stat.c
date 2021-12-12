@@ -146,3 +146,11 @@ int compare_cache_sftp(struct ssh_string_s *data, unsigned int size, char *buffe
 {
     return (size>=data->len && memcmp(buffer, data->ptr, data->len)==0) ? 0 : 1;
 }
+
+int test_remote_file_changed(struct system_stat_s *stat, struct system_timespec_s *mtime_before)
+{
+    struct system_timespec_s mtime=SYSTEM_TIME_INIT;
+
+    get_mtime_system_stat(stat, &mtime);
+    return compare_system_times(mtime_before, &mtime);
+}

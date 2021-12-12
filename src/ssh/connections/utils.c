@@ -108,28 +108,28 @@ unsigned int get_status_ssh_connection(struct ssh_connection_s *connection)
 
 }
 
-void get_ssh_connection_expire_init(struct ssh_connection_s *c, struct timespec *expire)
+void get_ssh_connection_expire_init(struct ssh_connection_s *c, struct system_timespec_s *expire)
 {
     struct fs_connection_s *connection=&c->connection;
 
-    get_current_time(expire);
-    expire->tv_sec+=c->connection.expire;
+    get_current_time_system_time(expire);
+    system_time_add(expire, SYSTEM_TIME_ADD_ZERO, c->connection.expire); /* connection expire is only in sec */
 }
 
-void get_ssh_connection_expire_session(struct ssh_connection_s *c, struct timespec *expire)
+void get_ssh_connection_expire_session(struct ssh_connection_s *c, struct system_timespec_s *expire)
 {
     struct ssh_session_s *session=get_ssh_connection_session(c);
 
-    get_current_time(expire);
-    expire->tv_sec+=session->config.connection_expire;
+    get_current_time_system_time(expire);
+    system_time_add(expire, SYSTEM_TIME_ADD_ZERO, session->config.connection_expire); /* connection expire is only in sec */
 }
 
-void get_ssh_connection_expire_userauth(struct ssh_connection_s *c, struct timespec *expire)
+void get_ssh_connection_expire_userauth(struct ssh_connection_s *c, struct system_timespec_s *expire)
 {
     struct ssh_session_s *session=get_ssh_connection_session(c);
 
-    get_current_time(expire);
-    expire->tv_sec+=session->config.userauth_expire;
+    get_current_time_system_time(expire);
+    system_time_add(expire, SYSTEM_TIME_ADD_ZERO, session->config.userauth_expire); /* connection expire is only in sec */
 }
 
 void signal_ssh_connections(struct ssh_session_s *session)

@@ -123,7 +123,6 @@ static struct sftp_request_s *lookup_request_hashtable(struct sftp_client_s *sft
     struct list_header_s *header=&hashtable[hash];
     struct sftp_request_s *sftp_r=NULL;
     struct list_element_s *list=NULL;
-    struct context_interface_s *tmp=NULL;
 
     /* writelock the hash table row
 	it's very simple here since only write locks are */
@@ -134,9 +133,8 @@ static struct sftp_request_s *lookup_request_hashtable(struct sftp_client_s *sft
     while (list) {
 
 	sftp_r=get_container_sftp_r(list);
-	tmp=sftp_r->interface;
 
-	if (sftp_r->id==id) {
+	if ((sftp_r->id==id) && (sftp_r->unique==sftp->context.unique)) {
 
 	    remove_list_element(list);
 	    break;
@@ -228,20 +226,22 @@ void signal_sftp_received_id_error(struct sftp_client_s *sftp, struct sftp_reque
 	- original request from context is cancelled by the caller
 */
 
-unsigned char wait_sftp_response(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r, struct timespec *timeout)
+unsigned char wait_sftp_response(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r, struct system_timespec_s *timeout)
 {
     struct common_signal_s *signal=sftp->signal.signal;
     unsigned int hash=sftp_r->id % hashsize;
     struct list_header_s *header=&hashtable[hash];
-    struct timespec expire;
+    struct system_timespec_s expire=SYSTEM_TIME_INIT;
     int result=0;
 
-    get_expire_time(&expire, timeout);
-
     init_list_element(&sftp_r->list, header);
-    get_current_time(&sftp_r->started);
-    sftp_r->timeout.tv_sec=timeout->tv_sec;
-    sftp_r->timeout.tv_nsec=timeout->tv_nsec;
+    get_current_time_system_time(&sftp_r->started);
+
+    /* reuse the system time set earlier */
+
+    copy_system_time(&expire, &sftp_r->started);
+    system_time_add_time(&expire, timeout);
+    copy_system_time(&sftp_r->timeout, timeout);
 
     /* add to the hash table */
     logoutput_debug("wait_sftp_response: add %u to hashtable", sftp_r->id);
@@ -293,8 +293,7 @@ unsigned char wait_sftp_response(struct sftp_client_s *sftp, struct sftp_request
 	logoutput("wait_sftp_response: error (packet wrong format?) (id=%i seq=%i)", sftp_r->id, sftp_r->reply.sequence);
 	return 0;
 
-    } else if (sftp->signal.seq==sftp_r->reply.sequence &&
-	    (sftp->signal.seqset.tv_sec > sftp_r->started.tv_sec || (sftp->signal.seqset.tv_sec==sftp_r->started.tv_sec && sftp->signal.seqset.tv_nsec > sftp_r->started.tv_nsec))) {
+    } else if (sftp->signal.seq==sftp_r->reply.sequence && compare_system_times(&sftp_r->started, &sftp->signal.seqset)==1) {
 
 	signal_unlock(signal);
 
@@ -357,15 +356,15 @@ unsigned char wait_sftp_response(struct sftp_client_s *sftp, struct sftp_request
 
 }
 
-unsigned char wait_sftp_service_complete(struct sftp_client_s *sftp, struct timespec *timeout)
+unsigned char wait_sftp_service_complete(struct sftp_client_s *sftp, struct system_timespec_s *timeout)
 {
     struct common_signal_s *signal=sftp->signal.signal;
-    struct timespec expire;
+    struct system_timespec_s expire;
     int result=-1;
 
     logoutput("wait_sftp_service_complete");
 
-    get_expire_time(&expire, timeout);
+    set_expire_time_system_time(&expire, timeout);
     signal_lock(signal);
 
     while ((sftp->signal.flags & (SFTP_SIGNAL_FLAG_DISCONNECT | SFTP_SIGNAL_FLAG_CONNECTED))==0) {

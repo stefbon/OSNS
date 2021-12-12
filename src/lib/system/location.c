@@ -311,7 +311,7 @@ static int compare_fs_devino_location_path(struct fs_location_s *b, struct fs_lo
 	char buffer[len];
 	struct fs_location_path_s tmp=FS_LOCATION_PATH_INIT;
 
-	set_buffer_location_path(&tmp, buffer, len, 0);
+	assign_buffer_location_path(&tmp, buffer, len);
 	append_location_path(&tmp, 'p', (void *) &a->type.path);
 	append_location_path(&tmp, 'c', a->name);
 

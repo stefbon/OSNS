@@ -63,24 +63,26 @@ static struct statfs statfs_keep;
 
 struct special_path_s {
     uint64_t					ino;
+    struct data_link_s				link;
     unsigned int				size;
     char					path[];
 };
 
-static void _fs_special_forget(struct inode_s *inode)
+static void _fs_special_forget(struct service_context_s *context, struct inode_s *inode)
 {
-    struct data_link_s *link=NULL;
+    struct data_link_s *link=inode->ptr;
 
     logoutput("_fs_special_forget");
 
-    fs_get_data_link(inode, &link);
+    if (link) {
 
-    if (link->type==DATA_LINK_TYPE_SPECIAL_ENTRY) {
-	struct special_path_s *s=(struct special_path_s *) link->link.ptr;
+	if (link->type==DATA_LINK_TYPE_SPECIAL_ENTRY) {
+	    struct special_path_s *s=(struct special_path_s *) ((char *) link - offsetof(struct special_path_s, link));
 
-	if (s) free(s);
-	link->type=0;
-	link->link.ptr=NULL;
+	    free(s);
+	    inode->ptr=NULL;
+
+	}
 
     }
 
@@ -112,28 +114,31 @@ static void _fs_special_open(struct fuse_openfile_s *openfile, struct fuse_reque
     unsigned int error=EIO;
     struct inode_s *inode=openfile->inode;
     int fd=0;
-    struct data_link_s *link=NULL;
-    struct special_path_s *s=NULL;
+    struct data_link_s *link=inode->ptr;
 
-    fs_get_data_link(inode, &link);
-    s=(struct special_path_s *) link->link.ptr;
+    if (link) {
 
-    fd=open((char *) s->path, flags);
+	if (link->type==DATA_LINK_TYPE_SPECIAL_ENTRY) {
+	    struct special_path_s *s=(struct special_path_s *) ((char *) link - offsetof(struct special_path_s, link));
 
-    if (fd>0) {
-	struct fuse_open_out open_out;
+	    fd=open((char *) s->path, flags);
 
-	openfile->handle.fd=fd;
+	    if (fd>0) {
+		struct fuse_open_out open_out;
 
-	open_out.fh=(uint64_t) openfile;
-	open_out.open_flags=0; //FOPEN_KEEP_CACHE;
-	open_out.padding=0;
-	reply_VFS_data(request, (char *) &open_out, sizeof(open_out));
-	return;
+		openfile->handle.fd=fd;
 
-    } else {
+		open_out.fh=(uint64_t) openfile;
+		open_out.open_flags=0; //FOPEN_KEEP_CACHE;
+		open_out.padding=0;
+		reply_VFS_data(request, (char *) &open_out, sizeof(open_out));
+		return;
 
-	error=errno;
+	    }
+
+	    error=errno;
+
+	}
 
     }
 
@@ -255,7 +260,7 @@ static void create_desktopentry_file(char *path, struct entry_s *parent, struct 
 {
     struct system_stat_s stat;
     struct fs_location_path_s location=FS_LOCATION_PATH_INIT;
-    struct directory_s *directory=get_directory(parent->inode);
+    struct directory_s *directory=get_directory(workspace, parent->inode, 0);
     struct simple_lock_s wlock;
 
     location.ptr=path;
@@ -306,8 +311,8 @@ static void create_desktopentry_file(char *path, struct entry_s *parent, struct 
 		    s->ino=inode->stat.sst_ino;
 		    strcpy(s->path, path);
 		    s->size=strlen(path);
-		    inode->link.link.ptr=(void *)s;
-		    inode->link.type=DATA_LINK_TYPE_SPECIAL_ENTRY;
+		    inode->ptr=&s->link;
+		    s->link.type=DATA_LINK_TYPE_SPECIAL_ENTRY;
 
 		}
 

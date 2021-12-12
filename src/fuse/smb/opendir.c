@@ -93,7 +93,7 @@ static void _cb_created(struct entry_s *entry, struct create_entry_s *ce)
 
 	inode->st.st_nlink=2;
 	parent->inode->st.st_nlink++;
-	set_directory_dump(inode, get_dummy_directory());
+	assign_directory_inode(inode);
 
     } else if (S_ISLNK(inode->st.st_mode)) {
 

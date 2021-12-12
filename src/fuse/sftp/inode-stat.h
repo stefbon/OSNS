@@ -34,5 +34,6 @@ unsigned int get_attr_buffer_size(struct context_interface_s *interface, struct 
 void set_sftp_inode_stat_defaults(struct context_interface_s *interface, struct inode_s *inode);
 
 int compare_cache_sftp(struct ssh_string_s *data, unsigned int size, char *buffer, void *ptr);
+int test_remote_file_changed(struct system_stat_s *stat, struct system_timespec_s *mtime_before);
 
 #endif

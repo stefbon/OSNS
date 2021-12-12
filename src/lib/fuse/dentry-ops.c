@@ -47,13 +47,15 @@
 
 static unsigned int _get_pathlen_dir(struct service_context_s *ctx, struct entry_s *entry)
 {
-    struct directory_s *d=get_directory(entry->inode);
+    struct workspace_mount_s *w=get_workspace_mount_ctx(ctx);
+    struct directory_s *d=get_directory(w, entry->inode, 0);
     return (d->getpath->get_pathlen)(ctx, d);
 }
 
 static void _append_path_dir(struct service_context_s *ctx, struct entry_s *entry, struct fuse_path_s *fp)
 {
-    struct directory_s *d=get_directory(entry->inode);
+    struct workspace_mount_s *w=get_workspace_mount_ctx(ctx);
+    struct directory_s *d=get_directory(w, entry->inode, 0);
     get_service_context_path(ctx, d, fp);
 }
 

@@ -90,7 +90,7 @@ static void _smb_lookup_cb_created(struct entry_s *entry, struct create_entry_s 
 	inode->st.st_nlink++;
 	parent->inode->st.st_nlink++;
 	logoutput_debug("_smb_lookup_cb_created: dir name %s ino %li", entry->name.name, inode->st.st_ino);
-	set_directory_dump(inode, get_dummy_directory());
+	assign_directory_inode(inode);
 
     } else {
 

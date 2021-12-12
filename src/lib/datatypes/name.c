@@ -102,6 +102,34 @@ int compare_names(struct name_s *a, struct name_s *b)
 
 }
 
+int compare_name(struct name_s *a, const unsigned char type, void *ptr)
+{
+
+    switch (type) {
+
+	case 'n': {
+
+	    struct name_s *b=(struct name_s *) ptr;
+	    return compare_names(a, b);
+
+	}
+
+	case 'c': {
+
+	    char *tmp=(char *) ptr;
+	    struct name_s b={tmp, strlen(tmp), 0};
+
+	    calculate_nameindex(&b);
+	    return compare_names(a, &b);
+
+	}
+
+    }
+
+    return -1;
+
+}
+
 void calculate_nameindex(struct name_s *name)
 {
     char buffer[6];

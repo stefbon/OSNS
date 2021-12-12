@@ -13,7 +13,7 @@ sbin_PROGRAMS += osns_client
 endif
 
 osns_client_SOURCES =  	lib/fuse/directory.c lib/fuse/dentry.c lib/fuse/dentry-ops.c lib/fuse/utils.c \
-			lib/fuse/fuse-interface.c lib/fuse/fs.c \
+			lib/fuse/fuse-interface.c lib/fuse/fs.c lib/fuse/symlink.c \
 			lib/fuse/fs-common.c lib/fuse/fs-virtual.c lib/fuse/fs-special.c \
 			lib/fuse/fs-service-browse.c lib/fuse/fs-service-path.c \
 			lib/sl/skiplist.c lib/sl/skiplist-delete.c lib/sl/skiplist-find.c lib/sl/skiplist-insert.c lib/sl/skiplist-utils.c lib/sl/skiplist-lock.c \
@@ -38,12 +38,11 @@ osns_client_SOURCES =  	lib/fuse/directory.c lib/fuse/dentry.c lib/fuse/dentry-o
 			lib/datatypes/name.c lib/datatypes/buffer.c \
 			lib/datatypes/ssh-string.c lib/datatypes/ssh-uint.c \
 			lib/datatypes/ssh-namelist.c lib/datatypes/ssh-payload.c lib/datatypes/ssh-mpint.c lib/datatypes/ssh-msg-buffer.c \
-			lib/file/read.c \
 			lib/users/check.c lib/users/getent.c lib/users/local.c lib/users/lookup.c \
 			lib/users/mapcb.c lib/users/mapcb_p2l.c lib/users/mapcb_l2p.c lib/users/mapping.c lib/users/monitor.c \
 			lib/system/directory.c lib/system/file.c lib/system/fshandle.c \
 			lib/system/hash.c lib/system/insert.c lib/system/location.c \
-			lib/system/open.c lib/system/path.c lib/system/stat.c \
+			lib/system/open.c lib/system/path.c lib/system/stat.c lib/system/time.c \
 			fuse/network.c fuse/ssh.c fuse/sftp.c \
 			fuse/workspace-fs.c fuse/workspace/access.c fuse/workspace/getattr.c fuse/workspace/lookup.c fuse/workspace/opendir.c fuse/workspace/statfs.c fuse/workspace/xattr.c \
 			fuse/sftp-fs.c fuse/sftp/access.c fuse/sftp/inode-stat.c \
@@ -61,7 +60,7 @@ osns_client_SOURCES =  	lib/fuse/directory.c lib/fuse/dentry.c lib/fuse/dentry-o
 			sftp/send.c sftp/send/send-v03.c sftp/send/send-v04.c sftp/send/send-v05.c sftp/send/send-v06.c \
 			sftp/attr.c sftp/context.c sftp/common.c sftp/extensions.c sftp/extensions/fsync.c sftp/extensions/statvfs.c \
 			sftp/init.c   \
-			sftp/request-hash.c sftp/time.c sftp/usermapping.c sftp/utils.c \
+			sftp/request-hash.c sftp/time.c sftp/usermapping.c \
 			ssh/channel/init.c ssh/channel/payload.c ssh/channel/shell.c ssh/channel/startclose.c \
 			ssh/channel/table.c ssh/channel/uri.c ssh/channel/utils.c \
 			ssh/connections/connect.c ssh/connections/init.c ssh/connections/setup.c ssh/connections/utils.c \

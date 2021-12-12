@@ -65,9 +65,7 @@
 #define FS_CONNECTION_FLAG_DISCONNECTED					(1 << 5)
 #define FS_CONNECTION_FLAG_DISCONNECT					( FS_CONNECTION_FLAG_DISCONNECTING | FS_CONNECTION_FLAG_DISCONNECTED )
 
-#define FS_CONNECTION_FLAG_WRITE					(1 << 6)
-#define FS_CONNECTION_FLAG_WAITING					(1 << 7)
-#define FS_CONNECTION_FLAG_WRITABLE					(1 << 8)
+#define FS_CONNECTION_FLAG_SEND_BLOCKED					(1 << 6)
 
 #define FS_CONNECTION_COMPARE_HOST					1
 
@@ -138,7 +136,7 @@ struct std_ops_s {
 struct fs_connection_s {
     unsigned char 				type;
     unsigned char				role;
-    unsigned char				status;
+    unsigned int				status;
     unsigned int				error;
     unsigned int				expire;
     void 					*data;

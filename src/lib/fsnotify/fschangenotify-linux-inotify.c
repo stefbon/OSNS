@@ -194,6 +194,13 @@ static unsigned int inotify_get_pid(struct fsevent_s *fsevent, unsigned int *err
     return 0;
 }
 
+static int issubdirectory(char *a, char *b)
+{
+    unsigned int lena=strlen(a);
+    unsigned int lenb=strlen(b);
+
+    return (((lena>=lenb) && (strncmp(a, b, lenb)==0) && (a[lenb]=='/')) ? 1 : 0);
+}
 
 /*
     function which set a os specific watch on the backend on path with mask mask
@@ -206,13 +213,11 @@ int set_watch_backend_inotify(struct notifywatch_s *watch, uint32_t mask)
 
     logoutput_info("set_watch_backend_inotify");
 
-    /*
-	test the the underlying fs works with inotify
+    /*	test the the underlying fs works with inotify
 	for example /proc and /sys do not support inotify
-	change this test 
-    */
+	change this test */
 
-    if (issubdirectory(watch->pathinfo.path, "/proc", 1)==1 || issubdirectory(watch->pathinfo.path, "/sys", 1)==1) {
+    if (issubdirectory(watch->pathinfo.path, "/proc")==1 || issubdirectory(watch->pathinfo.path, "/sys")==1) {
 
 	error=ENOSYS;
 	goto out;

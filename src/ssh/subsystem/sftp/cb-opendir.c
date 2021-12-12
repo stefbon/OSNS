@@ -171,7 +171,7 @@ void sftp_op_opendir(struct sftp_payload_s *payload)
 
 	    memset(&location, 0, sizeof(struct fs_location_s));
 	    location.flags=FS_LOCATION_FLAG_PATH;
-	    set_buffer_location_path(&location.type.path, tmp, size+1, 0);
+	    assign_buffer_location_path(&location.type.path, tmp, size+1);
 	    (* convert.complete)(sftp, &path, &location.type.path);
 	    _sftp_op_opendir(sftp, payload, &location);
 	    return;
@@ -227,7 +227,7 @@ static int check_target_symlink(struct sftp_subsystem_s *sftp, struct dirhandle_
 
 		/* absolute path, compare with prefix */
 
-		result=(int) test_location_path_subdirectory(&path, 's', (void *) &sftp->prefix.path);
+		result=(int) test_location_path_subdirectory(&path, 's', (void *) &sftp->prefix.path, NULL);
 
 	    }
 
@@ -247,7 +247,7 @@ static int check_target_symlink(struct sftp_subsystem_s *sftp, struct dirhandle_
 
 		if (get_realpath_fs_location_path(&test, &full)==0) {
 
-		    result=(int) test_location_path_subdirectory(&test, 's', (void *) &sftp->prefix.path);
+		    result=(int) test_location_path_subdirectory(&test, 's', (void *) &sftp->prefix.path, NULL);
 
 		}
 

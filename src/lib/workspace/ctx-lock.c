@@ -385,7 +385,7 @@ static int check_lockflags_conflict(struct service_context_lock_s *servicelock)
 
 }
 
-static int _lock_workspace_contexes(struct service_context_lock_s *servicelock, struct timespec *expire)
+static int _lock_workspace_contexes(struct service_context_lock_s *servicelock, struct system_timespec_s *expire)
 {
     int result=0;
     struct service_context_s *root=servicelock->root;

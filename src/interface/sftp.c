@@ -337,14 +337,14 @@ static int _send_data_ssh_channel(struct sftp_client_s *sftp, char *buffer, unsi
     return send_channel_data_message(channel, buffer, size, seq);
 }
 
-static void _correct_time_c2s(struct sftp_client_s *sftp, struct timespec *time)
+static void _correct_time_c2s(struct sftp_client_s *sftp, struct system_timespec_s *time)
 {
     struct ssh_channel_s *channel=(struct ssh_channel_s *) sftp->context.conn;
     struct ssh_session_s *session=channel->session;
     (* session->hostinfo.correct_time_c2s)(session, time);
 }
 
-static void _correct_time_s2c(struct sftp_client_s *sftp, struct timespec *time)
+static void _correct_time_s2c(struct sftp_client_s *sftp, struct system_timespec_s *time)
 {
     struct ssh_channel_s *channel=(struct ssh_channel_s *) sftp->context.conn;
     struct ssh_session_s *session=channel->session;
@@ -359,6 +359,20 @@ static char *get_interface_buffer_default(struct context_interface_s *interface)
 static char *get_interface_buffer_secondary(struct context_interface_s *interface)
 {
     return interface->link.primary->buffer;
+}
+
+static void _free_interface_sftp(struct context_interface_s *interface)
+{
+
+    clear_ssh_string(&interface->backend.sftp.prefix.path);
+
+    if (interface->backend.sftp.name) {
+
+	free(interface->backend.sftp.name);
+	interface->backend.sftp.name=NULL;
+
+    }
+
 }
 
 /*
@@ -487,10 +501,12 @@ static int _init_interface_sftp_buffer(struct context_interface_s *interface, st
 	interface->connect=_connect_interface_sftp_client;
 	interface->start=_start_interface_sftp_client;
 	interface->signal_interface=_signal_interface;
+	interface->free=_free_interface_sftp;
 
 	sftp->context.signal_sftp2ctx=_signal_sftp2ctx;
 	sftp->context.signal_sftp2conn=_signal_sftp2channel;
 	sftp->context.conn=(void *) channel;
+	sftp->context.unique=interface->unique;
 
 	sftp->signal.signal=channel->queue.signal->signal;
 
@@ -531,12 +547,7 @@ static int _init_interface_buffer(struct context_interface_s *interface, struct 
 static void _clear_interface_buffer(struct context_interface_s *interface)
 {
 
-    if (interface->backend.sftp.prefix.path) {
-
-	free(interface->backend.sftp.prefix.path);
-	interface->backend.sftp.prefix.path=NULL;
-
-    }
+    clear_ssh_string(&interface->backend.sftp.prefix.path);
 
     if (interface->backend.sftp.name) {
 
@@ -544,9 +555,6 @@ static void _clear_interface_buffer(struct context_interface_s *interface)
 	interface->backend.sftp.name=NULL;
 
     }
-
-    interface->backend.sftp.prefix.len=0;
-    interface->backend.sftp.prefix.type=0;
 
     if (interface->flags & _INTERFACE_FLAG_BUFFER_INIT) {
 

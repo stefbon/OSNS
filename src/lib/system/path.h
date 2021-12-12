@@ -22,6 +22,7 @@
 
 #define FS_LOCATION_PATH_FLAG_ALLOC				1
 #define FS_LOCATION_PATH_FLAG_PTR_ALLOC				2
+#define FS_LOCATION_PATH_FLAG_RELATIVE				4
 
 struct fs_location_path_s {
 #ifdef __linux__
@@ -29,13 +30,14 @@ struct fs_location_path_s {
     char							*ptr;
     unsigned int						len;
     unsigned int						size;
+    unsigned char						back;
 #endif
 };
 
 #ifdef __linux__
 
-#define FS_LOCATION_PATH_INIT					{0, NULL, 0, 0}
-#define FS_LOCATION_PATH_SET(a, b)				{.flags=0, .size=(a ? a : strlen(b) + 1), .len=0, .ptr=b}
+#define FS_LOCATION_PATH_INIT					{0, NULL, 0, 0, 0}
+#define FS_LOCATION_PATH_SET(a, b)				{.flags=0, .size=(a ? a : strlen(b) + 1), .len=0, .ptr=b, .back=0}
 
 #endif
 
@@ -43,9 +45,10 @@ struct fs_location_path_s {
 
 unsigned int append_location_path_get_required_size(struct fs_location_path_s *path, const unsigned char type, void *ptr);
 
-void set_buffer_location_path(struct fs_location_path_s *path, char *buffer, unsigned int size, unsigned int flags);
+void set_location_path(struct fs_location_path_s *path, const unsigned char type, void *ptr);
 void clear_location_path(struct fs_location_path_s *path);
 
+void assign_buffer_location_path(struct fs_location_path_s *path, char *buffer, unsigned int len);
 unsigned int combine_location_path(struct fs_location_path_s *result, struct fs_location_path_s *path, const unsigned char type, void *ptr);
 unsigned int append_location_path(struct fs_location_path_s *result, const unsigned char type, void *ptr);
 
@@ -59,6 +62,8 @@ char *get_filename_location_path(struct fs_location_path_s *path);
 void detach_filename_location_path(struct fs_location_path_s *path, struct ssh_string_s *filename);
 
 unsigned char test_location_path_absolute(struct fs_location_path_s *path);
-unsigned char test_location_path_subdirectory(struct fs_location_path_s *path, const unsigned char type, void *ptr);
+unsigned char test_location_path_subdirectory(struct fs_location_path_s *path, const unsigned char type, void *ptr, struct fs_location_path_s *sub);
+
+unsigned int remove_unneeded_path_elements(struct fs_location_path_s *path);
 
 #endif

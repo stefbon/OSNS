@@ -68,7 +68,7 @@ static void init_decompressor(struct ssh_decompressor_s *decompressor, struct ss
 {
     memset(decompressor, 0, sizeof(struct ssh_decompressor_s) + size);
     decompressor->decompress=decompress;
-    get_current_time(&decompressor->created);
+    get_current_time_system_time(&decompressor->created);
     decompressor->nr=(decompress) ? decompress->count : 0;
     init_list_element(&decompressor->list, NULL);
     decompressor->size=size;
@@ -150,8 +150,7 @@ void queue_decompressor(struct ssh_decompressor_s *decompressor)
 
     pthread_mutex_lock(&receive->mutex);
 
-    if (decompressor->created.tv_sec > receive->newkeys.tv_sec ||
-	(decompressor->created.tv_sec == receive->newkeys.tv_sec && decompressor->created.tv_nsec >= receive->newkeys.tv_nsec)) {
+    if (compare_system_times(&decompressor->created, &receive->newkeys)<=0) {
 
 	add_list_element_last(header, &decompressor->list);
 	pthread_cond_broadcast(&receive->cond);

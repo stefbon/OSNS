@@ -106,7 +106,7 @@ void _fs_sftp_statfs(struct service_context_s *context, struct fuse_request_s *f
     sftp_r.call.statvfs.len=pathinfo->len;
 
     if (send_sftp_statvfs_ctx(interface, &sftp_r, &error)>=0) {
-	struct timespec timeout;
+	struct system_timespec_s timeout=SYSTEM_TIME_INIT;
 
 	get_sftp_request_timeout_ctx(interface, &timeout);
 
@@ -117,6 +117,8 @@ void _fs_sftp_statfs(struct service_context_s *context, struct fuse_request_s *f
 		struct fuse_statfs_out statfs_out;
 		char *pos = (char *) reply->response.extension.buff;
 		uint64_t f_flag=0;
+
+		logoutput("_fs_sftp_statfs: size response %i", reply->response.extension.size);
 
 		/*
 		reply looks like

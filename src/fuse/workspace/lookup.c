@@ -69,6 +69,8 @@ void _fs_workspace_lookup_new(struct service_context_s *pctx, struct fuse_reques
 	    struct service_fs_s *fs=NULL;
 	    const char *what="";
 
+	    /* browse every ctx under pctx and compare it's name with the one to look for */
+
 	    if (ctx->type==SERVICE_CTX_TYPE_BROWSE) {
 		unsigned int type=ctx->service.browse.type;
 
@@ -101,30 +103,45 @@ void _fs_workspace_lookup_new(struct service_context_s *pctx, struct fuse_reques
 
 	    }
 
+	    /* get name from ctx through the fs it's using and compare*/
+
 	    if (fs) {
 		unsigned int len=(* fs->get_name)(ctx, NULL, 0);
 		char buffer[len+1];
-		struct entry_s *entry=NULL;
+		struct name_s tmp;
 
 		memset(buffer, 0, len+1);
 		len=(* fs->get_name)(ctx, buffer, len);
+		set_name(&tmp, buffer, len);
+		calculate_nameindex(&tmp);
 
-		if (xname->len==len && strncmp(xname->name, buffer, len)==0) {
+		if (compare_names(xname, &tmp)==0) {
+		    struct entry_s *entry=NULL;
 
 		    entry=install_virtualnetwork_map(ctx, inode->alias, buffer, what, NULL);
 
 		    if (entry) {
-			struct data_link_s *link=NULL;
+			struct directory_s *directory=NULL;
 
 			_fs_common_cached_lookup(ctx, request, entry->inode);
 			error=0;
 
-			fs_get_data_link(entry->inode, &link);
+			directory=get_directory(workspace, entry->inode, 0);
+			if (directory) {
 
-			if (link->type==0) {
+			    /* make directory point to context
+				justy check here*/
 
-			    link->type=DATA_LINK_TYPE_CONTEXT;
-			    link->link.ptr=(void *) ctx;
+			    pthread_mutex_lock(&workspace->mutex);
+
+			    if (directory->ptr==NULL) {
+
+				directory->ptr=&ctx->link;
+				ctx->link.refcount++;
+
+			    }
+
+			    pthread_mutex_unlock(&workspace->mutex);
 
 			}
 

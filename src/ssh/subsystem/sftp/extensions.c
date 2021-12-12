@@ -63,7 +63,7 @@
 static struct sftp_protocol_extension_s extensions[] = {
     {.flags=0, .name="setprefix@sftp.osns.net", 	.code=0, .cb=cb_ext_setprefix,		.op=sftp_op_setprefix},
     {.flags=0, .name="statvfs@openssh.com", 		.code=0, .cb=cb_ext_statvfs, 		.op=sftp_op_statvfs},
-    {.flags=0, .name="statvfs@openssh.com", 		.code=0, .cb=cb_ext_fsync, 		.op=sftp_op_fsync},
+    {.flags=0, .name="fsync@openssh.com", 		.code=0, .cb=cb_ext_fsync, 		.op=sftp_op_fsync},
     {.flags=0, .name="mapextension@sftp.osns.net", 	.code=0, .cb=cb_ext_mapextension, 	.op=sftp_op_mapextension}
     };
 

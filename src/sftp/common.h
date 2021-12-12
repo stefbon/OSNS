@@ -93,8 +93,8 @@ struct sftp_recv_ops_s {
 };
 
 struct sftp_time_ops_s {
-    void						(* correct_time_s2c)(struct sftp_client_s *sftp, struct timespec *time);
-    void						(* correct_time_c2s)(struct sftp_client_s *sftp, struct timespec *time);
+    void						(* correct_time_s2c)(struct sftp_client_s *sftp, struct system_timespec_s *time);
+    void						(* correct_time_c2s)(struct sftp_client_s *sftp, struct system_timespec_s *time);
 };
 
 #define SFTP_EXTENSION_FLAG_SUPPORTED			1
@@ -242,7 +242,7 @@ struct sftp_client_s {
 
 /* prototypes */
 
-void get_sftp_request_timeout(struct sftp_client_s *sftp, struct timespec *timeout);
+void get_sftp_request_timeout(struct sftp_client_s *sftp, struct system_timespec_s *timeout);
 uint32_t get_sftp_request_id(struct sftp_client_s *sftp);
 
 void clear_sftp_client(struct sftp_client_s *sftp);

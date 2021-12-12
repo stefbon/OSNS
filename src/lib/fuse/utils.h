@@ -46,7 +46,7 @@ struct create_entry_s {
     unsigned int			cache_size;
     struct _cache_s {
 	struct system_stat_s		stat;
-	struct data_link_s 		link;
+	void				*ptr;
 	struct attr_buffer_s		*abuff;
     } cache;
     unsigned int			flags;
@@ -56,28 +56,10 @@ struct create_entry_s {
 
 /* prototypes */
 
-struct entry_s *find_entry(struct directory_s *directory, struct name_s *xname, unsigned int *error);
-void remove_entry(struct directory_s *directory, struct entry_s *entry, unsigned int *error);
-struct entry_s *insert_entry(struct directory_s *directory, struct entry_s *entry, unsigned int *error, unsigned short flags);
-
-struct entry_s *find_entry_batch(struct directory_s *directory, struct name_s *xname, unsigned int *error);
-void remove_entry_batch(struct directory_s *directory, struct entry_s *entry, unsigned int *error);
-struct entry_s *insert_entry_batch(struct directory_s *directory, struct entry_s *entry, unsigned int *error, unsigned short flags);
-
-struct directory_s *get_directory(struct inode_s *inode);
-struct directory_s *remove_directory(struct inode_s *inode, unsigned int *error);
-uint64_t get_directory_count(struct directory_s *d);
-
-void init_directory_calls();
-struct directory_s *get_dummy_directory();
-
 void init_create_entry(struct create_entry_s *ce, struct name_s *n, struct entry_s *p, struct directory_s *d, struct fuse_opendir_s *fo, struct service_context_s *c, struct system_stat_s *st, void *ptr);
 struct entry_s *create_entry_extended(struct create_entry_s *ce);
 struct entry_s *create_entry_extended_batch(struct create_entry_s *ce);
 
-void clear_directory_recursive(struct context_interface_s *i, struct directory_s *directory);
-
-void get_current_time_system_time(struct system_timespec_s *time);
 void fill_fuse_attr_system_stat(struct fuse_attr *attr, struct system_stat_s *stat);
 
 #endif

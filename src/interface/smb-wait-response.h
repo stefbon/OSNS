@@ -43,8 +43,8 @@ struct smb_request_s {
     struct context_interface_s 			*interface;
     void					*ptr;
     struct list_element_s			list;
-    struct timespec				started;
-    struct timespec				timeout;
+    struct system_timespec_s			started;
+    struct system_timespec_s			timeout;
     struct smb_data_s				*data;
 };
 
@@ -57,6 +57,6 @@ void signal_smb_received_id_error(struct context_interface_s *interface, struct 
 
 void init_smb_request(struct smb_request_s *r, struct context_interface_s *i, struct fuse_request_s *f_request);
 void init_smb_request_minimal(struct smb_request_s *r, struct context_interface_s *i);
-unsigned char wait_smb_response_ctx(struct context_interface_s *i, struct smb_request_s *r, struct timespec *timeout);
+unsigned char wait_smb_response_ctx(struct context_interface_s *i, struct smb_request_s *r, struct system_timespec_s *timeout);
 
 #endif

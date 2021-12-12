@@ -72,11 +72,10 @@ uint32_t get_sftp_request_id(struct sftp_client_s *sftp)
     return id;
 }
 
-void get_sftp_request_timeout(struct sftp_client_s *sftp, struct timespec *timeout)
+void get_sftp_request_timeout(struct sftp_client_s *sftp, struct system_timespec_s *timeout)
 {
     /* make this configurable */
-    timeout->tv_sec=4;
-    timeout->tv_nsec=0;
+    set_system_time(timeout, 4, 0);
 }
 
 struct sftp_client_s *create_sftp_client(struct generic_error_s *error)

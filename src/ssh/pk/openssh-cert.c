@@ -40,6 +40,7 @@
 #include "misc.h"
 
 #include "datatypes.h"
+#include "system.h"
 #include "ssh-utils.h"
 #include "pk-types.h"
 #include "pk-keys.h"
@@ -164,7 +165,8 @@ static int check_signature_cert_openssh_com(struct openssh_cert_s *cert)
 
 int check_cert_openssh_com(struct openssh_cert_s *cert, const char *what)
 {
-    struct timespec current;
+    struct system_timespec_s current=SYSTEM_TIME_INIT;
+    struct system_timespec_s test=SYSTEM_TIME_INIT;
     int result=-1;
 
     /* perform checks the certificate is valid by looking at:
@@ -193,11 +195,22 @@ int check_cert_openssh_com(struct openssh_cert_s *cert, const char *what)
 
     }
 
-    get_current_time(&current);
+    get_current_time_system_time(&current);
+    set_system_time(&test, (system_time_sec_t) cert->valid_after, 0);
 
-    if ((current.tv_sec < cert->valid_after) || (current.tv_sec >= cert->valid_before)) {
+    if (compare_system_times(&test, &current)<0) {
 
-	logoutput("check_cert_openssh_com: certificate is not valid (anymore)");
+	logoutput("check_cert_openssh_com: certificate is not valid (only after %li)", cert->valid_after);
+	goto out;
+
+    }
+
+    set_system_time(&test, (system_time_sec_t) cert->valid_before, 0);
+
+    if (compare_system_times(&current, &test)<0) {
+
+	logoutput("check_cert_openssh_com: certificate is not valid (only before %li)", cert->valid_before);
+	goto out;
 
     }
 

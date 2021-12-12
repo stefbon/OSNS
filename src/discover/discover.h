@@ -62,7 +62,7 @@ struct discover_network_s {
     uint32_t						ctr;
     struct list_header_s				header;
     struct simple_locking_s				locking;
-    struct timespec					changed;
+    struct system_timespec_s				changed;
     void 						(*process_new_service)(struct discover_resource_s *s, void *ptr);
     void						*ptr;
     struct list_header_s				hash[DISCOVER_NETWORK_HASHSIZE];
@@ -105,7 +105,7 @@ struct discover_nethost_s {
 struct discover_netsocket_s {
     struct list_header_s				header;
     struct network_port_s				port;
-    struct timespec					refresh;
+    struct system_timespec_s				refresh;
     char						text[DISCOVER_NETWORK_NETSOCKET_TEXTSIZE + 1];
 };
 
@@ -114,8 +114,8 @@ struct discover_resource_s {
     unsigned char					type;
     unsigned int					flags;
     struct list_element_s				list;
-    struct timespec					found;
-    struct timespec					changed;
+    struct system_timespec_s				found;
+    struct system_timespec_s				changed;
     union resource_type_s {
 	struct discover_netgroup_s			group;
 	struct discover_nethost_s			host;
@@ -134,7 +134,7 @@ struct discover_resource_s *get_discover_nethost(struct discover_resource_s *res
 struct discover_resource_s *get_discover_netgroup(struct discover_resource_s *resource);
 
 void add_net_service(unsigned int method, char *name, struct host_address_s *host, struct network_port_s *port, unsigned int type, char *text);
-void get_net_services(struct timespec *since);
+void get_net_services(struct system_timespec_s *since);
 
 void free_discover_resource(struct discover_resource_s *r);
 int init_discover_group(void (* cb)(struct discover_resource_s *s, void *ptr), void *ptr);
@@ -147,7 +147,7 @@ int unlock_discover_network(struct simple_lock_s *lock);
 struct discover_resource_s *get_next_hashed_discover_resource(void **p_ptr, unsigned int *p_hashvalue);
 
 struct discover_resource_s *get_next_discover_resource(struct discover_resource_s *parent, struct discover_resource_s *r, unsigned char type);
-struct timespec *get_discover_network_changed(unsigned char type, uint32_t unique);
+struct system_timespec_s *get_discover_network_changed(unsigned char type, uint32_t unique);
 
 void add_net_service_avahi(const char *name, const char *hostname, char *ipv4, const char *domain, unsigned int port, const char *type);
 void synchronize_discover_resources();

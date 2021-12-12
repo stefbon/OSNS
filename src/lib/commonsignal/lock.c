@@ -58,9 +58,10 @@ int default_condwait(struct common_signal_s *s)
     return pthread_cond_wait(s->cond, s->mutex);
 }
 
-int default_condtimedwait(struct common_signal_s *s, struct timespec *t)
+int default_condtimedwait(struct common_signal_s *s, struct system_timespec_s *t)
 {
-    return pthread_cond_timedwait(s->cond, s->mutex, t);
+    struct timespec expire={.tv_sec=t->st_sec, .tv_nsec=t->st_nsec};
+    return pthread_cond_timedwait(s->cond, s->mutex, &expire);
 }
 
 static struct common_signal_s default_common_signal = {
@@ -120,7 +121,7 @@ int signal_condwait(struct common_signal_s *s)
 {
     return (* s->condwait)(s);
 }
-int signal_condtimedwait(struct common_signal_s *s, struct timespec *t)
+int signal_condtimedwait(struct common_signal_s *s, struct system_timespec_s *t)
 {
     return (* s->condtimedwait)(s, t);
 }

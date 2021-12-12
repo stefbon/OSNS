@@ -65,5 +65,6 @@ void set_directory_pathcache(struct service_context_s *ctx, struct directory_s *
 void set_directory_getpath(struct directory_s *d);
 
 void release_directory_pathcache(struct directory_s *d);
+void free_pathcache(struct list_element_s *list);
 
 #endif

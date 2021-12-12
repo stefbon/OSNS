@@ -24,7 +24,7 @@ struct sftp_request_s *get_sftp_request(struct sftp_client_s *sftp, unsigned int
 int signal_sftp_received_id(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r);
 void signal_sftp_received_id_error(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r, struct generic_error_s *error);
 
-unsigned char wait_sftp_response(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r, struct timespec *timeout);
+unsigned char wait_sftp_response(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r, struct system_timespec_s *timeout);
 unsigned char wait_sftp_service_complete(struct sftp_client_s *sftp, struct timespec *timeout);
 
 void init_sftp_sendhash();

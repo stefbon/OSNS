@@ -109,6 +109,16 @@ struct sftp_prefix_s {
     unsigned int					(* get_length_fullpath)(struct sftp_subsystem_s *sftp, struct ssh_string_s *p, struct convert_sftp_path_s *c);
 };
 
+#define SFTP_SEND_FLAG_BLOCKED				1
+#define SFTP_SEND_FLAG_DISCONNECTING			2
+#define SFTP_SEND_FLAG_DISCONNECTED			4
+#define SFTP_SEND_FLAG_DISCONNECT			( SFTP_SEND_FLAG_DISCONNECTING | SFTP_SEND_FLAG_DISCONNECTED )
+
+struct sftp_send_s {
+    unsigned int					flags;
+    /* here array with cb when sending */
+};
+
 struct sftp_subsystem_s {
     unsigned int					flags;
     struct sftp_prefix_s				prefix;
@@ -117,7 +127,9 @@ struct sftp_subsystem_s {
     struct sftp_protocol_s				protocol;
     struct ssh_subsystem_connection_s			connection;
     struct sftp_identity_s				identity;
+    struct common_signal_s				*signal;
     struct sftp_receive_s				receive;
+    struct sftp_send_s					send;
     struct attr_context_s				attrctx;
     struct sftp_payload_queue_s				queue;
     sftp_cb_t						cb[256];

@@ -191,47 +191,82 @@ struct entry_s *create_network_map_entry(struct service_context_s *context, stru
 
 }
 
+/* create special files like a .directory for the KDE graphical environment to show an icon
+    which illustrates the directory what it represents:
+    - a server -> icon for network server etc */
+
+void install_special_desktop_files(struct service_context_s *context, struct inode_s *inode, const char *what)
+{
+    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
+    struct directory_s *directory=NULL;
+    struct simple_lock_s wlock;
+
+    if (what==NULL || strlen(what)==0) return;
+
+    directory=get_directory(workspace, inode, 0);
+
+    if (wlock_directory(directory, &wlock)==0) {
+	unsigned int icon_option=0;
+
+	if (strcmp(what, "network")==0) {
+
+	    icon_option=fs_options.network.network_icon;
+
+	} else if (strcmp(what, "domain")==0 || strcmp(what, "netgroup")==0) {
+
+	    icon_option=fs_options.network.domain_icon;
+
+	} else if (strcmp(what, "server")==0 || strcmp(what, "nethost")==0) {
+
+	    icon_option=fs_options.network.server_icon;
+
+	} else if (strcmp(what, "share")==0 || strcmp(what, "netshare")==0) {
+
+	    icon_option=fs_options.network.share_icon; 
+
+	}
+
+	if (icon_option & (_OPTIONS_NETWORK_ICON_SHOW | _OPTIONS_NETWORK_ICON_OVERRULE)) create_network_desktopentry_file(inode->alias, workspace);
+
+	unlock_directory(directory, &wlock);
+
+    }
+
+}
+
 struct entry_s *install_virtualnetwork_map(struct service_context_s *context, struct entry_s *parent, char *name, const char *what, unsigned char *p_action)
 {
+    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
     struct entry_s *entry=NULL;
     unsigned int error=0;
-    struct directory_s *directory01=get_directory(parent->inode);
-    struct simple_lock_s wlock01;
+    struct directory_s *pdirectory=get_directory(workspace, parent->inode, 0);
+    struct simple_lock_s wlock;
 
-    if (wlock_directory(directory01, &wlock01)==0) {
+    if (wlock_directory(pdirectory, &wlock)==0) {
 	struct name_s xname;
-	struct directory_s *directory02=NULL;
-	struct simple_lock_s wlock02;
-	struct inode_s *inode=NULL;
 
 	xname.name=name;
 	xname.len=strlen(name);
 	calculate_nameindex(&xname);
 
-	entry=find_entry_batch(directory01, &xname, &error);
+	entry=find_entry_batch(pdirectory, &xname, &error);
 
 	/* only install if not exists */
 
 	if (entry) {
 
 	    logoutput_info("install_virtualnetwork_map: map %s already exists", name);
-	    unlock_directory(directory01, &wlock01);
 	    if (p_action) *p_action=FUSE_NETWORK_ACTION_FLAG_FOUND;
-	    goto out;
-
-	} else {
-
-	    logoutput_info("install_virtualnetwork_map: map %s not found: continue", name);
+	    goto unlock;
 
 	}
 
 	error=0;
-	entry=create_network_map_entry(context, directory01, &xname, &error);
+	entry=create_network_map_entry(context, pdirectory, &xname, &error);
 
 	if (entry==NULL) {
 
 	    logoutput_warning("install_virtualnetwork_map: unable to create map %s", name);
-	    unlock_directory(directory01, &wlock01);
 	    if (p_action) *p_action=FUSE_NETWORK_ACTION_FLAG_ERROR;
 	    goto out;
 
@@ -239,49 +274,11 @@ struct entry_s *install_virtualnetwork_map(struct service_context_s *context, st
 
 	logoutput_info("install_virtualnetwork_map: created map %s for %s", name, ((what) ? what : "unknown"));
 	if (p_action) *p_action=FUSE_NETWORK_ACTION_FLAG_ADDED;
-	inode=entry->inode;
-	directory02=get_directory(inode);
+	use_service_fs(context, entry->inode);
+	install_special_desktop_files(context, entry->inode, what);
 
-	if (wlock_directory(directory02, &wlock02)==0) {
-	    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
-
-	    logoutput_info("install_virtualnetwork_map: create special files and set fs");
-
-	    if (strcmp(what, "network")==0) {
-
-		if (fs_options.network.network_icon & (_OPTIONS_NETWORK_ICON_SHOW | _OPTIONS_NETWORK_ICON_OVERRULE))
-		    create_network_desktopentry_file(entry, workspace);
-
-		use_browse_fs(inode);
-
-	    } else if (strcmp(what, "domain")==0 || strcmp(what, "netgroup")==0) {
-
-		if (fs_options.network.domain_icon & (_OPTIONS_NETWORK_ICON_SHOW | _OPTIONS_NETWORK_ICON_OVERRULE))
-		    create_netgroup_desktopentry_file(entry, workspace);
-
-		use_browse_fs(inode);
-
-	    } else if (strcmp(what, "server")==0 || strcmp(what, "nethost")==0) {
-
-		if (fs_options.network.server_icon & (_OPTIONS_NETWORK_ICON_SHOW | _OPTIONS_NETWORK_ICON_OVERRULE))
-		    create_netserver_desktopentry_file(entry, workspace);
-
-		use_browse_fs(inode);
-
-	    } else if (strcmp(what, "share")==0 || strcmp(what, "netshare")==0) {
-
-		if (fs_options.network.share_icon & (_OPTIONS_NETWORK_ICON_SHOW | _OPTIONS_NETWORK_ICON_OVERRULE))
-		    create_netshare_desktopentry_file(entry, workspace);
-
-		use_service_path_fs(inode);
-
-	    }
-
-	    unlock_directory(directory02, &wlock02);
-
-	}
-
-	unlock_directory(directory01, &wlock01);
+	unlock:
+	unlock_directory(pdirectory, &wlock);
 
     } else {
 
@@ -461,7 +458,7 @@ static void determine_fqdn(struct service_context_s *hostctx, int fd, struct dis
 
 }
 
-static void update_service_ctx_refresh(struct service_context_s *ctx, struct timespec *changed)
+static void update_service_ctx_refresh(struct service_context_s *ctx, struct system_timespec_s *changed)
 {
 
     if (ctx->type==SERVICE_CTX_TYPE_BROWSE) {
@@ -472,19 +469,15 @@ static void update_service_ctx_refresh(struct service_context_s *ctx, struct tim
 	/* get write access to the context */
 
 	if (lock_service_context(&ctxlock, "w", "c")) {
-	    struct timespec *refresh=&ctx->service.browse.refresh;
+	    struct system_timespec_s *refresh=&ctx->service.browse.refresh;
 
 	    if (changed) {
 
-		if (refresh->tv_sec < changed->tv_sec || ((refresh->tv_sec == changed->tv_sec) && (refresh->tv_nsec < changed->tv_nsec))) {
-
-		    memcpy(&ctx->service.browse.refresh, changed, sizeof(struct timespec));
-
-		}
+		if (compare_system_times(refresh, changed)>=0) copy_system_time(refresh, changed);
 
 	    } else {
 
-		get_current_time(&ctx->service.browse.refresh);
+		get_current_time_system_time(&ctx->service.browse.refresh);
 
 	    }
 
@@ -790,10 +783,12 @@ static void network_service_context_connect_thread(void *ptr)
     startlock:
 
     if (lock_service_context(&ctxlock, "w", "c")==1) {
-	struct timespec *changed=get_discover_network_changed(0, 0);
-	struct timespec *refresh=&networkctx->service.browse.refresh;
+	struct system_timespec_s *changed=get_discover_network_changed(0, 0);
+	struct system_timespec_s *refresh=&networkctx->service.browse.refresh;
 
-	if (refresh->tv_sec < changed->tv_sec || ((refresh->tv_sec == changed->tv_sec) && (refresh->tv_nsec < changed->tv_nsec))) {
+	/* if the network context is refreshed later than resource cache is changed then quit */
+
+	if (compare_system_times(refresh, changed)>=0) {
 
 	    networkctx->service.browse.threadid=pthread_self();
 
@@ -955,13 +950,11 @@ static void network_service_context_connect_thread(void *ptr)
     init_service_ctx_lock(&ctxlock, NULL, networkctx);
 
     if (lock_service_context(&ctxlock, "w", "c")==1) {
-	struct timespec *changed=get_discover_network_changed(0, 0);
-	struct timespec *refresh=&networkctx->service.browse.refresh;
+	struct system_timespec_s *changed=get_discover_network_changed(0, 0);
+	struct system_timespec_s *refresh=&networkctx->service.browse.refresh;
 
 	networkctx->service.browse.threadid=0;
-	refresh->tv_sec=changed->tv_sec;
-	refresh->tv_nsec=changed->tv_nsec;
-
+	copy_system_time(refresh, changed);
 	unlock_service_context(&ctxlock, "w", "c");
 
     }
@@ -1010,16 +1003,15 @@ void start_discover_service_context_connect(struct workspace_mount_s *workspace)
 		set_ctx_service_ctx_lock(ctx, &ctxlock);
 
 		if (lock_service_context(&ctxlock, "w", "c")==1) {
-		    struct timespec *changed=get_discover_network_changed(0, 0);
-		    struct timespec *refresh=&ctx->service.browse.refresh;
+		    struct system_timespec_s *changed=get_discover_network_changed(0, 0);
+		    struct system_timespec_s *refresh=&ctx->service.browse.refresh;
 		    unsigned char do_discover=0;
 
-		    logoutput("start_discover_service_context_connect: thread id %i compare refresh %li:%i to changed %li:%i", ctx->service.browse.threadid, refresh->tv_sec, refresh->tv_nsec, changed->tv_sec, changed->tv_nsec);
+		    logoutput("start_discover_service_context_connect: thread id %i compare refresh %li:%i to changed %li:%i", ctx->service.browse.threadid, refresh->st_sec, refresh->st_nsec, changed->st_sec, changed->st_nsec);
 
-		    if (ctx->service.browse.threadid==0 && (refresh->tv_sec < changed->tv_sec || ((refresh->tv_sec == changed->tv_sec) && (refresh->tv_nsec < changed->tv_nsec))))
-			do_discover=1;
-
+		    if (ctx->service.browse.threadid==0 && compare_system_times(refresh, changed)>=0) do_discover=1;
 		    unlock_service_context(&ctxlock, "w", "c");
+
 		    if (do_discover) start_discover_service_thread(ctx);
 
 		}

@@ -52,287 +52,6 @@
 #include "workspace.h"
 #include "utils.h"
 
-extern void fs_inode_forget(struct inode_s *inode);
-
-static struct directory_s dummy_directory;
-static struct dops_s dummy_dops;
-static struct dops_s default_dops;
-static struct dops_s removed_dops;
-
-void set_inode_directory_dummy(struct inode_s *inode)
-{
-    if (inode && inode->link.type==0) {
-
-	inode->link.type=DATA_LINK_TYPE_DIRECTORY;
-	inode->link.link.ptr=&dummy_directory;
-
-    }
-
-}
-
-/* DUMMY DIRECTORY OPS */
-
-static void _init_directory(struct directory_s *d)
-{
-    d->dops=&default_dops;
-    set_directory_pathcache_x(d);
-}
-
-static struct directory_s *get_directory_dummy(struct inode_s *inode)
-{
-    struct directory_s *directory=_create_directory(inode, _init_directory);
-
-    if (directory) {
-
-	inode->link.type=DATA_LINK_TYPE_DIRECTORY;
-	inode->link.link.ptr=(void *) directory;
-
-    } else {
-
-	directory=&dummy_directory;
-
-    }
-
-    return directory;
-}
-
-struct directory_s *remove_directory_dummy(struct inode_s *inode, unsigned int *error)
-{
-    return NULL;
-}
-
-static struct dops_s dummy_dops = {
-    .get_directory		= get_directory_dummy,
-    .remove_directory		= remove_directory_dummy,
-};
-
-/* DEFAULT DIRECTORY OPS */
-
-static struct directory_s *get_directory_common(struct inode_s *inode)
-{
-    return (struct directory_s *) inode->link.link.ptr;
-}
-
-static struct directory_s *remove_directory_common(struct inode_s *inode, unsigned int *error)
-{
-    struct directory_s *directory=(struct directory_s *) inode->link.link.ptr;
-    directory->flags |= _DIRECTORY_FLAG_REMOVE;
-    directory->dops=&removed_dops;
-    directory->inode=NULL;
-    set_directory_dump(inode, get_dummy_directory());
-    return directory;
-}
-
-static struct dops_s default_dops = {
-    .get_directory		= get_directory_common,
-    .remove_directory		= remove_directory_common,
-};
-
-/* REMOVED DIRECTORY OPS */
-
-static struct directory_s *get_directory_removed(struct inode_s *inode)
-{
-    return (struct directory_s *) inode->link.link.ptr;
-}
-
-static struct directory_s *remove_directory_removed(struct inode_s *inode, unsigned int *error)
-{
-    *error=ENOTDIR;
-    return NULL;
-}
-
-static struct dops_s removed_dops = {
-    .get_directory		= get_directory_removed,
-    .remove_directory		= remove_directory_removed,
-};
-
-/* simple functions which call the right function for the directory */
-
-struct directory_s *get_directory(struct inode_s *inode)
-{
-    struct simple_lock_s wlock;
-    struct directory_s *directory=&dummy_directory;
-
-    logoutput_debug("get_directory: ino %li", inode->stat.sst_ino);
-
-    init_simple_writelock(&directory->locking, &wlock);
-
-    if (simple_lock(&wlock)==0) {
-	struct directory_s *tmp=(struct directory_s *) inode->link.link.ptr;
-
-	directory=(* tmp->dops->get_directory)(inode);
-	simple_unlock(&wlock);
-
-    }
-
-    return directory;
-
-}
-
-struct directory_s *remove_directory(struct inode_s *inode, unsigned int *error)
-{
-    struct simple_lock_s wlock;
-    struct directory_s *directory=&dummy_directory;
-
-    init_simple_writelock(&directory->locking, &wlock);
-
-    if (simple_lock(&wlock)==0) {
-	struct directory_s *tmp=(struct directory_s *) inode->link.link.ptr;
-
-	directory=(* directory->dops->remove_directory)(inode, error);
-	simple_unlock(&wlock);
-
-    }
-
-    return directory;
-
-}
-
-struct entry_s *find_entry(struct directory_s *directory, struct name_s *lookupname, unsigned int *error)
-{
-    struct sl_skiplist_s *sl=(struct sl_skiplist_s *) directory->buffer;
-    struct sl_searchresult_s result;
-
-    init_sl_searchresult(&result, (void *) lookupname, 0);
-    sl_find(sl, &result);
-    if (result.flags & SL_SEARCHRESULT_FLAG_EXACT) return (struct entry_s *)((char *) result.found - offsetof(struct entry_s, list));
-    *error=(result.flags & SL_SEARCHRESULT_FLAG_ERROR) ? EIO : ENOENT;
-    return NULL;
-}
-
-void remove_entry(struct directory_s *directory, struct entry_s *entry, unsigned int *error)
-{
-    struct sl_skiplist_s *sl=(struct sl_skiplist_s *) directory->buffer;
-    struct sl_searchresult_s result;
-
-    init_sl_searchresult(&result, (void *) &entry->name, 0);
-    sl_delete(sl, &result);
-    *error=(result.flags & SL_SEARCHRESULT_FLAG_EXACT) ? 0 : ENOENT;
-}
-
-struct entry_s *insert_entry(struct directory_s *directory, struct entry_s *entry, unsigned int *error, unsigned short flags)
-{
-    struct sl_skiplist_s *sl=(struct sl_skiplist_s *) directory->buffer;
-    struct sl_searchresult_s result;
-
-    init_sl_searchresult(&result, (void *) &entry->name, 0);
-    sl_insert(sl, &result);
-
-    if (result.flags & SL_SEARCHRESULT_FLAG_OK) {
-
-	*error=0;
-	return (struct entry_s *)((char *) result.found - offsetof(struct entry_s, list));
-
-    } else if (result.flags & SL_SEARCHRESULT_FLAG_EXACT) {
-
-	*error=EEXIST;
-	return (struct entry_s *)((char *) result.found - offsetof(struct entry_s, list));
-
-    } else {
-
-	*error=EIO;
-
-    }
-
-    return NULL;
-
-}
-
-struct entry_s *find_entry_batch(struct directory_s *directory, struct name_s *lookupname, unsigned int *error)
-{
-    struct sl_skiplist_s *sl=(struct sl_skiplist_s *) directory->buffer;
-    struct sl_searchresult_s result;
-
-    init_sl_searchresult(&result, (void *) lookupname, SL_SEARCHRESULT_FLAG_EXCLUSIVE);
-    sl_find(sl, &result);
-    if (result.flags & SL_SEARCHRESULT_FLAG_EXACT) return (struct entry_s *)((char *) result.found - offsetof(struct entry_s, list));
-
-    *error=(result.flags & SL_SEARCHRESULT_FLAG_ERROR) ? EIO : ENOENT;
-    return NULL;
-}
-
-void remove_entry_batch(struct directory_s *directory, struct entry_s *entry, unsigned int *error)
-{
-    struct sl_skiplist_s *sl=(struct sl_skiplist_s *) directory->buffer;
-    struct sl_searchresult_s result;
-
-    init_sl_searchresult(&result, (void *) &entry->name, SL_SEARCHRESULT_FLAG_EXCLUSIVE);
-    sl_delete(sl, &result);
-
-    *error=(result.flags & SL_SEARCHRESULT_FLAG_EXACT) ? 0 : ENOENT;
-}
-
-struct entry_s *insert_entry_batch(struct directory_s *directory, struct entry_s *entry, unsigned int *error, unsigned short flags)
-{
-    struct sl_skiplist_s *sl=(struct sl_skiplist_s *) directory->buffer;
-    struct sl_searchresult_s result;
-
-    init_sl_searchresult(&result, (void *) &entry->name, SL_SEARCHRESULT_FLAG_EXCLUSIVE);
-    sl_insert(sl, &result);
-
-    if (result.flags & SL_SEARCHRESULT_FLAG_OK) {
-
-	*error=0;
-	return (struct entry_s *)((char *) result.found - offsetof(struct entry_s, list));
-
-    } else if (result.flags & SL_SEARCHRESULT_FLAG_EXACT) {
-
-	*error=EEXIST;
-	return (struct entry_s *)((char *) result.found - offsetof(struct entry_s, list));
-
-    } else {
-
-	*error=EIO;
-
-    }
-
-    return NULL;
-}
-
-uint64_t get_directory_count(struct directory_s *d)
-{
-
-    if (d->size>0) {
-	struct sl_skiplist_s *sl=(struct sl_skiplist_s *) d->buffer;
-
-	return sl->header.count;
-
-    }
-
-    return 0;
-
-}
-
-void init_directory_calls()
-{
-    struct directory_s *directory=&dummy_directory;
-
-    memset(directory, 0, sizeof(struct directory_s));
-    directory->flags=_DIRECTORY_FLAG_DUMMY;
-    directory->size=0;
-
-    if (init_directory(directory, 0)==-1) {
-
-	logoutput_error("init_directory_calls: error initializing dummy directory");
-
-    } else {
-
-	logoutput("init_directory_calls: initialized dummy directory");
-
-    }
-
-    dummy_directory.dops=&dummy_dops;
-
-    /* make data_link point to directory self */
-    dummy_directory.link.type=DATA_LINK_TYPE_DIRECTORY;
-    dummy_directory.link.link.ptr=&dummy_directory;
-}
-
-struct directory_s *get_dummy_directory()
-{
-    return &dummy_directory;
-}
-
 /* FUNCTIONS to CREATE an entry and inode */
 
 static struct entry_s *_cb_create_entry(struct name_s *name)
@@ -341,19 +60,16 @@ static struct entry_s *_cb_create_entry(struct name_s *name)
 }
 static struct inode_s *_cb_create_inode()
 {
-    struct inode_s *inode=create_inode();
-
-    set_inode_directory_dummy(inode);
-    return inode;
+    return create_inode();
 }
 
 static struct entry_s *_cb_insert_entry(struct directory_s *directory, struct entry_s *entry, unsigned int flags, unsigned int *error)
 {
-    return insert_entry(directory, entry, error, flags);
+    return insert_entry(directory, entry, error);
 }
 static struct entry_s *_cb_insert_entry_batch(struct directory_s *directory, struct entry_s *entry, unsigned int flags, unsigned int *error)
 {
-    return insert_entry_batch(directory, entry, error, flags);
+    return insert_entry_batch(directory, entry, error);
 }
 static void _cb_adjust_pathmax_default(struct create_entry_s *ce)
 {
@@ -394,31 +110,34 @@ static void _cb_created_default(struct entry_s *entry, struct create_entry_s *ce
 {
     struct service_context_s *context=ce->context;
     struct inode_s *inode=entry->inode;
-    struct directory_s *directory=get_directory(inode);
+    struct system_stat_s *stat=&inode->stat;
 
-    inode->nlookup=0; /*20210401: changed from 1 to 0: setting of this should be done in the context */
-    inode->stat.sst_nlink=1;
-    get_current_time_system_time(&inode->stime); 							/* sync time */
+    inode->nlookup=0; 									/*20210401: changed from 1 to 0: setting of this should be done in the context */
+    set_nlink_system_stat(stat, 1);
+    get_current_time_system_time(&inode->stime); 					/* sync time */
 
-    if (directory && directory->inode) {
+    if (system_stat_test_ISDIR(stat)) {
+	struct directory_s *directory=get_upper_directory_entry(entry);
+	struct workspace_mount_s *w=get_workspace_mount_ctx(ce->context);
 
-	set_ctime_system_stat(&directory->inode->stat, &inode->stime); 		/* change the ctime of parent directory since it's attr are changed */
-	set_mtime_system_stat(&directory->inode->stat, &inode->stime); 		/* change the mtime of parent directory since an entry is added */
+	assign_directory_inode(w, inode);
+	increase_nlink_system_stat(stat, 1);
+
+	/* directory has to exist ... check is not required */
+
+	if (directory) {
+	    struct inode_s *tmp=directory->inode;
+
+	    set_ctime_system_stat(&tmp->stat, &inode->stime); 				/* change the ctime of parent directory since it's attr are changed */
+	    set_mtime_system_stat(&tmp->stat, &inode->stime); 				/* change the mtime of parent directory since an entry is added */
+
+	}
 
     }
 
     (* ce->cb_adjust_pathmax)(ce); 							/* adjust the maximum path len */
     (* ce->cb_cache_created)(entry, ce); 						/* create the inode stat and cache */
     (* ce->cb_context_created)(ce, entry); 						/* context depending cb, like a FUSE reply and adding inode to context, set fs etc */
-
-    if (S_ISDIR(inode->stat.sst_mode)) {
-
-	inode->stat.sst_nlink++;
-	if (directory && directory->inode) directory->inode->stat.sst_nlink++;
-	// set_directory_dump(inode, get_dummy_directory());
-
-    }
-
     set_entry_ops(entry);
     use_virtual_fs(NULL, inode);
 
@@ -430,7 +149,6 @@ static void _cb_found_default(struct entry_s *entry, struct create_entry_s *ce)
     struct system_stat_s *st=&ce->cache.stat;
     struct inode_s *inode=entry->inode;
 
-    inode->nlookup++;
     get_current_time_system_time(&inode->stime);
 
     /* when just created (for example by readdir) adjust the pathcache */
@@ -450,7 +168,8 @@ static void _cb_error_default(struct entry_s *parent, struct name_s *xname, stru
 static struct directory_s *get_directory_01(struct create_entry_s *ce)
 {
     struct inode_s *inode=ce->tree.parent->inode;
-    return get_directory(inode);
+    struct workspace_mount_s *w=get_workspace_mount_ctx(ce->context);
+    return get_directory(w, inode, 0);
 }
 
 static struct directory_s *get_directory_02(struct create_entry_s *ce)
@@ -461,7 +180,8 @@ static struct directory_s *get_directory_02(struct create_entry_s *ce)
 static struct directory_s *get_directory_03(struct create_entry_s *ce)
 {
     struct inode_s *inode=ce->tree.opendir->inode;
-    return get_directory(inode);
+    struct workspace_mount_s *w=get_workspace_mount_ctx(ce->context);
+    return get_directory(w, inode, 0);
 }
 
 void init_create_entry(struct create_entry_s *ce, struct name_s *n, struct entry_s *p, struct directory_s *d, struct fuse_opendir_s *fo, struct service_context_s *c, struct system_stat_s *stat, void *ptr)
@@ -614,89 +334,6 @@ struct entry_s *create_entry_extended_batch(struct create_entry_s *ce)
     return _create_entry_extended_common(ce);
 }
 
-static void _clear_directory(struct context_interface_s *i, struct directory_s *directory, char *path, unsigned int len, unsigned int level)
-{
-    struct sl_skiplist_s *sl=(struct sl_skiplist_s *) directory->buffer;
-    struct entry_s *entry=NULL, *next=NULL;
-    struct inode_s *inode=NULL;
-    struct list_element_s *list=NULL;
-
-    logoutput("_clear_directory: level %i path %s", level, path);
-
-    list=get_list_head(&sl->header, SIMPLE_LIST_FLAG_REMOVE);
-
-    while (list) {
-
-	entry=(struct entry_s *)((char *) list - offsetof(struct entry_s, list));
-
-	logoutput("_clear_directory: found %.*s", entry->name.len, entry->name.name);
-	inode=entry->inode;
-
-	if (inode) {
-
-	    (* inode->fs->forget)(inode);
-
-	    if (S_ISDIR(inode->stat.sst_mode)) {
-		unsigned int error=0;
-		struct directory_s *subdir=remove_directory(inode, &error);
-
-		if (subdir) {
-		    struct name_s *xname=&entry->name;
-		    unsigned int keep=len;
-
-		    path[len]='/';
-		    len++;
-		    memcpy(&path[len], xname->name, xname->len);
-		    len+=xname->len;
-		    path[len]='\0';
-		    len++;
-
-		    /* do directory recursive */
-
-		    release_directory_pathcache(subdir);
-		    _clear_directory(i, subdir, path, len, level+1);
-		    free_directory(subdir);
-		    len=keep;
-		    memset(&path[len], 0, sizeof(path) - len);
-
-		}
-
-	    }
-
-	    /* remove and free inode */
-
-	    inode->alias=NULL;
-	    free(inode);
-	    entry->inode=NULL;
-
-	}
-
-	destroy_entry(entry);
-	list=get_list_head(&sl->header, SIMPLE_LIST_FLAG_REMOVE);
-
-    }
-
-}
-
-void clear_directory_recursive(struct context_interface_s *i, struct directory_s *directory)
-{
-    struct service_context_s *context=get_service_context(i);
-    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
-    char path[workspace->pathmax];
-
-    memset(path, 0, workspace->pathmax);
-    _clear_directory(i, directory, path, 0, 0);
-}
-
-void get_current_time_system_time(struct system_timespec_s *time)
-{
-    struct timespec tmp;
-
-    get_current_time(&tmp);
-    time->tv_sec=tmp.tv_sec;
-    time->tv_nsec=tmp.tv_nsec;
-}
-
 void fill_fuse_attr_system_stat(struct fuse_attr *attr, struct system_stat_s *stat)
 {
 
@@ -705,12 +342,12 @@ void fill_fuse_attr_system_stat(struct fuse_attr *attr, struct system_stat_s *st
     attr->blksize=_DEFAULT_BLOCKSIZE;
     attr->blocks=calc_amount_blocks(attr->size, attr->blksize);
 
-    attr->atime=(uint64_t) stat->sst_atime.tv_sec;
-    attr->atimensec=(uint64_t) stat->sst_atime.tv_nsec;
-    attr->mtime=(uint64_t) stat->sst_mtime.tv_sec;
-    attr->mtimensec=(uint64_t) stat->sst_mtime.tv_nsec;
-    attr->ctime=(uint64_t) stat->sst_ctime.tv_sec;
-    attr->ctimensec=(uint64_t) stat->sst_ctime.tv_nsec;
+    attr->atime=(uint64_t) get_atime_sec_system_stat(stat);
+    attr->atimensec=(uint64_t) get_atime_nsec_system_stat(stat);
+    attr->mtime=(uint64_t) get_mtime_sec_system_stat(stat);
+    attr->mtimensec=(uint64_t) get_mtime_nsec_system_stat(stat);
+    attr->ctime=(uint64_t) get_ctime_sec_system_stat(stat);
+    attr->ctimensec=(uint64_t) get_ctime_nsec_system_stat(stat);
 
     attr->mode=stat->sst_mode;
     attr->nlink=stat->sst_nlink;

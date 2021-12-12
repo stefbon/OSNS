@@ -72,12 +72,21 @@ static int complete_path_sftp_root(struct context_interface_s *interface, char *
 
 static int complete_path_sftp_custom(struct context_interface_s *interface, char *buffer, struct pathinfo_s *pathinfo)
 {
+    unsigned int len=interface->backend.sftp.prefix.path.len;
+    char *pos=buffer;
+
     /* custom prefix */
-    memcpy(buffer, interface->backend.sftp.prefix.path, interface->backend.sftp.prefix.len);
-    memcpy(&buffer[interface->backend.sftp.prefix.len], pathinfo->path, pathinfo->len);
-    buffer[interface->backend.sftp.prefix.len + pathinfo->len]='\0';
+
+    memcpy(pos, interface->backend.sftp.prefix.path.ptr, len);
+    pos+=len;
+    memcpy(pos, pathinfo->path, pathinfo->len);
+    pos+=pathinfo->len;
+    *pos='\0';
     pathinfo->path=buffer;
-    return interface->backend.sftp.prefix.len;
+
+    /* return extra len */
+
+    return len;
 }
 
 static unsigned int get_complete_pathlen_home(struct context_interface_s *interface, unsigned int len)
@@ -92,10 +101,10 @@ static unsigned int get_complete_pathlen_root(struct context_interface_s *interf
 
 static unsigned int get_complete_pathlen_custom(struct context_interface_s *interface, unsigned int len)
 {
-    return len + interface->backend.sftp.prefix.len + 1;
+    return (len + interface->backend.sftp.prefix.path.len + 1);
 }
 
-void set_sftp_interface_prefix(struct context_interface_s *interface, char *name, char *prefix)
+void set_sftp_interface_prefix(struct context_interface_s *interface, char *name, struct ssh_string_s *prefix)
 {
 
     if (strcmp(name, "home")==0) {
@@ -104,27 +113,15 @@ void set_sftp_interface_prefix(struct context_interface_s *interface, char *name
 	interface->backend.sftp.get_complete_pathlen=get_complete_pathlen_home;
 	interface->backend.sftp.prefix.type=INTERFACE_BACKEND_SFTP_PREFIX_HOME;
 
-	if (prefix) {
+	/* now: no prefix in home directory */
 
-	    interface->backend.sftp.prefix.path=strdup(prefix);
-	    interface->backend.sftp.prefix.len=strlen(prefix);
+	init_ssh_string(&interface->backend.sftp.prefix.path);
+	interface->backend.sftp.name=strdup(name);
 
-	} else {
+    }
 
-	    interface->backend.sftp.prefix.path=NULL;
-	    interface->backend.sftp.prefix.len=0;
-
-	}
-
-    } else if (prefix==NULL || strlen(prefix)==0) {
-
-	interface->backend.sftp.complete_path=complete_path_sftp_root;
-	interface->backend.sftp.get_complete_pathlen=get_complete_pathlen_root;
-	interface->backend.sftp.prefix.type=INTERFACE_BACKEND_SFTP_PREFIX_ROOT;
-	interface->backend.sftp.prefix.path=NULL;
-	interface->backend.sftp.prefix.len=0;
-
-    } else {
+    if (prefix && get_ssh_string_length(prefix, SSH_STRING_FLAG_DATA)>0) {
+	struct ssh_string_s *tmp=&interface->backend.sftp.prefix.path;
 
 	/* custom prefix */
 
@@ -132,63 +129,59 @@ void set_sftp_interface_prefix(struct context_interface_s *interface, char *name
 	interface->backend.sftp.get_complete_pathlen=get_complete_pathlen_custom;
 	interface->backend.sftp.prefix.type=INTERFACE_BACKEND_SFTP_PREFIX_CUSTOM;
 
-	if (prefix) {
+	create_copy_ssh_string(&tmp, prefix);
 
-	    interface->backend.sftp.prefix.path=strdup(prefix);
-	    interface->backend.sftp.prefix.len=strlen(prefix);
+	if (get_ssh_string_length(&interface->backend.sftp.prefix.path, SSH_STRING_FLAG_DATA)>0) {
+
+	    interface->backend.sftp.name=strdup(name);
 
 	} else {
 
-	    interface->backend.sftp.prefix.path=NULL;
-	    interface->backend.sftp.prefix.len=0;
+	    prefix=NULL;
 
 	}
 
-	interface->backend.sftp.name=strdup(name);
+    }
+
+    if (prefix==NULL || get_ssh_string_length(prefix, SSH_STRING_FLAG_DATA)==0) {
+
+	/* no prefix ... */
+
+	interface->backend.sftp.complete_path=complete_path_sftp_root;
+	interface->backend.sftp.get_complete_pathlen=get_complete_pathlen_root;
+	interface->backend.sftp.prefix.type=INTERFACE_BACKEND_SFTP_PREFIX_ROOT;
+	init_ssh_string(&interface->backend.sftp.prefix.path);
+	interface->backend.sftp.name=NULL;
 
     }
 
 }
 
-int issubdir_prefix_sftp_client(struct context_interface_s *interface, char *path, unsigned int len_p)
+int issubdirectory_prefix_sftp_client(struct context_interface_s *interface, struct fs_location_path_s *path)
 {
-    char *prefix=NULL;
-    unsigned int len=0;
-
-    logoutput("issubdir_prefix_sftp_client: test path %.*s for type %i", len_p, path, interface->backend.sftp.prefix.type);
+    unsigned char issubdir=0;
 
     if (interface->backend.sftp.prefix.type==INTERFACE_BACKEND_SFTP_PREFIX_HOME) {
+	char *buffer=(* interface->get_interface_buffer)(interface);
+	struct sftp_client_s *sftp=(struct sftp_client_s *) buffer;
+	struct net_idmapping_s *idm=sftp->mapping;
+        struct getent_fields_s *su=&idm->su;
 
-	if (interface->backend.sftp.prefix.path) {
+	/* test it's a subdirectory of the users home directory (on server) */
 
-	    prefix=interface->backend.sftp.prefix.path;
-	    len=interface->backend.sftp.prefix.len;
-
-	} else {
-	    char *buffer=(* interface->get_interface_buffer)(interface);
-	    struct sftp_client_s *sftp=(struct sftp_client_s *) buffer;
-	    struct net_idmapping_s *im=sftp->mapping;
-	    struct getent_fields_s *su=&im->sg;
-
-	    prefix=su->type.user.home;
-	    len=strlen(prefix);
-
-	}
+	issubdir=test_location_path_subdirectory(path, 'c', su->type.user.home, path);
 
     } else if (interface->backend.sftp.prefix.type==INTERFACE_BACKEND_SFTP_PREFIX_CUSTOM) {
 
-	prefix=interface->backend.sftp.prefix.path;
-	len=interface->backend.sftp.prefix.len;
+	/* test it's a subdirectory of the custom prefix */
+
+	issubdir=test_location_path_subdirectory(path, 's', &interface->backend.sftp.prefix.path, path);
 
     } else {
 
-	prefix="/";
-	len=1;
+	issubdir=test_location_path_subdirectory(path, 'c', "/", path);
 
     }
 
-    logoutput("issubdir_prefix_sftp_client: compare prefix %.*s and path %.*s", len, prefix, len_p, path);
-
-    if (len_p>len && strncmp(path, prefix, len)==0 && path[len]=='/') return 0;
-    return -1;
+    return issubdir;
 }

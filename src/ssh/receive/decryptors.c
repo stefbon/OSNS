@@ -80,7 +80,7 @@ static void init_decryptor(struct ssh_decryptor_s *decryptor, struct ssh_decrypt
 {
     memset(decryptor, 0, sizeof(struct ssh_decryptor_s) + size);
     decryptor->decrypt=decrypt;
-    get_current_time(&decryptor->created);
+    get_current_time_system_time(&decryptor->created);
     decryptor->nr=(decrypt) ? decrypt->count : 0;
     init_list_element(&decryptor->list, NULL);
     decryptor->size=size;
@@ -145,9 +145,7 @@ struct ssh_decryptor_s *get_decryptor_unlock(struct ssh_receive_s *receive, unsi
 
 	decryptor=get_decryptor_container(list);
 
-	if (decryptor->created.tv_sec > receive->newkeys.tv_sec ||
-	    (decryptor->created.tv_sec == receive->newkeys.tv_sec && decryptor->created.tv_nsec >= receive->newkeys.tv_nsec)) goto finish;
-
+	if (compare_system_times(&decryptor->created, &receive->newkeys) <=0) goto finish;
 	(* decryptor->clear)(decryptor);
 	free(decryptor);
 	decrypt->count--;
@@ -175,8 +173,9 @@ void queue_decryptor(struct ssh_decryptor_s *decryptor)
 
     pthread_mutex_lock(&receive->mutex);
 
-    if (decryptor->created.tv_sec > receive->newkeys.tv_sec ||
-	(decryptor->created.tv_sec == receive->newkeys.tv_sec && decryptor->created.tv_nsec >= receive->newkeys.tv_nsec)) {
+    /* everything is ok when created is later then then when newkeys are in use */
+
+    if (compare_system_times(&decryptor->created, &receive->newkeys) <=0) {
 
 	add_list_element_last(header, &decryptor->list);
 	pthread_cond_broadcast(&receive->cond);

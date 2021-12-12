@@ -404,3 +404,13 @@ struct attr_buffer_s init_nowrite_attr_buffer = {
     .count			= 0,
     .ops			= &ab_nowrite,
 };
+
+void set_attr_buffer_count(struct attr_buffer_s *ab, int count)
+{
+    ab->count=count;
+}
+
+void set_attr_buffer_flags(struct attr_buffer_s *ab, unsigned int flags)
+{
+    ab->flags |= flags;
+}

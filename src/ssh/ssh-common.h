@@ -29,6 +29,7 @@
 #include "list.h"
 #include "network.h"
 #include "users.h"
+#include "system.h"
 
 #include "datatypes.h"
 #include "ssh-pk.h"
@@ -305,7 +306,7 @@ struct ssh_utils_s {
 
 struct ssh_decompressor_s {
     struct ssh_decompress_s				*decompress;
-    struct timespec					created;
+    struct system_timespec_s				created;
     unsigned int					nr;
     int							(* decompress_packet)(struct ssh_decompressor_s *d, struct ssh_packet_s *packet, struct ssh_payload_s **payload, unsigned int *error);
     void						(* clear)(struct ssh_decompressor_s *d);
@@ -334,7 +335,7 @@ struct ssh_decompress_s {
 
 struct ssh_decryptor_s {
     struct ssh_decrypt_s				*decrypt;
-    struct timespec					created;
+    struct system_timespec_s				created;
     unsigned int					nr;
     int							(* verify_hmac_pre)(struct ssh_decryptor_s *d, struct ssh_packet_s *packet);
     int							(* decrypt_length)(struct ssh_decryptor_s *d, struct ssh_packet_s *packet, char *buffer, unsigned int len);
@@ -422,7 +423,7 @@ struct ssh_decrypt_s {
 
 struct ssh_receive_s {
     unsigned int					status;
-    struct timespec					newkeys;
+    struct system_timespec_s				newkeys;
     struct ssh_signal_s					signal;
     struct ssh_decrypt_s				decrypt;
     struct ssh_decompress_s				decompress;
@@ -450,7 +451,7 @@ struct ssh_compress_s;
 
 struct ssh_compressor_s {
     struct ssh_compress_s				*compress;
-    struct timespec					created;
+    struct system_timespec_s				created;
     unsigned int					nr;
     int							(* compress_payload)(struct ssh_compressor_s *c, struct ssh_payload_s **payload, unsigned int *error);
     void						(* clear)(struct ssh_compressor_s *c);
@@ -493,7 +494,7 @@ struct ssh_compress_s {
 
 struct ssh_encryptor_s {
     struct ssh_encrypt_s				*encrypt;
-    struct timespec					created;
+    struct system_timespec_s				created;
     unsigned int					nr;
     int							(* write_hmac_pre)(struct ssh_encryptor_s *e, struct ssh_packet_s *packet);
     int							(* encrypt_packet)(struct ssh_encryptor_s *e, struct ssh_packet_s *packet);
@@ -561,7 +562,7 @@ struct ssh_send_s {
     pthread_mutex_t					mutex;
     pthread_cond_t					cond;
     struct list_header_s				senders;
-    struct timespec					newkeys;
+    struct system_timespec_s				newkeys;
     int							(* queue_sender)(struct ssh_send_s *send, struct ssh_sender_s *sender, unsigned int *error);
     unsigned int 					sequence_number;
     struct ssh_encrypt_s				encrypt;
@@ -579,9 +580,9 @@ struct ssh_pubkey_s {
 struct ssh_hostinfo_s {
     unsigned int					flags;
     struct ssh_string_s 				fp;
-    struct timespec					delta;
-    void						(* correct_time_s2c)(struct ssh_session_s *session, struct timespec *time);
-    void						(* correct_time_c2s)(struct ssh_session_s *session, struct timespec *time);
+    struct system_timespec_s				delta;
+    void						(* correct_time_s2c)(struct ssh_session_s *session, struct system_timespec_s *time);
+    void						(* correct_time_c2s)(struct ssh_session_s *session, struct system_timespec_s *time);
     struct net_idmapping_s				mapping;
 };
 

@@ -97,7 +97,7 @@ static void sftp_op_stat_generic(struct sftp_subsystem_s *sftp, struct sftp_payl
 
 	    memset(&location, 0, sizeof(struct fs_location_s));
 	    location.flags=FS_LOCATION_FLAG_PATH;
-	    set_buffer_location_path(&location.type.path, pathtmp, size+1, 0);
+	    assign_buffer_location_path(&location.type.path, pathtmp, size+1);
 	    (* convert.complete)(sftp, &path, &location.type.path);
 
 	    mask=translate_valid_2_stat_mask(&sftp->attrctx, &valid, 'w');

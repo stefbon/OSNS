@@ -353,7 +353,7 @@ static void post_send_newkeys(struct ssh_connection_s *connection, int written)
 
     reset_compress(send, algo_compr);
     reset_encrypt(connection, algo_cipher, algo_hmac);
-    get_current_time(&send->newkeys);
+    get_current_time_system_time(&send->newkeys);
 
     /* change the setup */
     int result=change_ssh_connection_setup(connection, "transport", SSH_TRANSPORT_TYPE_KEX, SSH_KEX_FLAG_NEWKEYS_C2S, 0, setup_cb_send_newkeys, NULL);
@@ -391,7 +391,7 @@ static int select_payload_service_accept(struct ssh_connection_s *connection, st
 int request_ssh_service(struct ssh_connection_s *connection, const char *service)
 {
     struct payload_queue_s *queue=&connection->setup.queue;
-    struct timespec expire;
+    struct system_timespec_s expire=SYSTEM_TIME_INIT;
     struct generic_error_s error=GENERIC_ERROR_INIT;
     struct ssh_payload_s *payload=NULL;
     uint32_t seq=0;

@@ -40,6 +40,8 @@
 
 extern struct context_interface_s *get_next_context_interface(struct context_interface_s *reference, struct context_interface_s *interface);
 static struct list_header_s interface_ops_list=INIT_LIST_HEADER;
+static unsigned int unique_ctr=1;
+static pthread_mutex_t mutex_unique=PTHREAD_MUTEX_INITIALIZER;
 
 static void _free_option_alloc(struct ctx_option_s *option)
 {
@@ -104,12 +106,10 @@ static int _connect_interface(uid_t uid, struct context_interface_s *interface, 
     return -1;
 }
 
-static int _free_interface(struct context_interface_s *interface, const char *what)
+static void _free_interface(struct context_interface_s *interface)
 {
     /* for default there is nothing extra to be freed and the interface is never occupied/used
         so it's safe to free */
-
-    return 1;
 
 }
 
@@ -134,6 +134,11 @@ int init_context_interface(struct context_interface_s *interface, struct interfa
     memset(interface, 0, sizeof(struct context_interface_s));
     interface->type=0;
     interface->flags=0;
+
+    pthread_mutex_lock(&mutex_unique);
+    interface->unique=unique_ctr;
+    unique_ctr++;
+    pthread_mutex_unlock(&mutex_unique);
 
     interface->connect=_connect_interface;
     interface->start=_start_interface;
@@ -165,7 +170,6 @@ void reset_context_interface(struct context_interface_s *interface)
 
 void add_interface_ops(struct interface_ops_s *ops)
 {
-    
     add_list_element_last(&interface_ops_list, &ops->list);
 }
 

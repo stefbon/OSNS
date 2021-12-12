@@ -21,6 +21,7 @@
 #define _LIB_COMMONSIGNAL_LOCK_H
 
 #include <pthread.h>
+#include "system.h"
 
 #define COMMON_SIGNAL_FLAG_ALLOC			1
 #define COMMON_SIGNAL_FLAG_DEFAULT			2
@@ -33,7 +34,7 @@ struct common_signal_s {
     int							(* unlock)(struct common_signal_s *s);
     int							(* broadcast)(struct common_signal_s *s);
     int							(* condwait)(struct common_signal_s *s);
-    int							(* condtimedwait)(struct common_signal_s *s, struct timespec *expire);
+    int							(* condtimedwait)(struct common_signal_s *s, struct system_timespec_s *expire);
     char						buffer[];
 };
 
@@ -47,7 +48,7 @@ int signal_unlock(struct common_signal_s *s);
 
 int signal_broadcast(struct common_signal_s *s);
 int signal_condwait(struct common_signal_s *s);
-int signal_condtimedwait(struct common_signal_s *s, struct timespec *t);
+int signal_condtimedwait(struct common_signal_s *s, struct system_timespec_s *t);
 
 void clear_common_signal(struct common_signal_s **p_s);
 

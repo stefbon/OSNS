@@ -112,13 +112,13 @@ int start_remote_shell(struct ssh_channel_s *channel, unsigned int *error)
     }
 
     if (result==0) {
-	struct timespec expire;
+	struct system_timespec_s expire=SYSTEM_TIME_INIT;
 	struct ssh_payload_s *payload=NULL;
 
 	/* process any message from server like banners */
 
-	get_current_time(&expire);
-	expire.tv_sec+=1;
+	get_current_time_system_time(&expire);
+	system_time_add(&expire, SYSTEM_TIME_ADD_ZERO, 1);
 
 	processdatashell:
 

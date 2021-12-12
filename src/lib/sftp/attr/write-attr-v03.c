@@ -93,10 +93,10 @@ void write_attr_acmodtime_v03(struct attr_context_s *ctx, struct attr_buffer_s *
     struct system_timespec_s time=SYSTEM_TIME_INIT;
 
     get_atime_system_stat(stat, &time);
-    (* buffer->ops->rw.write.write_uint32)(buffer, time.tv_sec);
+    (* buffer->ops->rw.write.write_uint32)(buffer, time.st_sec);
 
     get_mtime_system_stat(stat, &time);
-    (* buffer->ops->rw.write.write_uint32)(buffer, time.tv_sec);
+    (* buffer->ops->rw.write.write_uint32)(buffer, time.st_sec);
 
 }
 

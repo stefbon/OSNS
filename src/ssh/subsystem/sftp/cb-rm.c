@@ -96,7 +96,7 @@ static void sftp_op_remove_common(struct sftp_payload_s *payload, unsigned char 
 	    char tmp[size+1];
 	    unsigned int error=0;
 
-	    set_buffer_location_path(&location, tmp, size+1, 0);
+	    assign_buffer_location_path(&location, tmp, size+1);
 	    (* convert.complete)(sftp, &path, &location);
 
 	    logoutput("sftp_op_remove_common : %.*s", location.len, location.ptr);

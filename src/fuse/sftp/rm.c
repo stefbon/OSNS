@@ -100,7 +100,7 @@ void _fs_sftp_unlink(struct service_context_s *context, struct fuse_request_s *f
     sftp_r.call.remove.len=pathinfo->len;
 
     if (send_sftp_remove_ctx(interface, &sftp_r)>0) {
-	struct timespec timeout;
+	struct system_timespec_s timeout=SYSTEM_TIME_INIT;
 
 	get_sftp_request_timeout_ctx(interface, &timeout);
 
@@ -158,7 +158,7 @@ void _fs_sftp_rmdir(struct service_context_s *context, struct fuse_request_s *f_
     sftp_r.call.rmdir.len=pathinfo->len;
 
     if (send_sftp_rmdir_ctx(interface, &sftp_r)>0) {
-	struct timespec timeout;
+	struct system_timespec_s timeout=SYSTEM_TIME_INIT;
 
 	get_sftp_request_timeout_ctx(interface, &timeout);
 

@@ -205,7 +205,7 @@ int main(int argc, char *argv[])
 
     set_process_sftp_payload_init(&sftp);
 
-    if (add_ssh_subsystem_connection_eventloop(&sftp.connection, read_ssh_subsystem_connection_signal)==0) {
+    if (add_ssh_subsystem_connection_eventloop(&sftp.connection, read_ssh_subsystem_connection_signal, write_ssh_subsystem_connection_signal)==0) {
 
 	logoutput("MAIN: sftp subsystem added tot eventloop");
 
@@ -224,8 +224,8 @@ int main(int argc, char *argv[])
 
     out:
 
-    remove_ssh_subsystem_connection_eventloop(&sftp.connection);
-    disconnect_ssh_subsystem_connection(&sftp.connection);
+    remove_ssh_subsystem_connection_eventloop(-1, &sftp.connection);
+    finish_ssh_subsystem_connection(-1, &sftp.connection);
     free_ssh_subsystem_connection(&sftp.connection);
 
     logoutput_info("MAIN: stop workerthreads");

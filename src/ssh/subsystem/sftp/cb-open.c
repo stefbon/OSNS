@@ -372,7 +372,7 @@ void sftp_op_open(struct sftp_payload_s *payload)
 
 	    memset(&location, 0, sizeof(struct fs_location_s));
 	    location.flags=FS_LOCATION_FLAG_PATH;
-	    set_buffer_location_path(&location.type.path, tmp, size+1, 0);
+	    assign_buffer_location_path(&location.type.path, tmp, size+1);
 	    (* convert.complete)(sftp, &path, &location.type.path);
 
 	    if (translate_sftp2local(&openmode, &local, &error)==-1) {

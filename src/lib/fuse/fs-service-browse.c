@@ -54,32 +54,57 @@
 
 static struct fuse_fs_s browse_fs;
 
+/* get the context which is linked to the inode
+    this is used only here since in the browse part of the virtual network path every inode is linked via data link
+    to a context */
+
 static struct service_context_s *get_browse_context(struct inode_s *inode)
 {
-    struct data_link_s *link=NULL;
-    fs_get_data_link(inode, &link);
-    return ((struct service_context_s *) (link->link.ptr));
+    struct data_link_s *link=inode->ptr;
+    struct service_context_s *ctx=NULL;
+
+    if (link) {
+
+	if (link->type==DATA_LINK_TYPE_DIRECTORY) {
+	    struct directory_s *directory=(struct directory_s *) ((char *) link - offsetof(struct directory_s, link));
+
+	    link=directory->ptr;
+
+	    if (link) {
+
+		if (link->type==DATA_LINK_TYPE_CONTEXT) ctx=(struct service_context_s *) ((char *) link - offsetof(struct service_context_s, link));
+
+
+	    }
+
+	} else if (link->type==DATA_LINK_TYPE_CONTEXT) {
+
+	    ctx=(struct service_context_s *) ((char *) link - offsetof(struct service_context_s, link));
+
+	}
+
+    }
+
+    return ctx;
 }
 
-static void unset_context_inode(struct inode_s *inode)
+static void _fs_browse_forget(struct service_context_s *context, struct inode_s *inode)
 {
-    struct data_link_s *link=NULL;
-    fs_get_data_link(inode, &link);
-    link->type=0;
-    link->link.ptr=NULL;
-}
+    struct data_link_s *link=inode->ptr;
 
-static void _fs_browse_forget(struct inode_s *inode)
-{
-    struct service_context_s *context=get_browse_context(inode);
+    if (link) {
 
-    logoutput("FORGET context %s", context->name);
+	if (link->type==DATA_LINK_TYPE_DIRECTORY) {
+	    struct directory_s *directory=(struct directory_s *) ((char *) link - offsetof(struct directory_s, link));
 
-    (* context->interface.signal_interface)(&context->interface, "command:disconnect", NULL);
-    (* context->interface.signal_interface)(&context->interface, "command:close", NULL);
-    (* context->interface.signal_interface)(&context->interface, "command:free", NULL);
-    remove_list_element(&context->wlist);
-    unset_context_inode(inode);
+	    logoutput("FORGET directory link (refount=%i)", link->refcount);
+
+	    link->refcount--;
+	    inode->ptr=NULL;
+
+	}
+
+    }
 
 }
 
@@ -92,6 +117,7 @@ static void _fs_browse_lookup(struct service_context_s *context, struct fuse_req
     struct directory_s *directory=NULL;
     struct service_fs_s *fs=get_service_context_fs(context);
     unsigned int error=(* fs->access)(context, request, SERVICE_OP_TYPE_LOOKUP);
+    struct workspace_mount_s *w=get_workspace_mount_ctx(context);
 
     logoutput("_fs_browse_lookup: ino %li name %s", (unsigned long) pinode->stat.sst_ino, name);
 
@@ -113,7 +139,7 @@ static void _fs_browse_lookup(struct service_context_s *context, struct fuse_req
     }
 
     fs=get_service_context_fs(context);
-    directory=get_directory(pinode);
+    directory=get_directory(w, pinode, 0);
     calculate_nameindex(&xname);
     entry=find_entry(directory, &xname, &error);
 

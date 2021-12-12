@@ -23,8 +23,8 @@
 /* prototypes */
 
 void init_sftp_timecorrection(struct sftp_client_s *sftp);
-void correct_time_s2c(struct sftp_client_s *sftp, struct timespec *time);
-void correct_time_c2s(struct sftp_client_s *sftp, struct timespec *time);
+void correct_time_s2c(struct sftp_client_s *sftp, struct system_timespec_s *time);
+void correct_time_c2s(struct sftp_client_s *sftp, struct system_timespec_s *time);
 void enable_timecorrection(struct sftp_client_s *sftp);
 
 #endif

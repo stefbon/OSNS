@@ -89,6 +89,9 @@ static void init_service_context(struct service_context_s *context, unsigned cha
     context->type=ctype; /* like SERVICE_CTX_TYPE_WORKSPACE */
     init_list_element(&context->wlist, NULL);
 
+    context->link.type=DATA_LINK_TYPE_CONTEXT;
+    context->link.refcount=0;
+
     if (ctype==SERVICE_CTX_TYPE_WORKSPACE) {
 
 	context->service.workspace.fs=NULL;
@@ -100,8 +103,7 @@ static void init_service_context(struct service_context_s *context, unsigned cha
 	context->service.network.fs=NULL;
 	init_list_element(&context->service.network.clist, NULL);
 	init_list_header(&context->service.network.header, SIMPLE_LIST_TYPE_EMPTY, NULL);
-	context->service.network.refresh.tv_sec=0;
-	context->service.network.refresh.tv_nsec=0;
+	set_system_time(&context->service.network.refresh, 0, 0);
 	context->service.network.threadid =0;
 
     } else if (ctype==SERVICE_CTX_TYPE_BROWSE) {
@@ -110,8 +112,7 @@ static void init_service_context(struct service_context_s *context, unsigned cha
 	context->service.browse.fs=NULL;
 	context->service.browse.unique=0;
 	init_list_element(&context->service.browse.clist, NULL);
-	context->service.browse.refresh.tv_sec=0;
-	context->service.browse.refresh.tv_nsec=0;
+	set_system_time(&context->service.network.refresh, 0, 0);
 	init_list_header(&context->service.browse.header, SIMPLE_LIST_TYPE_EMPTY, NULL);
 	context->service.browse.threadid =0;
 

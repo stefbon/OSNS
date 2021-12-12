@@ -57,7 +57,7 @@ void _fs_workspace_getattr(struct service_context_s *context, struct fuse_reques
     _fs_common_getattr(context, request, inode);
 }
 
-void _fs_workspace_setattr(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, struct pathinfo_s *pathinfo, struct stat *st, unsigned int set)
+void _fs_workspace_setattr(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, struct pathinfo_s *pathinfo, struct system_stat_s *st, unsigned int set)
 {
     _fs_common_getattr(context, request, inode);
 }

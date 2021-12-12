@@ -155,33 +155,49 @@ static int open_std_connection(struct ssh_subsystem_connection_s *connection)
 
 }
 
-static int close_std_connection(struct ssh_subsystem_connection_s *connection)
+static int close_std_connection_helper(int fd, struct fs_connection_s *fsc)
+{
+    struct bevent_s *bevent=bevent=fsc->io.std.bevent;
+
+    if (fd==-1 || fd==get_bevent_unix_fd(bevent)) {
+	struct io_std_s *io_std=&fsc->io.std;
+	struct std_ops_s *sops=io_std->sops;
+
+	return (* sops->close)(io_std);
+
+    }
+
+    return -1;
+
+}
+
+static int close_std_connection_common(int fd, struct ssh_subsystem_connection_s *connection)
 {
     struct fs_connection_s *fsc=&connection->type.std.stdin;
-    struct io_std_s *io_std=&fsc->io.std;
-    struct std_ops_s *sops=io_std->sops;
     int result=0;
 
-    fsc=&connection->type.std.stdin;
-    io_std=&fsc->io.std;
-    sops=io_std->sops;
+    /* STDIN */
 
-    result=(* sops->close)(io_std);
+    fsc=&connection->type.std.stdin;
+    result=close_std_connection_helper(fd, fsc);
+
+    /* STDOUT */
 
     fsc=&connection->type.std.stdout;
-    io_std=&fsc->io.std;
-    sops=io_std->sops;
+    result=close_std_connection_helper(fd, fsc);
 
-    result=(* sops->close)(io_std);
+    /* STDERR */
 
     fsc=&connection->type.std.stderr;
-    io_std=&fsc->io.std;
-    sops=io_std->sops;
-
-    result=(* sops->close)(io_std);
+    result=close_std_connection_helper(fd, fsc);
 
     return 0;
 
+}
+
+static int close_std_connection(struct ssh_subsystem_connection_s *connection)
+{
+    return close_std_connection_common(-1, connection);
 }
 
 static int read_std_connection(struct ssh_subsystem_connection_s *connection, char *buffer, unsigned int size)
@@ -195,19 +211,121 @@ static int read_std_connection(struct ssh_subsystem_connection_s *connection, ch
     return (* sops->read)(io_std, buffer, size);
 }
 
+static int send_operation_expired(struct system_timespec_s *time)
+{
+    struct system_timespec_s now=SYSTEM_TIME_INIT;
+
+    get_current_time_system_time(&now);
+    return compare_system_times(time, &now);
+}
+
 static int write_std_connection(struct ssh_subsystem_connection_s *connection, char *data, unsigned int size)
 {
-    struct fs_connection_s *fsc=&connection->type.std.stdout;
-    struct io_std_s *io_std=&fsc->io.std;
-    struct std_ops_s *sops=io_std->sops;
+    struct fs_connection_s *fsc=NULL;
+    struct io_std_s *io_std=NULL;
+    struct std_ops_s *sops=NULL;
+    int result=-1;
+    struct system_timespec_s time=SYSTEM_TIME_INIT;
 
     /* STDOUT is used for writing */
 
-    return (* sops->write)(io_std, data, size);
+    fsc=&connection->type.std.stdout;
+    io_std=&fsc->io.std;
+    sops=io_std->sops; /* socket ops */
+
+    get_current_time_system_time(&time);
+    system_time_add(&time, SYSTEM_TIME_ADD_ZERO, 4); 			/* TODO: make this 4 configurable */
+
+    while (result==-1 && send_operation_expired(&time)<=0) {
+
+	fsc->status &= ~FS_CONNECTION_FLAG_SEND_BLOCKED;
+	result=(* sops->write)(io_std, data, size);
+
+	if (result==-1) {
+	    unsigned int error=errno;
+
+	    if ((error==EAGAIN || error==EWOULDBLOCK)) {
+		struct common_signal_s *signal=connection->signal;
+		struct system_timespec_s expire;
+
+		get_current_time_system_time(&expire);
+		system_time_add(&time, SYSTEM_TIME_ADD_MILLI, 4); /* add 4 thousanths (==milli) seconds */
+
+		signal_lock(signal);
+
+		fsc->status |= FS_CONNECTION_FLAG_SEND_BLOCKED;
+
+		while (fsc->status & FS_CONNECTION_FLAG_SEND_BLOCKED) {
+
+		    int tmp=signal_condtimedwait(signal, &expire);
+
+		    if (tmp==ETIMEDOUT || ((fsc->status & FS_CONNECTION_FLAG_SEND_BLOCKED)==0)) {
+
+			/* waited long enough or system signals write is posible again: try again */
+			signal_unlock(signal);
+			break;
+
+		    }
+
+		}
+
+		signal_unlock(signal);
+
+	    } else if (socket_network_connection_error(error)) {
+
+		start_thread_ssh_subsystem_connection_problem(connection);
+
+	    } else {
+
+		logoutput_error("write_std_connection: unknown error %i (%s)", error, strerror(error));
+
+	    }
+
+	} else {
+
+	    /* bytes written>=0 */
+
+	    break;
+
+	}
+
+    }
+
+    return result;
+
 }
 
-int init_ssh_subsystem_connection(struct ssh_subsystem_connection_s *connection, unsigned char type)
+unsigned char signal_outgoing_connection_unblock(struct ssh_subsystem_connection_s *connection)
 {
+    unsigned char signal=0;
+
+    if (connection->flags & SSH_SUBSYSTEM_CONNECTION_FLAG_STD) {
+	struct fs_connection_s *fsc=&connection->type.std.stdout;
+	struct common_signal_s *signal=connection->signal;
+
+	signal_lock(signal);
+
+	if (fsc->status & FS_CONNECTION_FLAG_SEND_BLOCKED) {
+
+	    fsc->status &= ~FS_CONNECTION_FLAG_SEND_BLOCKED;
+	    signal_broadcast(signal);
+	    signal=1;
+
+	}
+
+	signal_unlock(signal);
+
+    }
+
+    return signal;
+
+}
+
+int init_ssh_subsystem_connection(struct ssh_subsystem_connection_s *connection, unsigned char type, struct common_signal_s *signal)
+{
+
+    connection->signal=signal;
+
     /* default */
 
     if (type==0) type=SSH_SUBSYSTEM_CONNECTION_TYPE_STD;
@@ -256,27 +374,48 @@ int connect_ssh_subsystem_connection(struct ssh_subsystem_connection_s *connecti
 
 }
 
-int add_ssh_subsystem_connection_eventloop(struct ssh_subsystem_connection_s *connection, void (* read_connection_signal)(int fd, void *ptr, struct event_s *event))
+static int add_std_connection_eventloop_helper(struct ssh_subsystem_connection_s *connection, struct fs_connection_s *fsc, void (* cb)(int fd, void *ptr, struct event_s *event))
+{
+    struct bevent_s *bevent=fsc->io.std.bevent;
+    int result=-1;
+
+    if (fsc->status & FS_CONNECTION_FLAG_EVENTLOOP) return 0;
+    if (bevent==NULL) return -1;
+
+    set_bevent_cb(bevent, cb);
+    set_bevent_ptr(bevent, (void *) connection);
+
+    if (add_bevent_beventloop(bevent)==0) {
+
+	logoutput_info("add_std_connection_eventloop_helper: added %i to eventloop", get_bevent_unix_fd(bevent));
+	fsc->status |= FS_CONNECTION_FLAG_EVENTLOOP;
+	return 0;
+
+    }
+
+    logoutput_warning("add_std_connection_eventloop_helper: failed to add %i to eventloop", get_bevent_unix_fd(bevent));
+    return -1;
+}
+
+int add_ssh_subsystem_connection_eventloop(struct ssh_subsystem_connection_s *connection, void (* read_connection_signal)(int fd, void *ptr, struct event_s *event), void (* write_connection_signal)(int fd, void *ptr, struct event_s *event))
 {
     int result=-1;
 
     if (connection->flags & SSH_SUBSYSTEM_CONNECTION_FLAG_STD) {
-	struct fs_connection_s *fsc=&connection->type.std.stdin;
-	struct bevent_s *bevent=fsc->io.std.bevent;
+	struct fs_connection_s *fsc=NULL;
 
-	set_bevent_cb(bevent, read_connection_signal);
-	set_bevent_ptr(bevent, (void *) connection);
+	/* with std incoming data and ougoing data are different fd's, so two fd's to add to eventloop
+	    TODO: add stderr */
 
-	if (add_bevent_beventloop(bevent)==0) {
+	/* stdin */
 
-	    logoutput_info("add_ssh_subsystem_connection_eventloop: added %i to eventloop", get_bevent_unix_fd(bevent));
-	    result=0;
+	fsc=&connection->type.std.stdin;
+	result=add_std_connection_eventloop_helper(connection, fsc, read_connection_signal);
 
-	} else {
+	/* stdout */
 
-	    logoutput_warning("add_ssh_subsystem_connection_eventloop: failed to add %i to eventloop", get_bevent_unix_fd(bevent));
-
-	}
+	fsc=&connection->type.std.stdout;
+	result=add_std_connection_eventloop_helper(connection, fsc, write_connection_signal);
 
     }
 
@@ -284,31 +423,116 @@ int add_ssh_subsystem_connection_eventloop(struct ssh_subsystem_connection_s *co
 
 }
 
-void remove_ssh_subsystem_connection_eventloop(struct ssh_subsystem_connection_s *connection)
+static void remove_std_connection_eventloop_helper(int fd, struct fs_connection_s *fsc)
 {
+    struct bevent_s *bevent=bevent=fsc->io.std.bevent;
 
-    if (connection->flags & SSH_SUBSYSTEM_CONNECTION_FLAG_STD) {
-	struct fs_connection_s *fsc=&connection->type.std.stdin;
-	struct bevent_s *bevent=fsc->io.socket.bevent;
+    if (bevent && (fsc->status & FS_CONNECTION_FLAG_EVENTLOOP) && (fd==-1 || fd==get_bevent_unix_fd(bevent))) {
 
-	if (bevent) {
-
-	    remove_bevent(bevent);
-	    fsc->io.socket.bevent=NULL;
-
-	}
+	remove_bevent(bevent);
+	fsc->io.socket.bevent=NULL;
+	fsc->status &= ~FS_CONNECTION_FLAG_EVENTLOOP;
 
     }
 
 }
 
-void disconnect_ssh_subsystem_connection(struct ssh_subsystem_connection_s *connection)
+void remove_ssh_subsystem_connection_eventloop(int fd, struct ssh_subsystem_connection_s *connection)
 {
-    if (connection->flags & SSH_SUBSYSTEM_CONNECTION_FLAG_DISCONNECT) return;
 
-    connection->flags |= SSH_SUBSYSTEM_CONNECTION_FLAG_DISCONNECTING;
-    (* connection->close)(connection);
-    connection->flags |= SSH_SUBSYSTEM_CONNECTION_FLAG_DISCONNECTED;
+    if (connection->flags & SSH_SUBSYSTEM_CONNECTION_FLAG_STD) {
+	struct fs_connection_s *fsc=NULL;
+
+	/* stdin */
+
+	fsc=&connection->type.std.stdin;
+	remove_std_connection_eventloop_helper(fd, fsc);
+
+	/* stdout */
+
+	fsc=&connection->type.std.stdout;
+	remove_std_connection_eventloop_helper(fd, fsc);
+
+	/* stderr ... TODO? */
+
+    }
+
+}
+
+static void finish_std_connection_helper(int fd, struct fs_connection_s *fsc, struct common_signal_s *signal)
+{
+
+    signal_lock(signal);
+
+    if (fsc->status & FS_CONNECTION_FLAG_DISCONNECTING) {
+	struct system_timespec_s expire=SYSTEM_TIME_INIT;
+
+	get_current_time_system_time(&expire);
+	system_time_add(&expire, SYSTEM_TIME_ADD_ZERO, 1); /* add 1 second */
+
+	/* wait till not disconnecting anymore */
+
+	while ((fsc->status & FS_CONNECTION_FLAG_DISCONNECTING) && (fsc->status & FS_CONNECTION_FLAG_DISCONNECTED)==0) {
+
+	    int tmp=signal_condtimedwait(signal, &expire);
+
+	    if (tmp=ETIMEDOUT) {
+		struct bevent_s *bevent=bevent=fsc->io.std.bevent;
+
+		logoutput_warning("finish_std_connection_helper: waiting for disconnecting connection %i timed out", get_bevent_unix_fd(bevent));
+		signal_unlock(signal);
+		return;
+
+	    }
+
+	}
+
+    }
+
+    if (fsc->status & FS_CONNECTION_FLAG_DISCONNECTED) {
+
+	/* another thread already has disconnected this */
+
+	signal_unlock(signal);
+	return;
+
+    }
+
+    fsc->status |= FS_CONNECTION_FLAG_DISCONNECTING;
+    signal_unlock(signal);
+
+    /* now when disconnecting flag has been set here is room to do the checking and possibly disconnect */
+
+    remove_std_connection_eventloop_helper(fd, fsc);
+    if (close_std_connection_helper(fd, fsc)==0) fsc->status |= FS_CONNECTION_FLAG_DISCONNECTED;
+
+    signal_lock(signal);
+    fsc->status &= ~FS_CONNECTION_FLAG_DISCONNECTING;
+    signal_broadcast(signal);
+    signal_unlock(signal);
+
+    return;
+}
+
+void finish_ssh_subsystem_connection(int fd, struct ssh_subsystem_connection_s *connection)
+{
+
+    if (connection->flags & SSH_SUBSYSTEM_CONNECTION_FLAG_STD) {
+	struct fs_connection_s *fsc=NULL;
+	struct common_signal_s *signal=connection->signal;
+
+	/* stdin */
+
+	fsc=&connection->type.std.stdin;
+	finish_std_connection_helper(fd, fsc, signal);
+
+	/* stdout */
+
+	fsc=&connection->type.std.stdout;
+	finish_std_connection_helper(fd, fsc, signal);
+
+    }
+
 }
 
 void free_ssh_subsystem_connection(struct ssh_subsystem_connection_s *connection)
@@ -333,20 +557,17 @@ static void analyze_ssh_subsystem_connection_problem(void *ptr)
 
     /* this flag should be set */
 
-    if ((connection->flags & SSH_SUBSYSTEM_CONNECTION_FLAG_TROUBLE)==0) logoutput("analyze_ssh_subsystem_connection_problem: flag SSH_SUBSYSTEM_CONNECTION_FLAG_TROUBLE not set as it should be ... warning");
+    if ((connection->flags & SSH_SUBSYSTEM_CONNECTION_FLAG_TROUBLE)==0)
+	logoutput("analyze_ssh_subsystem_connection_problem: flag SSH_SUBSYSTEM_CONNECTION_FLAG_TROUBLE not set as it should be ... warning");
 
     if (connection->error>0) error=connection->error;
 
     if (error>0) {
 
-	logoutput("analyze_ssh_subsystem_connection_problem: found error %i:%s", error, strerror(error));
-
 	if (socket_network_connection_error(error)) {
 
-	    logoutput("analyze_ssh_subsystem_connection_problem: error %i: disconnecting", error);
-
-	    remove_ssh_subsystem_connection_eventloop(connection);
-	    disconnect_ssh_subsystem_connection(connection);
+	    logoutput("analyze_ssh_subsystem_connection_problem: socket error %i:%s: disconnecting", error, strerror(error));
+	    finish_ssh_subsystem_connection(-1, connection);
 
 	} else {
 

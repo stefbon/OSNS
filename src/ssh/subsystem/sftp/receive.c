@@ -214,7 +214,7 @@ static void read_sftp_buffer(void *ptr)
     disconnect:
 
     logoutput_warning("read_ssh_buffer_packet: ignoring received data");
-    disconnect_ssh_subsystem_connection(connection);
+    finish_ssh_subsystem_connection(-1, connection);
 
 }
 
@@ -349,19 +349,9 @@ void read_ssh_subsystem_connection_signal(int fd, void *ptr, struct event_s *eve
 
     }
 
-    receive->flags |= SFTP_RECEIVE_STATUS_DISCONNECTING;
-    pthread_mutex_unlock(&receive->mutex);
-
-    remove_ssh_subsystem_connection_eventloop(connection);
-    disconnect_ssh_subsystem_connection(connection);
-
-    pthread_mutex_lock(&receive->mutex);
-    receive->flags |= SFTP_RECEIVE_STATUS_DISCONNECTED;
-    pthread_mutex_unlock(&receive->mutex);
-
+    finish_ssh_subsystem_connection(-1, connection);
     logoutput("read_ssh_subsystem_connection_signal: disconnected.. exit..");
     stop_beventloop(NULL);
-
     return;
 
 }

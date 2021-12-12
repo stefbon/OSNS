@@ -88,9 +88,9 @@ struct fusecontext_s {
 struct fusesocket_s {
     unsigned int					flags;
     struct fusecontext_s				context;
-    struct timespec					attr_timeout;
-    struct timespec					entry_timeout;
-    struct timespec					negative_timeout;
+    struct system_timespec_s				attr_timeout;
+    struct system_timespec_s				entry_timeout;
+    struct system_timespec_s				negative_timeout;
     struct fs_connection_s				connection;
     unsigned int					size_cb;
     fuse_cb_t						fuse_cb[FUSE_MAXNR_CB + 1]; /* depends on version protocol; at this moment max opcode is 47 */
@@ -198,8 +198,8 @@ int add_direntry_plus_buffer(struct context_interface_s *i, struct direntry_buff
 	char *tmp=(* i->get_interface_buffer)(i);
 	struct fusesocket_s *fusesocket=(struct fusesocket_s *) tmp;
 	struct fuse_direntplus *direntplus=(struct fuse_direntplus *) buffer->pos;
-	struct timespec *attr_timeout=&fusesocket->attr_timeout;
-	struct timespec *entry_timeout=&fusesocket->entry_timeout;
+	struct system_timespec_s *attr_timeout=&fusesocket->attr_timeout;
+	struct system_timespec_s *entry_timeout=&fusesocket->entry_timeout;
 
 	memset(buffer->pos, 0, dirent_size_alligned); /* to be sure, the buffer should be zerod already */
 
@@ -211,10 +211,10 @@ int add_direntry_plus_buffer(struct context_interface_s *i, struct direntry_buff
 
 	direntplus->entry_out.nodeid=stat->sst_ino;
 	direntplus->entry_out.generation=0; /* ???? */
-	direntplus->entry_out.entry_valid=entry_timeout->tv_sec;
-	direntplus->entry_out.entry_valid_nsec=entry_timeout->tv_nsec;
-	direntplus->entry_out.attr_valid=attr_timeout->tv_sec;
-	direntplus->entry_out.attr_valid_nsec=attr_timeout->tv_nsec;
+	direntplus->entry_out.entry_valid=get_system_time_sec(entry_timeout);
+	direntplus->entry_out.entry_valid_nsec=get_system_time_nsec(entry_timeout);
+	direntplus->entry_out.attr_valid=get_system_time_sec(attr_timeout);
+	direntplus->entry_out.attr_valid_nsec=get_system_time_nsec(attr_timeout);
 
 	fill_fuse_attr_system_stat(&direntplus->entry_out.attr, stat);
 
@@ -856,14 +856,9 @@ void init_fusesocket(struct context_interface_s *i, size_t size, unsigned char f
 
     /* change this .... make this longer for a network fs like 4/5/6 seconds */
 
-    fusesocket->attr_timeout.tv_sec=1;
-    fusesocket->attr_timeout.tv_nsec=0;
-
-    fusesocket->entry_timeout.tv_sec=1;
-    fusesocket->entry_timeout.tv_nsec=0;
-
-    fusesocket->negative_timeout.tv_sec=1;
-    fusesocket->negative_timeout.tv_nsec=0;
+    set_system_time(&fusesocket->attr_timeout, 1, 0);
+    set_system_time(&fusesocket->entry_timeout, 1, 0);
+    set_system_time(&fusesocket->negative_timeout, 1, 0);
 
     init_connection(&fusesocket->connection, FS_CONNECTION_TYPE_FUSE, FS_CONNECTION_ROLE_CLIENT);
 
@@ -907,19 +902,19 @@ struct common_signal_s *get_fusesocket_signal(struct context_interface_s *i)
     return fusesocket->signal;
 }
 
-struct timespec *get_fuse_attr_timeout(struct context_interface_s *i)
+struct system_timespec_s *get_fuse_attr_timeout(struct context_interface_s *i)
 {
     struct fusesocket_s *fusesocket=(struct fusesocket_s *) (* i->get_interface_buffer)(i);
     return &fusesocket->attr_timeout;
 }
 
-struct timespec *get_fuse_entry_timeout(struct context_interface_s *i)
+struct system_timespec_s *get_fuse_entry_timeout(struct context_interface_s *i)
 {
     struct fusesocket_s *fusesocket=(struct fusesocket_s *) (* i->get_interface_buffer)(i);
     return &fusesocket->entry_timeout;
 }
 
-struct timespec *get_fuse_negative_timeout(struct context_interface_s *i)
+struct system_timespec_s *get_fuse_negative_timeout(struct context_interface_s *i)
 {
     struct fusesocket_s *fusesocket=(struct fusesocket_s *) (* i->get_interface_buffer)(i);
     return &fusesocket->negative_timeout;

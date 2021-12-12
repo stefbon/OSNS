@@ -83,12 +83,51 @@ unsigned int append_location_path_get_required_size(struct fs_location_path_s *p
 
 }
 
-void set_buffer_location_path(struct fs_location_path_s *path, char *buffer, unsigned int size, unsigned int flags)
+void assign_buffer_location_path(struct fs_location_path_s *path, char *buffer, unsigned int len)
 {
-    path->flags=flags;
+    path->flags=0;
     path->ptr=buffer;
-    path->size=size;
-    path->len=0;
+    path->len=len; /* ? */
+    path->size=len;
+}
+
+void set_location_path(struct fs_location_path_s *path, const unsigned char type, void *ptr)
+{
+
+    switch (type) {
+
+	case 's': {
+
+	    struct ssh_string_s *tmp=(struct ssh_string_s *) ptr;
+
+	    path->flags=0;
+	    path->ptr=tmp->ptr;
+	    path->len=tmp->len;
+	    path->size=tmp->len;
+
+	}
+
+	case 'c': {
+	    char *buffer=(char *) ptr;
+
+	    path->flags=0;
+	    path->ptr=buffer;
+	    path->len=strlen(buffer);
+	    path->size=path->len;
+
+	}
+
+	case 'n': {
+
+	    path->flags=0;
+	    path->ptr=NULL;
+	    path->len=0;
+	    path->size=0;
+
+	}
+
+    }
+
 }
 
 void clear_location_path(struct fs_location_path_s *path)
@@ -413,34 +452,55 @@ unsigned char test_location_path_absolute(struct fs_location_path_s *path)
 
 }
 
-unsigned char test_location_path_subdirectory(struct fs_location_path_s *path, const unsigned char type, void *ptr)
+unsigned char test_location_path_subdirectory(struct fs_location_path_s *path, const unsigned char type, void *ptr, struct fs_location_path_s *sub)
 {
     unsigned char result=0;
+    char *tmp=NULL;
+    unsigned int len=0;
 
     switch (type) {
 
 	case 's' : {
 	    struct ssh_string_s *prefix=(struct ssh_string_s *) ptr;
 
-#ifdef __linux__
-
-	    result=(((path->len > prefix->len) && (strncmp(path->ptr, prefix->ptr, prefix->len)==0) && (path->ptr[prefix->len]=='/')) ? 1 : 0);
-
-#endif
-
+	    len=prefix->len;
+	    tmp=prefix->ptr;
 	    break;
+
 	}
 
 	case 'p' : {
 	    struct fs_location_path_s *prefix=(struct fs_location_path_s *) ptr;
 
-#ifdef __linux__
-
-	    result=(((path->len > prefix->len) && (strncmp(path->ptr, prefix->ptr, prefix->len)==0) && (path->ptr[prefix->len]=='/')) ? 1 : 0);
-
-#endif
-
+	    len=prefix->len;
+	    tmp=prefix->ptr;
 	    break;
+
+	}
+
+	case 'c' : {
+
+	    tmp=(char *) ptr;
+	    len=strlen(tmp);
+	    break;
+
+	}
+
+    }
+
+    if (ptr) {
+
+	if ((path->len > len) && (strncmp(path->ptr, tmp, len)==0) && (path->ptr[len]=='/')) {
+
+	    result=1;
+
+	    if (sub) {
+
+		sub->ptr=(char *)(path->ptr + len);
+		sub->len=path->len - len;
+
+	    }
+
 	}
 
     }
@@ -449,3 +509,172 @@ unsigned char test_location_path_subdirectory(struct fs_location_path_s *path, c
 
 }
 
+#define HANDLE_PATH_FLAG_FINISH					1
+
+#define HANDLE_PATH_ACTION_APPEND				0
+#define HANDLE_PATH_ACTION_IGNORE				1
+#define HANDLE_PATH_ACTION_UP					2
+
+struct path_element_s {
+    unsigned char	flags;
+    unsigned char	action;
+    unsigned int 	len;
+};
+
+static void handle_path_element(char *pos, unsigned int len, struct path_element_s *pa)
+{
+
+    /* default: append ... override in special cases */
+
+    pa->action=HANDLE_PATH_ACTION_APPEND;
+    pa->len=len;
+
+    if (len>=3) {
+
+	if (len>=4 && strncmp(pos, "/../", 4)==0) {
+
+	    pa->action=HANDLE_PATH_ACTION_UP;
+	    pa->len=4;
+
+	} else if (len==3 && (strncmp(pos, "/..", 3)==0 || strncmp(pos, "../", 3)==0)) {
+
+	    pa->action=HANDLE_PATH_ACTION_UP;
+	    pa->len=3;
+
+	} else if (strncmp(pos, "/./", 3)==0 || strncmp(pos, "///", 3)==0) {
+
+	    pa->action=HANDLE_PATH_ACTION_IGNORE;
+	    pa->len=3;
+
+	} else if (strncmp(pos, "//", 2)==0 || strncmp(pos, "/.", 2)==0) {
+
+	    pa->action=HANDLE_PATH_ACTION_IGNORE;
+	    pa->len=2;
+
+	}
+
+    } else if (len==2) {
+
+	if (strncmp(pos, "/.", 2)==0 || strncmp(pos, "//", 2)==0) {
+
+	    pa->action=HANDLE_PATH_ACTION_IGNORE;
+	    pa->len=2;
+
+	}
+
+    } else if (len==1) {
+
+	if (strncmp(pos, ".", 1)==0) {
+
+	    pa->action=HANDLE_PATH_ACTION_IGNORE;
+	    pa->len=1;
+
+	}
+
+    }
+
+}
+
+unsigned int remove_unneeded_path_elements(struct fs_location_path_s *path)
+{
+    char *slash[2];
+    char *pos=path->ptr;
+    int left=(int) path->len;
+    unsigned int len=0;
+    int result=-1;
+    struct path_element_s pa;
+
+    slash[0]=NULL;
+    slash[1]=NULL;
+
+    pa.flags=0;
+    pa.action=0;
+    pa.len=0;
+
+    while (left>0 && (pa.flags & HANDLE_PATH_FLAG_FINISH)==0) {
+
+	slash[1]=memchr(pos, '/', left);
+	pa.len=0;
+	pa.action=0;
+
+	if (slash[1]==NULL) {
+
+	    handle_path_element(pos, left, &pa);
+
+	} else {
+
+	    if (slash[1] > path->ptr) {
+
+		handle_path_element(pos, (unsigned int)(slash[1] - pos + 1), &pa);
+
+	    } else {
+
+		pa.action=HANDLE_PATH_ACTION_APPEND;
+		pa.len=1;
+
+	    }
+
+	}
+
+	if (pa.action==HANDLE_PATH_ACTION_APPEND) {
+
+	    pos+=pa.len;
+	    left-=pa.len;
+	    len += pa.len;
+
+	    if (slash[1]) slash[0]=slash[1];
+
+	} else if (pa.action==HANDLE_PATH_ACTION_IGNORE) {
+	    char *new=pos + pa.len;
+
+	    memmove(pos, new, left - pa.len);
+	    pos+=pa.len;
+	    left-=pa.len;
+
+	} else if (pa.action==HANDLE_PATH_ACTION_UP) {
+
+	    if (slash[0]) {
+		char *new=pos + pa.len;
+		unsigned int tmp=(unsigned int)(pos - slash[0]);
+
+		pos=slash[0] + 1;
+
+		/* remove the previous path element -> len decreases by the length of this element */
+
+		memmove(pos, new, left - pa.len);
+		left-= pa.len;
+
+	    } else {
+
+		/* no slash[0] -> no obvious previous path element -> two possible reasons:
+		    - must be the start of the path (which has no slash)
+		    - or it's the first element */
+
+		char *new=pos + pa.len;
+		unsigned int tmp=(unsigned int)(pos - path->ptr);
+
+		pos=path->ptr;
+		memmove(pos, new, left - pa.len);
+		left-= pa.len;
+
+		path->back++;
+
+	    }
+
+	}
+
+    }
+
+    out:
+
+    if (len < path->len) {
+
+	pos=(char *)(path->ptr + len);
+	left=(unsigned int)(path->len - len);
+	memset(pos, 0, left);
+
+    }
+
+    return len;
+
+}

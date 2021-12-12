@@ -51,7 +51,7 @@
 #include "sftp/common.h"
 #include "sftp/request-hash.h"
 
-unsigned char wait_sftp_response_ctx(struct context_interface_s *interface, struct sftp_request_s *sftp_r, struct timespec *timeout)
+unsigned char wait_sftp_response_ctx(struct context_interface_s *interface, struct sftp_request_s *sftp_r, struct system_timespec_s *timeout)
 {
     struct sftp_client_s *sftp=(struct sftp_client_s *) (* interface->get_interface_buffer)(interface);
     return wait_sftp_response(sftp, sftp_r, timeout);
@@ -102,6 +102,7 @@ void init_sftp_request(struct sftp_request_s *r, struct context_interface_s *i, 
 
     r->status = SFTP_REQUEST_STATUS_WAITING;
     r->interface=i;
+    r->unique=i->unique;
     r->send=send_sftp_request_data_default;
     r->ptr=(void *) f_request;
 
@@ -117,12 +118,13 @@ void init_sftp_request_minimal(struct sftp_request_s *r, struct context_interfac
 
     r->status = SFTP_REQUEST_STATUS_WAITING;
     r->interface=i;
+    r->unique=i->unique;
     r->send=send_sftp_request_data_default;
     r->ptr=NULL;
 
 }
 
-void get_sftp_request_timeout_ctx(struct context_interface_s *interface, struct timespec *timeout)
+void get_sftp_request_timeout_ctx(struct context_interface_s *interface, struct system_timespec_s *timeout)
 {
     struct sftp_client_s *sftp=(struct sftp_client_s *) (* interface->get_interface_buffer)(interface);
     get_sftp_request_timeout(sftp, timeout);

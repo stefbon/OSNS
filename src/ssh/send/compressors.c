@@ -66,7 +66,7 @@ static void init_compressor(struct ssh_compressor_s *compressor, struct ssh_comp
 {
     memset(compressor, 0, sizeof(struct ssh_compressor_s) + size);
     compressor->compress=compress;
-    get_current_time(&compressor->created);
+    get_current_time_system_time(&compressor->created);
     compressor->nr=(compress) ? compress->count : 0;
     init_list_element(&compressor->list, NULL);
     compressor->size=size;
@@ -138,11 +138,6 @@ struct ssh_compressor_s *get_compressor(struct ssh_send_s *send, unsigned int *e
 
     finish:
 
-    // logoutput("get_compressor: finish");
-
-    // logoutput("get_compressor (nr %i count %i)", (compressor) ? compressor->nr : -1, compress->count);
-    // logoutput("get_compressor: finish (%li.%li - %li.%li)", compressor->created.tv_sec, compressor->created.tv_nsec, send->newkeys.tv_sec, send->newkeys.tv_nsec);
-
     pthread_mutex_unlock(&send->mutex);
     return compressor;
 
@@ -156,8 +151,7 @@ void queue_compressor(struct ssh_compressor_s *compressor)
 
     pthread_mutex_lock(&send->mutex);
 
-    if (compressor->created.tv_sec > send->newkeys.tv_sec ||
-	(compressor->created.tv_sec == send->newkeys.tv_sec && compressor->created.tv_nsec >= send->newkeys.tv_nsec)) {
+    if (compare_system_times(&compressor->created, &send->newkeys)<=0) {
 
 	add_list_element_last(header, &compressor->list);
 	pthread_cond_broadcast(&send->cond);

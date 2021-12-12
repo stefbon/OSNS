@@ -26,14 +26,30 @@ char *application_errors[] = {
 	    "Object not found.",
 };
 
-static char *get_description_system_linux(struct generic_error_s *error)
+#ifdef __linux__
+
+static char *get_description_system(struct generic_error_s *error)
 {
     return strerror(error->value.errnum);
 }
 
-static char *get_description_default(struct generic_error_s *error)
+#else
+
+static char *get_description_system(struct generic_error_s *error)
+{
+    return "Unknown system: unable to give error description";
+}
+
+#endif
+
+static char *get_description_init(struct generic_error_s *error)
 {
     return "";
+}
+
+static char *get_description_unknown_app(struct generic_error_s *error)
+{
+    return "Unknown application: unable to give error description";
 }
 
 static char *get_description_application(struct generic_error_s *error)
@@ -41,15 +57,18 @@ static char *get_description_application(struct generic_error_s *error)
     return (error->value.errnum>=0 && error->value.errnum<=2) ? application_errors[error->value.errnum] : application_errors[0];
 }
 
+#ifdef __linux__
+
 void set_generic_error_system(struct generic_error_s *error, int errnum, const char *function)
 {
     if (error==NULL) return;
-
     error->type=_ERROR_TYPE_SYSTEM;
     error->value.errnum=errnum;
-    error->get_description=get_description_system_linux;
+    error->get_description=get_description_system;
     if (function) strcpy(error->function, function);
 }
+
+#endif
 
 void set_generic_error_application(struct generic_error_s *error, int errnum, char *(* get_desc)(struct generic_error_s *e), const char *function)
 {
@@ -74,7 +93,7 @@ void set_generic_error_application(struct generic_error_s *error, int errnum, ch
 void init_generic_error(struct generic_error_s *error)
 {
     memset(error, 0, sizeof(struct generic_error_s));
-    error->get_description=get_description_default;
+    error->get_description=get_description_init;
 }
 
 char *get_error_description(struct generic_error_s *error)
@@ -86,5 +105,5 @@ char *get_error_description(struct generic_error_s *error)
 struct generic_error_s initge = {
 		    .type=0,
 		    .value.errnum=0,
-		    .get_description=get_description_default};
+		    .get_description=get_description_init};
 

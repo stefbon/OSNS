@@ -58,26 +58,6 @@ void copy_fuse_fs(struct fuse_fs_s *to, struct fuse_fs_s *from)
     memcpy(to, from, sizeof(struct fuse_fs_s));
 }
 
-void fs_inode_forget(struct inode_s *inode)
-{
-    (* inode->fs->forget)(inode);
-}
-
-int fs_lock_datalink(struct inode_s *inode)
-{
-    return (* inode->fs->lock_datalink)(inode);
-}
-
-int fs_unlock_datalink(struct inode_s *inode)
-{
-    return (* inode->fs->unlock_datalink)(inode);
-}
-
-void fs_get_data_link(struct inode_s *inode, struct data_link_s **p_link)
-{
-    (* inode->fs->get_data_link)(inode, p_link);
-}
-
 struct context_interface_s *get_fuse_request_interface(struct fuse_request_s *request)
 {
     return (request->root);
@@ -252,8 +232,7 @@ void set_stat_mask_from_fuse_setattr(struct fuse_setattr_in *attr, struct system
 
 	} else {
 
-	    time.tv_sec=attr->atime;
-	    time.tv_nsec=attr->atimensec;
+	    set_system_time(&time, attr->atime, attr->atimensec);
 
 	}
 
@@ -270,8 +249,7 @@ void set_stat_mask_from_fuse_setattr(struct fuse_setattr_in *attr, struct system
 
 	} else {
 
-	    time.tv_sec=attr->mtime;
-	    time.tv_nsec=attr->mtimensec;
+	    set_system_time(&time, attr->mtime, attr->mtimensec);
 
 	}
 
@@ -282,9 +260,7 @@ void set_stat_mask_from_fuse_setattr(struct fuse_setattr_in *attr, struct system
     if (attr->valid & FATTR_CTIME) {
 	struct system_timespec_s time=SYSTEM_TIME_INIT;
 
-	time.tv_sec=attr->ctime;
-	time.tv_nsec=attr->ctimensec;
-
+	set_system_time(&time, attr->ctime, attr->ctimensec);
 	set_ctime_system_stat(stat, &time);
 
     }
@@ -1735,20 +1711,21 @@ void clear_fuse_buffer(struct fuse_buffer_s *buffer)
 struct entry_s *get_fuse_direntry_common(struct fuse_opendir_s *opendir, struct list_header_s *header, struct fuse_request_s *request)
 {
     struct common_signal_s *signal=opendir->signal;
-    struct directory_s *directory=get_directory(opendir->inode);
+    struct workspace_mount_s *w=get_workspace_mount_ctx(opendir->context);
+    struct directory_s *directory=get_directory(w, opendir->inode, 0);
     struct list_element_s *list=NULL;
     struct fuse_direntry_s *direntry=NULL;
     struct entry_s *entry=NULL;
     unsigned int opendirflags=(_FUSE_OPENDIR_FLAG_READDIR_FINISH | _FUSE_OPENDIR_FLAG_READDIR_INCOMPLETE | _FUSE_OPENDIR_FLAG_READDIR_ERROR | _FUSE_OPENDIR_FLAG_QUEUE_READY);
-    struct timespec expire;
+    struct system_timespec_s expire=SYSTEM_TIME_INIT;
     int result=0;
 
     logoutput("get_fuse_direntry_common: opendir flags %i", opendir->flags);
 
     signal_lock(signal);
 
-    get_current_time(&expire);
-    expire.tv_sec+=4; /* make configurable */
+    get_current_time_system_time(&expire);
+    system_time_add(&expire, SYSTEM_TIME_ADD_ZERO, 4); /* make configurable */
 
     checkandwait:
 
@@ -1838,7 +1815,8 @@ void queue_fuse_direntry(struct fuse_opendir_s *opendir, struct entry_s *entry)
 
 void queue_fuse_direntries_virtual(struct fuse_opendir_s *opendir)
 {
-    struct directory_s *d=get_directory(opendir->inode);
+    struct workspace_mount_s *w=get_workspace_mount_ctx(opendir->context);
+    struct directory_s *d=get_directory(w, opendir->inode, 0);
     struct simple_lock_s rlock;
 
     if (rlock_directory(d, &rlock)==0) {

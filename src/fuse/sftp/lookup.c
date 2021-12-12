@@ -63,18 +63,18 @@
     of a name on sftp map
 */
 
-static unsigned int _sftp_cb_cache_size(struct create_entry_s *ce)
-{
-    struct attr_response_s *attr=(struct attr_response_s *) ce->cache.link.link.ptr;
-    return attr->size;
-}
+// static unsigned int _sftp_cb_cache_size(struct create_entry_s *ce)
+//{
+//    struct attr_response_s *attr=(struct attr_response_s *) ce->cache.link.link.ptr;
+//    return attr->size;
+//}
 
 static void _sftp_lookup_cb_created(struct entry_s *entry, struct create_entry_s *ce)
 {
     struct service_context_s *context=ce->context;
     struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
     struct context_interface_s *interface=&context->interface;
-    struct attr_response_s *response=(struct attr_response_s *) ce->cache.link.link.ptr;
+    struct attr_response_s *response=(struct attr_response_s *) ce->cache.ptr;
     struct fuse_request_s *r=(struct fuse_request_s *) ce->ptr;
     struct inode_s *inode=entry->inode;
     struct system_stat_s *stat=&inode->stat;
@@ -101,7 +101,7 @@ static void _sftp_lookup_cb_created(struct entry_s *entry, struct create_entry_s
 	increase_nlink_system_stat(stat, 1);
 	increase_nlink_system_stat(&parent->inode->stat, 1);
 	set_ctime_system_stat(&parent->inode->stat, &inode->stime); /* attribute of parent changed */
-	set_directory_dump(inode, get_dummy_directory());
+	assign_directory_inode(workspace, inode);
 
     }
 
@@ -124,7 +124,7 @@ static void _sftp_lookup_cb_found(struct entry_s *entry, struct create_entry_s *
 {
     struct service_context_s *context=ce->context;
     struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
-    struct attr_response_s *response=(struct attr_response_s *) ce->cache.link.link.ptr;
+    struct attr_response_s *response=(struct attr_response_s *) ce->cache.ptr;
     struct fuse_request_s *r=(struct fuse_request_s *) ce->ptr;
     struct inode_s *inode=entry->inode;
     struct system_stat_s *stat=&inode->stat;
@@ -135,18 +135,12 @@ static void _sftp_lookup_cb_found(struct entry_s *entry, struct create_entry_s *
     /* received attr buffer differs from the cache: have to parse it */
 
     get_mtime_system_stat(stat, &mtime);
-    set_attr_buffer_read_attr_response(&abuff, (struct attr_response_s *) ce->cache.link.link.ptr);
+    set_attr_buffer_read_attr_response(&abuff, response);
     read_sftp_attributes_ctx(&context->interface, &abuff, stat);
 
-    if (stat->sst_mtime.tv_sec > mtime.tv_sec ||
-	(stat->sst_mtime.tv_sec==mtime.tv_sec && stat->sst_mtime.tv_nsec>mtime.tv_nsec)) {
+    /* if file has been changed on remote side remember this for caching purposes */
 
-	/* if file has been changed on remote side remember this: when opening the file here take care
-		the local cache is not uptodate anymore */
-
-	inode->flags |= INODE_FLAG_REMOTECHANGED;
-
-    }
+    if (test_remote_file_changed(stat, &mtime)==1) inode->flags |= INODE_FLAG_REMOTECHANGED;
 
     if (!(type==get_type_system_stat(stat)) ) {
 
@@ -198,7 +192,7 @@ void _fs_sftp_lookup_new(struct service_context_s *context, struct fuse_request_
     /* send lstat cause not interested in target when dealing with symlink */
 
     if (send_sftp_lstat_ctx(interface, &sftp_r)>0) {
-	struct timespec timeout;
+	struct system_timespec_s timeout=SYSTEM_TIME_INIT;
 
 	get_sftp_request_timeout_ctx(interface, &timeout);
 	error=0;
@@ -211,13 +205,11 @@ void _fs_sftp_lookup_new(struct service_context_s *context, struct fuse_request_
 		struct create_entry_s ce;
 
 		init_create_entry(&ce, xname, inode->alias, NULL, NULL, context, NULL, (void *) f_request);
-		ce.cache.link.link.ptr=(void *) &reply->response.attr;
-		ce.cache.link.type=DATA_LINK_TYPE_CACHE; /* not really required */
+		ce.cache.ptr=(void *) &reply->response.attr;
 		ce.pathlen=pathinfo->len;
 		ce.cb_created=_sftp_lookup_cb_created;
 		ce.cb_found=_sftp_lookup_cb_found;
 		ce.cb_error=_sftp_lookup_cb_error;
-		ce.cb_cache_size=_sftp_cb_cache_size;
 		entry=create_entry_extended(&ce);
 
 		free(reply->response.attr.buff);
@@ -273,7 +265,7 @@ void _fs_sftp_lookup_existing(struct service_context_s *context, struct fuse_req
     /* send lstat cause not interested in target when dealing with symlink */
 
     if (send_sftp_lstat_ctx(interface, &sftp_r)>0) {
-	struct timespec timeout;
+	struct system_timespec_s timeout=SYSTEM_TIME_INIT;
 
 	get_sftp_request_timeout_ctx(interface, &timeout);
 	error=0;
@@ -294,15 +286,9 @@ void _fs_sftp_lookup_existing(struct service_context_s *context, struct fuse_req
 		set_attr_buffer_read_attr_response(&abuff, response);
 		read_sftp_attributes_ctx(interface, &abuff, stat);
 
-		if (stat->sst_mtime.tv_sec > mtime.tv_sec ||
-			(stat->sst_mtime.tv_sec==mtime.tv_sec && stat->sst_mtime.tv_nsec>mtime.tv_nsec)) {
+		/* if file has been changed on remote side remember this for caching purposes */
 
-		    /* if file has been changed on remote side remember this: when opening the file here take care
-		    the local cache is not uptodate anymore */
-
-		    inode->flags |= INODE_FLAG_REMOTECHANGED;
-
-		}
+		if (test_remote_file_changed(stat, &mtime)==1) inode->flags |= INODE_FLAG_REMOTECHANGED;
 
 		if (inode->nlookup==0 || (type != get_type_system_stat(stat))) {
 		    struct directory_s *directory=get_upper_directory_entry(entry);
@@ -323,8 +309,8 @@ void _fs_sftp_lookup_existing(struct service_context_s *context, struct fuse_req
 		free(reply->response.attr.buff);
 		reply->response.attr.buff=NULL;
 
-		if (S_ISDIR(stat->sst_mode)) {
-		    struct directory_s *d=get_directory(inode);
+		if (system_stat_test_ISDIR(stat)) {
+		    struct directory_s *d=get_directory(workspace, inode, 0);
 
 		    if (d->getpath==NULL) set_directory_pathcache(context, d, NULL);
 
