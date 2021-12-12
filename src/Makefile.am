@@ -251,7 +251,7 @@ osns_sftp_subsystem_SOURCES	=	osns_sftp_subsystem.c \
 					lib/users/mapcb_l2p.c lib/users/mapcb_p2l.c lib/users/mapping.c \
 					lib/system/directory.c lib/system/file.c lib/system/fshandle.c \
 					lib/system/hash.c lib/system/insert.c lib/system/location.c \
-					lib/system/open.c lib/system/path.c lib/system/stat.c \
+					lib/system/open.c lib/system/path.c lib/system/stat.c lib/system/time.c \
 					lib/datatypes/ssh-string.c lib/datatypes/ssh-uint.c lib/datatypes/buffer.c \
 					lib/eventloop/beventloop.c lib/eventloop/beventsignal.c \
 					lib/error/error-handling.c \
