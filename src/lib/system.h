@@ -29,5 +29,6 @@
 #include "system/directory.h"
 #include "system/hash.h"
 #include "system/insert.h"
+#include "system/time.h"
 
 #endif
