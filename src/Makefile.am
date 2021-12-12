@@ -255,6 +255,7 @@ osns_sftp_subsystem_SOURCES	=	osns_sftp_subsystem.c \
 					lib/datatypes/ssh-string.c lib/datatypes/ssh-uint.c lib/datatypes/buffer.c \
 					lib/eventloop/beventloop.c lib/eventloop/beventsignal.c \
 					lib/error/error-handling.c \
+					lib/commonsignal/lock.c \
 					lib/list/simple-list.c lib/list/simple-locking.c lib/list/simple-hash.c \
 					lib/log/logging.c \
 					lib/misc/pidfile.c lib/misc/utils.c \
