@@ -22,6 +22,7 @@
 
 #include "network.h"
 #include "commonsignal.h"
+#include "system.h"
 
 #define SSH_SUBSYSTEM_CONNECTION_FLAG_STD			(1 << 0)
 #define SSH_SUBSYSTEM_CONNECTION_FLAG_RECV_ERROR		(1 << 2)
