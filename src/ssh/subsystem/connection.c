@@ -417,8 +417,8 @@ int add_ssh_subsystem_connection_eventloop(struct ssh_subsystem_connection_s *co
 
 	/* stdout */
 
-	fsc=&connection->type.std.stdout;
-	result=add_std_connection_eventloop_helper(connection, fsc, write_connection_signal);
+	// fsc=&connection->type.std.stdout;
+	// result=add_std_connection_eventloop_helper(connection, fsc, write_connection_signal);
 
     }
 
