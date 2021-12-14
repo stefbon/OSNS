@@ -486,8 +486,9 @@ void terminate_workerthreads(void *ptr, unsigned int timeout)
 	system_time_add(&expire, SYSTEM_TIME_ADD_ZERO, timeout);
 
 	while (queue->nrthreads>0) {
+	    struct timespec tmp={.tv_sec=expire.st_sec, .tv_nsec=expire.st_nsec};
 
-	    result=pthread_cond_timedwait(&queue->cond, &queue->mutex, &expire);
+	    result=pthread_cond_timedwait(&queue->cond, &queue->mutex, &tmp);
 
 	    if (result==ETIMEDOUT) {
 

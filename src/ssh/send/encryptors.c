@@ -142,7 +142,7 @@ struct ssh_encryptor_s *get_encryptor(struct ssh_send_s *send, unsigned int *err
 
 	/* dealing with an "old" encryptor ?*/
 
-	if (compare_system_times(&encryptor->created, &send->newkeys)<=0) goto finish;
+	if (system_time_test_earlier(&encryptor->created, &send->newkeys)<=0) goto finish;
 
 	(* encryptor->clear)(encryptor);
 	free(encryptor);
@@ -176,7 +176,7 @@ void queue_encryptor(struct ssh_encryptor_s *encryptor)
 
     pthread_mutex_lock(&send->mutex);
 
-    if (compare_system_times(&encryptor->created, &send->newkeys)<=0) {
+    if (system_time_test_earlier(&encryptor->created, &send->newkeys)<=0) {
 
 	add_list_element_last(header, &encryptor->list);
 	pthread_cond_broadcast(&send->cond);

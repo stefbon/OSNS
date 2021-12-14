@@ -110,7 +110,7 @@ int send_userauth_none_request(struct ssh_connection_s *connection, struct ssh_s
 
 }
 
-int respond_userauth_none_request(struct ssh_connection_s *connection, struct ssh_string_s *username, struct ssh_string_s *service, struct ssh_string_s *data, struct timespec *expire)
+int respond_userauth_none_request(struct ssh_connection_s *connection, struct ssh_string_s *username, struct ssh_string_s *service, struct ssh_string_s *data, struct system_timespec_s *expire)
 {
     return respond_userauth_request(connection, 0);
 }

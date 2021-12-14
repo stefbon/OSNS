@@ -325,7 +325,7 @@ int compare_msg_kexinit(struct ssh_connection_s *connection)
 	if ((connection->flags & SSH_CONNECTION_FLAG_MAIN) && i==SSH_ALGO_TYPE_HOSTKEY) {
 	    struct ssh_session_s *session=get_ssh_connection_session(connection);
 
-	    store_algo_pubkey_negotiation(session, &clist_client[i], &clist_server[i]);
+	    store_algo_pubkey_negotiation(session, &clist_client[i], &clist_server[i], "pk");
 
 	}
 

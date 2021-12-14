@@ -642,11 +642,12 @@ static void _fs_service_open_common(struct _fs_open_common_s *opencommon, struct
 
     } else if (opencommon->op==SERVICE_OP_TYPE_OPENDIR) {
 	struct fuse_opendir_s *opendir=opencommon->type.opendir;
-	struct directory_s *directory=get_directory(workspace, inode, GET_DIRECTORY_FLAG_NOCREATE);
+	struct directory_s *directory=NULL;
 
 	opendir->context=context;
 	logoutput("OPENDIR %s (thread %i) %s", context->name, (int) gettid(), pathinfo.path);
 	(* fs->opendir)(opendir, request, &pathinfo, flags);
+	directory=get_directory(workspace, inode, GET_DIRECTORY_FLAG_NOCREATE);
 	if ((directory->flags & _DIRECTORY_FLAG_DUMMY)==0) set_directory_pathcache(context, directory, fpath);
 
     }

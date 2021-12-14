@@ -293,7 +293,7 @@ unsigned char wait_sftp_response(struct sftp_client_s *sftp, struct sftp_request
 	logoutput("wait_sftp_response: error (packet wrong format?) (id=%i seq=%i)", sftp_r->id, sftp_r->reply.sequence);
 	return 0;
 
-    } else if (sftp->signal.seq==sftp_r->reply.sequence && compare_system_times(&sftp_r->started, &sftp->signal.seqset)==1) {
+    } else if (sftp->signal.seq==sftp_r->reply.sequence && system_time_test_earlier(&sftp_r->started, &sftp->signal.seqset)==1) {
 
 	signal_unlock(signal);
 
@@ -403,8 +403,6 @@ void init_sftp_sendhash()
     }
     pthread_mutex_unlock(&hashmutex);
 }
-
-
 
 void clear_sftp_reply(struct sftp_reply_s *r)
 {

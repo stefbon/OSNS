@@ -406,7 +406,8 @@ int setup_ssh_session(struct ssh_session_s *session, int fd)
     if (check_ssh_connection_setup(connection, "transport", SSH_TRANSPORT_TYPE_KEX, 0)<1) {
 
 	logoutput("setup_ssh_session: error: keyexchange failed");
-	goto out_kex;
+	finish_ssh_connection_setup(connection, "transport", 0);
+	goto out_setup;
 
     }
 
@@ -464,21 +465,21 @@ int setup_ssh_session(struct ssh_session_s *session, int fd)
     out_auth:
 
     finish_ssh_connection_setup(connection, "service", SSH_SERVICE_TYPE_AUTH);
-
-    out_kex:
-
-    /* after auth. the connection is ready to use */
     finish_ssh_connection_setup(connection, "service", 0);
 
+    out_kex:
     out_setup:
 
     finish_ssh_connection_setup(connection, "setup", 0);
-    logoutput("setup_ssh_session: authentication finished");
 
     if (result==-1) {
 
 	if (error==0) error=EIO;
 	logoutput("setup_ssh_session: exit with error %i (%s)", error, strerror(error));
+
+    } else {
+
+	logoutput("setup_ssh_session: authentication finished");
 
     }
 

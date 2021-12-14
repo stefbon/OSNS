@@ -158,6 +158,8 @@ void _fs_sftp_readlink(struct service_context_s *context, struct fuse_request_s 
 
 	if (syml) {
 
+	    logoutput("_fs_sftp_readlink: 001");
+
 	    reply_VFS_data(f_request, syml->path.ptr, syml->path.len);
 	    unset_fuse_request_flags_cb(f_request);
 	    return;
@@ -169,10 +171,14 @@ void _fs_sftp_readlink(struct service_context_s *context, struct fuse_request_s 
     if (send_sftp_readlink_ctx(interface, &sftp_r)>0) {
 	struct system_timespec_s timeout=SYSTEM_TIME_INIT;
 
+	logoutput("_fs_sftp_readlink: 002");
+
 	get_sftp_request_timeout_ctx(interface, &timeout);
 
 	if (wait_sftp_response_ctx(interface, &sftp_r, &timeout)==1) {
 	    struct sftp_reply_s *reply=&sftp_r.reply;
+
+	    logoutput("_fs_sftp_readlink: 003");
 
 	    unset_fuse_request_flags_cb(f_request);
 
@@ -181,13 +187,21 @@ void _fs_sftp_readlink(struct service_context_s *context, struct fuse_request_s 
 		struct ssh_string_s tmp=SSH_STRING_INIT;
 		int result=0;
 
+		logoutput("_fs_sftp_readlink: 004");
+
 		if (read_ssh_string(names->buff, names->size, &tmp)>0) {
 		    struct fs_location_path_s target=FS_LOCATION_PATH_INIT;
 
+		    logoutput("_fs_sftp_readlink: 005");
+
 		    set_location_path(&target, 's', &tmp);
+
+		    logoutput("_fs_sftp_readlink: 006");
 
 		    if (test_location_path_absolute(&target)==0) target.flags |= FS_LOCATION_PATH_FLAG_RELATIVE;
 		    result=remove_unneeded_path_elements(&target);
+
+		    logoutput("_fs_sftp_readlink: 007");
 
 		    if (result>0) {
 

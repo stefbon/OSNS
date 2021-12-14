@@ -112,56 +112,42 @@ void process_server_sig_algs(struct ssh_session_s *session, struct ssh_string_s 
 {
     char *name=NULL;
     char *sep=NULL;
-    char search[data->len + 1];
-    unsigned int left=0;
-    unsigned int index=_OPTIONS_SSH_EXTENSION_SERVER_SIG_ALGS - 1;
+    char search[data->len + 2];
+    int left=data->len + 1;
 
-    session->config.extensions|=(1 << ( 2 * index + 1));
-    if ((session->config.extensions & (1 << ( 2 * index)))==0) return; /* server sigs algos are not supported from config */
+    /* put one comma at end: that eases the looking for names in this comma seperated list */
 
     memcpy(search, data->ptr, data->len);
     search[data->len]=',';
-
-    /* ssh string is a namelist of acceptable sign algo's */
+    search[data->len+1]='\0';
 
     name=search;
-    left=data->len + 1;
 
     getname:
 
     sep=memchr(name, ',', left);
     if (sep) {
 	struct ssh_pkalgo_s *algo=NULL;
+	int index=-1;
 
 	*sep='\0';
-	logoutput("process_server_sig_algs: found %s", name);
+	logoutput("process_server_sig_algs: received %s", name);
 
 	/* lookup the signalgo name in the available sign algos */
 
-	algo=get_next_pkalgo(NULL, NULL);
+	algo=get_pkalgo(name, strlen(name), &index);
 
-	while (algo) {
+	if (algo && index>=0) {
 
-	    /* only look at sign algo's with a name: non default ones */
-
-	    if (algo->name && strcmp(algo->name, name)==0) break;
-	    algo=get_next_pkalgo(algo, NULL);
-
-	}
-
-	if (algo) {
-	    int index=get_index_pkalgo(algo);
-
-	    logoutput("process_server_sig_algs: signalgo %s", name);
-
-	    // if (session->pubkey.ids_pkalgo & (1 << (index - 1)))) session->pubkey.ids_pksign |= (1 << (get_index_pksign(pksign) - 1));
+	    logoutput("process_server_sig_algs: algo %s supported (index=%i)", name, index);
+	    enable_algo_pubkey(session, index, "server", "pksign");
 
 	}
 
 	*sep=',';
 	left -= (sep + 1 - name);
 	name=sep+1;
-	goto getname;
+	if (left>0) goto getname;
 
     }
 
@@ -199,31 +185,16 @@ void process_delay_compression(struct ssh_session_s *session, struct ssh_string_
 
 void process_no_flow_control(struct ssh_session_s *session, struct ssh_string_s *data)
 {
-    unsigned int index=_OPTIONS_SSH_EXTENSION_NO_FLOW_CONTROL - 1;
-
-    session->config.extensions|=(1 << ( 2 * index + 1));
-    if ((session->config.extensions & (1 << ( 2 * index)))==0) return; /* no flow control not supported from config */
-
     logoutput("process_no_flow_control: received choice %.*s", data->len, data->ptr);
 }
 
 void process_elevation(struct ssh_session_s *session, struct ssh_string_s *data)
 {
-    unsigned int index=_OPTIONS_SSH_EXTENSION_ELEVATION - 1;
-
-    session->config.extensions|=(1 << ( 2 * index + 1));
-    if ((session->config.extensions & (1 << ( 2 * index)))==0) return; /* elevation not supported from config */
-
     logoutput("process_elevation: received choice %.*s", data->len, data->ptr);
 }
 
 void process_gr_support(struct ssh_session_s *session, struct ssh_string_s *data)
 {
-    unsigned int index=_OPTIONS_SSH_EXTENSION_GR_SUPPORT - 1;
-
-    session->config.extensions|=(1 << ( 2 * index + 1));
-    if ((session->config.extensions & (1 << ( 2 * index)))==0) return; /* global request support not supported from config */
-
     logoutput("process_gr_support: received %.*s", data->len, data->ptr);
 }
 
@@ -287,18 +258,7 @@ void process_msg_ext_info(struct ssh_connection_s *connection, struct ssh_payloa
 
 	    }
 
-	    if (code>0) {
-
-		received |= (1 << (code - 1));
-
-	    }
-
 	}
-
-    }
-
-    if (received>0) {
-
 
     }
 

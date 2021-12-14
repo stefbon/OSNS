@@ -47,7 +47,7 @@
 #include "ssh-utils.h"
 #include "ssh-receive.h"
 
-struct ssh_payload_s *get_ssh_payload_channel(struct ssh_channel_s *channel, struct timespec *expire, uint32_t *seq, unsigned int *error)
+struct ssh_payload_s *get_ssh_payload_channel(struct ssh_channel_s *channel, struct system_timespec_s *expire, uint32_t *seq, unsigned int *error)
 {
 
     if (channel->flags & (CHANNEL_FLAG_SERVER_CLOSE | CHANNEL_FLAG_SERVER_EOF | CHANNEL_FLAG_OPENFAILURE)) {

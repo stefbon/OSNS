@@ -92,9 +92,12 @@ struct ssh_config_s {
 #define CHANNEL_FLAG_CLIENT_EOF				(1 << 6)
 #define CHANNEL_FLAG_CLIENT_CLOSE			(1 << 7)
 #define CHANNEL_FLAG_NODATA				( CHANNEL_FLAG_CLIENT_CLOSE | CHANNEL_FLAG_CLIENT_EOF | CHANNEL_FLAG_SERVER_CLOSE | CHANNEL_FLAG_SERVER_EOF )
-#define CHANNEL_FLAG_UDP				(1 << 8)
-#define CHANNEL_FLAG_CONNECTION_REFCOUNT		(1 << 9)
-#define CHANNEL_FLAG_ALLOCATED				(1 << 10)
+
+#define CHANNEL_FLAG_SERVER_SIGNAL			(1 << 8)
+
+#define CHANNEL_FLAG_UDP				(1 << 20)
+#define CHANNEL_FLAG_CONNECTION_REFCOUNT		(1 << 21)
+#define CHANNEL_FLAG_ALLOCATED				(1 << 22)
 
 #define TABLE_LOCK_OPENCHANNEL				1
 #define TABLE_LOCK_CLOSECHANNEL				2
@@ -570,8 +573,12 @@ struct ssh_send_s {
 };
 
 struct ssh_pubkey_s {
-    unsigned int 					ids_pkalgo;
-    unsigned int					ids_pksign;
+    unsigned int 					pkalgo_client;
+    unsigned int 					pkalgo_server;
+    unsigned int					pksign_client;
+    unsigned int					pksign_server;
+    unsigned int					pkcert_client;
+    unsigned int					pkcert_server;
 };
 
 #define SSH_HOSTINFO_FLAG_TIMEINIT			1

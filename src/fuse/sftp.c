@@ -54,6 +54,7 @@
 #include "fuse.h"
 
 #include "interface/sftp-prefix.h"
+#include "interface/sftp-extensions.h"
 #include "network.h"
 #include "sftp-fs.h"
 #include "sftp.h"
@@ -178,7 +179,6 @@ static struct service_context_s *create_sftp_client_context(struct service_conte
     struct workspace_mount_s *workspace=get_workspace_mount_ctx(sshctx);
     struct service_context_s *ctx=NULL;
 
-    logoutput("create_sftp_client_context: create sftp context for filesystem");
 
     ctx=create_service_context(workspace, sshctx, ilist, SERVICE_CTX_TYPE_FILESYSTEM, NULL);
 
@@ -248,7 +248,10 @@ static struct service_context_s *create_start_sftp_client_context(struct service
 
     }
 
-    set_sftp_interface_prefix(interface, service->name, service->prefix);
+    logoutput_debug("create_start_sftp_client_context: set prefix");
+    set_sftp_interface_prefix(interface, service->name, &service->prefix);
+
+    logoutput_debug("create_start_sftp_client_context: set indices statvfs and fsync");
     interface->backend.sftp.statvfs_index=get_index_sftp_extension_statvfs(interface);
     interface->backend.sftp.fsync_index=get_index_sftp_extension_fsync(interface);
     return context;
@@ -345,7 +348,7 @@ struct service_context_s *add_shared_map_sftp(struct service_context_s *context,
 	    }
 
 	    service->uri=uri;
-	    service->prefix=prefix;
+	    set_ssh_string(&service->prefix, 'c', prefix);
 
 	    sftpctx=create_start_sftp_client_context(context, service, ilist);
 
@@ -410,7 +413,7 @@ unsigned int add_ssh_channel_sftp(struct service_context_s *context, char *fulln
 
     service.fullname=fullname;
     service.name=tmp;
-    service.prefix=NULL;
+    init_ssh_string(&service.prefix);
     service.uri=NULL;
 
     if (add_shared_map_sftp(context, &service, ptr)) count++;
@@ -422,4 +425,3 @@ unsigned int add_default_ssh_channel_sftp(struct service_context_s *context, voi
 {
     return add_ssh_channel_sftp(context, _SFTP_DEFAULT_SERVICE, strlen(_SFTP_DEFAULT_SERVICE), _SFTP_HOME_MAP, ptr);
 }
-

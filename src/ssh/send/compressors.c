@@ -151,7 +151,7 @@ void queue_compressor(struct ssh_compressor_s *compressor)
 
     pthread_mutex_lock(&send->mutex);
 
-    if (compare_system_times(&compressor->created, &send->newkeys)<=0) {
+    if (system_time_test_earlier(&compressor->created, &send->newkeys)<=0) {
 
 	add_list_element_last(header, &compressor->list);
 	pthread_cond_broadcast(&send->cond);

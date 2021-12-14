@@ -228,7 +228,7 @@ void system_time_add(struct system_timespec_s *time, unsigned char what, uint32_
 
 }
 
-int compare_system_times(struct system_timespec_s *a, struct system_timespec_s *b)
+int system_time_test_earlier(struct system_timespec_s *a, struct system_timespec_s *b)
 {
     int result=0;
 

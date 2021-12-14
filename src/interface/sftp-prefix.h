@@ -21,7 +21,7 @@
 
 /* prototypes */
 
-void set_sftp_interface_prefix(struct context_interface_s *interface, char *name, char *prefix);
+void set_sftp_interface_prefix(struct context_interface_s *interface, char *name, struct ssh_string_s *prefix);
 int issubdirectory_prefix_sftp_client(struct context_interface_s *interface, struct fs_location_path_s *path);
 
 #endif

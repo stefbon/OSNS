@@ -493,7 +493,7 @@ static int read_config(char *path)
 
 		}
 
-	    } else if (strcmp(option, "ssh.extensions")==0) {
+	    } else if (strcmp(option, "ssh.support.extensions")==0) {
 
 		/* if extensions are defined in config that overrides the default
 		    note that these extensions are only used when ext-info is enabled */

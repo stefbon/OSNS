@@ -281,8 +281,6 @@ struct service_context_s *create_ssh_server_service_context(struct service_conte
     struct service_context_s *context=NULL;
     struct workspace_mount_s *workspace=get_workspace_mount_ctx(networkctx);
 
-    logoutput("create_ssh_server_service_context: (unique %i)", unique);
-
     /* no parent yet */
 
     context=create_service_context(workspace, NULL, ilist, SERVICE_CTX_TYPE_BROWSE, NULL);
@@ -297,6 +295,8 @@ struct service_context_s *create_ssh_server_service_context(struct service_conte
 	set_context_filesystem_workspace(context);
 	set_name_service_context(context);
 
+	logoutput("create_ssh_server_service_context: created context %s (unique %i)", context->name, unique);
+
     }
 
     return context;
@@ -308,7 +308,6 @@ static int compare_starting_substring(char *name, unsigned int len, const char *
     unsigned int lens=strlen(start);
 
     if (len>=lens && strncmp(name, start, lens)==0) return 0;
-
     return -1;
 }
 

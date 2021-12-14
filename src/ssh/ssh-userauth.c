@@ -358,7 +358,7 @@ static int start_ssh_userauth_server(struct ssh_session_s *session, struct ssh_c
     struct ssh_auth_s *auth=&setup->phase.service.type.auth;
     struct ssh_payload_s *payload=NULL;
     struct generic_error_s error=GENERIC_ERROR_INIT;
-    struct timespec expire;
+    struct system_timespec_s expire=SYSTEM_TIME_INIT;
     uint32_t seq=0;
     int result=-1;
     char *buffer=payload->buffer;

@@ -549,7 +549,7 @@ void assign_directory_inode(struct workspace_mount_s *w, struct inode_s *inode)
     struct directory_s *d=&w->inodes.dummy_directory;
     struct simple_lock_s wlock;
 
-    init_simple_writelock(&w->locking, &wlock);
+    init_simple_writelock(w->locking, &wlock);
 
     if (simple_lock(&wlock)==0) {
 

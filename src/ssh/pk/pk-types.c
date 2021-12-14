@@ -180,8 +180,6 @@ struct ssh_pkalgo_s *get_pkalgo(char *name, unsigned int len, int *index)
 
     while (available_algos[i].id>0) {
 
-	logoutput_debug("get_pkalgo: test %s", available_algos[i].name);
-
 	if (strlen(available_algos[i].name)==len && strncmp(available_algos[i].name, name, len)==0) {
 
 	    pkalgo=&available_algos[i];
@@ -234,9 +232,26 @@ struct ssh_pkalgo_s *get_next_pkalgo(struct ssh_pkalgo_s *algo, int *index)
 	algo=&available_algos[0];
 
     } else {
+	struct ssh_pkalgo_s *tmp=algo;
 
-	algo=(struct ssh_pkalgo_s *)((char *) algo + sizeof(struct ssh_pkalgo_s));
-	if (algo->id==0) algo=NULL;
+	algo=NULL;
+
+	/* get the location in the array, make sure it's on an exact array member */
+
+	if (tmp > &available_algos[0] && tmp < (&available_algos[0] + sizeof(available_algos))) {
+
+	    unsigned int offset=(unsigned int)(tmp - &available_algos[0]);
+
+	    /* test algo is not pointed somewhere in between */
+
+	    if ((offset % (sizeof(struct ssh_pkalgo_s)))==0) {
+
+		algo=(struct ssh_pkalgo_s *)((char *) tmp + sizeof(struct ssh_pkalgo_s));
+		if (algo->id==0) algo=NULL;
+
+	    }
+
+	}
 
     }
 

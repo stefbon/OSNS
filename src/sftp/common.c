@@ -107,8 +107,7 @@ int init_sftp_client(struct sftp_client_s *sftp, uid_t uid, struct net_idmapping
     sftp->signal.flags=0;
     sftp->signal.signal=NULL;
     sftp->signal.seq=0;
-    sftp->signal.seqset.tv_sec=0;
-    sftp->signal.seqset.tv_nsec=0;
+    set_system_time(&sftp->signal.seqset, 0, 0);
     sftp->signal.seqtype=0;
     init_generic_error(&sftp->signal.error);
 
@@ -187,7 +186,7 @@ int start_init_sftp_client(struct sftp_client_s *sftp)
     /* start the sftp init negotiation */
 
     if ((* sftp->send_ops->init)(sftp, &sftp_r)>0) {
-	struct timespec timeout;
+	struct system_timespec_s timeout=SYSTEM_TIME_INIT;
 	unsigned int error=0;
 	struct sftp_signal_s *signal=&sftp->signal;
 	struct list_element_s *list=NULL;

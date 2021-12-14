@@ -23,6 +23,6 @@
 /* prototypes */
 
 struct pk_identity_s *send_userauth_pubkey_request(struct ssh_connection_s *c, struct ssh_string_s *service, struct pk_list_s *pkeys);
-int respond_userauth_publickey_request(struct ssh_connection_s *connection, struct ssh_string_s *username1, struct ssh_string_s *service1, struct ssh_string_s *data1, struct timespec *expire);
+int respond_userauth_publickey_request(struct ssh_connection_s *connection, struct ssh_string_s *username1, struct ssh_string_s *service1, struct ssh_string_s *data1, struct system_timespec_s *expire);
 
 #endif

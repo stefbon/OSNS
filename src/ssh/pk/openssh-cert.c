@@ -198,7 +198,7 @@ int check_cert_openssh_com(struct openssh_cert_s *cert, const char *what)
     get_current_time_system_time(&current);
     set_system_time(&test, (system_time_sec_t) cert->valid_after, 0);
 
-    if (compare_system_times(&test, &current)<0) {
+    if (system_time_test_earlier(&current, &test)<0) {
 
 	logoutput("check_cert_openssh_com: certificate is not valid (only after %li)", cert->valid_after);
 	goto out;
@@ -207,7 +207,7 @@ int check_cert_openssh_com(struct openssh_cert_s *cert, const char *what)
 
     set_system_time(&test, (system_time_sec_t) cert->valid_before, 0);
 
-    if (compare_system_times(&current, &test)<0) {
+    if (system_time_test_earlier(&current, &test)>0) {
 
 	logoutput("check_cert_openssh_com: certificate is not valid (only before %li)", cert->valid_before);
 	goto out;

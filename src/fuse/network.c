@@ -473,7 +473,7 @@ static void update_service_ctx_refresh(struct service_context_s *ctx, struct sys
 
 	    if (changed) {
 
-		if (compare_system_times(refresh, changed)>=0) copy_system_time(refresh, changed);
+		if (system_time_test_earlier(refresh, changed)>0) copy_system_time(refresh, changed);
 
 	    } else {
 
@@ -788,7 +788,9 @@ static void network_service_context_connect_thread(void *ptr)
 
 	/* if the network context is refreshed later than resource cache is changed then quit */
 
-	if (compare_system_times(refresh, changed)>=0) {
+	if (system_time_test_earlier(refresh, changed)>=0) {
+
+	    /* a change in the resource cache is later -> ok*/
 
 	    networkctx->service.browse.threadid=pthread_self();
 
@@ -880,6 +882,7 @@ static void network_service_context_connect_thread(void *ptr)
 
 	if (socketctx) {
 
+	    logoutput("network_service_context_connect_thread: found port %i flags %i already on workspace", resource->service.socket.port, resource->flags);
 	    unlock_service_context(&ctxlock, "w", "w");
 	    goto next;
 
@@ -889,7 +892,7 @@ static void network_service_context_connect_thread(void *ptr)
 
 	if (socketctx==NULL) {
 
-	    logoutput_warning("network_service_context_connect_thread: unable to create virtual service context");
+	    logoutput_warning("network_service_context_connect_thread: unable to create context for %i", resource->service.socket.port);
 	    unlock_service_context(&ctxlock, "w", "w");
 	    goto next;
 
@@ -1009,7 +1012,7 @@ void start_discover_service_context_connect(struct workspace_mount_s *workspace)
 
 		    logoutput("start_discover_service_context_connect: thread id %i compare refresh %li:%i to changed %li:%i", ctx->service.browse.threadid, refresh->st_sec, refresh->st_nsec, changed->st_sec, changed->st_nsec);
 
-		    if (ctx->service.browse.threadid==0 && compare_system_times(refresh, changed)>=0) do_discover=1;
+		    if (ctx->service.browse.threadid==0 && system_time_test_earlier(refresh, changed)>=0) do_discover=1;
 		    unlock_service_context(&ctxlock, "w", "c");
 
 		    if (do_discover) start_discover_service_thread(ctx);

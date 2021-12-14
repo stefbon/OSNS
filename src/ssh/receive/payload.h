@@ -20,7 +20,7 @@
 #ifndef _SSH_RECEIVE_PAYLOAD_H
 #define _SSH_RECEIVE_PAYLOAD_H
 
-struct ssh_payload_s *get_ssh_payload(struct ssh_connection_s *c, struct payload_queue_s *q, struct timespec *e, uint32_t *seq, int (* cb)(struct ssh_connection_s *connection, struct ssh_payload_s *payload, void *ptr), void *ptr, struct generic_error_s *error);
+struct ssh_payload_s *get_ssh_payload(struct ssh_connection_s *c, struct payload_queue_s *q, struct system_timespec_s *e, uint32_t *seq, int (* cb)(struct ssh_connection_s *connection, struct ssh_payload_s *payload, void *ptr), void *ptr, struct generic_error_s *error);
 
 void queue_ssh_payload_locked(struct payload_queue_s *queue, struct ssh_payload_s *payload);
 void queue_ssh_payload(struct payload_queue_s *queue, struct ssh_payload_s *payload);

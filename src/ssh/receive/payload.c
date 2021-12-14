@@ -87,7 +87,7 @@ static struct ssh_payload_s *select_requested_payload(struct ssh_connection_s *c
     on a queue; this queue can be the transport queue used to setup a connection
     or the queue to handle key reexchange */
 
-struct ssh_payload_s *get_ssh_payload(struct ssh_connection_s *connection, struct payload_queue_s *queue, struct timespec *expire, uint32_t *seq, int (* cb)(struct ssh_connection_s *connection, struct ssh_payload_s *payload, void *ptr), void *ptr, struct generic_error_s *error)
+struct ssh_payload_s *get_ssh_payload(struct ssh_connection_s *connection, struct payload_queue_s *queue, struct system_timespec_s *expire, uint32_t *seq, int (* cb)(struct ssh_connection_s *connection, struct ssh_payload_s *payload, void *ptr), void *ptr, struct generic_error_s *error)
 {
     struct ssh_payload_s *payload=NULL;
     struct ssh_signal_s *signal=queue->signal;
@@ -214,7 +214,7 @@ void clear_payload_queue(struct payload_queue_s *queue, unsigned char dolog)
 
 struct ssh_payload_s *receive_message_common(struct ssh_connection_s *connection, int (* cb)(struct ssh_connection_s *connection, struct ssh_payload_s *payload, void *ptr), void *ptr, struct generic_error_s *error)
 {
-    struct timespec expire;
+    struct system_timespec_s expire;
     uint32_t seq=0;
 
     get_ssh_connection_expire_init(connection, &expire);

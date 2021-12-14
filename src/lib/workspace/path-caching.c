@@ -130,7 +130,7 @@ int get_service_path_default(struct directory_s *directory, struct fuse_path_s *
 
     /* inode is the "root" of the service: data is holding the context */
 
-    fpath->context=((link && (link->type==DATA_LINK_TYPE_CONTEXT)) ? ((struct service_context_s *)((char *) &link - offsetof(struct service_context_s, link))) : NULL);
+    fpath->context=((link && (link->type==DATA_LINK_TYPE_CONTEXT)) ? ((struct service_context_s *)((char *) link - offsetof(struct service_context_s, link))) : NULL);
     return pathlen;
 
 }
@@ -186,7 +186,7 @@ static void append_path_0(struct service_context_s *ctx, struct directory_s *d, 
     }
 
     /* service context */
-    fpath->context=((link && (link->type==DATA_LINK_TYPE_CONTEXT)) ? ((struct service_context_s *)((char *) &link - offsetof(struct service_context_s, link))) : NULL);
+    fpath->context=((link && (link->type==DATA_LINK_TYPE_CONTEXT)) ? ((struct service_context_s *)((char *) link - offsetof(struct service_context_s, link))) : NULL);
 
 }
 
@@ -214,7 +214,7 @@ static void append_path_1(struct service_context_s *ctx, struct directory_s *dir
     /* service context */
     directory=get_upper_directory_entry(entry);
     link=directory->ptr;
-    fpath->context=((link && (link->type==DATA_LINK_TYPE_CONTEXT)) ? ((struct service_context_s *)((char *) &link - offsetof(struct service_context_s, link))) : NULL);
+    fpath->context=((link && (link->type==DATA_LINK_TYPE_CONTEXT)) ? ((struct service_context_s *)((char *) link - offsetof(struct service_context_s, link))) : NULL);
 }
 
 /* functions when depth (distance to root) is bigger than 1: x>1 */
@@ -242,7 +242,7 @@ static void append_path_x(struct service_context_s *ctx, struct directory_s *dir
 
     directory=get_upper_directory_entry(entry);
     link=directory->ptr;
-    fpath->context=((link && (link->type==DATA_LINK_TYPE_CONTEXT)) ? ((struct service_context_s *)((char *) &link - offsetof(struct service_context_s, link))) : NULL);
+    fpath->context=((link && (link->type==DATA_LINK_TYPE_CONTEXT)) ? ((struct service_context_s *)((char *) link - offsetof(struct service_context_s, link))) : NULL);
 
 }
 

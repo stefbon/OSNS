@@ -503,7 +503,7 @@ void initialize_inotify(struct beventloop_s *loop, unsigned int *error)
     }
 
     set_bevent_unix_fd(bevent_inotify, fd);
-    set_bevent_watch(bevent_inotify, "incoming data");
+    set_bevent_watch(bevent_inotify, "i");
 
     if (add_bevent_beventloop(bevent_inotify)==0) {
 

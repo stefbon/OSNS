@@ -54,7 +54,7 @@ void set_expire_time_system_time(struct system_timespec_s *expire, struct system
 void get_expired_time_system_time(struct system_timespec_s *time, struct system_timespec_s *expired);
 void system_time_add(struct system_timespec_s *time, unsigned char what, uint32_t count);
 void copy_system_time(struct system_timespec_s *to, struct system_timespec_s *from);
-int compare_system_times(struct system_timespec_s *a, struct system_timespec_s *b);
+int system_time_test_earlier(struct system_timespec_s *a, struct system_timespec_s *b);
 
 void convert_system_time_from_double(struct system_timespec_s *time, double from);
 double convert_system_time_to_double(struct system_timespec_s *time);

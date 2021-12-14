@@ -287,18 +287,22 @@ static void receive_msg_ext_info(struct ssh_connection_s *connection, struct ssh
 	free_payload(&payload);
 	payload=NULL;
 
-    } else {
+    }
+
+    signal_unlock(connection->setup.signal);
+
+    if (payload) {
 
 	/* received:
 	    - after SSH_MSG_NEWKEYS or
 	    - before SSH_MSG_USERAUTH_SUCCESS */
 
+	/* this msg is allowed after first SSH_MSG_NEWKEYS */
+
 	process_msg_ext_info(connection, payload);
+	free_payload(&payload);
 
     }
-
-    signal_unlock(connection->setup.signal);
-    if (payload) free_payload(&payload);
 
 }
 

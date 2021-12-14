@@ -40,6 +40,7 @@
 #include "log.h"
 #include "main.h"
 #include "misc.h"
+#include "datatypes.h"
 
 #include "ssh-common.h"
 #include "ssh-utils.h"
@@ -48,112 +49,109 @@ void init_ssh_pubkey(struct ssh_session_s *session)
 {
     struct ssh_pubkey_s *pubkey=&session->pubkey;
 
-    pubkey->ids_pkalgo=0;
-    pubkey->ids_pksign=0;
+    pubkey->pkalgo_client=0;
+    pubkey->pksign_client=0;
+    pubkey->pkcert_client=0;
+
+    pubkey->pkalgo_server=0;
+    pubkey->pksign_server=0;
+    pubkey->pkcert_server=0;
+
+}
+
+void enable_algo_pubkey(struct ssh_session_s *session, int index, const char *who, const char *what)
+{
+    struct ssh_pubkey_s *pubkey=&session->pubkey;
+
+    if (index>= (8 * sizeof(pubkey->pkalgo_client))) {
+
+	logoutput_error("enable_bit_algo_pubkey: invalid value, too big: %i", index);
+	return;
+
+    }
+
+    if (strcmp(who, "client")==0) {
+
+	if (strcmp(what, "pk")==0) {
+
+	    pubkey->pkalgo_client |= (1 << index);
+
+	} else if (strcmp(what, "pkcert")==0) {
+
+	    pubkey->pkcert_client |= (1 << index);
+
+	} else if (strcmp(what, "pksign")==0) {
+
+	    pubkey->pksign_client |= (1 << index);
+
+	}
+
+    } else if (strcmp(who, "server")==0) {
+
+	if (strcmp(what, "pk")==0) {
+
+	    pubkey->pkalgo_server |= (1 << index);
+
+	} else if (strcmp(what, "pkcert")==0) {
+
+	    pubkey->pkcert_server |= (1 << index);
+
+	} else if (strcmp(what, "pksign")==0) {
+
+	    pubkey->pksign_server |= (1 << index);
+
+	}
+
+    }
 
 }
 
 /* build a bitwise number of pkalgo's used in this session/per keyexchange */
 
-static void build_pubkey_list(char *list_c, char *list_s, struct ssh_pubkey_s *pubkey)
-{
-    char *c_name=NULL, *c_sep=NULL;
-    unsigned int size=0;
-
-    /* find the common pk methods by starting at the client list and test the name is also on the server list */
-
-    c_name=list_c;
-
-    search:
-
-    c_sep=strchr(c_name+1, ',');
-    if (c_sep) {
-	unsigned int len=(unsigned int)(c_sep - c_name + 1);
-
-	/* if algo on client list is also found on server list enable the bit */
-
-	if (memmem(list_s, strlen(list_s), c_name, len)) {
-	    int index=0;
-	    struct ssh_pkalgo_s *pkalgo=NULL;
-
-	    *c_sep='\0';
-	    pkalgo=get_pkalgo(c_name + 1, len-2, &index);
-
-	    if (pkalgo) {
-
-		pubkey->ids_pkalgo |= (1 << (index - 1));
-		logoutput("build_pubkey_list: found %s", c_name + 1);
-
-	    }
-
-	    *c_sep=',';
-
-	}
-
-	c_name=c_sep;
-	goto search;
-
-    }
-
-}
-
-void store_algo_pubkey_negotiation(struct ssh_session_s *session, struct ssh_string_s *clist_c, struct ssh_string_s *clist_s)
-{
-    char list_c[clist_c->len+3];
-    char list_s[clist_s->len+3];
-
-    logoutput("store_algo_pubkey_negotiation");
-
-    if (clist_c->len==0 || clist_c->ptr==NULL || clist_s->len==0 || clist_c->ptr==NULL) {
-
-	session->pubkey.ids_pkalgo=0;
-	return;
-
-    }
-
-    /* create lists starting with a comma */
-
-    list_c[0]=',';
-    memcpy(&list_c[1], clist_c->ptr, clist_c->len);
-    list_c[clist_c->len+1]=',';
-    list_c[clist_c->len+2]='\0';
-    list_s[0]=',';
-    memcpy(&list_s[1], clist_s->ptr, clist_s->len);
-    list_s[clist_s->len+1]=',';
-    list_s[clist_s->len+2]='\0';
-
-    build_pubkey_list(list_c, list_s, &session->pubkey);
-
-}
-
-/* find the name in the pubkey commalist
-    this commalist is like:
-    ,first-name,second-name,third-name,
-    name is zero terminated */
-
-int find_pubkey_negotiation(struct ssh_session_s *session, char *name)
+static void build_pubkey_list(struct ssh_string_s *list, struct ssh_session_s *session, const char *who, const char *what)
 {
     struct ssh_pubkey_s *pubkey=&session->pubkey;
+    char *sep=NULL;
+    char tmp[list->len + 2];
+    char *name=tmp;
 
-    if (pubkey->ids_pkalgo>0) {
+    logoutput("build_pubkey_list: %s pklist %.*s (type=%s)", who, list->len, list->ptr, what);
+
+    /* copy to temporary list to ease the wlinkg through this list */
+
+    memcpy(tmp, list->ptr, list->len);
+    tmp[list->len]=',';
+    tmp[list->len+1]='\0';
+
+    search:
+    sep=memchr(name, ',', (unsigned int)(tmp + list->len + 1 - name));
+
+    while (sep) {
+	unsigned int len=(unsigned int)(sep - name);
 	int index=0;
 	struct ssh_pkalgo_s *pkalgo=NULL;
 
-	pkalgo=get_pkalgo(name, strlen(name), &index);
+	*sep='\0';
+	pkalgo=get_pkalgo(name, len, &index);
 
-	if (pkalgo && (pubkey->ids_pkalgo & (1 << (index - 1)))) return index;
+	if (pkalgo && index>=0) enable_algo_pubkey(session, index, who, what);
+
+	*sep=',';
+	name=sep+1;
+	sep=NULL;
+	if ((unsigned int) (name - tmp) < list->len + 1) sep=memchr(name, ',', (unsigned int)(tmp + list->len + 1 - name));
 
     }
 
-    return -1;
+}
 
+void store_algo_pubkey_negotiation(struct ssh_session_s *session, struct ssh_string_s *clist_c, struct ssh_string_s *clist_s, const char *what)
+{
+    if (clist_c) build_pubkey_list(clist_c, session, "client", what);
+    if (clist_s) build_pubkey_list(clist_s, session, "server", what);
 }
 
 void free_ssh_pubkey(struct ssh_session_s *session)
 {
-    struct ssh_pubkey_s *pubkey=&session->pubkey;
-
-    pubkey->ids_pkalgo=0;
-    pubkey->ids_pksign=0;
-
+    init_ssh_pubkey(session);
 }

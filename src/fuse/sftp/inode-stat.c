@@ -152,5 +152,5 @@ int test_remote_file_changed(struct system_stat_s *stat, struct system_timespec_
     struct system_timespec_s mtime=SYSTEM_TIME_INIT;
 
     get_mtime_system_stat(stat, &mtime);
-    return compare_system_times(mtime_before, &mtime);
+    return system_time_test_earlier(mtime_before, &mtime);
 }

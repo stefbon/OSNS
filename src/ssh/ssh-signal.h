@@ -28,6 +28,6 @@ int ssh_signal_lock(struct ssh_signal_s *signal);
 int ssh_signal_unlock(struct ssh_signal_s *signal);
 int ssh_signal_broadcast(struct ssh_signal_s *signal);
 int ssh_signal_condwait(struct ssh_signal_s *signal);
-int ssh_signal_condtimedwait(struct ssh_signal_s *signal, struct timespec *t);
+int ssh_signal_condtimedwait(struct ssh_signal_s *signal, struct system_timespec_s *t);
 
 #endif

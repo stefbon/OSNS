@@ -23,6 +23,6 @@
 /* prototypes */
 
 int send_userauth_password_request(struct ssh_connection_s *c, struct ssh_string_s *service, struct pw_list_s *pwlist);
-int respond_userauth_password_request(struct ssh_connection_s *connection, struct ssh_string_s *username, struct ssh_string_s *service, struct ssh_string_s *data, struct timespec *expire);
+int respond_userauth_password_request(struct ssh_connection_s *connection, struct ssh_string_s *username, struct ssh_string_s *service, struct ssh_string_s *data, struct system_timespec_s *expire);
 
 #endif

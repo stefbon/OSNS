@@ -90,7 +90,7 @@ struct common_signal_s *create_custom_common_signal()
 
 	signal->flags 			= COMMON_SIGNAL_FLAG_ALLOC;
 	signal->mutex 			= (pthread_mutex_t *) signal->buffer;
-	signal->cond  			= (pthread_cond_t *) (signal->buffer + sizeof(pthread_mutex_t));
+ 	signal->cond  			= (pthread_cond_t *) (signal->buffer + sizeof(pthread_mutex_t));
 	signal->lock  			= default_lock;
 	signal->unlock 			= default_unlock;
 	signal->broadcast		= default_broadcast;

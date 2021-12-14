@@ -118,40 +118,42 @@ void set_sftp_interface_prefix(struct context_interface_s *interface, char *name
 	init_ssh_string(&interface->backend.sftp.prefix.path);
 	interface->backend.sftp.name=strdup(name);
 
-    }
+    } else {
 
-    if (prefix && get_ssh_string_length(prefix, SSH_STRING_FLAG_DATA)>0) {
-	struct ssh_string_s *tmp=&interface->backend.sftp.prefix.path;
+	if (prefix && get_ssh_string_length(prefix, SSH_STRING_FLAG_DATA)>0) {
+	    struct ssh_string_s *tmp=&interface->backend.sftp.prefix.path;
 
-	/* custom prefix */
+	    /* custom prefix */
 
-	interface->backend.sftp.complete_path=complete_path_sftp_custom;
-	interface->backend.sftp.get_complete_pathlen=get_complete_pathlen_custom;
-	interface->backend.sftp.prefix.type=INTERFACE_BACKEND_SFTP_PREFIX_CUSTOM;
+	    interface->backend.sftp.complete_path=complete_path_sftp_custom;
+	    interface->backend.sftp.get_complete_pathlen=get_complete_pathlen_custom;
+	    interface->backend.sftp.prefix.type=INTERFACE_BACKEND_SFTP_PREFIX_CUSTOM;
 
-	create_copy_ssh_string(&tmp, prefix);
+	    create_copy_ssh_string(&tmp, prefix);
 
-	if (get_ssh_string_length(&interface->backend.sftp.prefix.path, SSH_STRING_FLAG_DATA)>0) {
+	    if (get_ssh_string_length(&interface->backend.sftp.prefix.path, SSH_STRING_FLAG_DATA)>0) {
 
-	    interface->backend.sftp.name=strdup(name);
+		interface->backend.sftp.name=strdup(name);
 
-	} else {
+	    } else {
 
-	    prefix=NULL;
+		prefix=NULL;
+
+	    }
 
 	}
 
-    }
+	if (prefix==NULL || get_ssh_string_length(prefix, SSH_STRING_FLAG_DATA)==0) {
 
-    if (prefix==NULL || get_ssh_string_length(prefix, SSH_STRING_FLAG_DATA)==0) {
+	    /* no prefix ... */
 
-	/* no prefix ... */
+	    interface->backend.sftp.complete_path=complete_path_sftp_root;
+	    interface->backend.sftp.get_complete_pathlen=get_complete_pathlen_root;
+	    interface->backend.sftp.prefix.type=INTERFACE_BACKEND_SFTP_PREFIX_ROOT;
+	    init_ssh_string(&interface->backend.sftp.prefix.path);
+	    interface->backend.sftp.name=NULL;
 
-	interface->backend.sftp.complete_path=complete_path_sftp_root;
-	interface->backend.sftp.get_complete_pathlen=get_complete_pathlen_root;
-	interface->backend.sftp.prefix.type=INTERFACE_BACKEND_SFTP_PREFIX_ROOT;
-	init_ssh_string(&interface->backend.sftp.prefix.path);
-	interface->backend.sftp.name=NULL;
+	}
 
     }
 

@@ -180,6 +180,54 @@ static void receive_msg_channel_open(struct ssh_connection_s *connection, struct
 
 }
 
+static void forward_payload2channel(struct ssh_connection_s *connection, unsigned int local_channel, struct ssh_payload_s **p_payload)
+{
+    struct ssh_session_s *session=get_ssh_connection_session(connection);
+    struct channel_table_s *table=&session->channel_table;
+    struct ssh_channel_s *channel=NULL;
+    struct simple_lock_s rlock;
+
+    channeltable_readlock(table, &rlock);
+    channel=lookup_session_channel_for_payload(table, local_channel, p_payload);
+    channeltable_unlock(table, &rlock);
+
+}
+
+static void forward_data2channel(struct ssh_connection_s *connection, unsigned int local_channel, struct ssh_payload_s **p_payload)
+{
+    struct ssh_session_s *session=get_ssh_connection_session(connection);
+    struct channel_table_s *table=&session->channel_table;
+    struct ssh_channel_s *channel=NULL;
+    struct simple_lock_s rlock;
+
+    channeltable_readlock(table, &rlock);
+    channel=lookup_session_channel_for_data(table, local_channel, p_payload);
+    channeltable_unlock(table, &rlock);
+
+}
+
+static void set_flag_signal_channel(struct ssh_connection_s *connection, unsigned int local_channel, unsigned int flag, unsigned int code)
+{
+    struct ssh_session_s *session=get_ssh_connection_session(connection);
+    struct channel_table_s *table=&session->channel_table;
+    struct ssh_signal_s *signal=NULL;
+    struct ssh_channel_s *channel=NULL;
+    struct simple_lock_s rlock;
+
+    channeltable_readlock(table, &rlock);
+    channel=lookup_session_channel_for_flag(table, local_channel, flag);
+    signal=(channel) ? channel->queue.signal : NULL;
+    channeltable_unlock(table, &rlock);
+
+    if (signal) {
+
+	ssh_signal_lock(signal);
+	ssh_signal_broadcast(signal);
+	ssh_signal_unlock(signal);
+
+    }
+
+}
 
 /*
     message has the following form:
@@ -202,19 +250,13 @@ static void receive_msg_channel_open_confirmation(struct ssh_connection_s *conne
     } else {
 	unsigned int pos=1;
 	unsigned int local_channel=0;
-	struct ssh_session_s *session=get_ssh_connection_session(connection);
-	struct channel_table_s *table=&session->channel_table;
-	struct ssh_channel_s *channel=NULL;
-	struct simple_lock_s rlock;
 
 	local_channel=get_uint32(&payload->buffer[pos]);
 	pos+=4;
 
 	logoutput("receive_msg_open_confirmation: local channel %i", local_channel);
 
-	channeltable_readlock(table, &rlock);
-	channel=lookup_session_channel_for_payload(table, local_channel, &payload);
-	channeltable_unlock(table, &rlock);
+	forward_payload2channel(connection, local_channel, &payload);
 
     }
 
@@ -248,17 +290,13 @@ static void receive_msg_channel_open_failure(struct ssh_connection_s *connection
     } else {
 	unsigned int pos=1;
 	unsigned int local_channel=0;
-	struct ssh_session_s *session=get_ssh_connection_session(connection);
-	struct channel_table_s *table=&session->channel_table;
-	struct ssh_channel_s *channel=NULL;
-	struct simple_lock_s rlock;
 
 	local_channel=get_uint32(&payload->buffer[pos]);
 	pos+=4;
 
-	channeltable_readlock(table, &rlock);
-	channel=lookup_session_channel_for_payload(table, local_channel, &payload);
-	channeltable_unlock(table, &rlock);
+	logoutput("receive_msg_open_failure: local channel %i", local_channel);
+
+	forward_payload2channel(connection, local_channel, &payload);
 
     }
 
@@ -330,25 +368,13 @@ static void receive_msg_channel_data(struct ssh_connection_s *connection, struct
 	pos+=4;
 
 	if (len + pos <= payload->len) {
-	    struct ssh_session_s *session=get_ssh_connection_session(connection);
-	    struct channel_table_s *table=&session->channel_table;
-	    struct ssh_channel_s *channel=NULL;
-	    struct simple_lock_s rlock;
 
 	    /* make sure the relevant data is at start of buffer */
 
-	    // logoutput_base64encoded("receive_msg_channel_data", &payload->buffer[pos], len);
-
 	    memmove(payload->buffer, &payload->buffer[pos], len);
 	    memset(&payload->buffer[len], 0, payload->len - len);
-
-	    // logoutput("receive_msg_channel_data: resized from %i to %i", payload->len, len);
-
 	    payload->len=len;
-
-	    channeltable_readlock(table, &rlock);
-	    channel=lookup_session_channel_for_data(table, local_channel, &payload);
-	    channeltable_unlock(table, &rlock);
+	    forward_data2channel(connection, local_channel, &payload);
 
 	}
 
@@ -392,11 +418,9 @@ static void receive_msg_channel_extended_data(struct ssh_connection_s *connectio
 
 	if (len + pos == payload->len) {
 
+	    /* TODO: more extended data streams? */
+
 	    if (code==SSH_EXTENDED_DATA_STDERR) {
-		struct ssh_session_s *session=get_ssh_connection_session(connection);
-		struct channel_table_s *table=&session->channel_table;
-		struct ssh_channel_s *channel=NULL;
-		struct simple_lock_s rlock;
 
 		/* make sure the relevant data is at start of buffer */
 
@@ -404,10 +428,7 @@ static void receive_msg_channel_extended_data(struct ssh_connection_s *connectio
 		memset(&payload->buffer[len], 0, payload->len - len);
 		payload->len=len;
 		payload->flags |= SSH_PAYLOAD_FLAG_ERROR;
-
-		channeltable_readlock(table, &rlock);
-		channel=lookup_session_channel_for_data(table, local_channel, &payload);
-		channeltable_unlock(table, &rlock);
+		forward_data2channel(connection, local_channel, &payload);
 
 	    }
 
@@ -418,8 +439,6 @@ static void receive_msg_channel_extended_data(struct ssh_connection_s *connectio
     if (payload) free_payload(&payload);
 
 }
-
-
 
 /* TODO: call a handler per channel which will close the channel and anything related like sftp */
 
@@ -433,29 +452,12 @@ static void receive_msg_channel_eof(struct ssh_connection_s *connection, struct 
     } else {
 	unsigned int pos=1;
 	unsigned int local_channel=0;
-	struct ssh_session_s *session=get_ssh_connection_session(connection);
-	struct channel_table_s *table=&session->channel_table;
-	struct ssh_channel_s *channel=NULL;
-	struct ssh_signal_s *signal=NULL;
-	struct simple_lock_s rlock;
 
 	local_channel=get_uint32(&payload->buffer[pos]);
 	pos+=4;
 
 	logoutput_debug("receive_msg_channel_eof: channel %i", local_channel);
-
-	channeltable_readlock(table, &rlock);
-	channel=lookup_session_channel_for_flag(table, local_channel, CHANNEL_FLAG_SERVER_EOF);
-	signal=(channel) ? channel->queue.signal : NULL;
-	channeltable_unlock(table, &rlock);
-
-	if (signal) {
-
-	    ssh_signal_lock(signal);
-	    ssh_signal_broadcast(signal);
-	    ssh_signal_unlock(signal);
-
-	}
+	set_flag_signal_channel(connection, local_channel, CHANNEL_FLAG_SERVER_EOF, 0);
 
     }
 
@@ -480,29 +482,12 @@ static void receive_msg_channel_close(struct ssh_connection_s *connection, struc
     } else {
 	unsigned int pos=1;
 	unsigned int local_channel=0;
-	struct ssh_session_s *session=get_ssh_connection_session(connection);
-	struct channel_table_s *table=&session->channel_table;
-	struct ssh_channel_s *channel=NULL;
-	struct ssh_signal_s *signal=NULL;
-	struct simple_lock_s rlock;
 
 	local_channel=get_uint32(&payload->buffer[pos]);
 	pos+=4;
 
 	logoutput_debug("receive_msg_channel_close: channel %i", local_channel);
-
-	channeltable_readlock(table, &rlock);
-	channel=lookup_session_channel_for_flag(table, local_channel, CHANNEL_FLAG_SERVER_CLOSE);
-	signal=(channel) ? channel->queue.signal : NULL;
-	channeltable_unlock(table, &rlock);
-
-	if (signal) {
-
-	    ssh_signal_lock(signal);
-	    ssh_signal_broadcast(signal);
-	    ssh_signal_unlock(signal);
-
-	}
+	set_flag_signal_channel(connection, local_channel, CHANNEL_FLAG_SERVER_CLOSE, 0);
 
     }
 
@@ -523,27 +508,19 @@ static void receive_msg_channel_request_s(struct ssh_connection_s *connection, s
 	pos+=4;
 
 	if (len + pos <= payload->len) {
-	    struct ssh_session_s *session=get_ssh_connection_session(connection);
-	    struct channel_table_s *table=&session->channel_table;
-	    struct ssh_channel_s *channel=NULL;
-	    struct simple_lock_s rlock;
 
 	    /* make sure the relevant data is at start of buffer */
 
 	    memmove(payload->buffer, &payload->buffer[pos], len);
 	    memset(&payload->buffer[len], 0, payload->len - len);
-
 	    payload->len=len;
 
-	    channeltable_readlock(table, &rlock);
-	    channel=lookup_session_channel_for_data(table, local_channel, &payload);
-	    channeltable_unlock(table, &rlock);
+	    forward_data2channel(connection, local_channel, &payload);
 
 	} else {
 	    int fd=-1;
 
 	    if (connection->connection.io.socket.bevent) fd=get_bevent_unix_fd(connection->connection.io.socket.bevent);
-
 	    logoutput("receive_msg_channel_request_s: ssh fd %i received invalid message local channel %i", fd, local_channel);
 
 	}
@@ -593,6 +570,12 @@ static void receive_msg_channel_request_c(struct ssh_connection_s *connection, s
 
 		logoutput("receive_msg_channel_request_c: local channel %i exit signal %.*s message %.*s", local_channel, signal.len, signal.ptr, message.len, message.ptr);
 
+		/* TODO 20211214: set the type signal somewhere
+		    see: https://www.rfc-editor.org/rfc/rfc4254.html#section-6.10 Returning Exit Status
+		    it is for example SIGV, ABRT or KILL */
+
+		set_flag_signal_channel(connection, local_channel, CHANNEL_FLAG_SERVER_SIGNAL, 0);
+
 
 	    }
 
@@ -621,19 +604,13 @@ static void receive_msg_channel_request_reply(struct ssh_connection_s *connectio
 	logoutput("receive_msg_channel_request_reply: message too small (size: %i)", payload->len);
 
     } else {
-	struct ssh_session_s *session=get_ssh_connection_session(connection);
-	struct channel_table_s *table=&session->channel_table;
-	struct ssh_channel_s *channel=NULL;
 	unsigned int local_channel=0;
 	unsigned int pos=1;
-	struct simple_lock_s rlock;
 
 	local_channel=get_uint32(&payload->buffer[pos]);
 	pos+=4;
 
-	channeltable_readlock(table, &rlock);
-	channel=lookup_session_channel_for_payload(table, local_channel, &payload);
-	channeltable_unlock(table, &rlock);
+	forward_payload2channel(connection, local_channel, &payload);
 
     }
 

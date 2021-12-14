@@ -443,6 +443,8 @@ struct service_context_s *create_mount_context(struct osns_user_s *user, char **
 
     }
 
+    logoutput("create_mount_context: created mount context for %s", workspace->mountpoint.path);
+
     set_context_filesystem_workspace(context);
     snprintf(source, 64, "network@osns.net");
     snprintf(name, 32, "network");

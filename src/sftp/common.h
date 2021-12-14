@@ -208,7 +208,7 @@ struct sftp_signal_s {
     unsigned int					flags;
     struct common_signal_s				*signal;
     uint32_t						seq;
-    struct timespec					seqset;
+    struct system_timespec_s				seqset;
     unsigned char					seqtype;
     struct generic_error_s				error;
 };

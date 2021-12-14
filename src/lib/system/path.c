@@ -105,6 +105,8 @@ void set_location_path(struct fs_location_path_s *path, const unsigned char type
 	    path->len=tmp->len;
 	    path->size=tmp->len;
 
+	    break;
+
 	}
 
 	case 'c': {
@@ -115,6 +117,8 @@ void set_location_path(struct fs_location_path_s *path, const unsigned char type
 	    path->len=strlen(buffer);
 	    path->size=path->len;
 
+	    break;
+
 	}
 
 	case 'n': {
@@ -123,6 +127,8 @@ void set_location_path(struct fs_location_path_s *path, const unsigned char type
 	    path->ptr=NULL;
 	    path->len=0;
 	    path->size=0;
+
+	    break;
 
 	}
 
@@ -583,6 +589,8 @@ unsigned int remove_unneeded_path_elements(struct fs_location_path_s *path)
     unsigned int len=0;
     int result=-1;
     struct path_element_s pa;
+
+    logoutput_debug("remove_unneeded_path_elements: path %.*s", path->len, path->ptr);
 
     slash[0]=NULL;
     slash[1]=NULL;

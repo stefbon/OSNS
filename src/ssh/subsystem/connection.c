@@ -216,7 +216,7 @@ static int send_operation_expired(struct system_timespec_s *time)
     struct system_timespec_s now=SYSTEM_TIME_INIT;
 
     get_current_time_system_time(&now);
-    return compare_system_times(time, &now);
+    return system_time_test_earlier(time, &now);
 }
 
 static int write_std_connection(struct ssh_subsystem_connection_s *connection, char *data, unsigned int size)
@@ -236,7 +236,7 @@ static int write_std_connection(struct ssh_subsystem_connection_s *connection, c
     get_current_time_system_time(&time);
     system_time_add(&time, SYSTEM_TIME_ADD_ZERO, 4); 			/* TODO: make this 4 configurable */
 
-    while (result==-1 && send_operation_expired(&time)<=0) {
+    while (result==-1 && send_operation_expired(&time)>=0) {
 
 	fsc->status &= ~FS_CONNECTION_FLAG_SEND_BLOCKED;
 	result=(* sops->write)(io_std, data, size);

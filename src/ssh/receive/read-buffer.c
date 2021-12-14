@@ -278,7 +278,7 @@ static void read_ssh_buffer_packet(void *ptr)
 			pthread_mutex_lock(&receive->mutex);
 
 			if (receive->status & SSH_RECEIVE_STATUS_SERIAL) {
-			    struct timespec expire;
+			    struct system_timespec_s expire=SYSTEM_TIME_INIT;
 
 			    get_ssh_connection_expire_init(connection, &expire);
 
@@ -286,10 +286,11 @@ static void read_ssh_buffer_packet(void *ptr)
 				that's when the new keys are ready to be used */
 
 			    while ((receive->status & SSH_RECEIVE_STATUS_NEWKEYS) && (receive->status & SSH_RECEIVE_STATUS_KEXINIT)) {
+				struct timespec tmp={.tv_sec=expire.st_sec, .tv_nsec=expire.st_nsec};
 
 				/* wait for the calculation of the new keys before proceed */
 
-				int result=pthread_cond_timedwait(&receive->cond, &receive->mutex, &expire);
+				int result=pthread_cond_timedwait(&receive->cond, &receive->mutex, &tmp);
 
 				if ((receive->status & SSH_RECEIVE_STATUS_DISCONNECT) || result==ETIMEDOUT) {
 

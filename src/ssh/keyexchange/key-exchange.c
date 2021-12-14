@@ -214,7 +214,7 @@ static struct ssh_payload_s *receive_keydh(struct ssh_connection_s *connection, 
 {
     struct payload_queue_s *queue=&connection->setup.queue;
     struct ssh_payload_s *payload=NULL;
-    struct timespec expire;
+    struct system_timespec_s expire=SYSTEM_TIME_INIT;
     unsigned int sequence=0;
 
     /* wait for SSH_MSG_KEXDH_REPLY when client or KEXDH_INIT when server */

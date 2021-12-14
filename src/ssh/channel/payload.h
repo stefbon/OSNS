@@ -22,7 +22,7 @@
 
 /* prototypes */
 
-struct ssh_payload_s *get_ssh_payload_channel(struct ssh_channel_s *channel, struct timespec *expire, unsigned int *seq, unsigned int *error);
+struct ssh_payload_s *get_ssh_payload_channel(struct ssh_channel_s *channel, struct system_timespec_s *expire, unsigned int *seq, unsigned int *error);
 void queue_ssh_payload_channel(struct ssh_channel_s *channel, struct ssh_payload_s *payload);
 
 #endif

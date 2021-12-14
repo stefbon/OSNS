@@ -129,7 +129,7 @@ int send_userauth_password_request(struct ssh_connection_s *connection, struct s
 
 }
 
-int respond_userauth_password_request(struct ssh_connection_s *connection, struct ssh_string_s *username, struct ssh_string_s *service, struct ssh_string_s *data, struct timespec *expire)
+int respond_userauth_password_request(struct ssh_connection_s *connection, struct ssh_string_s *username, struct ssh_string_s *service, struct ssh_string_s *data, struct system_timespec_s *expire)
 {
     struct ssh_setup_s *setup=&connection->setup;
     struct ssh_auth_s *auth=&setup->phase.service.type.auth;

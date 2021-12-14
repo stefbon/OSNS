@@ -150,7 +150,9 @@ void queue_decompressor(struct ssh_decompressor_s *decompressor)
 
     pthread_mutex_lock(&receive->mutex);
 
-    if (compare_system_times(&decompressor->created, &receive->newkeys)<=0) {
+    if (system_time_test_earlier(&decompressor->created, &receive->newkeys)<=0) {
+
+	/* not earlier -> is later created than newkeys -> ok */
 
 	add_list_element_last(header, &decompressor->list);
 	pthread_cond_broadcast(&receive->cond);

@@ -81,13 +81,13 @@ void read_name_name_response_ctx(struct context_interface_s *interface, struct a
     (* sftp->attrctx.ops.read_name_name_response)(&sftp->attrctx, abuff, name);
 }
 
-void correct_time_s2c_ctx(struct context_interface_s *interface, struct timespec *t)
+void correct_time_s2c_ctx(struct context_interface_s *interface, struct system_timespec_s *t)
 {
     struct sftp_client_s *sftp=(struct sftp_client_s *) (* interface->get_interface_buffer)(interface);
     (* sftp->time_ops.correct_time_s2c)(sftp, t);
 }
 
-void correct_time_c2s_ctx(struct context_interface_s *interface, struct timespec *t)
+void correct_time_c2s_ctx(struct context_interface_s *interface, struct system_timespec_s *t)
 {
     struct sftp_client_s *sftp=(struct sftp_client_s *) (* interface->get_interface_buffer)(interface);
     (* sftp->time_ops.correct_time_c2s)(sftp, t);

@@ -481,7 +481,7 @@ void _fs_common_remove_nonsynced_dentries(struct fuse_opendir_s *opendir)
 
 		inode=entry->inode;
 		if (check_entry_special(inode)) goto next;
-		if (compare_system_times(&inode->stime, &directory->synctime) == 1) queue_inode_2forget(workspace, inode->stat.sst_ino, FORGET_INODE_FLAG_DELETED, 0);
+		if (system_time_test_earlier(&inode->stime, &directory->synctime) == 1) queue_inode_2forget(workspace, inode->stat.sst_ino, FORGET_INODE_FLAG_DELETED, 0);
 
 		next:
 		list=next;

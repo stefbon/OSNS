@@ -72,7 +72,7 @@ int start_channel(struct ssh_channel_s *channel, unsigned int *error)
     logoutput("start_channel: send channel open message");
 
     if (send_channel_open_message(channel, &seq)>0) {
-	struct timespec expire;
+	struct system_timespec_s expire=SYSTEM_TIME_INIT;
 	struct ssh_payload_s *payload=NULL;
 
 	get_channel_expire_init(channel, &expire);
@@ -178,7 +178,7 @@ void close_channel(struct ssh_channel_s *channel, unsigned int flags)
     }
 
     if ((flags & CHANNEL_FLAG_SERVER_CLOSE) && (channel->flags & CHANNEL_FLAG_SERVER_CLOSE)==0) {
-	struct timespec expire;
+	struct system_timespec_s expire=SYSTEM_TIME_INIT;
 	struct ssh_signal_s *signal=channel->queue.signal;
 
 	/* TODO: do not wait when there are connection problems */

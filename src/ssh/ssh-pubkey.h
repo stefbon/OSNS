@@ -21,8 +21,8 @@
 #define _SSH_PUBKEY_H
 
 void init_ssh_pubkey(struct ssh_session_s *session);
-void store_algo_pubkey_negotiation(struct ssh_session_s *session, struct ssh_string_s *clist_c, struct ssh_string_s *clist_s);
-int find_pubkey_negotiation(struct ssh_session_s *session, char *name);
+void enable_algo_pubkey(struct ssh_session_s *session, int index, const char *who, const char *what);
+void store_algo_pubkey_negotiation(struct ssh_session_s *session, struct ssh_string_s *clist_c, struct ssh_string_s *clist_s, const char *what);
 void free_ssh_pubkey(struct ssh_session_s *session);
 
 #endif

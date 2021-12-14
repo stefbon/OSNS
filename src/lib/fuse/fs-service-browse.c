@@ -108,6 +108,26 @@ static void _fs_browse_forget(struct service_context_s *context, struct inode_s 
 
 }
 
+static void _fs_filesystem_root_lookup(struct service_context_s *context, struct fuse_request_s *request, struct entry_s *entry)
+{
+    struct pathinfo_s pathinfo=PATHINFO_INIT;
+    unsigned int pathlen=0;
+    char path[3];
+    struct service_fs_s *fs=context->service.filesystem.fs;
+
+    logoutput("_fs_filesystem_root_lookup: use context %s", context->name);
+
+    path[2]='\0';
+    path[1]='.';
+    path[0]='/';
+
+    pathinfo.len=2;
+    pathinfo.path=path;
+
+    (* fs->lookup_existing)(context, request, entry, &pathinfo);
+}
+
+
 /* LOOKUP */
 
 static void _fs_browse_lookup(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *pinode, const char *name, unsigned int len)
@@ -144,6 +164,7 @@ static void _fs_browse_lookup(struct service_context_s *context, struct fuse_req
     entry=find_entry(directory, &xname, &error);
 
     if (entry) {
+	struct inode_s *inode=entry->inode;
 
 	error=(* fs->access)(context, request, SERVICE_OP_TYPE_LOOKUP_EXISTING);
 
@@ -156,15 +177,35 @@ static void _fs_browse_lookup(struct service_context_s *context, struct fuse_req
 
 	logoutput("_fs_browse_lookup: context %s (thread %i) %.*s (entry found)", context->name, (int) gettid(), len, name);
 
-	if (check_entry_special(entry->inode)==0) {
+	if (inode->ptr) {
+	    struct data_link_s *link=inode->ptr;
 
-	    _fs_common_cached_lookup(context, request, entry->inode);
+	    if (link->type==DATA_LINK_TYPE_SPECIAL_ENTRY) {
 
-	} else {
+		(* fs->lookup_existing)(context, request, entry, NULL);
+		return;
 
-	    (* fs->lookup_existing)(context, request, entry, NULL);
+	    } else if (link->type==DATA_LINK_TYPE_DIRECTORY) {
+		struct directory_s *tmp=(struct directory_s *)((char *) link - offsetof(struct directory_s, link));
+
+		if (tmp->ptr) {
+
+		    context=(struct service_context_s *)((char *) tmp->ptr - offsetof(struct service_context_s, link));
+
+		    if (context->type == SERVICE_CTX_TYPE_FILESYSTEM) {
+
+			_fs_filesystem_root_lookup(context, request, entry);
+			return;
+
+		    }
+
+		}
+
+	    }
 
 	}
+
+	_fs_common_cached_lookup(context, request, inode);
 
     } else {
 

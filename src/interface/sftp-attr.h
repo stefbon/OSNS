@@ -28,8 +28,8 @@ void write_attributes_ctx(struct context_interface_s *interface, struct attr_buf
 
 void read_name_name_response_ctx(struct context_interface_s *interface, struct attr_buffer_s *abuff, struct ssh_string_s *name);
 
-void correct_time_c2s_ctx(struct context_interface_s *interface, struct timespec *t);
-void correct_time_s2c_ctx(struct context_interface_s *interface, struct timespec *t);
+void correct_time_c2s_ctx(struct context_interface_s *interface, struct system_timespec_s *t);
+void correct_time_s2c_ctx(struct context_interface_s *interface, struct system_timespec_s *t);
 
 unsigned char enable_attributes_ctx(struct context_interface_s *interface, struct sftp_valid_s *valid, const char *name);
 

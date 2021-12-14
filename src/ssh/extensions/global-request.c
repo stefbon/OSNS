@@ -60,23 +60,23 @@ static void process_enum_supported_name(char *name, void *ptr)
     struct ssh_session_s *session=get_ssh_connection_session(connection);
     struct ssh_extensions_s *extensions=&session->extensions;
 
-    if (strcmp(name, "enum-supported@osns.net") == 0) {
+    if (strcmp(name, "enum-supported@ssh.osns.net") == 0) {
 
 	extensions->global_requests |= SSH_GLOBAL_REQUEST_ENUM_SUPPORTED;
 
-    } else if (strcmp(name, "enum-services@osns.net") == 0) {
+    } else if (strcmp(name, "enum-services@ssh.osns.net") == 0) {
 
 	extensions->global_requests |= SSH_GLOBAL_REQUEST_ENUM_SERVICES;
 
-    } else if (strcmp(name, "info-service@osns.net") == 0) {
+    } else if (strcmp(name, "info-service@ssh.osns.net") == 0) {
 
 	extensions->global_requests |= SSH_GLOBAL_REQUEST_INFO_SERVICE;
 
-    } else if (strcmp(name, "info-command@osns.net") == 0) {
+    } else if (strcmp(name, "info-command@ssh.osns.net") == 0) {
 
 	extensions->global_requests |= SSH_GLOBAL_REQUEST_INFO_COMMAND;
 
-    } else if (strcmp(name, "udp-channel@osns.net") == 0) {
+    } else if (strcmp(name, "udp-channel@ssh.osns.net") == 0) {
 
 	extensions->global_requests |= SSH_GLOBAL_REQUEST_UDP_CHANNEL;
 
@@ -106,7 +106,7 @@ int process_global_request_message(struct ssh_connection_s *connection, char *re
     int result=-1;
 
     if (send_global_request_message(connection, request, data, size, &seq)==0) {
-	struct timespec expire;
+	struct system_timespec_s expire=SYSTEM_TIME_INIT;
 	struct ssh_payload_s *payload=NULL;
 
 	get_ssh_connection_expire_init(connection, &expire);

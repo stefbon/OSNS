@@ -250,7 +250,7 @@ static int _start_interface_ssh_channel(struct context_interface_s *interface, i
 
     if (send_channel_start_command_message(channel, 1, &seq)>0) {
 	struct ssh_payload_s *payload=NULL;
-	struct timespec expire;
+	struct system_timespec_s expire;
 	unsigned int error=0;
 
 	get_channel_expire_init(channel, &expire);

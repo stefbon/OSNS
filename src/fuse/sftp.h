@@ -22,7 +22,7 @@
 struct sftp_service_s {
     char			*fullname;
     char			*name;
-    char			*prefix;
+    struct ssh_string_s		prefix;
     char			*uri;
 };
 

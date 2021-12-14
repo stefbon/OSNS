@@ -74,7 +74,7 @@ int ssh_signal_condwait(struct ssh_signal_s *signal)
     return signal_condwait(signal->signal);
 }
 
-int ssh_signal_condtimedwait(struct ssh_signal_s *signal, struct timespec *t)
+int ssh_signal_condtimedwait(struct ssh_signal_s *signal, struct system_timespec_s *t)
 {
     return signal_condtimedwait(signal->signal, t);
 }

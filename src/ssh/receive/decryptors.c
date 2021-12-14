@@ -145,7 +145,7 @@ struct ssh_decryptor_s *get_decryptor_unlock(struct ssh_receive_s *receive, unsi
 
 	decryptor=get_decryptor_container(list);
 
-	if (compare_system_times(&decryptor->created, &receive->newkeys) <=0) goto finish;
+	if (system_time_test_earlier(&decryptor->created, &receive->newkeys) <=0) goto finish;
 	(* decryptor->clear)(decryptor);
 	free(decryptor);
 	decrypt->count--;
@@ -175,7 +175,7 @@ void queue_decryptor(struct ssh_decryptor_s *decryptor)
 
     /* everything is ok when created is later then then when newkeys are in use */
 
-    if (compare_system_times(&decryptor->created, &receive->newkeys) <=0) {
+    if (system_time_test_earlier(&decryptor->created, &receive->newkeys) <=0) {
 
 	add_list_element_last(header, &decryptor->list);
 	pthread_cond_broadcast(&receive->cond);

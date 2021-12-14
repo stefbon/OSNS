@@ -19,6 +19,8 @@
 #ifndef INTERFACE_SFTP_EXTENSIONS_H
 #define INTERFACE_SFTP_EXTENSIONS_H
 
+#include "sftp/common-protocol.h"
+
 /* prototypes */
 
 int send_sftp_statvfs_ctx(struct context_interface_s *interface, struct sftp_request_s *sftp_r, unsigned int *error);
@@ -26,6 +28,5 @@ int send_sftp_fsync_ctx(struct context_interface_s *interface, struct sftp_reque
 
 unsigned int get_index_sftp_extension_statvfs(struct context_interface_s *interface);
 unsigned int get_index_sftp_extension_fsync(struct context_interface_s *interface);
-
 
 #endif

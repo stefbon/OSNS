@@ -46,7 +46,7 @@
 
 #include "workspace-interface.h"
 #include "workspace.h"
-#include "options.h"
+#include "options.h"      
 #include "discover.h"
 
 #include "lib/discover.h"
@@ -399,7 +399,7 @@ void free_discover_resource(struct discover_resource_s *r)
 
 static void update_single_timespec(struct system_timespec_s *changed, struct system_timespec_s *r)
 {
-    if (compare_system_times(r, changed)==1) copy_system_time(r, changed);
+    if (system_time_test_earlier(r, changed)==1) copy_system_time(r, changed);
 }
 
 static void update_changed_times_resources(struct discover_resource_s *r_netsocket)
@@ -666,7 +666,7 @@ void get_net_services(struct system_timespec_s *since)
 
     } else {
 
-	if (compare_system_times(since, &resource->changed)==1) {
+	if (system_time_test_earlier(since, &resource->changed)==1) {
 
 	    /* service is "new" */
 
