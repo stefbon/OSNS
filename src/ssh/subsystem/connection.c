@@ -216,7 +216,7 @@ static int send_operation_expired(struct system_timespec_s *time)
     struct system_timespec_s now=SYSTEM_TIME_INIT;
 
     get_current_time_system_time(&now);
-    return system_time_test_earlier(time, &now);
+    return system_time_test_earlier(&now, time);
 }
 
 static int write_std_connection(struct ssh_subsystem_connection_s *connection, char *data, unsigned int size)
