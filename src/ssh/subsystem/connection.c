@@ -244,12 +244,14 @@ static int write_std_connection(struct ssh_subsystem_connection_s *connection, c
 	if (result==-1) {
 	    unsigned int error=errno;
 
+	    logoutput_warning("write_std_connection: error %i writing (%s)", error, strerror(error));
+
 	    if ((error==EAGAIN || error==EWOULDBLOCK)) {
 		struct common_signal_s *signal=connection->signal;
 		struct system_timespec_s expire;
 
 		get_current_time_system_time(&expire);
-		system_time_add(&time, SYSTEM_TIME_ADD_MILLI, 4); /* add 4 thousanths (==milli) seconds */
+		system_time_add(&expire, SYSTEM_TIME_ADD_MILLI, 4); /* add 4 thousanths (==milli) seconds */
 
 		signal_lock(signal);
 
@@ -284,7 +286,7 @@ static int write_std_connection(struct ssh_subsystem_connection_s *connection, c
 	} else {
 
 	    /* bytes written>=0 */
-
+	    logoutput_debug("write_std_connection: %i bytes written", result);
 	    break;
 
 	}
@@ -293,11 +295,12 @@ static int write_std_connection(struct ssh_subsystem_connection_s *connection, c
 
     return result;
 
+
 }
 
 unsigned char signal_outgoing_connection_unblock(struct ssh_subsystem_connection_s *connection)
 {
-    unsigned char signal=0;
+    unsigned char tmp=0;
 
     if (connection->flags & SSH_SUBSYSTEM_CONNECTION_FLAG_STD) {
 	struct fs_connection_s *fsc=&connection->type.std.stdout;
@@ -309,7 +312,7 @@ unsigned char signal_outgoing_connection_unblock(struct ssh_subsystem_connection
 
 	    fsc->status &= ~FS_CONNECTION_FLAG_SEND_BLOCKED;
 	    signal_broadcast(signal);
-	    signal=1;
+	    tmp=1;
 
 	}
 
@@ -317,7 +320,7 @@ unsigned char signal_outgoing_connection_unblock(struct ssh_subsystem_connection
 
     }
 
-    return signal;
+    return tmp;
 
 }
 
@@ -476,7 +479,7 @@ static void finish_std_connection_helper(int fd, struct fs_connection_s *fsc, st
 
 	    int tmp=signal_condtimedwait(signal, &expire);
 
-	    if (tmp=ETIMEDOUT) {
+	    if (tmp==ETIMEDOUT) {
 		struct bevent_s *bevent=bevent=fsc->io.std.bevent;
 
 		logoutput_warning("finish_std_connection_helper: waiting for disconnecting connection %i timed out", get_bevent_unix_fd(bevent));
