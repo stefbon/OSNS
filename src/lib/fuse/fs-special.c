@@ -17,44 +17,19 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/statfs.h>
 
-#ifndef ENOATTR
-#define ENOATTR ENODATA        /* No such attribute */
-#endif
+#include "libosns-log.h"
+#include "libosns-misc.h"
+#include "libosns-interface.h"
+#include "libosns-workspace.h"
+#include "libosns-fuse.h"
 
-#include "log.h"
-#include "main.h"
-
-#include "misc.h"
-
-#include "workspace-interface.h"
-#include "workspace.h"
-#include "fuse.h"
-
-#define UINT32_T_MAX		0xFFFFFFFF
+#include "defaults,h"
 
 static struct fuse_fs_s fs;
 static char *desktopentryname=".directory";
@@ -261,7 +236,7 @@ static void create_desktopentry_file(char *path, struct entry_s *parent, struct 
     struct system_stat_s stat;
     struct fs_location_path_s location=FS_LOCATION_PATH_INIT;
     struct directory_s *directory=get_directory(workspace, parent->inode, 0);
-    struct simple_lock_s wlock;
+    struct osns_lock_s wlock;
 
     location.ptr=path;
     location.len=strlen(path);

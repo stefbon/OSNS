@@ -17,8 +17,8 @@
 
 */
 
-#ifndef FS_WORKSPACE_SSH_PK_LAYOUT_H
-#define FS_WORKSPACE_SSH_PK_LAYOUT_H
+#ifndef SSH_PK_PK_LAYOUT_H
+#define SSH_PK_PK_LAYOUT_H
 
 int get_pkey_material(struct ssh_key_s *key, char *buffer, unsigned int size, unsigned int layout, struct ssh_string_s *result, unsigned int *format);
 int get_skey_material(struct ssh_key_s *key, char *buffer, unsigned int size, unsigned int layout, struct ssh_string_s *result, unsigned int *format);

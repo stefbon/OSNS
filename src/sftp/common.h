@@ -20,10 +20,11 @@
 #ifndef _SFTP_COMMON_H
 #define _SFTP_COMMON_H
 
+#include "libosns-interface.h"
+#include "libosns-error.h"
 #include <sys/types.h>
 #include <pwd.h>
 
-#include "workspace-interface.h"
 #include "sftp/common-protocol.h"
 #include "sftp/attr-context.h"
 #include "sftp/attr-read.h"
@@ -184,13 +185,14 @@ struct sftp_sendhash_s {
 struct sftp_context_s {
     unsigned int					unique;
     void 						*ctx;
-    void						*conn;
-    int							(* signal_ctx2sftp)(struct sftp_client_s **s, const char *what, struct ctx_option_s *o);
-    int							(* signal_sftp2ctx)(struct sftp_client_s *s, const char *what, struct ctx_option_s *o);
-    int							(* signal_conn2sftp)(struct sftp_client_s *s, const char *what, struct ctx_option_s *o);
-    int							(* signal_sftp2conn)(struct sftp_client_s *s, const char *what, struct ctx_option_s *o);
+    int							(* signal_ctx2sftp)(struct sftp_client_s **s, const char *what, struct io_option_s *o, unsigned int type);
+    int							(* signal_sftp2ctx)(struct sftp_client_s *s, const char *what, struct io_option_s *o, unsigned int type);
     int							(* send_data)(struct sftp_client_s *s, char *buffer, unsigned int size, uint32_t *seq, struct list_element_s *list);
-    void						(* receive_data)(struct sftp_client_s *s, char **buffer, unsigned int size, uint32_t seq, unsigned int flags);
+    void						(* recv_data)(struct sftp_client_s *s, char **buffer, unsigned int size, uint32_t seq, unsigned int flags);
+    unsigned int					(* get_required_path_size_p2l)(struct sftp_client_s *s, unsigned int len);
+    unsigned int					(* get_required_path_size_l2p)(struct sftp_client_s *s, unsigned int len);
+    int							(* convert_path_p2l)(struct sftp_client_s *s, char *buffer, unsigned int size, char *data, unsigned int len);
+    int							(* convert_path_l2p)(struct sftp_client_s *s, char *buffer, unsigned int size, char *data, unsigned int len);
 };
 
 #define SFTP_SIGNAL_FLAG_MUTEX_ALLOC			(1 << 0)
@@ -206,7 +208,7 @@ struct sftp_context_s {
 
 struct sftp_signal_s {
     unsigned int					flags;
-    struct common_signal_s				*signal;
+    struct shared_signal_s				*signal;
     uint32_t						seq;
     struct system_timespec_s				seqset;
     unsigned char					seqtype;

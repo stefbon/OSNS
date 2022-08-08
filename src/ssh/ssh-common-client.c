@@ -17,32 +17,11 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
-#include "main.h"
-#include "log.h"
-#include "options.h"
-
-#include "misc.h"
-#include "threads.h"
+#include "libosns-log.h"
+#include "libosns-misc.h"
+#include "libosns-threads.h"
 
 #include "ssh-utils.h"
 #include "ssh-common-protocol.h"
@@ -103,13 +82,13 @@ unsigned int get_ssh_session_buffer_size()
     return sizeof(struct ssh_session_s);
 }
 
-int init_ssh_session_client(struct ssh_session_s *session, uid_t uid, void *ctx)
+int init_ssh_session_client(struct ssh_session_s *session, uid_t uid, void *ctx, struct shared_signal_s *signal)
 {
     logoutput("_init_ssh_session: init user uid %i", (unsigned int) uid);
 
-    if (init_ssh_backend()==-1) goto error;
+    if (init_ssh_backend(signal)==-1) goto error;
 
-    init_ssh_session(session, uid, ctx);
+    init_ssh_session(session, uid, ctx, signal);
     init_ssh_session_signals_client(&session->context);
 
     if (init_ssh_identity_client(session, uid)==-1) {
@@ -131,12 +110,45 @@ int init_ssh_session_client(struct ssh_session_s *session, uid_t uid, void *ctx)
 
 }
 
-int connect_ssh_session_client(struct ssh_session_s *session, char *target, unsigned int port)
+static void disconnect_ssh_connection_cb(struct connection_s *c, unsigned char remote)
+{
+
+    disconnect_cb_default(c, remote);
+
+    if (remote) {
+	struct ssh_connection_s *sshc=(struct ssh_connection_s *)((char *)c - offsetof(struct ssh_connection_s, connection));
+
+	/* when initiated by remote side signal the context (==workspace)
+	    here the context == the channels using this connection */
+
+	struct ssh_session_s *session=get_ssh_connection_session(sshc);
+
+	if (session) {
+	    struct channel_table_s *table=&session->channel_table;
+	    struct osns_lock_s lock;
+
+	    if (channeltable_readlock(table, &lock)==0) {
+		struct ssh_channel_s *channel=get_next_channel(session, NULL);
+
+		if (channel->connection==sshc) (* channel->context.signal_channel2ctx)(channel, "event:disconnect:", NULL, INTERFACE_CTX_SIGNAL_TYPE_SSH_CHANNEL);
+		channel=get_next_channel(session, channel);
+
+		channeltable_unlock(table, &lock);
+
+	    }
+
+	}
+
+    }
+
+}
+
+int connect_ssh_session_client(struct ssh_session_s *session, struct host_address_s *target, struct network_port_s *port, struct beventloop_s *loop)
 {
     struct ssh_connection_s *connection=NULL;
-    struct ctx_option_s option;
+    struct io_option_s option;
     int fd=-1;
-    struct common_signal_s *signal=NULL;
+    struct shared_signal_s *signal=NULL;
 
     /* get the ctx for values like:
 	- shared mutex and cond for shared event signalling when for example the connection and/or
@@ -144,30 +156,16 @@ int connect_ssh_session_client(struct ssh_session_s *session, char *target, unsi
 	- timeout
     */
 
-    memset(&option, 0, sizeof(struct ctx_option_s));
-    option.type=_CTX_OPTION_TYPE_PVOID;
-    if ((* session->context.signal_ssh2ctx)(session, "io:shared-signal", &option)>=0) {
+    init_io_option(&option, _IO_OPTION_TYPE_PVOID);
 
-	signal=(struct common_signal_s *) option.value.ptr;
-	logoutput("connect_ssh_session_client: received shared workspace signal");
-
-    }
-
-    if (set_ssh_connections_signal(session, signal)==-1) {
+    if (set_ssh_connections_signal(session, session->signal)==-1) {
 
 	logoutput("connect_ssh_session_client: error setting shared signal");
 	goto out;
 
     }
 
-    memset(&option, 0, sizeof(struct ctx_option_s));
-    option.type=_CTX_OPTION_TYPE_INT;
-    if ((* session->context.signal_ssh2ctx)(session, "option:ssh.init_timeout", &option)>0) {
-
-	session->config.connection_expire=option.value.integer;
-	logoutput("connect_ssh_session_client: received connection timeout %i", option.value.integer);
-
-    }
+    init_io_option(&option, _IO_OPTION_TYPE_INT);
 
     if (add_main_ssh_connection(session)==0) {
 
@@ -181,15 +179,18 @@ int connect_ssh_session_client(struct ssh_session_s *session, char *target, unsi
     }
 
     connection=session->connections.main;
-    fd=connect_ssh_connection(connection, target, port);
+    connection->connection.ops.client.disconnect=disconnect_ssh_connection_cb;
+    connection->connection.ops.client.dataavail=read_ssh_connection_socket;
+
+    fd=connect_ssh_connection(connection, target, port, loop);
 
     if (fd>0) {
 
-	logoutput("connect_ssh_session_client: connected to %s:%i with fd %i", target, port, fd);
+	logoutput("connect_ssh_session_client: connected with fd %i", fd);
 
     } else {
 
-	logoutput("connect_ssh_session_client: unable to connect to %s:%i", target, port);
+	logoutput("connect_ssh_session_client: unable to connect");
 
     }
 

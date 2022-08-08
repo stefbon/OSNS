@@ -17,8 +17,8 @@
 
 */
 
-#ifndef FS_WORKSPACE_SSH_PK_COMPARE_H
-#define FS_WORKSPACE_SSH_PK_COMPARE_H
+#ifndef SSH_PK_PK_COMPARE_H
+#define SSH_PK_PK_COMPARE_H
 
 int compare_ssh_keys(struct ssh_key_s *a, struct ssh_key_s *b);
 int compare_ssh_key_data(struct ssh_key_s *a, char *buffer, unsigned int len, unsigned int format);

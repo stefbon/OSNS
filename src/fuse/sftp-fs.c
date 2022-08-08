@@ -17,35 +17,15 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
-#include "main.h"
-#include "misc.h"
-#include "log.h"
-
-#include "workspace-interface.h"
-#include "workspace.h"
-#include "fuse.h"
+#include "libosns-log.h"
+#include "libosns-misc.h"
+#include "libosns-interface.h"
+#include "libosns-workspace.h"
+#include "libosns-context.h"
+#include "libosns-fuse-public.h"
+#include "libosns-resources.h"
 
 #include "sftp/access.h"
 #include "sftp/getattr.h"
@@ -60,36 +40,18 @@
 #include "sftp/statfs.h"
 #include "sftp/xattr.h"
 
-static unsigned int _fs_sftp_get_name(struct service_context_s *context, char *buffer, unsigned int len)
+static unsigned int _fs_sftp_get_name(struct service_context_s *ctx, char *buffer, unsigned int len)
 {
-    struct context_interface_s *interface=&context->interface;
     char *name=NULL;
     unsigned int size=0;
 
-    if (interface->backend.sftp.prefix.type==INTERFACE_BACKEND_SFTP_PREFIX_HOME) {
+    name=ctx->service.filesystem.name;
+    size=strlen(name);
 
-	name=(char *) "home";
+    if (buffer) {
 
-    } else if (interface->backend.sftp.prefix.type==INTERFACE_BACKEND_SFTP_PREFIX_ROOT) {
-
-	name=(char *) "root";
-
-    } else {
-
-	name=interface->backend.sftp.name;
-
-    }
-
-    if (name) {
-
-	size=strlen(name);
-
-	if (buffer) {
-
-	    if (size<len) len=size;
-	    memcpy(buffer, name, len);
-
-	}
+	if (size<len) len=size;
+	memcpy(buffer, name, len);
 
     }
 
@@ -99,7 +61,7 @@ static unsigned int _fs_sftp_get_name(struct service_context_s *context, char *b
 
 /* generic sftp fs */
 
-static struct service_fs_s sftp_fs = {
+static struct path_service_fs_s sftp_fs = {
 
     .lookup_existing		= _fs_sftp_lookup_existing,
     .lookup_new			= _fs_sftp_lookup_new,
@@ -121,24 +83,8 @@ static struct service_fs_s sftp_fs = {
 
     .create			= _fs_sftp_create,
     .open			= _fs_sftp_open,
-    .read			= _fs_sftp_read,
-    .write			= _fs_sftp_write,
-    .fsync			= _fs_sftp_fsync,
-    .flush			= _fs_sftp_flush,
-    .fgetattr			= _fs_sftp_fgetattr,
-    .fsetattr			= _fs_sftp_fsetattr,
-    .release			= _fs_sftp_release,
-
-    .getlock			= _fs_sftp_getlock,
-    .setlock			= _fs_sftp_setlock,
-    .setlockw			= _fs_sftp_setlockw,
-    .flock			= _fs_sftp_flock,
 
     .opendir			= _fs_sftp_opendir,
-    .readdir			= _fs_sftp_readdir,
-    .readdirplus		= _fs_sftp_readdirplus,
-    .fsyncdir			= _fs_sftp_fsyncdir,
-    .releasedir			= _fs_sftp_releasedir,
 
     .getxattr			= _fs_sftp_getxattr,
     .setxattr			= _fs_sftp_setxattr,
@@ -149,7 +95,7 @@ static struct service_fs_s sftp_fs = {
 
 };
 
-static struct service_fs_s sftp_fs_disconnected = {
+static struct path_service_fs_s sftp_fs_disconnected = {
 
     .lookup_existing		= _fs_sftp_lookup_existing_disconnected,
     .lookup_new			= _fs_sftp_lookup_new_disconnected,
@@ -169,24 +115,8 @@ static struct service_fs_s sftp_fs_disconnected = {
 
     .create			= _fs_sftp_create_disconnected,
     .open			= _fs_sftp_open_disconnected,
-    .read			= _fs_sftp_read_disconnected,
-    .write			= _fs_sftp_write_disconnected,
-    .fsync			= _fs_sftp_fsync_disconnected,
-    .flush			= _fs_sftp_flush_disconnected,
-    .fgetattr			= _fs_sftp_fgetattr_disconnected,
-    .fsetattr			= _fs_sftp_fsetattr_disconnected,
-    .release			= _fs_sftp_release_disconnected,
-
-    .getlock			= _fs_sftp_getlock_disconnected,
-    .setlock			= _fs_sftp_setlock_disconnected,
-    .setlockw			= _fs_sftp_setlockw_disconnected,
-    .flock			= _fs_sftp_flock_disconnected,
 
     .opendir			= _fs_sftp_opendir_disconnected,
-    .readdir			= _fs_sftp_readdir_disconnected,
-    .readdirplus		= _fs_sftp_readdirplus_disconnected,
-    .fsyncdir			= _fs_sftp_fsyncdir_disconnected,
-    .releasedir			= _fs_sftp_releasedir_disconnected,
 
     .getxattr			= _fs_sftp_getxattr,
     .setxattr			= _fs_sftp_setxattr,

@@ -20,7 +20,9 @@
 #ifndef LIB_MOUNTINFO_UTILS_H
 #define LIB_MOUNTINFO_UTILS_H
 
-char *get_device_from_uuid(const char *uuid);
-char *get_real_root_device(int major, int minor);
+/* prototypes */
+
+char *get_unescaped_string(char *str);
+void free_unescaped_string(char *ptr);
 
 #endif

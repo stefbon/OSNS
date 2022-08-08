@@ -23,7 +23,7 @@
 struct name_s {
     char 				*name;
     size_t				len;
-    unsigned long long			index;
+    uint64_t				index;
 };
 
 #define INIT_NAME			{NULL, 0, 0}
@@ -37,6 +37,7 @@ void set_name_from(struct name_s *a, unsigned char type, void *ptr);
 int compare_names(struct name_s *a, struct name_s *b);
 int compare_name(struct name_s *a, const unsigned char type, void *ptr);
 
+uint64_t calculate_nameindex_hlp(char* buffer);
 void calculate_nameindex(struct name_s *name);
 
 #endif

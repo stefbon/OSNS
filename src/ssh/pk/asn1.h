@@ -17,8 +17,8 @@
 
 */
 
-#ifndef FS_WORKSPACE_SSH_PK_ASN1_H
-#define FS_WORKSPACE_SSH_PK_ASN1_H
+#ifndef SSH_PK_PK_ASN1_H
+#define SSH_PK_PK_ASN1_H
 
 #define _ASN1_TAG_SEQUENCE		0x30
 #define _ASN1_TAG_INTEGER		0x02

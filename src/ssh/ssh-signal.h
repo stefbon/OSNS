@@ -22,7 +22,7 @@
 
 /* prototypes */
 
-void init_ssh_signal(struct ssh_signal_s *signal, unsigned int flags, struct common_signal_s *s);
+void init_ssh_signal(struct ssh_signal_s *signal, unsigned int flags, struct shared_signal_s *s);
 
 int ssh_signal_lock(struct ssh_signal_s *signal);
 int ssh_signal_unlock(struct ssh_signal_s *signal);

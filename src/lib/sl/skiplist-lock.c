@@ -17,30 +17,10 @@
 
 */
 
-#include "global-defines.h"
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <err.h>
-
-#include <inttypes.h>
-#include <ctype.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/param.h>
-#include <pthread.h>
-
-#ifndef ENOATTR
-#define ENOATTR ENODATA        /* No such attribute */
-#endif
+#include "libosns-basic-system-headers.h"
 
 #include "skiplist.h"
-#include "log.h"
+#include "libosns-log.h"
 
 /* remove the read locks set by the vector */
 

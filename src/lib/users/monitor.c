@@ -17,32 +17,12 @@
 
 */
 
-#include "global-defines.h"
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
+#include "libosns-basic-system-headers.h"
 
 #include <systemd/sd-login.h>
 
-#include "log.h"
+#include "libosns-log.h"
 #include "datatypes/ssh-string.h"
-
 #include "monitor.h"
 
 #define _MONITOR_FLAG_CHANGED				1
@@ -218,13 +198,9 @@ static int user_monitor_filter_dummy(uid_t uid, void *ptr)
     return 0;	/* by default do not filter any uid */
 }
 
-int create_user_monitor(void (* cb)(uid_t uid, int what, void *ptr), void *ptr, int (* filter)(uid_t uid, void *ptr))
+static int create_user_monitor()
 {
     int fd=-1;
-
-    monitor_cb=(cb) ? cb : user_monitor_cb_dummy;
-    monitor_filter=(filter) ? filter : user_monitor_filter_dummy;
-    monitor_ptr=ptr;
 
     if (sd_login_monitor_new("uid", &monitor)==0) {
 
@@ -247,7 +223,7 @@ void close_user_monitor()
     monitor=NULL;
 }
 
-void read_user_monitor_event(int fd, void *data, struct event_s *event)
+void read_user_monitor_event(struct bevent_s *bevent, struct event_s *event)
 {
     struct _login_uids_s new = {.uid=NULL, .len=0};
     int result=0;
@@ -294,6 +270,33 @@ void read_user_monitor_event(int fd, void *data, struct event_s *event)
     monitor_flags &= ~_MONITOR_FLAG_THREAD;
     pthread_mutex_unlock(&monitor_mutex);
 
-    logoutput("read_user_monitor_event: finish");
+}
 
+struct bevent_s *monitor_users(void (* cb)(uid_t uid, int what, void *ptr), void *ptr, int (* filter)(uid_t uid, void *ptr))
+{
+    int fd=-1;
+    struct bevent_s *bevent=NULL;
+
+    monitor_cb=(cb) ? cb : user_monitor_cb_dummy;
+    monitor_filter=(filter) ? filter : user_monitor_filter_dummy;
+    monitor_ptr=ptr;
+
+    fd=create_user_monitor();
+    if (fd<0) return NULL;
+
+    bevent=create_fd_bevent(NULL, read_user_monitor_event, NULL);
+    if (bevent==NULL) goto errorfailed;
+
+    set_bevent_unix_fd(bevent, fd);
+    set_bevent_watch(bevent, "i");
+    return bevent;
+
+    errorfailed:
+    close_user_monitor();
+    return NULL;
+}
+
+void monitor_user_do_read()
+{
+    read_user_monitor_event(NULL, NULL);
 }

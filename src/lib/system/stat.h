@@ -16,10 +16,13 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
+
 #ifndef LIB_SYSTEM_STAT_H
 #define LIB_SYSTEM_STAT_H
 
+#include <fcntl.h>
 #include <sys/sysmacros.h>
+#include <sys/stat.h>
 
 #include "path.h"
 #include "open.h"
@@ -52,7 +55,7 @@ struct system_dev_s {
 
 #include <sys/stat.h>
 
-#ifdef HAVE_STATX
+#ifdef STATX_TYPE
 
 #define SYSTEM_STAT_TYPE			STATX_TYPE
 #define SYSTEM_STAT_MODE			STATX_MODE
@@ -115,7 +118,7 @@ struct system_stat_s {
 	unsigned char	flags;
 	unsigned int	mask;
 	struct stat	st;
-	struct timespec	dummy
+	struct timespec	dummy;
 };
 
 #define sst_mode				st.st_mode
@@ -132,6 +135,14 @@ struct system_stat_s {
 #define sst_blksize				st.st_blksize
 
 #endif
+
+#define STAT_MODE_ROLE_USER			1
+#define STAT_MODE_ROLE_GROUP			2
+#define STAT_MODE_ROLE_OTHERS			4
+
+#define STAT_MODE_PERM_READ			1
+#define STAT_MODE_PERM_WRITE			2
+#define STAT_MODE_PERM_EXEC			4
 
 #endif /* __linux__ */
 
@@ -237,11 +248,10 @@ void copy_ctime_system_stat(struct system_stat_s *to, struct system_stat_s *from
 void copy_btime_system_stat(struct system_stat_s *to, struct system_stat_s *from);
 
 void set_blksize_system_stat(struct system_stat_s *stat, uint32_t blksize);
+void set_blocks_system_stat(struct system_stat_s *stat, uint32_t blocks);
 
-void increase_nlink_system_stat(struct system_stat_s *stat, uint32_t count);
-void decrease_nlink_system_stat(struct system_stat_s *stat, uint32_t count);
-
-#endif
+void increase_nlink_system_stat(struct system_stat_s *stat, int32_t count);
+void decrease_nlink_system_stat(struct system_stat_s *stat, int32_t count);
 
 /*
     TODO: get a function to copy the atime to system time formats like timespec
@@ -251,7 +261,16 @@ uint32_t calc_amount_blocks(uint64_t size, uint32_t blksize);
 void calc_blocks_system_stat(struct system_stat_s *stat);
 
 uint32_t get_unique_system_dev(struct system_dev_s *dev);
+
 int system_stat_test_ISDIR(struct system_stat_s *stat);
 int system_stat_test_ISLNK(struct system_stat_s *stat);
+int system_stat_test_ISBLK(struct system_stat_s *stat);
+int system_stat_test_ISCHR(struct system_stat_s *stat);
+int system_stat_test_ISSOCK(struct system_stat_s *stat);
+int system_stat_test_ISREG(struct system_stat_s *stat);
 
 int system_getstatvfs(struct fs_location_path_s *path, struct system_statvfs_s *s);
+
+unsigned int enable_mode_permission(unsigned int mode, unsigned int role, unsigned int perm);
+
+#endif

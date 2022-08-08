@@ -17,31 +17,10 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
-#include "log.h"
-#include "main.h"
-
-#include "misc.h"
-#include "options.h"
+#include "libosns-log.h"
+#include "libosns-misc.h"
 
 #include "ssh-utils.h"
 #include "ssh-hash.h"
@@ -232,13 +211,13 @@ static struct ssh_payload_s *receive_keydh(struct ssh_connection_s *connection, 
 
 static int check_serverkey_localdb(struct ssh_connection_s *connection, struct ssh_keyex_s *k, struct ssh_key_s *pkey)
 {
-    unsigned int done = fs_options.ssh.trustdb;
+    struct ssh_session_s *session=get_ssh_connection_session(connection);
+    unsigned int done = session->config.trustdb;
     int result=-1;
 
-    if (fs_options.ssh.trustdb & _OPTIONS_SSH_TRUSTDB_OPENSSH) {
-	struct ssh_session_s *session=get_ssh_connection_session(connection);
+    if (done & SSH_CONFIG_TRUSTDB_OPENSSH) {
 
-	done-=_OPTIONS_SSH_TRUSTDB_OPENSSH;
+	done &= ~SSH_CONFIG_TRUSTDB_OPENSSH;
 
 	if (check_serverkey_localdb_openssh(&connection->connection, &session->identity.pwd, pkey, (pkey->algo->flags & SSH_PKALGO_FLAG_PKC) ? "ca" : "pk")==0) {
 
@@ -443,7 +422,7 @@ int start_diffiehellman_client(struct ssh_connection_s *connection, struct ssh_k
 	TODO: make a check using another local db/agent possible 
 	TODO: make a check of certificates possible (look for a CA) */
 
-    if (fs_options.ssh.trustdb == _OPTIONS_SSH_TRUSTDB_NONE) {
+    if (session->config.trustdb == SSH_CONFIG_TRUSTDB_NONE) {
 
 	logoutput_info("start_diffiehellman_client: no trustdb used, hostkey is not checked to local db of trusted keys");
 

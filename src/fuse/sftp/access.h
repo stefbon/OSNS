@@ -20,6 +20,6 @@
 #ifndef _FUSE_SFTP_ACCESS_H
 #define _FUSE_SFTP_ACCESS_H
 
-int _fs_sftp_access(struct service_context_s *context, struct fuse_request_s *request, unsigned char what);
+void _fs_sftp_access(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *i, struct fuse_path_s *fp, unsigned int mask);
 
 #endif

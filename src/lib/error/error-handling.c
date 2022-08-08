@@ -18,6 +18,8 @@
 
 */
 
+#include "libosns-basic-system-headers.h"
+
 #include "error-handling.h"
 
 char *application_errors[] = {

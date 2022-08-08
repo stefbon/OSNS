@@ -17,8 +17,8 @@
 
 */
 
-#ifndef FS_WORKSPACE_SSH_PK_TYPES_H
-#define FS_WORKSPACE_SSH_PK_TYPES_H
+#ifndef SSH_PK_PK_TYPES_H
+#define SSH_PK_PK_TYPES_H
 
 #define SSH_PKALGO_SCHEME_RSA				1
 #define SSH_PKALGO_SCHEME_DSS				2

@@ -17,34 +17,15 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
-#include "main.h"
-#include "misc.h"
-#include "log.h"
+#include "libosns-misc.h"
+#include "libosns-log.h"
 
 #include "ssh-common.h"
 #include "ssh-utils.h"
 #include "ssh-connections.h"
 
-#include "options.h"
 
 extern struct fs_options_s fs_options;
 
@@ -158,7 +139,7 @@ void process_delay_compression(struct ssh_session_s *session, struct ssh_string_
     struct msg_buffer_s mb=INIT_SSH_MSG_BUFFER;
     struct ssh_string_s compr_c2s;
     struct ssh_string_s compr_s2c;
-    unsigned int index=_OPTIONS_SSH_EXTENSION_DELAY_COMPRESSION - 1;
+    unsigned int index=SSH_EXTENSION_DELAY_COMPRESSION - 1;
 
     session->config.extensions|=(1 << ( 2 * index + 1));
     if ((session->config.extensions & (1 << ( 2 * index)))==0) return; /* delay compression not supported from config */

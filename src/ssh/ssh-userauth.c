@@ -17,31 +17,11 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-
-#include "main.h"
-#include "log.h"
-#include "options.h"
-
-#include "misc.h"
-#include "network.h"
+#include "libosns-log.h"
+#include "libosns-misc.h"
+#include "libosns-network.h"
 
 #include "ssh-common.h"
 #include "ssh-common-protocol.h"
@@ -50,15 +30,13 @@
 #include "ssh-send.h"
 #include "ssh-connections.h"
 #include "ssh-utils.h"
-#include "users.h"
+// #include "users.h"
 
 #include "userauth/pubkey.h"
 #include "userauth/hostbased.h"
 #include "userauth/utils.h"
 #include "userauth/none.h"
 #include "userauth/password.h"
-
-extern struct fs_options_s fs_options;
 
 void init_ssh_auth(struct ssh_auth_s *auth)
 {
@@ -93,21 +71,18 @@ void clear_ssh_auth(struct ssh_auth_s *auth)
 
 static int ssh_auth_method_supported(unsigned int methods)
 {
-    if (methods & SSH_AUTH_METHOD_NONE) methods -= SSH_AUTH_METHOD_NONE;
-    if (methods & SSH_AUTH_METHOD_PUBLICKEY) methods -= SSH_AUTH_METHOD_PUBLICKEY;
-    if (methods & SSH_AUTH_METHOD_HOSTBASED) methods -= SSH_AUTH_METHOD_HOSTBASED;
-    if (methods & SSH_AUTH_METHOD_PASSWORD) methods -= SSH_AUTH_METHOD_PASSWORD;
+    methods &= ~(SSH_AUTH_METHOD_NONE | SSH_AUTH_METHOD_PUBLICKEY | SSH_AUTH_METHOD_HOSTBASED | SSH_AUTH_METHOD_PASSWORD);
     return (methods > 0) ? -1 : 0;
 }
 
-static unsigned int get_required_userauth_methods()
+static unsigned int get_required_userauth_methods(struct ssh_session_s *session)
 {
     unsigned int methods;
     /* which services are required ?*/
 
-    if (fs_options.ssh.required_authmethods & _OPTIONS_SSH_SERVER_USERAUTH_REQUIRED_PASSWORD) methods |= SSH_AUTH_METHOD_PASSWORD;
-    if (fs_options.ssh.required_authmethods & _OPTIONS_SSH_SERVER_USERAUTH_REQUIRED_PUBLICKEY) methods |= SSH_AUTH_METHOD_PUBLICKEY;
-    if (fs_options.ssh.required_authmethods & _OPTIONS_SSH_SERVER_USERAUTH_REQUIRED_HOSTBASED) methods |= SSH_AUTH_METHOD_HOSTBASED;
+    if (session->config.auth & SSH_CONFIG_AUTH_PASSWORD) methods |= SSH_AUTH_METHOD_PASSWORD;
+    if (session->config.auth & SSH_CONFIG_AUTH_PUBLICKEY) methods |= SSH_AUTH_METHOD_PUBLICKEY;
+    if (session->config.auth & SSH_CONFIG_AUTH_HOSTKEY) methods |= SSH_AUTH_METHOD_HOSTBASED;
     return methods;
 
 }
@@ -122,6 +97,7 @@ static int start_ssh_userauth_client(struct ssh_session_s *session, struct ssh_c
     struct pk_identity_s *user_identity=NULL;
     struct pk_identity_s *host_identity=NULL;
     char *user=NULL;
+    struct network_peer_s local;
 
     logoutput("start_ssh_userauth_client");
 
@@ -162,6 +138,28 @@ static int start_ssh_userauth_client(struct ssh_session_s *session, struct ssh_c
 	    goto finish;
 
 	}
+
+    }
+
+    memset(&local, 0, sizeof(struct network_peer_s));
+    local.host.flags=(HOST_ADDRESS_FLAG_IP | HOST_ADDRESS_FLAG_HOSTNAME);
+
+    if (get_network_peer_properties(&connection->connection.sock, &local, "local")==-1) {
+
+	logoutput("start_ssh_userauth_client: not able to get local address");
+	goto finish;
+
+    }
+
+    set_ssh_string(&auth->c_hostname, 'c', local.host.hostname);
+
+    if (local.host.ip.family==SYSTEM_SOCKET_FLAG_IPv4) {
+
+	set_ssh_string(&auth->c_ip, 'c', local.host.ip.addr.v4);
+
+    } else if (local.host.ip.family==SYSTEM_SOCKET_FLAG_IPv6) {
+
+	set_ssh_string(&auth->c_ip, 'c', local.host.ip.addr.v6);
 
     }
 
@@ -248,7 +246,6 @@ static int start_ssh_userauth_client(struct ssh_session_s *session, struct ssh_c
 
     } else if (auth->required & SSH_AUTH_METHOD_HOSTBASED) {
 	char *s_user=NULL;
-	int fd=-1;
 
 	if (auth->done & SSH_AUTH_METHOD_HOSTBASED) {
 
@@ -260,31 +257,6 @@ static int start_ssh_userauth_client(struct ssh_session_s *session, struct ssh_c
 	}
 
 	if (populate_list_public_keys(&pkeys, PK_IDENTITY_SOURCE_OPENSSH_LOCAL, "host")==0) goto finish;
-
-	if (connection->connection.io.socket.bevent) fd=get_bevent_unix_fd(connection->connection.io.socket.bevent);
-
-	if (fd>=0) {
-	    char *hostname=get_connection_hostname(&connection->connection, fd, 0, &error);
-
-	    if (hostname) {
-
-		set_ssh_string(&auth->c_hostname, 'c', hostname);
-		hostname=NULL;
-		auth->c_hostname.flags |= SSH_STRING_FLAG_ALLOC;
-
-	    }
-
-	}
-
-	if (ssh_string_isempty(&auth->c_hostname)) {
-
-	    logoutput("start_ssh_userauth_client: failed to get local hostname");
-	    goto finish;
-
-	}
-
-	logoutput("start_ssh_userauth_client: using local hostname %s for hb userauth", auth->c_hostname.ptr);
-
 	host_identity=send_userauth_hostbased_request(connection, &service, &pkeys);
 
 	if (host_identity==NULL) {
@@ -399,7 +371,7 @@ static int start_ssh_userauth_server(struct ssh_session_s *session, struct ssh_c
     /* get/set the required methods from config
 	maybe make this depend on the host/user */
 
-    auth->required=get_required_userauth_methods();
+    auth->required=get_required_userauth_methods(session);
     auth->done=0;
 
     if (compare_ssh_string(&service1, 'c', "ssh-userauth")==0) {

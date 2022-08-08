@@ -17,35 +17,13 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/vfs.h>
-#include <pwd.h>
-
-#include "main.h"
-#include "log.h"
-#include "misc.h"
-#include "datatypes.h"
-#include "network.h"
+#include "libosns-log.h"
+#include "libosns-misc.h"
+#include "libosns-datatypes.h"
+#include "libosns-threads.h"
+#include "libosns-eventloop.h"
 
 #include "protocol.h"
 #include "osns_sftp_subsystem.h"
@@ -55,6 +33,21 @@
 #include "handle.h"
 #include "init.h"
 #include "attr.h"
+
+int reply_sftp_attr_from_stat(struct sftp_subsystem_s *sftp, uint32_t id, struct sftp_valid_s *valid, struct system_stat_s *stat)
+{
+    struct rw_attr_result_s r=RW_ATTR_RESULT_INIT;
+    unsigned int size=get_size_buffer_write_attributes(&sftp->attrctx, &r, valid);
+    char buffer[size];
+    struct attr_buffer_s abuff;
+
+    set_attr_buffer_write(&abuff, buffer, size);
+    (* abuff.ops->rw.write.write_uint32)(&abuff, (r.valid.mask | r.valid.flags));
+    write_attributes_generic(&sftp->attrctx, &abuff, &r, stat, valid);
+
+    return reply_sftp_attrs(sftp, id, abuff.buffer, abuff.len);
+
+}
 
 /* SSH_FXP_(L)STAT/
     message has the form:
@@ -106,16 +99,8 @@ static void sftp_op_stat_generic(struct sftp_subsystem_s *sftp, struct sftp_payl
 	    logoutput("sftp_op_stat: %.*s result %i valid %i", location.type.path.len, location.type.path.ptr, result, valid.mask);
 
 	    if (result==0) {
-		struct rw_attr_result_s r=RW_ATTR_RESULT_INIT;
-		unsigned int size=get_size_buffer_write_attributes(&sftp->attrctx, &r, &valid);
-		char tmp[size];
-		struct attr_buffer_s abuff;
 
-		set_attr_buffer_write(&abuff, tmp, size);
-		(* abuff.ops->rw.write.write_uint32)(&abuff, (r.valid.mask | r.valid.flags));
-		write_attributes_generic(&sftp->attrctx, &abuff, &r, &stat, &valid);
-
-		if (reply_sftp_attrs(sftp, payload->id, abuff.buffer, abuff.len)==-1) logoutput_warning("sftp_op_stat: error sending attr");
+		if (reply_sftp_attr_from_stat(sftp, payload->id, &valid, &stat)==-1) logoutput_warning("sftp_op_stat_generic: error sending attr");
 		return;
 
 	    } else {

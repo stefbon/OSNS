@@ -20,9 +20,10 @@
 #ifndef LIB_USERS_MAPPING_H
 #define LIB_USERS_MAPPING_H
 
-#include "datatypes.h"
+#include "libosns-datatypes.h"
+#include "libosns-sl.h"
+
 #include "getent.h"
-#include "sl.h"
 #include "mapping.h"
 
 /*

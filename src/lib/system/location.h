@@ -20,7 +20,7 @@
 #ifndef LIB_SYSTEM_LOCATION_H
 #define LIB_SYSTEM_LOCATION_H
 
-#include "datatypes.h"
+#include "libosns-datatypes.h"
 
 #define FS_LOCATION_FLAG_ALLOC					( 1 << 0 )
 #define FS_LOCATION_FLAG_NAME					( 1 << 1 )

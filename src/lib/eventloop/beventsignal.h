@@ -20,9 +20,35 @@
 #ifndef _LIB_EVENTLOOP_BEVENTSIGNAL_H
 #define _LIB_EVENTLOOP_BEVENTSIGNAL_H
 
+struct bsignal_event_s {
+    uint32_t				signo;
+    struct beventloop_s 		*loop;
+    union _bsignal_signo_u {
+	struct _bsignal_io {
+	    uint32_t			pid;
+	    uint32_t			fd;
+	    uint32_t			events;
+	} io;
+	struct _bsignal_chld {
+	    uint32_t			pid;
+	    uint32_t			uid;
+	    int				status;
+	    uint64_t			utime;
+	    uint64_t			stime;
+	} chld;
+	struct _bsignal_kill {
+	    uint32_t			uid;
+	    uint32_t			pid;
+	} kill;
+    } type;
+};
+
 /* Prototypes */
 
-int enable_beventloop_signal(struct beventloop_s *loop, void (* cb) (struct beventloop_s *loop, unsigned int signo, pid_t pid, int fd));
-void disable_beventloop_signal(struct beventloop_s *loop);
+int create_bevent_signal_subsystem(struct beventloop_s *eloop, void (* cb)(struct beventloop_s *eloop, struct bsignal_event_s *bse));
+
+int start_bsignal_subsystem(struct beventloop_s *eloop, unsigned int id);
+void stop_bsignal_subsystem(struct beventloop_s *eloop, unsigned int id);
+void clear_bsignal_subsystem(struct beventloop_s *eloop, unsigned int id);
 
 #endif

@@ -2,13 +2,13 @@
 /* config.h.in.  Generated from configure.ac by autoheader.  */
 
 /* Define Avahi client is available */
-#define HAVE_AVAHI_CLIENT 1
+/* #undef HAVE_AVAHI_CLIENT */
 
 /* Define Avahi core is available */
-#define HAVE_AVAHI_CORE 1
+/* #undef HAVE_AVAHI_CORE */
 
 /* Define Avahi glib is available */
-#define HAVE_AVAHI_GLIB 1
+/* #undef HAVE_AVAHI_GLIB */
 
 /* Define to 1 if your system has a working `chown' function. */
 #define HAVE_CHOWN 1
@@ -49,17 +49,8 @@
 /* Check for libgcrypt */
 #define HAVE_LIBGCRYPT 1
 
-/* Define if libmagic is available */
-#define HAVE_LIBMAGIC 1
-
 /* Define if pam is available */
 #define HAVE_LIBPAM 1
-
-/* Define if librsync is available */
-#define HAVE_LIBRSYNC 1
-
-/* Define if libsmbs is available */
-#define HAVE_LIBSMB2 1
 
 /* Define libsystemd is available */
 #define HAVE_LIBSYSTEMD 1
@@ -208,14 +199,26 @@
    backward compatibility; new code need not use it. */
 #define STDC_HEADERS 1
 
+/* Define to use glib mainloop */
+/* #undef USE_GLIB_MAINLOOP */
+
+/* Define to use linux epoll */
+#define USE_LINUX_EPOLL 1
+
 /* Version number of package */
 #define VERSION "1.0a1"
+
+/* Define to build OSNS ctl utility. */
+/* #undef WITH_OSNSCTL */
 
 /* Define to build OSNS client */
 /* #undef WITH_OSNS_CLIENT */
 
 /* Define to build OSNS SSH Server */
 #define WITH_OSNS_SFTP_SUBSYSTEM 1
+
+/* Define to build OSNS system */
+/* #undef WITH_OSNS_SYSTEM */
 
 /* Define for Solaris 2.5.1 so the uint32_t typedef from <sys/synch.h>,
    <pthread.h>, or <semaphore.h> is not used. If the typedef were allowed, the

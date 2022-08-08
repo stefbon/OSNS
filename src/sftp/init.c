@@ -17,52 +17,23 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/vfs.h>
-
-#include "main.h"
-#include "log.h"
-#include "misc.h"
+#include "libosns-log.h"
+#include "libosns-misc.h"
+#include "libosns-threads.h"
+#include "libosns-interface.h"
+#include "libosns-workspace.h"
+#include "libosns-context.h"
+#include "libosns-fuse-public.h"
+#include "libosns-resources.h"
 
 #include "sftp/common-protocol.h"
 #include "sftp/common.h"
 
 #include "attr.h"
-//#include "attr/read-attr-v03.h"
-//#include "attr/read-attr-v04.h"
-//#include "attr/read-attr-v05.h"
-//#include "attr/read-attr-v06.h"
-
 #include "recv.h"
-//#include "recv/recv-v03.h"
-//#include "recv/recv-v04.h"
-//#include "recv/recv-v05.h"
-//#include "recv/recv-v06.h"
-
 #include "send.h"
-//#include "send/send-v03.h"
-//#include "send/send-v04.h"
-//#include "send/send-v05.h"
-//#include "send/send-v06.h"
-
 #include "datatypes/ssh-uint.h"
 
 #include "time.h"

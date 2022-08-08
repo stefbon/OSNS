@@ -17,49 +17,23 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
+#include "libosns-log.h"
+#include "libosns-misc.h"
+#include "libosns-datatypes.h"
+#include "libosns-threads.h"
+#include "libosns-eventloop.h"
 
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/vfs.h>
-#include <pwd.h>
-
-#include "main.h"
-#include "misc.h"
-#include "datatypes.h"
-
-#include "threads.h"
-#include "eventloop.h"
-#include "users.h"
-#include "mountinfo.h"
-
-#include "misc.h"
 #include "osns_sftp_subsystem.h"
 
 #include "../protocol.h"
 #include "../send.h"
 #include "../handle.h"
 
-/* SSH_FXP_EXTENDED - statvfs@openssh.com
+/* SSH_FXP_EXTENDED - fsync@openssh.com
     message has the form:
-    - string				path
+    - string				handle
     */
 
 void cb_ext_fsync(struct sftp_payload_s *payload, unsigned int pos)

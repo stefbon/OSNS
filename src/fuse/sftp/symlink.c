@@ -17,77 +17,48 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
-#include "main.h"
-#include "log.h"
-#include "misc.h"
-#include "options.h"
-
-#include "workspace-interface.h"
-#include "workspace.h"
-#include "fuse.h"
+#include "libosns-log.h"
+#include "libosns-misc.h"
+#include "libosns-interface.h"
+#include "libosns-workspace.h"
+#include "libosns-context.h"
+#include "libosns-fuse-public.h"
 
 #include "sftp/common-protocol.h"
 #include "sftp/attr-context.h"
+
+#include "interface/sftp.h"
 #include "interface/sftp-attr.h"
 #include "interface/sftp-send.h"
 #include "interface/sftp-wait-response.h"
+
 #include "datatypes/ssh-uint.h"
 
-extern struct fs_options_s fs_options;
-
-unsigned int check_target_symlink_sftp_client(struct context_interface_s *interface, struct fs_location_path_s *syml, struct fs_location_path_s *sub)
+static int check_target_symlink_sftp_client(struct workspace_mount_s *w, struct context_interface_s *i, struct fuse_request_s *request, struct inode_s *inode, char *link, unsigned int len)
 {
-    unsigned int result=EIO; /* default */
+    int result=-EIO; /* default */
+    unsigned int size=sftp_get_required_buffer_size_p2l(i, len);
+    char buffer[size+1];
+    struct fs_location_path_s path=FS_LOCATION_PATH_INIT;
+    int tmp=0;
 
-    if ((syml->flags & FS_LOCATION_PATH_FLAG_RELATIVE)==0) {
+    memset(buffer, 0, size+1);
+    tmp=sftp_convert_path_p2l(i, buffer, size, link, len);
 
-	/* absolute path (on server) */
+    if (tmp==-1) {
 
-	if (syml->back>0) {
+	logoutput_debug("check_target_symlink_sftp_client: error converting local path");
+	return -EIO;
 
-	    result=EACCES;
+    }
 
-	} else if (issubdirectory_prefix_sftp_client(interface, &syml, sub)) {
+    set_location_path(&path, 'c', (void *) buffer);
 
-	    result=0;
+    if (remove_unneeded_path_elements(&path)>=0) {
 
-	} else {
-
-	    /* target does not start with the prefix
-		note again that this check does not belong here but on the server */
-
-	    result=EXDEV;
-
-	}
-
-    } else {
-
-	/* relative 
-	    assume symlink has been checked on double dots which go one level higher */
-
-	if (syml->back>0) {
+	if (path.back>0) {
 
 	    /* no matter what going one (or more) level higher is not allowed ...
 		also when the result is still a subdirectory of the shared directory like:
@@ -95,21 +66,33 @@ unsigned int check_target_symlink_sftp_client(struct context_interface_s *interf
 		take the following example:
 		prefix: /home/guest with inside a directory doc
 		and the relative target is ../guest/doc will result in the directory /home/guest/doc, which is ok
-		but here is chosen that no going higher at the prefix is allowed in --> any <-- case
+		but here is chosen that going higher/up at the prefix is not allowed in --> any <-- case
 		*/
 
-	    result=EXDEV;
+	    result=-EXDEV;
+	    logoutput_debug("check_target_symlink_sftp_client: path has too many backslashes");
 
 	} else {
 
-	    if (sub) {
+	    size=strlen(buffer);
+	    tmp=sftp_compare_path(i, buffer, size, SFTP_COMPARE_PATH_PREFIX_SUBDIR);
 
-		sub->ptr=syml->ptr;
-		sub->len=syml->len;
+	    if (tmp>=0) {
+
+		/* target of link is a subdirectory of (remote) prefix */
+
+		result=tmp;
+		logoutput_debug("check_target_symlink_sftp_client: result %u", result);
+		reply_VFS_data(request, &buffer[result], (unsigned int)(size - result));
+
+		tmp=set_inode_fuse_cache_symlink(w, inode, &buffer[result]);
+		if (tmp>0) logoutput_debug("check_target_symlink_sftp_client: errcode %i saving link", tmp);
+
+	    } else {
+
+		result=-EXDEV;
 
 	    }
-
-	    result=0;
 
 	}
 
@@ -119,48 +102,27 @@ unsigned int check_target_symlink_sftp_client(struct context_interface_s *interf
 
 }
 
-
-
 /* READLINK */
 
-void _fs_sftp_readlink(struct service_context_s *context, struct fuse_request_s *f_request, struct inode_s *inode, struct pathinfo_s *pathinfo)
+void _fs_sftp_readlink(struct service_context_s *context, struct fuse_request_s *f_request, struct inode_s *inode, struct fuse_path_s *fpath)
 {
-    struct context_interface_s *interface=&context->interface;
+    struct context_interface_s *i=&context->interface;
     struct sftp_request_s sftp_r;
     unsigned int error=EIO;
-    char origpath[pathinfo->len + 1];
-    unsigned int origpath_len=pathinfo->len;
-    unsigned int pathlen=(* interface->backend.sftp.get_complete_pathlen)(interface, pathinfo->len);
-    char pathinfobuffer[pathlen];
-
-    if (fs_options.sftp.flags & _OPTIONS_SFTP_FLAG_SYMLINKS_DISABLE) {
-
-	reply_VFS_error(f_request, ENOENT);
-	return;
-
-    }
-
-    logoutput("_fs_sftp_readlink");
-
-    strcpy(origpath, pathinfo->path);
-    pathinfo->len += (* interface->backend.sftp.complete_path)(interface, pathinfobuffer, pathinfo);
-
-    init_sftp_request(&sftp_r, interface, f_request);
-
-    sftp_r.call.readlink.path=(unsigned char *) pathinfo->path;
-    sftp_r.call.readlink.len=pathinfo->len;
+    unsigned int pathlen=sftp_get_complete_pathlen(i, fpath);
+    unsigned int size=sftp_get_required_buffer_size_l2p(i, pathlen);
+    char buffer[size];
+    int result=0;
 
     if ((inode->flags & INODE_FLAG_REMOTECHANGED)==0) {
 
 	/* try cached target symlink if there is any */
 
-	struct fuse_symlink_s *syml=get_inode_fuse_cache_symlink(inode);
+	struct fuse_symlink_s *cs=get_inode_fuse_cache_symlink(inode);
 
-	if (syml) {
+	if (cs) {
 
-	    logoutput("_fs_sftp_readlink: 001");
-
-	    reply_VFS_data(f_request, syml->path.ptr, syml->path.len);
+	    reply_VFS_data(f_request, cs->path, cs->len);
 	    unset_fuse_request_flags_cb(f_request);
 	    return;
 
@@ -168,70 +130,55 @@ void _fs_sftp_readlink(struct service_context_s *context, struct fuse_request_s 
 
     }
 
-    if (send_sftp_readlink_ctx(interface, &sftp_r)>0) {
+    memset(buffer, 0, size);
+    result=sftp_convert_path_l2p(i, buffer, size, fpath->pathstart, pathlen);
+
+    if (result==-1) {
+
+	logoutput_debug("_fs_sftp_readlink: error converting local path");
+	goto out;
+
+    }
+
+    logoutput("_fs_sftp_readlink: %s", fpath->pathstart);
+
+    init_sftp_request(&sftp_r, i, f_request);
+    sftp_r.call.readlink.path=(unsigned char *) buffer;
+    sftp_r.call.readlink.len=(unsigned int) result;
+
+    if (send_sftp_readlink_ctx(i, &sftp_r)>0) {
 	struct system_timespec_s timeout=SYSTEM_TIME_INIT;
 
-	logoutput("_fs_sftp_readlink: 002");
+	get_sftp_request_timeout_ctx(i, &timeout);
 
-	get_sftp_request_timeout_ctx(interface, &timeout);
-
-	if (wait_sftp_response_ctx(interface, &sftp_r, &timeout)==1) {
+	if (wait_sftp_response_ctx(i, &sftp_r, &timeout)==1) {
 	    struct sftp_reply_s *reply=&sftp_r.reply;
-
-	    logoutput("_fs_sftp_readlink: 003");
 
 	    unset_fuse_request_flags_cb(f_request);
 
 	    if (reply->type==SSH_FXP_NAME) {
-		struct name_response_s *names=&reply->response.names;
-		struct ssh_string_s tmp=SSH_STRING_INIT;
-		int result=0;
+		struct workspace_mount_s *w=get_workspace_mount_ctx(context);
 
-		logoutput("_fs_sftp_readlink: 004");
+		if (reply->response.names.size>4) {
+		    unsigned int len=0;
 
-		if (read_ssh_string(names->buff, names->size, &tmp)>0) {
-		    struct fs_location_path_s target=FS_LOCATION_PATH_INIT;
+		    len=get_uint32(reply->response.names.buff);
 
-		    logoutput("_fs_sftp_readlink: 005");
+		    if (len + 4 < reply->response.names.size) {
+			char *link=&reply->response.names.buff[4];
 
-		    set_location_path(&target, 's', &tmp);
+			logoutput_debug("_fs_sftp_readlink: received target %.*s", len, link);
 
-		    logoutput("_fs_sftp_readlink: 006");
-
-		    if (test_location_path_absolute(&target)==0) target.flags |= FS_LOCATION_PATH_FLAG_RELATIVE;
-		    result=remove_unneeded_path_elements(&target);
-
-		    logoutput("_fs_sftp_readlink: 007");
-
-		    if (result>0) {
-
-			logoutput("_fs_sftp_readlink: %s target %.*s", pathinfo->path, target.len, target.ptr);
-			error=check_target_symlink_sftp_client(interface, &target, NULL);
-
-			if (error==0) {
-			    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
-
-			    reply_VFS_data(f_request, target.ptr, target.len);
-			    set_inode_fuse_cache_symlink(workspace, inode, &target, FUSE_SYMLINK_FLAG_PATH_ALLOC);
-
-			    free(names->buff);
-			    names->buff=NULL;
-			    names->size=0;
-			    return;
-
-			}
+			result=check_target_symlink_sftp_client(w, i, f_request, inode, link, len);
+			free(reply->response.names.buff);
+			reply->response.names.buff=NULL;
+			reply->response.names.size=0;
+			if (result>=0) return;
+			error=abs(result);
 
 		    }
 
-		} else {
-
-		    error=EPROTO;
-
 		}
-
-		free(names->buff);
-		names->buff=NULL;
-		names->size=0;
 
 	    } else if (reply->type==SSH_FXP_STATUS) {
 
@@ -257,53 +204,8 @@ void _fs_sftp_readlink(struct service_context_s *context, struct fuse_request_s 
 
 void _fs_sftp_symlink(struct service_context_s *context, struct fuse_request_s *f_request, struct entry_s *entry, struct pathinfo_s *pathinfo, struct fs_location_path_s *target)
 {
-    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
-    struct service_context_s *rootcontext=get_root_context(context);
-    struct context_interface_s *interface=&context->interface;
-    struct sftp_request_s sftp_r;
-    unsigned int error=EIO;
 
-    init_sftp_request(&sftp_r, interface, f_request);
-
-    sftp_r.call.symlink.path=(unsigned char *) pathinfo->path;
-    sftp_r.call.symlink.len=pathinfo->len;
-    sftp_r.call.symlink.target_path=(unsigned char *) target->ptr;
-    sftp_r.call.symlink.target_len=target->len;
-
-    if (send_sftp_symlink_ctx(interface, &sftp_r)>0) {
-	struct system_timespec_s timeout=SYSTEM_TIME_INIT;
-
-	get_sftp_request_timeout_ctx(interface, &timeout);
-
-	if (wait_sftp_response_ctx(&context->interface, &sftp_r, &timeout)==1) {
-	    struct sftp_reply_s *reply=&sftp_r.reply;
-
-	    if (reply->type==SSH_FXP_STATUS) {
-
-		if (reply->response.status.code==0) {
-
-		    reply_VFS_error(f_request, 0);
-		    unset_fuse_request_flags_cb(f_request);
-		    return;
-
-		}
-
-		error=reply->response.status.linux_error;
-
-	    } else {
-
-		error=EIO;
-
-	    }
-
-	}
-
-    }
-
-    out:
-
-    queue_inode_2forget(workspace, get_ino_system_stat(&entry->inode->stat), 0, 0);
-    reply_VFS_error(f_request, error);
+    reply_VFS_error(f_request, ENOSYS);
     unset_fuse_request_flags_cb(f_request);
 
 }
@@ -315,26 +217,8 @@ void _fs_sftp_symlink(struct service_context_s *context, struct fuse_request_s *
 
 int _fs_sftp_symlink_validate(struct service_context_s *context, struct pathinfo_s *pathinfo, char *target, struct fs_location_path_s *sub)
 {
-    struct fs_location_path_s tmp=FS_LOCATION_PATH_INIT;
-    int result=0;
-    unsigned int error=EIO;
 
-    set_location_path(&tmp, 'c', target);
-    if (test_location_path_absolute(&tmp)==0) tmp.flags |= FS_LOCATION_PATH_FLAG_RELATIVE;
-
-    result=remove_unneeded_path_elements(&tmp);
-    if (result==0 || tmp.back>0) return -1;
-
-    error=check_target_symlink_sftp_client(&context->interface, &tmp, sub);
-
-    if (error) {
-
-	logoutput_debug("_fs_sftp_symlink_validate: error %i comparing %s with sftp prefix (%s)", error, target, strerror(error));
-	return -1;
-
-    }
-
-    return 0;
+    return -1;
 
 }
 

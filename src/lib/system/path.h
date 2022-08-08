@@ -20,6 +20,8 @@
 #ifndef LIB_SYSTEM_PATH_H
 #define LIB_SYSTEM_PATH_H
 
+#include "libosns-datatypes.h"
+
 #define FS_LOCATION_PATH_FLAG_ALLOC				1
 #define FS_LOCATION_PATH_FLAG_PTR_ALLOC				2
 #define FS_LOCATION_PATH_FLAG_RELATIVE				4

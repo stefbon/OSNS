@@ -17,28 +17,12 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
+#include "libosns-log.h"
 
 #include "ssh-uint.h"
 #include "ssh-string.h"
-#include "log.h"
 
 struct ssh_string_s *create_ssh_string(struct ssh_string_s **p_s, unsigned int len, char *data, unsigned char flags)
 {

@@ -17,8 +17,8 @@
 
 */
 
-#ifndef FS_WORKSPACE_SSH_PK_KEYSTORE_H
-#define FS_WORKSPACE_SSH_PK_KEYSTORE_H
+#ifndef SSH_PK_PK_KEYSTORE_H
+#define SSH_PK_PK_KEYSTORE_H
 
 /* define the different sources of public keys
     - public keys stored in files by openssh ($HOME/.ssh/id_rsa.pub)

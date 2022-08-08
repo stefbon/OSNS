@@ -22,8 +22,9 @@
 #ifndef _LIB_LIST_SIMPLE_HASH_H
 #define _LIB_LIST_SIMPLE_HASH_H
 
+#include "libosns-lock.h"
 #include "simple-list.h"
-#include "simple-locking.h"
+
 #define SIMPLE_HASH_HASHSIZE	512
 
 struct hash_element_s {
@@ -34,7 +35,7 @@ struct hash_element_s {
 /* TODO: add "add", "remove" and "lookup" functions as cb */
 
 struct simple_hash_s {
-    struct simple_locking_s	locking;
+    struct osns_locking_s	locking;
     unsigned int 		(*hashfunction) (void *data);
     int 			len;
     struct list_header_s 	*hash;
@@ -45,11 +46,11 @@ struct simple_hash_s {
 int initialize_group(struct simple_hash_s *group, unsigned int (*hashfunction) (void *data), unsigned int len, unsigned int *error);
 void free_group(struct simple_hash_s *group, void (*free_data) (void *data));
 
-void init_rlock_hashtable(struct simple_hash_s *group, struct simple_lock_s *lock);
-void init_wlock_hashtable(struct simple_hash_s *group, struct simple_lock_s *lock);
+void init_rlock_hashtable(struct simple_hash_s *group, struct osns_lock_s *lock);
+void init_wlock_hashtable(struct simple_hash_s *group, struct osns_lock_s *lock);
 
-int lock_hashtable(struct simple_lock_s *l);
-int unlock_hashtable(struct simple_lock_s *l);
+int lock_hashtable(struct osns_lock_s *l);
+int unlock_hashtable(struct osns_lock_s *l);
 
 void *get_next_hashed_value(struct simple_hash_s *group, void **index, unsigned int hashvalue);
 

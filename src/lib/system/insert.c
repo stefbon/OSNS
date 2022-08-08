@@ -17,33 +17,15 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/vfs.h>
 
-#include "log.h"
-#include "misc.h"
-#include "datatypes.h"
-#include "network.h"
+#include "libosns-log.h"
+#include "libosns-misc.h"
+#include "libosns-datatypes.h"
+#include "libosns-network.h"
 
 #include "fshandle.h"
 #include "hash.h"
@@ -231,7 +213,7 @@ static struct commonhandle_s *check_block_new_handle(struct commonhandle_s *new,
 int start_insert_filehandle(struct commonhandle_s *new, struct insert_filehandle_s *insert)
 {
     struct commonhandle_s *handle=NULL;
-    struct simple_lock_s lock;
+    struct osns_lock_s lock;
     int result=-1;
 
     if ((new->flags & COMMONHANDLE_FLAG_FILE)==0) return -1;
@@ -265,7 +247,7 @@ void complete_create_filehandle(struct commonhandle_s *handle, dev_t dev, uint64
 {
 
     if (handle->flags & COMMONHANDLE_FLAG_CREATE) {
-	struct simple_lock_s lock;
+	struct osns_lock_s lock;
 	struct fs_location_s *location=&handle->location;
 
 	/* rehash since the devino and fd are available */
@@ -307,7 +289,7 @@ void complete_create_filehandle(struct commonhandle_s *handle, dev_t dev, uint64
 
 void insert_dirhandle(struct commonhandle_s *new)
 {
-    struct simple_lock_s lock;
+    struct osns_lock_s lock;
 
     if ((new->flags & COMMONHANDLE_FLAG_DIR)==0) return;
 

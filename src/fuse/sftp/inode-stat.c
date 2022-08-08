@@ -17,35 +17,14 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
-#include "log.h"
-#include "main.h"
-#include "misc.h"
-
-#include "workspace-interface.h"
-#include "workspace.h"
-#include "fuse.h"
+#include "libosns-log.h"
+#include "libosns-misc.h"
+#include "libosns-interface.h"
+#include "libosns-workspace.h"
+#include "libosns-context.h"
+#include "libosns-fuse-public.h"
 
 #include "sftp/common-protocol.h"
 #include "sftp/attr-context.h"
@@ -56,7 +35,7 @@
 /* TODO: use in stead of setting this and copy it to the inode->stat, use the inode->stat from the first moment, and use some custom "set" functions
     same as the mapping of users: use a parse_time_net2local and vice versa */
 
-void set_local_attributes(struct context_interface_s *interface, struct inode_s *inode, struct system_stat_s *stat)
+void set_local_attributes(struct context_interface_s *i, struct inode_s *inode, struct system_stat_s *stat)
 {
 
     if (stat->mask & SYSTEM_STAT_TYPE) set_type_system_stat(&inode->stat, get_type_system_stat(stat));
@@ -111,7 +90,7 @@ static void _get_supported_sftp_attr_cb(unsigned int stat_mask, unsigned int len
 
 }
 
-unsigned int get_attr_buffer_size(struct context_interface_s *interface, struct rw_attr_result_s *r, struct system_stat_s *stat, struct get_supported_sftp_attr_s *gssa)
+unsigned int get_attr_buffer_size(struct context_interface_s *i, struct rw_attr_result_s *r, struct system_stat_s *stat, struct get_supported_sftp_attr_s *gssa)
 {
 
     gssa->stat_mask_asked=stat->mask;
@@ -119,18 +98,18 @@ unsigned int get_attr_buffer_size(struct context_interface_s *interface, struct 
     gssa->len=0;
     init_sftp_valid(&gssa->valid);
 
-    parse_attributes_generic_ctx(interface, r, NULL, 'w', _get_supported_sftp_attr_cb, (void *) gssa);
+    parse_attributes_generic_ctx(i, r, NULL, 'w', _get_supported_sftp_attr_cb, (void *) gssa);
     return gssa->len;
 
 }
 
-void set_sftp_inode_stat_defaults(struct context_interface_s *interface, struct inode_s *inode)
+void set_sftp_inode_stat_defaults(struct context_interface_s *i, struct inode_s *inode)
 {
     struct system_stat_s *stat=&inode->stat;
     struct system_timespec_s time=SYSTEM_TIME_INIT;
 
-    stat->sst_uid=get_sftp_unknown_userid_ctx(interface);
-    stat->sst_gid=get_sftp_unknown_groupid_ctx(interface);
+    stat->sst_uid=get_sftp_unknown_userid_ctx(i);
+    stat->sst_gid=get_sftp_unknown_groupid_ctx(i);
 
     /* set time to this moment */
 

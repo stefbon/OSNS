@@ -18,12 +18,7 @@
 
 */
 
-#include <stdio.h>
-#include <stdarg.h>
-#include <string.h>
-#include <errno.h>
-#include <err.h>
-#include <syslog.h>
+#include "libosns-basic-system-headers.h"
 
 #include "logging.h"
 
@@ -71,10 +66,11 @@ void logoutput_debug_std(const char *fmt, ...)
     if (logging_std.level >= LOG_DEBUG) {
 	va_list args;
 	unsigned int len=strlen(fmt);
-	char fmtextra[len+1];
+	char fmtextra[len+2];
 
 	memcpy(fmtextra, fmt, len);
 	fmtextra[len]='\n';
+	fmtextra[len+1]='\0';
 
 	va_start(args, fmt);
 	vfprintf(stdout, fmtextra, args);
@@ -86,10 +82,11 @@ void logoutput_info_std(const char *fmt, ...)
     if (logging_std.level >= LOG_INFO) {
 	va_list args;
 	unsigned int len=strlen(fmt);
-	char fmtextra[len+1];
+	char fmtextra[len+2];
 
 	memcpy(fmtextra, fmt, len);
 	fmtextra[len]='\n';
+	fmtextra[len=1]='\0';
 
 	va_start(args, fmt);
 	vfprintf(stdout, fmtextra, args);
@@ -101,10 +98,11 @@ void logoutput_notice_std(const char *fmt, ...)
     if (logging_std.level >= LOG_NOTICE) {
 	va_list args;
 	unsigned int len=strlen(fmt);
-	char fmtextra[len+1];
+	char fmtextra[len+2];
 
 	memcpy(fmtextra, fmt, len);
 	fmtextra[len]='\n';
+	fmtextra[len+1]='\0';
 
 	va_start(args, fmt);
 	vfprintf(stdout, fmtextra, args);
@@ -116,10 +114,11 @@ void logoutput_warning_std(const char *fmt, ...)
     if (logging_std.level >= LOG_WARNING) {
 	va_list args;
 	unsigned int len=strlen(fmt);
-	char fmtextra[len+1];
+	char fmtextra[len+2];
 
 	memcpy(fmtextra, fmt, len);
 	fmtextra[len]='\n';
+	fmtextra[len+1]='\0';
 
 	va_start(args, fmt);
 	vfprintf(stderr, fmtextra, args);
@@ -131,10 +130,11 @@ void logoutput_error_std(const char *fmt, ...)
     if (logging_std.level >= LOG_ERR) {
 	va_list args;
 	unsigned int len=strlen(fmt);
-	char fmtextra[len+1];
+	char fmtextra[len+2];
 
 	memcpy(fmtextra, fmt, len);
 	fmtextra[len]='\n';
+	fmtextra[len+1]='\0';
 
 	va_start(args, fmt);
 	vfprintf(stderr, fmtextra, args);
@@ -253,7 +253,7 @@ void set_logging_level(unsigned int level)
 
 }
 
-// #ifdef HAVE_GLIB2
+#ifdef HAVE_GLIB2
 
 #include <glib.h>
 
@@ -295,10 +295,9 @@ void logoutput_base64encoded(char *prefix, char *buffer, unsigned int size, unsi
 
 }
 
-// #else
+#else
 
-//void logoutput_base64encoded(char *prefix, char *buffer, unsigned int size, unsigned char tofile)
-//{
-//}
+void logoutput_base64encoded(char *prefix, char *buffer, unsigned int size, unsigned char tofile)
+{}
 
-//#endif
+#endif

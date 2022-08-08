@@ -22,16 +22,14 @@
 
 #include					<stdint.h>
 
+#include 					"lock.h"
+
 #define SIMPLE_LIST_TYPE_EMPTY			1
 #define SIMPLE_LIST_TYPE_DEFAULT		2
 #define SIMPLE_LIST_TYPE_ONE			3
 
 #define SIMPLE_LIST_FLAG_REMOVE			1
 #define SIMPLE_LIST_FLAG_INIT			2
-
-#define SIMPLE_LIST_LOCK_PREWRITE		1
-#define SIMPLE_LIST_LOCK_WRITE			2
-#define SIMPLE_LIST_LOCK_READ			4
 
 struct list_element_s;
 struct list_header_s;
@@ -48,12 +46,6 @@ struct header_ops_s {
     void 			(* delete)(struct list_header_s *h, struct list_element_s *e);
 };
 
-struct list_lock_s {
-    unsigned int		value;
-    pthread_t			threadidw;
-    pthread_t			threadidpw;
-};
-
 struct list_element_s {
     struct list_header_s	*h;
     struct list_element_s 	*n;
@@ -66,14 +58,15 @@ struct list_header_s {
     unsigned int		flags;
     uint64_t			count;
     struct list_lock_s		lock;
-    unsigned int		readers;
     struct list_element_s 	head;
     struct list_element_s 	tail;
     struct header_ops_s		*ops;
 };
 
+extern struct header_ops_s empty_header_ops;
+
 #define				INIT_LIST_ELEMENT		{.h=NULL, .n=NULL, .p=NULL, .ops.get_element=get_element_default, .lock.value=0, .lock.threadidw=0, .lock.threadidpw=0}
-#define				INIT_LIST_HEADER		{.flags=0, .count=0, .lock.value=0, .lock.threadidw=0, .lock.threadidpw=0, .readers=0, .head=INIT_LIST_ELEMENT, .tail=INIT_LIST_ELEMENT, .ops=NULL}
+#define				INIT_LIST_HEADER		{.flags=0, .count=0, .lock.value=0, .lock.threadidw=0, .lock.threadidpw=0, .head=INIT_LIST_ELEMENT, .tail=INIT_LIST_ELEMENT, NULL}
 
 void init_list_element(struct list_element_s *e, struct list_header_s *h);
 void init_list_header(struct list_header_s *h, unsigned char type, struct list_element_s *e);
@@ -99,10 +92,14 @@ struct list_element_s *_get_prev_element(struct list_element_s *e);
 struct list_element_s *get_next_element(struct list_element_s *e);
 struct list_element_s *get_prev_element(struct list_element_s *e);
 
-void write_lock_list_header(struct list_header_s *header, pthread_mutex_t *mutex, pthread_cond_t *cond);
-void write_unlock_list_header(struct list_header_s *header, pthread_mutex_t *mutex, pthread_cond_t *cond);
+void write_lock_list_header(struct list_header_s *header);
+void write_unlock_list_header(struct list_header_s *header);
+void read_lock_list_header(struct list_header_s *header);
+void read_unlock_list_header(struct list_header_s *header);
 
-void read_lock_list_header(struct list_header_s *header, pthread_mutex_t *mutex, pthread_cond_t *cond);
-void read_unlock_list_header(struct list_header_s *header, pthread_mutex_t *mutex, pthread_cond_t *cond);
+void write_lock_list_element(struct list_element_s *l);
+void write_unlock_list_element(struct list_element_s *l);
+void read_lock_list_element(struct list_element_s *l);
+void read_unlock_list_element(struct list_element_s *l);
 
 #endif

@@ -20,7 +20,7 @@
 #ifndef _LIB_SL_SKIPLIST_H
 #define _LIB_SL_SKIPLIST_H
 
-#include "list.h"
+#include "libosns-list.h"
 
 #define _SKIPLIST_VERSION_MAJOR				1
 #define _SKIPLIST_VERSION_MINOR				0
@@ -86,8 +86,6 @@ struct sl_move_dirnode_s {
 struct sl_ops_s {
     int 						(* compare)(struct list_element_s *l, void *b);
     struct list_element_s				*(* get_list_element)(void *lookupdata, struct sl_skiplist_s *sl);
-    void 						(* insert) (struct list_element_s *data);
-    void 						(* delete) (struct list_element_s *data);
     char						*(* get_logname)(struct list_element_s *data);
 };
 
@@ -99,6 +97,7 @@ struct sl_skiplist_s {
     pthread_cond_t					cond;
     unsigned short					maxlevel;
     struct list_header_s				header;
+    void						*ptr;
     unsigned int					size;
     struct sl_dirnode_s					dirnode;
 };
@@ -151,10 +150,8 @@ struct sl_searchresult_s {
 
 int init_sl_skiplist(struct sl_skiplist_s *sl,
 		    int (* compare) (struct list_element_s *l, void *b),
-		    void (* insert) (struct list_element_s *l),
-		    void (* delete) (struct list_element_s *l),
 		    struct list_element_s *(* get_list_element) (void *lookupdata, struct sl_skiplist_s *sl),
-		    char *(* get_logname)(struct list_element_s *l));
+		    char *(* get_logname)(struct list_element_s *l), void *ptr);
 
 struct sl_skiplist_s *create_sl_skiplist(struct sl_skiplist_s *sl, unsigned char prob, unsigned int size, unsigned char maxlanes);
 unsigned int get_size_sl_skiplist(unsigned char *p_maxlanes);

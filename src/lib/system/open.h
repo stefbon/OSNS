@@ -22,11 +22,33 @@
 
 #include "path.h"
 
+struct fs_socket_s;
+struct fs_init_s;
+
+struct _file_sops_s {
+    int						(* open)(struct fs_socket_s *sock, struct fs_location_path_s *path, unsigned int flags);
+    int						(* create)(struct fs_socket_s *sock, struct fs_location_path_s *path, struct fs_init_s *init, unsigned int flags);
+    int						(* pread)(struct fs_socket_s *sock, char *buffer, unsigned int size, off_t off);
+    int						(* pwrite)(struct fs_socket_s *sock, char *buffer, unsigned int size, off_t off);
+    int						(* fsync)(struct fs_socket_s *sock);
+    int						(* fdatasync)(struct fs_socket_s *sock);
+    int						(* flush)(struct fs_socket_s *sock, unsigned int flags);
+    int						(* lseek)(struct fs_socket_s *sock, off_t off, int whence);
+};
+
+#define FS_SOCKET_FLAG_OPEN			1
+#define FS_SOCKET_FLAG_CREATE			2
+
 struct fs_socket_s {
+    unsigned int				flags;
 #ifdef __linux__
-    pid_t						pid;
-    int							fd;
+    int						fd;
+    pid_t					pid;
 #endif
+    union _fs_socket_u {
+	struct _file_sops_s			*sops_f;
+	struct _dir_sops_s			*sops_d;
+    } type;
 };
 
 struct fs_init_s {

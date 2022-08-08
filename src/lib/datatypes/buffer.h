@@ -17,11 +17,11 @@
 
 */
 
-#ifndef SRC_LIB_SFTP_ATTR_BUFFER_H
-#define SRC_LIB_SFTP_ATTR_BUFFER_H
+#ifndef LIB_BUFFER_H
+#define LIB_BUFFER_H
 
-#include "ssh-uint.h"
-#include "ssh-string.h"
+#include "lib/datatypes/ssh-uint.h"
+#include "lib/datatypes/ssh-string.h"
 
 struct attr_buffer_s;
 
@@ -57,7 +57,7 @@ struct attr_buffer_ops_s {
 struct attr_buffer_s {
     unsigned int					flags;
     unsigned char					*buffer;
-    unsigned char					*pos;
+    unsigned int					pos;
     int							left;
     unsigned int					len;
     int							count;

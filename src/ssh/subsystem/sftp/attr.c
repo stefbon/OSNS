@@ -17,31 +17,13 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
-#include "main.h"
-#include "log.h"
-#include "misc.h"
+#include "libosns-log.h"
+#include "libosns-misc.h"
+#include "libosns-datatypes.h"
+#include "libosns-threads.h"
+#include "libosns-eventloop.h"
 
 #include "sftp/common-protocol.h"
 #include "sftp/attr-context.h"
@@ -62,4 +44,3 @@ void init_sftp_subsystem_attr_context(struct sftp_subsystem_s *sftp)
     init_attr_context(actx, ATTR_CONTEXT_FLAG_SERVER, NULL, &sftp->mapping);
     actx->get_sftp_protocol_version=get_sftp_subsystem_protocol_version;
 }
-

@@ -20,7 +20,7 @@
 #ifndef _LIB_THREADS_WORKERTHREADS_H
 #define _LIB_THREADS_WORKERTHREADS_H
 
-#include "error.h"
+#include "libosns-error.h"
 
 // Prototypes
 

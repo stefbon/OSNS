@@ -18,27 +18,11 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <err.h>
+#include "libosns-log.h"
+#include "libosns-misc.h"
 
-#include <inttypes.h>
-#include <ctype.h>
-
-#include <sys/stat.h>
-#include <sys/param.h>
-#include <pthread.h>
-
-#include "log.h"
-
-#include "misc.h"
 #include "handlemime.h"
 
 #ifdef HAVE_GIO2

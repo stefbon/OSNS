@@ -17,35 +17,15 @@
 
 */
 
-#include "global-defines.h"
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <err.h>
-
-#include <inttypes.h>
-#include <ctype.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/param.h>
-#include <pthread.h>
-
-#ifndef ENOATTR
-#define ENOATTR ENODATA        /* No such attribute */
-#endif
+#include "libosns-basic-system-headers.h"
 
 #include "skiplist.h"
 #include "skiplist-find.h"
 #include "skiplist-delete.h"
 #include "skiplist-utils.h"
 #include "skiplist-lock.h"
-#define LOGGING
-#include "log.h"
+
+#include "libosns-log.h"
 
 static void correct_sl_dirnodes_remove(struct sl_skiplist_s *sl, struct sl_vector_s *vector, unsigned int level, struct sl_move_dirnode_s *move)
 {

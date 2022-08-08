@@ -20,10 +20,10 @@
 #ifndef _FUSE_SFTP_SETATTR_H
 #define _FUSE_SFTP_SETATTR_H
 
-void _fs_sftp_setattr(struct service_context_s *context, struct fuse_request_s *r, struct inode_s *inode, struct pathinfo_s *pathinfo, struct system_stat_s *stat);
+void _fs_sftp_setattr(struct service_context_s *context, struct fuse_request_s *r, struct inode_s *inode, struct fuse_path_s *fpath, struct system_stat_s *stat);
 void _fs_sftp_fsetattr(struct fuse_openfile_s *openfile, struct fuse_request_s *r, struct system_stat_s *stat);
 
-void _fs_sftp_setattr_disconnected(struct service_context_s *context, struct fuse_request_s *f_request, struct inode_s *inode, struct pathinfo_s *pathinfo, struct system_stat_s *stat);
+void _fs_sftp_setattr_disconnected(struct service_context_s *context, struct fuse_request_s *f_request, struct inode_s *inode, struct fuse_path_s *fpath, struct system_stat_s *stat);
 void _fs_sftp_fsetattr_disconnected(struct fuse_openfile_s *openfile, struct fuse_request_s *f_request, struct system_stat_s *stat);
 
 

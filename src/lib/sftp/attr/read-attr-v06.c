@@ -17,30 +17,10 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include "log.h"
-#include "main.h"
-#include "misc.h"
+#include "libosns-log.h"
+#include "libosns-misc.h"
 
 #include "sftp/common-protocol.h"
 #include "sftp/common.h"
@@ -61,7 +41,7 @@ void read_attr_type_v06(struct attr_context_s *actx, struct attr_buffer_s *buffe
     unsigned char tmp=(* buffer->ops->rw.read.read_uchar)(buffer);
     unsigned int type=(tmp<10) ? type_mapping[tmp] : 0;
     set_type_system_stat(stat, type);
-    logoutput_debug("read_attr_type_v06: type %i", type);
+    // logoutput_debug("read_attr_type_v06: type %i", type);
 }
 
 void read_attr_alloc_size_v06(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)
@@ -74,14 +54,14 @@ void read_attr_changetime_v06(struct attr_context_s *ctx, struct attr_buffer_s *
 {
     int64_t sec=(* buffer->ops->rw.read.read_int64)(buffer);
     set_ctime_sec_system_stat(stat, sec);
-    logoutput_debug("read_attr_changetime_v06: sec %li", sec);
+    // logoutput_debug("read_attr_changetime_v06: sec %li", sec);
 }
 
 void read_attr_changetime_n_v06(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)
 {
     uint32_t nsec=(* buffer->ops->rw.read.read_uint32)(buffer);
     set_ctime_nsec_system_stat(stat, nsec);
-    logoutput_debug("read_attr_changetime_n_v06: nsec %i", nsec);
+    // logoutput_debug("read_attr_changetime_n_v06: nsec %i", nsec);
 }
 
 struct _attr_cb_s {

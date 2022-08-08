@@ -17,27 +17,11 @@
 
 */
 
-#include "global-defines.h"
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
+#include "libosns-basic-system-headers.h"
 
 #include "ssh-uint.h"
 
-void store_uint16(char *buff, uint32_t value)
+void store_uint16(char *buff, uint16_t value)
 {
     unsigned char *tmp=(unsigned char *) buff;
 

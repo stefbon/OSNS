@@ -20,12 +20,9 @@
 #ifndef LIB_SFTP_ATTR_CONTEXT_H
 #define LIB_SFTP_ATTR_CONTEXT_H
 
-#include "linux/fuse.h"
-
-#include "system.h"
-#include "datatypes.h"
+#include "libosns-datatypes.h"
+#include "lib/system/stat.h"
 #include "lib/users/mapping.h"
-
 #include "attr-indices.h"
 
 #define RW_ATTR_RESULT_FLAG_READ			1

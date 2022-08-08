@@ -17,374 +17,500 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
+#include "libosns-log.h"
+#include "libosns-misc.h"
+#include "libosns-threads.h"
+#include "libosns-interface.h"
+#include "libosns-workspace.h"
+#include "libosns-context.h"
+#include "libosns-fuse-public.h"
+#include "libosns-resources.h"
 
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/syscall.h>
-
-#define LOGGING
-#include "log.h"
-
-#include "main.h"
-#include "options.h"
-#include "workspace.h"
-#include "workspace-interface.h"
 #include "ssh/ssh-common.h"
 #include "sftp/common.h"
 #include "sftp/recv.h"
 #include "ssh/send/msg-channel.h"
 #include "ssh-utils.h"
 #include "sftp-attr.h"
+#include "sftp/extensions.h"
+#include "sftp.h"
 
-extern int send_channel_start_command_message(struct ssh_channel_s *channel, unsigned char reply, unsigned int *seq);
+#define SFTP_PREFIX_TYPE_HOME					0
+#define SFTP_PREFIX_TYPE_ROOT					1
+#define SFTP_PREFIX_TYPE_CUSTOM					2
+
+struct sftp_client_data_s {
+    unsigned int				flags;
+    unsigned int				statvfs_index;
+    unsigned int				fsync_index;
+    int						(* compare_path)(struct context_interface_s *i, char *path, unsigned int len, unsigned int type);
+    unsigned int				(* get_complete_pathlen)(struct context_interface_s *i, struct fuse_path_s *fp);
+    unsigned char				type;
+    unsigned int				len;
+    char					path[];
+};
+
+static unsigned int get_complete_pathlen_home(struct context_interface_s *i, struct fuse_path_s *fpath)
+{
+    fpath->pathstart++;
+    return (unsigned int)(fpath->path + fpath->len - 1 - fpath->pathstart);
+}
+
+static char *get_ssh_session_remote_home(struct context_interface_s *i)
+{
+    struct context_interface_s *primary=i->link.primary;
+    struct ssh_channel_s *channel=NULL;
+    char *home=NULL;
+
+    if (primary->type==_INTERFACE_TYPE_SFTP_CLIENT) primary=primary->link.primary;
+    if (primary->type==_INTERFACE_TYPE_SSH_CHANNEL) channel=(struct ssh_channel_s *) primary->buffer;
+
+    if (channel) {
+	struct ssh_session_s *session=channel->session;
+	struct net_idmapping_s *mapping=&session->hostinfo.mapping;
+
+	home=mapping->su.type.user.home;
+
+    }
+
+    return home;
+}
+
+static int compare_path_home(struct context_interface_s *i, char *path, unsigned int len, unsigned int type)
+{
+    int result=-1;
+
+    logoutput_debug("compare_path_home: path %.*s", len, path);
+
+    switch (type) {
+
+	case SFTP_COMPARE_PATH_PREFIX_SUBDIR:
+
+	    if ((len>=1) && strncmp(&path[0], "/", 1)==0) {
+		char *home=get_ssh_session_remote_home(i);
+
+		/* absolute path : must be subdir of homedirectory */
+
+		if (home) {
+		    unsigned int tmp=strlen(home);
+
+		    logoutput_debug("compare_path_home: compare with home %s", home);
+		    if ((len > tmp) && (strncmp(path, home, tmp)==0) && (strncmp(&path[tmp], "/", 1)==0)) result=(int) tmp;
+
+		}
+
+	    } else {
+
+		/* empty path or not starting with slash:
+		    always a subdirectory of home by protocol */
+
+		result=0;
+
+	    }
+
+	    break;
+
+	default:
+
+	    logoutput_debug("compare_path_home: type %u not reckognized", type);
+
+    }
+
+    return result;
+}
+
+static unsigned int get_complete_pathlen_root(struct context_interface_s *i, struct fuse_path_s *fpath)
+{
+    return (unsigned int)(fpath->path + fpath->len - 1 - fpath->pathstart);
+}
+
+static int compare_path_root(struct context_interface_s *i, char *path, unsigned int len, unsigned int type)
+{
+    int result=-1;
+
+    logoutput_debug("compare_path_root: path %.*s", len, path);
+
+    switch (type) {
+
+	case SFTP_COMPARE_PATH_PREFIX_SUBDIR:
+
+	    if ((len>=1) && strncmp(&path[0], "/", 1)==0) result=1;
+	    break;
+
+	default:
+
+	    logoutput_debug("compare_path_root: type %u not reckognized", type);
+
+    }
+
+    return result;
+}
+
+static unsigned int get_complete_pathlen_custom(struct context_interface_s *i, struct fuse_path_s *fpath)
+{
+    struct sftp_client_data_s *data=(struct sftp_client_data_s *) i->ptr;
+
+    logoutput_debug("get_complete_pathlen_custom: prefix %.*s path %s", data->len, data->path, fpath->pathstart);
+
+    fpath->pathstart -= data->len;
+    memcpy(fpath->pathstart, data->path, data->len);
+
+    return (unsigned int)(fpath->path + fpath->len - 1 - fpath->pathstart);
+}
+
+static int compare_path_custom(struct context_interface_s *i, char *path, unsigned int len, unsigned int type)
+{
+    struct sftp_client_data_s *data=(struct sftp_client_data_s *) i->ptr;
+    int result=-1;
+
+    logoutput_debug("compare_path_custom: path %.*s", len, path);
+
+    switch (type) {
+
+	case SFTP_COMPARE_PATH_PREFIX_SUBDIR:
+
+	    if ((len > data->len) && (strncmp(path, data->path, data->len)==0) && (strncmp(&path[data->len], "/", 1)==0)) result=(int) data->len;
+	    break;
+
+	default:
+
+	    logoutput_debug("compare_path_custom: type %u not reckognized", type);
+
+    }
+
+    return result;
+}
+
+
+static struct ssh_channel_s *get_ssh_channel_sftp_client(struct sftp_client_s *sftp)
+{
+    struct context_interface_s *i=(struct context_interface_s *)((char *) sftp - offsetof(struct context_interface_s, buffer));
+    struct context_interface_s *primary=i->link.primary;
+
+    return (struct ssh_channel_s *) primary->buffer;
+}
+
+static struct sftp_client_s *get_sftp_client_ssh_channel(struct ssh_channel_s *channel)
+{
+    struct context_interface_s *i=(struct context_interface_s *)((char *) channel - offsetof(struct context_interface_s, buffer));
+    struct context_interface_s *secondary=i->link.secondary.interface;
+
+    return (struct sftp_client_s *) secondary->buffer;
+}
+
+static int set_prefix_sftp_client(struct context_interface_s *i, char *prefix)
+{
+    struct sftp_client_data_s *data=NULL;
+    unsigned int len=0;
+
+    if (prefix) {
+	char *home=get_ssh_session_remote_home(i);
+	unsigned int tmp=((home) ? strlen(home) : 0);
+
+	logoutput_debug("set_prefix_sftp_client: remote home %s prefix %s", home, prefix);
+
+	len=(((strcmp(prefix, "~")==0) ||
+	    ((tmp>0) && (strcmp(prefix, home)==0)) ||
+	    ((tmp>0) && (strlen(prefix) == tmp + 1) && (strncmp(prefix, home, tmp)==0) && (prefix[tmp]=='/'))) ? 0 : strlen(prefix));
+
+    } else {
+
+	len=0;
+
+    }
+
+    data=malloc(sizeof(struct sftp_client_data_s) + len);
+
+    if (data) {
+
+	i->ptr=(void *) data;
+
+	data->flags=0;
+	data->statvfs_index=0;
+	data->fsync_index=0;
+
+	if (len==0) {
+
+	    /* remote subdirectory is the user's homedirectory
+		now by protocol when a path is send to the sftp server
+		and does not start with a slash it's relative to $HOME on server */
+
+	    data->type=SFTP_PREFIX_TYPE_HOME;
+	    data->compare_path=compare_path_home;
+	    data->get_complete_pathlen=get_complete_pathlen_home;
+	    data->len=0;
+
+	} else if (len==1 && strcmp(prefix, "/")==0) {
+
+	    /* remote subdirectory is root: path's are send without modification */
+
+	    data->type=SFTP_PREFIX_TYPE_ROOT;
+	    data->compare_path=compare_path_root;
+	    data->get_complete_pathlen=get_complete_pathlen_root;
+	    memcpy(data->path, "/", 1);
+	    data->len=1;
+
+	} else {
+
+	    /* remote subdirectory is custom: every path send is prepended by this */
+
+	    data->type=SFTP_PREFIX_TYPE_CUSTOM;
+	    data->compare_path=compare_path_custom;
+	    data->get_complete_pathlen=get_complete_pathlen_custom;
+	    memcpy(data->path, prefix, len);
+	    data->len=len;
+
+	}
+
+    }
+
+    return ((data) ? 0 : -1);
+
+}
+
+int sftp_compare_path(struct context_interface_s *i, char *path, unsigned int len, unsigned int type)
+{
+    struct sftp_client_data_s *data=(struct sftp_client_data_s *) i->ptr;
+    return (* data->compare_path)(i, path, len, type);
+}
+
+unsigned int sftp_get_complete_pathlen(struct context_interface_s *i, struct fuse_path_s *fpath)
+{
+    struct sftp_client_data_s *data=(struct sftp_client_data_s *) i->ptr;
+    return (* data->get_complete_pathlen)(i, fpath);
+}
+
+unsigned int sftp_get_required_buffer_size_p2l(struct context_interface_s *i, unsigned int len)
+{
+    struct sftp_client_s *sftp=(struct sftp_client_s *) (* i->get_interface_buffer)(i);
+    return (* sftp->context.get_required_path_size_p2l)(sftp, len);
+}
+
+unsigned int sftp_get_required_buffer_size_l2p(struct context_interface_s *i, unsigned int len)
+{
+    struct sftp_client_s *sftp=(struct sftp_client_s *) (* i->get_interface_buffer)(i);
+    return (* sftp->context.get_required_path_size_l2p)(sftp, len);
+}
+
+int sftp_convert_path_p2l(struct context_interface_s *i, char *buffer, unsigned int size, char *data, unsigned int len)
+{
+    struct sftp_client_s *sftp=(struct sftp_client_s *) (* i->get_interface_buffer)(i);
+    return (* sftp->context.convert_path_p2l)(sftp, buffer, size, data, len);
+}
+
+int sftp_convert_path_l2p(struct context_interface_s *i, char *buffer, unsigned int size, char *data, unsigned int len)
+{
+    struct sftp_client_s *sftp=(struct sftp_client_s *) (* i->get_interface_buffer)(i);
+    return (* sftp->context.convert_path_l2p)(sftp, buffer, size, data, len);
+}
 
 /* SFTP callbacks */
 
-static int _connect_interface_sftp_client(uid_t uid, struct context_interface_s *interface, struct host_address_s *host, struct service_address_s *service)
+static int _connect_interface_shared_sftp_client(struct context_interface_s *i, union interface_target_u *target, union interface_parameters_u *param)
+{
+    int result=-1;
+
+    if (i->flags & _INTERFACE_FLAG_SECONDARY_1TO1) {
+	struct ssh_channel_s *channel=NULL;
+	struct context_interface_s *primary=i->link.primary;
+
+	if (primary && primary->type==_INTERFACE_TYPE_SSH_CHANNEL) channel=(struct ssh_channel_s *) primary->buffer;
+
+	/* test the channel is suitable to use ... TODO: add direct-tcpip and direct-streamlocal channels */
+
+	if (channel && (channel->type==_CHANNEL_TYPE_SESSION) &&
+	    (channel->target.session.type==_CHANNEL_SESSION_TYPE_SUBSYSTEM) &&
+	    (strcmp(channel->target.session.buffer, "sftp")==0)) {
+
+	    result=0;
+
+	}
+
+    }
+
+    return result;
+
+}
+
+static int _connect_interface_client_sftp_client(struct context_interface_s *interface, union interface_target_u *target, union interface_parameters_u *param)
+{
+    int result=-1;
+
+    if (interface->flags & _INTERFACE_FLAG_SECONDARY_1TON) {
+	struct context_interface_s *primary=interface->link.primary;
+
+	if (primary && (primary->type == _INTERFACE_TYPE_SFTP_CLIENT)) result=0;
+
+    }
+
+    if (result==0) {
+	char *prefix=NULL;
+
+	/* prefix differs per client interface (used in the browse map), and is not used bt the primary sftp client */
+
+	if (target) prefix=target->sftp->prefix;
+
+	if (prefix) {
+
+	    logoutput_debug("_connect_interface_sftp_client: found prefix %s", prefix);
+
+	} else {
+
+	    logoutput_debug("_connect_interface_sftp_client: no prefix");
+
+	}
+
+	result=set_prefix_sftp_client(interface, prefix);
+
+    }
+
+    out:
+    return result;
+}
+
+static int _start_interface_shared_sftp_client(struct context_interface_s *interface)
 {
     char *buffer=(* interface->get_interface_buffer)(interface);
     struct sftp_client_s *sftp=(struct sftp_client_s *) buffer;
     struct ssh_channel_s *channel=NULL;
     int result=-1;
 
-    /* secondary interfaces do not have to be connected */
-    if (interface->flags & _INTERFACE_FLAG_SECONDARY) return 0;
+    logoutput_debug("_start_interface_shared_sftp_client: start sftp init subsystem");
 
-    if (!(service->type==_SERVICE_TYPE_SFTP_CLIENT)) {
+    channel=get_ssh_channel_sftp_client(sftp);
 
-	logoutput_warning("_connect_interface_ssh_channel: error, connections other than ssh channel (service type=%i)", service->type);
-	goto out;
+    /* switch the processing if incoming data for the channel to the sftp subsystem (=context)
+	it's not required to set the cb here...it's already set in the init phase */
 
-    }
-
-    logoutput("_connect_interface_ssh_channel: (service type=%i)", service->type);
-
-    channel=(struct ssh_channel_s *) sftp->context.conn;
-
-    /* when there is an uri it must be for direct tcpip/streamlocal */
-
-    if (service->target.sftp.uri) {
-	char *uri=service->target.channel.uri;
-
-	if (translate_channel_uri(channel, uri)==-1) {
-
-	    logoutput_warning("_connect_interface_sftp_client: error processing uri %s", uri);
-	    goto out;
-
-	}
-
-	if (channel->type==_CHANNEL_TYPE_DIRECT_STREAMLOCAL) {
-
-	    channel->target.direct_streamlocal.type=_CHANNEL_DIRECT_STREAMLOCAL_TYPE_OPENSSH_COM;
-
-	} else {
-
-	    if (channel->type!=_CHANNEL_TYPE_DIRECT_TCPIP && 
-		! (channel->type==_CHANNEL_TYPE_SESSION && channel->target.session.type==_CHANNEL_SESSION_TYPE_SUBSYSTEM &&
-		channel->target.session.use.subsystem.type==_CHANNEL_SUBSYSTEM_TYPE_SFTP)) {
-
-		logoutput_warning("_connect_interface_sftp_client: uri %s is not possible as sftp backend", uri);
-		return -1;
-
-	    }
-
-	}
-
-    } else {
-
-	/* no uri: take the default, the sftp subsystem */
-
-	channel->type=_CHANNEL_TYPE_SESSION;
-	channel->name=_CHANNEL_NAME_SESSION;
-	channel->target.session.type=_CHANNEL_SESSION_TYPE_SUBSYSTEM;
-	channel->target.session.name=_CHANNEL_SESSION_NAME_SUBSYSTEM;
-	channel->target.session.use.subsystem.type=_CHANNEL_SUBSYSTEM_TYPE_SFTP;
-	channel->target.session.use.subsystem.name=_CHANNEL_SUBSYSTEM_NAME_SFTP;
-
-    }
-
-    if (channel->type==0) {
-
-	logoutput_warning("_connect_interface_sftp_client: type cannot be determined");
-	goto out;
-
-    }
-
-    logoutput("_connect_interface_sftp_client: open and add channel");
-
-    if (add_channel(channel, CHANNEL_FLAG_OPEN)==0) {
-
-	logoutput_info("_connect_interface_sftp_client: channel %i open and added", channel->local_channel);
-	result=0;
-
-    } else {
-
-	logoutput_warning("_connect_interface_sftp_client: failed to open channel %i", channel->local_channel);
-
-    }
-
-    out:
-    return result;
-}
-
-static int _start_interface_sftp_client(struct context_interface_s *interface, int fd, struct ctx_option_s *option)
-{
-    char *buffer=(* interface->get_interface_buffer)(interface);
-    struct sftp_client_s *sftp=(struct sftp_client_s *) buffer;
-    struct ssh_channel_s *channel=(struct ssh_channel_s *) sftp->context.conn;
-    int result=-1;
-
-    if (interface->flags & _INTERFACE_FLAG_SECONDARY) return 0;
-
-    if (channel->type==_CHANNEL_TYPE_SESSION) {
-	unsigned int seq=0;
-
-	/* start the channel
-	    only required for things like exec, shell and subsystem 
-	    see: https://tools.ietf.org/html/rfc4254#section-6.5
-	    which is kind of strange cause when you open a channel
-	    to a remote socket (direct-tcpip for example) the server
-	    can also offer different services which first have to be started
-	    but somehow this only counts for internal subsystems
-	    I guess that the creators of this thought it is an external
-	    address, which can be anything so one cannot safely assume things
-	    have to be started extra
-	    */
-
-	logoutput("_start_interface_sftp_client: send start subsystem sftp");
-
-	if (send_channel_start_command_message(channel, 1, &seq)>0) {
-	    struct ssh_payload_s *payload=NULL;
-	    struct system_timespec_s expire=SYSTEM_TIME_INIT;
-	    unsigned int error=0;
-
-	    get_channel_expire_init(channel, &expire);
-	    payload=get_ssh_payload_channel(channel, &expire, NULL, &error);
-
-	    if (! payload) {
-
-		logoutput("_start_interface_sftp_client: error waiting for packet");
-
-	    } else {
-
-		if (payload->type==SSH_MSG_CHANNEL_SUCCESS) {
-
-		    /* ready: channel ready to use */
-
-		    logoutput("_start_interface_ssh_channel: server started the sftp subsystem");
-		    result=0;
-
-		} else if (payload->type==SSH_MSG_CHANNEL_FAILURE) {
-
-		    logoutput("_start_interface_sftp_client: server failed to start the sftp subsystem");
-
-		} else {
-
-		    logoutput("_start_interface_sftp_client: got unexpected reply %i", payload->type);
-
-		}
-
-		free_payload(&payload);
-
-	    }
-
-	} else {
-
-	    logoutput("_start_interface_sftp_client: error sending sftp");
-
-	}
-
-    } else {
-
-	result=0;
-
-    }
-
-    if (result==0) {
-
-	logoutput("_start_interface_sftp_client: start sftp init subsystem");
-
-	/* switch the processing if incoming data for the channel to the sftp subsystem (=context)
-	    it's not required to set the cb here...it's already set in the init phase */
-	switch_msg_channel_receive_data(channel, "context", NULL);
-	result=start_init_sftp_client(sftp);
-
-	if (result==-1) {
-
-	    logoutput_warning("_start_interface_sftp_client: error starting sftp subsystem");
-	    goto out;
-
-	}
-
-	/* translate the supported sftp attributes to something fuse understands (FATTR_MODE, FATTR_SIZE, etc) */
-
-	//translate_sftp_attr_fattr(interface);
-
-    }
-
-    out:
+    switch_msg_channel_receive_data(channel, "context", NULL);
+    result=start_init_sftp_client(sftp);
+    if (result==-1) logoutput_warning("_start_interface_shared_sftp_client: error starting sftp subsystem");
 
     return result;
 
 }
 
-/* function called by the context to inform sftp subsystem of events, it does that by calling the signal_sftp_client function */
-
-static int _signal_interface(struct context_interface_s *interface, const char *what, struct ctx_option_s *option)
+static int _start_interface_client_sftp_client(struct context_interface_s *interface)
 {
-    char *buffer=(* interface->get_interface_buffer)(interface);
-    struct sftp_client_s *sftp=(struct sftp_client_s *) buffer;
-
-    /* what to do with a secondary interface ?
-	ignore things like "command:close ?
-	for now 20201027 ignore everything */
-
-    if (interface->flags & _INTERFACE_FLAG_SECONDARY) return 0;
-    return (* sftp->context.signal_ctx2sftp)(&sftp, what, option);
+    return 0;
 }
 
-/* call all the secondary sftp contexes, which can be an 1:n relation: no other way than to walk every interface and 
-    check it's a secundary one and it's primary interface is this one */
+/* function called by the context to inform sftp client of events */
 
-static void _signal_sftp2ctx_secondary(struct context_interface_s *interface, const char *what, struct ctx_option_s *option)
+struct select_sftp2ctx_hlpr_s {
+    struct context_interface_s 				*i;
+};
+
+static int select_sftp2ctx_cb(struct context_interface_s *i, void *ptr)
 {
-    struct context_interface_s *search=get_next_context_interface(interface, NULL);
-    unsigned int refcount=interface->link.refcount;
+    struct select_sftp2ctx_hlpr_s *hlpr=(struct select_sftp2ctx_hlpr_s *) ptr;
 
-    while (search && refcount>0) {
+    return (((i->type==_INTERFACE_TYPE_SFTP_CLIENT) && (i->link.primary==hlpr->i)) ? 1 : 0);
+}
 
-	if ((search->flags & _INTERFACE_FLAG_SECONDARY) && search->link.primary==interface) {
+static int _signal_ctx2sftp_secondary(struct context_interface_s *i, const char *what, struct io_option_s *option, struct context_interface_s *s, unsigned int type)
+{
 
-	    int result=(* search->signal_context)(search, what, option);
-	    refcount--;
+    /* what to do with it depends on the sender */
+
+    if (((type==INTERFACE_CTX_SIGNAL_TYPE_SSH_SESSION) || (type==INTERFACE_CTX_SIGNAL_TYPE_SSH_CHANNEL)) || (s && (s==i->link.primary || s==i))) {
+
+	/* coming from downstream -> forward/send to interfaces using this interface upstream */
+
+	if (i->flags & _INTERFACE_FLAG_PRIMARY_1TO1) {
+	    struct context_interface_s *tmp=i->link.secondary.interface;
+
+	    return (* tmp->iocmd.in)(tmp, what, option, i, type);
+
+	} else if (i->flags & _INTERFACE_FLAG_PRIMARY_1TON) {
+	    struct select_sftp2ctx_hlpr_s hlpr;
+
+	    hlpr.i=i;
+	    return signal_selected_ctx(i, 0, what, option, type, select_sftp2ctx_cb, (void *) &hlpr);
 
 	}
 
-	search=get_next_context_interface(interface, search);
+    } else if (i->flags & (_INTERFACE_FLAG_SECONDARY_1TO1 | _INTERFACE_FLAG_SECONDARY_1TON)) {
+	struct context_interface_s *primary=i->link.primary;
+
+	/* coming from upstream -> send downstream */
+
+	return (* primary->iocmd.in)(primary, what, option, s, type);
 
     }
 
+    return 0;
 }
 
-static int _signal_sftp2ctx(struct sftp_client_s *sftp, const char *what, struct ctx_option_s *option)
+static int _signal_ctx2sftp_primary(struct context_interface_s *i, const char *what, struct io_option_s *option, struct context_interface_s *s, unsigned int type)
 {
-    struct context_interface_s *interface=(struct context_interface_s *)((char *) sftp - offsetof(struct context_interface_s, buffer));
-
-    if ((interface->flags & _INTERFACE_FLAG_SECONDARY)==0 && interface->link.refcount>0) {
-
-	/* do not send all kinds of signals to the secondary interfaces
-	    only events like disconnect */
-
-	if (strncmp(what, "event:", 6)==0) _signal_sftp2ctx_secondary(interface, what, option);
-
-    }
-
-    return (* interface->signal_context)(interface, what, option);
+    char *buffer=(* i->get_interface_buffer)(i);
+    struct sftp_client_s *sftp=(struct sftp_client_s *) buffer;
+    return (* sftp->context.signal_ctx2sftp)(&sftp, what, option, type);
 }
 
-/* signal the context of the channel which is the sftp subsystem */
+/* function called by the sftp client to inform the context of events */
 
-static int _signal_channel2sftp(struct ssh_channel_s *channel, const char *what, struct ctx_option_s *option)
+static int _signal_sftp2ctx_primary(struct sftp_client_s *sftp, const char *what, struct io_option_s *option, unsigned int type)
 {
-    struct sftp_client_s *sftp=(struct sftp_client_s *) channel->context.ctx;
-    return (* sftp->context.signal_conn2sftp)(sftp, what, option);
+    struct context_interface_s *i=(struct context_interface_s *)((char *) sftp - offsetof(struct context_interface_s, buffer));
+    return (* i->iocmd.out)(i, what, option, i, type);
 }
 
-static int _signal_sftp2channel(struct sftp_client_s *sftp, const char *what, struct ctx_option_s *option)
+static void recv_data_ssh_channel_sftp_client(struct ssh_channel_s *channel, char **buffer, unsigned int size, uint32_t seq, unsigned char ssh_flags)
 {
-    struct ssh_channel_s *channel=(struct ssh_channel_s *) sftp->context.conn;
-    return (* channel->context.signal_ctx2channel)(&channel, what, option);
-}
-
-static void _receive_data_ssh_channel(struct ssh_channel_s *channel, char **buffer, unsigned int size, uint32_t seq, unsigned char ssh_flags)
-{
-    struct sftp_client_s *sftp=(struct sftp_client_s *) channel->context.ctx;
+    struct sftp_client_s *sftp=get_sftp_client_ssh_channel(channel);
     unsigned int sftp_flags=0;
+
+    logoutput_debug("recv_data_ssh_channel_sftp_client: size %u channel %i", size, ((channel) ? channel->local_channel : -1));
 
     sftp_flags |= (ssh_flags & _CHANNEL_DATA_RECEIVE_FLAG_ALLOC) ? SFTP_RECEIVE_FLAG_ALLOC : 0;
     sftp_flags |= (ssh_flags & _CHANNEL_DATA_RECEIVE_FLAG_ERROR) ? SFTP_RECEIVE_FLAG_ERROR : 0;
-    receive_sftp_data(sftp, buffer, size, seq, sftp_flags);
+    (* sftp->context.recv_data)(sftp, buffer, size, seq, sftp_flags);
 
 }
 
-static int _send_data_ssh_channel(struct sftp_client_s *sftp, char *buffer, unsigned int size, uint32_t *seq, struct list_element_s *list)
+static int _send_data_ssh_channel_sftp_client(struct sftp_client_s *sftp, char *buffer, unsigned int size, uint32_t *seq, struct list_element_s *list)
 {
-    struct ssh_channel_s *channel=(struct ssh_channel_s *) sftp->context.conn;
-
-    /* ignore the list ... do not put on send list */
-    // pthread_mutex_lock(&sftp->mutex);
-    // add_list_element_last(&sftp->pending, list);
-    // pthread_mutex_unlock(&sftp->mutex);
-
+    struct ssh_channel_s *channel=get_ssh_channel_sftp_client(sftp);
+    // logoutput_debug("_send_data_ssh_channel_sftp_client: size %u channel %i", size, ((channel) ? channel->local_channel : -1));
     return send_channel_data_message(channel, buffer, size, seq);
 }
 
+/* pair the time correction functions ... these are valid per ssh session */
+
 static void _correct_time_c2s(struct sftp_client_s *sftp, struct system_timespec_s *time)
 {
-    struct ssh_channel_s *channel=(struct ssh_channel_s *) sftp->context.conn;
+    struct ssh_channel_s *channel=get_ssh_channel_sftp_client(sftp);
     struct ssh_session_s *session=channel->session;
     (* session->hostinfo.correct_time_c2s)(session, time);
 }
 
 static void _correct_time_s2c(struct sftp_client_s *sftp, struct system_timespec_s *time)
 {
-    struct ssh_channel_s *channel=(struct ssh_channel_s *) sftp->context.conn;
+    struct ssh_channel_s *channel=get_ssh_channel_sftp_client(sftp);
     struct ssh_session_s *session=channel->session;
     (* session->hostinfo.correct_time_s2c)(session, time);
 }
 
-static char *get_interface_buffer_default(struct context_interface_s *interface)
+static char *get_interface_buffer_secondary(struct context_interface_s *i)
 {
-    return interface->buffer;
-}
-
-static char *get_interface_buffer_secondary(struct context_interface_s *interface)
-{
-    return interface->link.primary->buffer;
-}
-
-static void _free_interface_sftp(struct context_interface_s *interface)
-{
-
-    clear_ssh_string(&interface->backend.sftp.prefix.path);
-
-    if (interface->backend.sftp.name) {
-
-	free(interface->backend.sftp.name);
-	interface->backend.sftp.name=NULL;
-
-    }
-
+    struct context_interface_s *primary=i->link.primary;
+    return primary->buffer;
 }
 
 /*
 	INTERFACE OPS
 			*/
 
-static unsigned int _populate_sftp_interface(struct context_interface_s *interface, struct interface_ops_s *ops, struct interface_list_s *ilist, unsigned int start)
+static unsigned int _populate_interface_sftp_client(struct context_interface_s *interface, struct interface_ops_s *ops, struct interface_list_s *ilist, unsigned int start)
 {
 
     if (ilist) {
 
-	ilist[start].type=_INTERFACE_TYPE_SFTP;
+	ilist[start].type=_INTERFACE_TYPE_SFTP_CLIENT;
 	ilist[start].name="sftp";
 	ilist[start].ops=ops;
 
@@ -393,134 +519,107 @@ static unsigned int _populate_sftp_interface(struct context_interface_s *interfa
     return start;
 }
 
-static unsigned int _get_interface_sftp_buffer_size(struct interface_list_s *ilist)
+static unsigned int _get_interface_buffer_size_sftp_client(struct interface_list_s *ilist)
 {
+    unsigned int size=0;
 
-    if (ilist->type==_INTERFACE_TYPE_SFTP) {
+    if ((ilist->type==_INTERFACE_TYPE_SFTP_CLIENT) && (strcmp(ilist->name, "sftp")==0)) {
 
-	if (strcmp(ilist->name, "sftp")==0) {
-
-	    return get_sftp_buffer_size();
-
-	}
+	size=get_sftp_buffer_size();
 
     }
 
-    return 0;
+    return size;
 
 }
 
-static int _init_interface_sftp_buffer(struct context_interface_s *interface, struct interface_list_s *ilist, struct context_interface_s *primary)
+static int _init_interface_buffer_sftp_client(struct context_interface_s *interface, struct interface_list_s *ilist, struct context_interface_s *primary)
 {
     struct sftp_client_s *sftp=NULL;
     struct ssh_channel_s *channel=NULL;
     struct ssh_session_s *session=NULL;
     struct service_context_s *context=get_service_context(interface);
-    struct service_context_s *pctx=NULL;
-    struct context_interface_s *parent=NULL;
 
     if (strcmp(ilist->name, "sftp")!=0) {
 
-	logoutput_warning("_init_interface_buffer_sftp: not initializing %s", ilist->name);
-	return -1;
-
-    }
-
-    logoutput("_init_interface_buffer_sftp");
-    interface->type=_INTERFACE_TYPE_SFTP;
-
-    if (primary) {
-
-	interface->flags |= _INTERFACE_FLAG_SECONDARY;
-
-	/* dealing with a secondary interface: no initialization required */
-
-	interface->link.primary=primary;
-	primary->link.refcount++;
-	interface->get_interface_buffer=get_interface_buffer_secondary;
-
-	interface->connect=_connect_interface_sftp_client;
-	interface->start=_start_interface_sftp_client;
-	interface->signal_interface=_signal_interface;
-
-	interface->flags |= _INTERFACE_FLAG_BUFFER_INIT;
-
-	return 0;
-
-    }
-
-    pctx=get_parent_context(context);
-    if (pctx) parent=&pctx->interface;
-
-    if (interface->size < get_sftp_buffer_size()) {
-
-	logoutput_warning("_init_interface_buffer_sftp: buffer size too small (%i, required %i) cannot continue", interface->size, get_sftp_buffer_size());
+	logoutput_warning("_init_interface_buffer_sftp_client: wring interface %s", ilist->name);
 	return -1;
 
     }
 
     if (interface->flags & _INTERFACE_FLAG_BUFFER_INIT) {
 
-	logoutput_warning("_init_interface_buffer_sftp: buffer already initialized");
+	logoutput_warning("_init_interface_buffer_sftp_client: buffer already initialized");
 	return 0;
 
     }
 
-    if (parent==NULL) {
+    logoutput("_init_interface_buffer_sftp_client");
 
-	logoutput_warning("_init_interface_buffer_sftp: parent interface (= ssh session) not set");
-	return -1;
+    if (primary) {
 
-    } else if (parent->type != _INTERFACE_TYPE_SSH_SESSION) {
+	if (primary->type==_INTERFACE_TYPE_SSH_CHANNEL) {
 
-	logoutput_warning("_init_interface_buffer_sftp: parent interface is not a ssh session (%i)", parent->type);
-	return -1;
+	    /* there is a 1:1 between the ssh channel and the sftp client */
+
+	    channel=(struct ssh_channel_s *) primary->buffer;
+	    primary->link.secondary.interface=interface;
+	    primary->flags |= _INTERFACE_FLAG_PRIMARY_1TO1;
+	    interface->link.primary=primary;
+	    interface->flags |= _INTERFACE_FLAG_SECONDARY_1TO1;
+
+	} else if (primary->type==_INTERFACE_TYPE_SFTP_CLIENT) {
+
+	    /* there is a 1:n relation between shared sftp client and sftp client in browse environment */
+
+	    primary->link.secondary.refcount++;
+	    primary->flags |= _INTERFACE_FLAG_PRIMARY_1TON;
+
+	    interface->link.primary=primary;
+	    interface->flags |= _INTERFACE_FLAG_SECONDARY_1TON;
+
+	    interface->iocmd.in = _signal_ctx2sftp_secondary;
+	    interface->connect=_connect_interface_client_sftp_client;
+	    interface->start=_start_interface_client_sftp_client;
+	    interface->get_interface_buffer=get_interface_buffer_secondary;
+	    return 0;
+
+	}
 
     }
-
-    interface->get_interface_buffer=get_interface_buffer_default;
-    interface->link.refcount=0;
-
-    session=(struct ssh_session_s *) (* parent->get_interface_buffer)(parent);
-    channel=create_channel(session, session->connections.main, 0);
 
     if (channel==NULL) {
 
-	logoutput_warning("_connect_interface_sftp_client: failed to create channel");
-	goto out;
+	logoutput("_init_interface_buffer_sftp_client: channel not defined");
+	return -1;
 
     }
 
-    logoutput("_connect_interface_sftp_client: created channel");
-
+    interface->type=_INTERFACE_TYPE_SFTP_CLIENT;
+    interface->flags |= _INTERFACE_FLAG_PRIMARY_1TON;
     sftp=(struct sftp_client_s *) interface->buffer;
-    channel->context.ctx=(void *) sftp;
+    session=channel->session;
 
-    if (init_sftp_client(sftp, session->identity.pwd.pw_uid, &session->hostinfo.mapping)==0) {
+    if (init_sftp_client(sftp, session->identity.pwd.pw_uid, &session->hostinfo.mapping)>=0) {
 
-	interface->connect=_connect_interface_sftp_client;
-	interface->start=_start_interface_sftp_client;
-	interface->signal_interface=_signal_interface;
-	interface->free=_free_interface_sftp;
+	interface->connect=_connect_interface_shared_sftp_client;
+	interface->start=_start_interface_shared_sftp_client;
 
-	sftp->context.signal_sftp2ctx=_signal_sftp2ctx;
-	sftp->context.signal_sftp2conn=_signal_sftp2channel;
-	sftp->context.conn=(void *) channel;
-	sftp->context.unique=interface->unique;
+	interface->iocmd.in=_signal_ctx2sftp_primary;
+	sftp->context.signal_sftp2ctx=_signal_sftp2ctx_primary;
 
-	sftp->signal.signal=channel->queue.signal->signal;
+	sftp->signal.signal=channel->signal;
+
+	/* set the time correction functions for the sftp client */
 
 	sftp->time_ops.correct_time_c2s=_correct_time_c2s;
 	sftp->time_ops.correct_time_s2c=_correct_time_s2c;
 
-	channel->context.signal_channel2ctx=_signal_channel2sftp;
+	/* pair the sending from sftp to the channel, and the
+	    receiving by the channel to the sftp client */
 
-	/* connect data transfer:
-	    send from sftp to channel and
-	    receive from channel to sftp */
-
-	sftp->context.send_data=_send_data_ssh_channel;
-	channel->context.receive_data=_receive_data_ssh_channel;
+	sftp->context.send_data=_send_data_ssh_channel_sftp_client;
+	channel->context.recv_data=recv_data_ssh_channel_sftp_client;
 
 	interface->flags |= _INTERFACE_FLAG_BUFFER_INIT;
 	return 0;
@@ -532,56 +631,64 @@ static int _init_interface_sftp_buffer(struct context_interface_s *interface, st
 
 }
 
-static int _init_interface_buffer(struct context_interface_s *interface, struct interface_list_s *ilist, struct context_interface_s *primary)
+static void _clear_interface_buffer_sftp_client(struct context_interface_s *i)
 {
 
-    if (ilist->type == _INTERFACE_TYPE_SFTP) {
+    if (i->ptr) {
+	struct sftp_client_data_s *data=(struct sftp_client_data_s *) i->ptr;
 
-	if (strcmp(ilist->name, "sftp")==0) return _init_interface_sftp_buffer(interface, ilist, primary);
-
-    }
-
-    return -1;
-}
-
-static void _clear_interface_buffer(struct context_interface_s *interface)
-{
-
-    clear_ssh_string(&interface->backend.sftp.prefix.path);
-
-    if (interface->backend.sftp.name) {
-
-	free(interface->backend.sftp.name);
-	interface->backend.sftp.name=NULL;
+	free(data);
+	i->ptr=NULL;
 
     }
 
-    if (interface->flags & _INTERFACE_FLAG_BUFFER_INIT) {
-
-	if ((interface->flags & _INTERFACE_FLAG_BUFFER_CLEAR)==0) {
-
-	    (* interface->signal_interface)(interface, "command:close:", NULL);
-	    (* interface->signal_interface)(interface, "command:free:", NULL);
-	    interface->flags |= _INTERFACE_FLAG_BUFFER_CLEAR;
-
-	}
-
-	interface->flags -= _INTERFACE_FLAG_BUFFER_INIT;
-	reset_context_interface(interface);
-
-    }
+    clear_interface_buffer_default(i);
 
 }
 
 static struct interface_ops_s sftp_interface_ops = {
     .name					= "SSH_SUBSYSTEM",
-    .populate					= _populate_sftp_interface,
-    .get_buffer_size				= _get_interface_sftp_buffer_size,
-    .init_buffer				= _init_interface_buffer,
-    .clear_buffer				= _clear_interface_buffer,
+    .populate					= _populate_interface_sftp_client,
+    .get_buffer_size				= _get_interface_buffer_size_sftp_client,
+    .init_buffer				= _init_interface_buffer_sftp_client,
+    .clear_buffer				= _clear_interface_buffer_sftp_client,
 };
 
 void init_sftp_client_interface()
 {
     add_interface_ops(&sftp_interface_ops);
+}
+
+int send_sftp_statvfs_ctx(struct context_interface_s *i, struct sftp_request_s *sftp_r, unsigned int *error)
+{
+    struct sftp_client_s *sftp=(struct sftp_client_s *)(* i->get_interface_buffer)(i);
+    struct sftp_client_data_s *data=(struct sftp_client_data_s *) i->ptr;
+    unsigned int index=data->statvfs_index;
+    return send_sftp_extension_index(sftp, index, sftp_r);
+}
+
+unsigned int get_index_sftp_extension_statvfs(struct context_interface_s *i)
+{
+    struct sftp_client_s *sftp=(struct sftp_client_s *) (* i->get_interface_buffer)(i);
+    struct ssh_string_s name=SSH_STRING_SET(0, "statvfs@openssh.com");
+    unsigned int index=get_sftp_protocol_extension_index(sftp, &name);
+    logoutput_debug("get_index_sftp_extension_statvfs: index %u", index);
+    return index;
+}
+
+int send_sftp_fsync_ctx(struct context_interface_s *i, struct sftp_request_s *sftp_r, unsigned int *error)
+{
+    struct sftp_client_s *sftp=(struct sftp_client_s *)(* i->get_interface_buffer)(i);
+    struct sftp_client_data_s *data=(struct sftp_client_data_s *) i->ptr;
+    unsigned int index=data->fsync_index;
+    return send_sftp_extension_index(sftp, index, sftp_r);
+}
+
+unsigned int get_index_sftp_extension_fsync(struct context_interface_s *i)
+{
+    struct sftp_client_s *sftp=(struct sftp_client_s *)(* i->get_interface_buffer)(i);
+    struct ssh_string_s name=SSH_STRING_SET(0, "fsync@openssh.com");
+    unsigned int index=get_sftp_protocol_extension_index(sftp, &name);
+    logoutput_debug("get_index_sftp_extension_fsync: index %u", index);
+    return index;
 }

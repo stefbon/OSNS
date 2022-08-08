@@ -17,8 +17,8 @@
 
 */
 
-#ifndef FS_WORKSPACE_SSH_PK_SIGN_H
-#define FS_WORKSPACE_SSH_PK_SIGN_H
+#ifndef SSH_PK_PK_SIGN_H
+#define SSH_PK_PK_SIGN_H
 
 int create_sig_rsa(struct ssh_key_s *key, unsigned char *b, unsigned int size, struct ssh_string_s *sig, const char *hashname);
 int create_sig_dss(struct ssh_key_s *key, unsigned char *b, unsigned int size, struct ssh_string_s *sig, const char *hashname);

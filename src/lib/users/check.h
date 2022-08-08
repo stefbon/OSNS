@@ -20,7 +20,7 @@
 #ifndef _LIB_USERS_CHECK_H
 #define _LIB_USERS_CHECK_H
 
-#include "datatypes.h"
+#include "libosns-datatypes.h"
 
 /* prototypes */
 

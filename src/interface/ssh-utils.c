@@ -17,138 +17,44 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
+#include "libosns-log.h"
+#include "libosns-workspace.h"
+#include "libosns-eventloop.h"
+#include "libosns-interface.h"
+#include "libosns-context.h"
+#include "libosns-socket.h"
 
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/syscall.h>
-
-#define LOGGING
-#include "log.h"
-
-#include "main.h"
-#include "options.h"
-#include "workspace-interface.h"
 #include "ssh/ssh-common.h"
-#include "sftp/common-protocol.h"
-#include "sftp/common.h"
+#include "ssh/ssh-common-client.h"
+#include "ssh/ssh-common.h"
 
-static int channelname_cmp(char **p_name, int *p_left, const char *match)
-{
-    char *name=*p_name;
-    int left=*p_left;
-    unsigned int len=strlen(match);
-
-    if (len + 1 <=left) {
-
-	if (memcmp(name, match, len)==0 && name[len]==':') {
-
-	    *p_name+=(len+1);
-	    *p_left-=(len+1);
-	    return 0;
-
-	}
-
-    } 
-
-    return -1;
-
-}
-
-/* translate a name as service into channel type, name and properties
-    name can be something like:
-    "ssh-channel:session:*/
-
-void translate_ssh_channel_name(struct ssh_channel_s *channel, char *name)
-{
-    int left=strlen(name);
-
-    if (left <= 12) {
-
-	logoutput_warning("translate_ssh_channel_name: error, name (%s) is too short", name);
-	return;
-
-    }
-
-    if (channelname_cmp(&name, &left, "ssh-channel")==0) {
-
-	if (channelname_cmp(&name, &left, _CHANNEL_NAME_SESSION)==0) {
-
-	    channel->type=_CHANNEL_TYPE_SESSION;
-	    channel->name=_CHANNEL_NAME_SESSION;
-
-	    if (channelname_cmp(&name, &left, _CHANNEL_SESSION_NAME_SHELL)==0) {
-
-		channel->target.session.type=_CHANNEL_SESSION_TYPE_SHELL;
-		channel->target.session.name=_CHANNEL_SESSION_NAME_SHELL;
-
-	    } else if (channelname_cmp(&name, &left, _CHANNEL_SESSION_NAME_EXEC)==0) {
-
-		channel->target.session.type=_CHANNEL_SESSION_TYPE_EXEC;
-		channel->target.session.name=_CHANNEL_SESSION_NAME_EXEC;
-
-	    } else if (channelname_cmp(&name, &left, _CHANNEL_SESSION_NAME_SUBSYSTEM)==0) {
-
-		channel->target.session.type=_CHANNEL_SESSION_TYPE_SUBSYSTEM;
-		channel->target.session.name=_CHANNEL_SESSION_NAME_SUBSYSTEM;
-
-		if (channelname_cmp(&name, &left, _CHANNEL_SUBSYSTEM_NAME_SFTP)==0) {
-
-		    channel->target.session.use.subsystem.type=_CHANNEL_SUBSYSTEM_TYPE_SFTP;
-		    channel->target.session.use.subsystem.name=_CHANNEL_SUBSYSTEM_NAME_SFTP;
-
-		}
-
-	    }
-
-	} else {
-
-	    if (channelname_cmp(&name, &left, _CHANNEL_NAME_DIRECT_STREAMLOCAL_OPENSSH_COM)==0) {
-
-		channel->type=_CHANNEL_TYPE_DIRECT_STREAMLOCAL;
-		channel->name=_CHANNEL_NAME_DIRECT_STREAMLOCAL_OPENSSH_COM;
-		channel->target.direct_streamlocal.type=_CHANNEL_DIRECT_STREAMLOCAL_TYPE_OPENSSH_COM;
-
-	    } else if (channelname_cmp(&name, &left, _CHANNEL_NAME_DIRECT_TCPIP)==0) {
-
-		channel->type=_CHANNEL_TYPE_DIRECT_TCPIP;
-		channel->name=_CHANNEL_NAME_DIRECT_TCPIP;
-
-	    }
-
-	}
-
-    }
-
-}
-
-struct fs_connection_s *get_fs_connection_ssh_interface(struct context_interface_s *i)
+struct connection_s *get_connection_ssh_interface(struct context_interface_s *i)
 {
 
     if (i->type==_INTERFACE_TYPE_SSH_SESSION) {
 	char *buffer=(* i->get_interface_buffer)(i);
 	struct ssh_session_s *s=(struct ssh_session_s *) buffer;
 
-	return get_session_fs_connection(s);
+	return get_session_connection(s);
 
     }
 
     return NULL;
+}
+
+unsigned int get_default_ssh_port(struct context_interface_s *i)
+{
+    unsigned int port=0;
+
+    if (i->type==_INTERFACE_TYPE_SSH_SESSION) {
+	char *buffer=(* i->get_interface_buffer)(i);
+	struct ssh_session_s *s=(struct ssh_session_s *) buffer;
+
+	port=s->config.port;
+
+    }
+
+    return port;
 }

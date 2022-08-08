@@ -18,73 +18,69 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
+#include "libosns-log.h"
+#include "libosns-misc.h"
+#include "libosns-workspace.h"
+#include "libosns-interface.h"
+#include "libosns-context.h"
 
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <linux/fs.h>
+#include "dentry.h"
+#include "opendir.h"
+#include "request.h"
+#include "fs-common.h"
 
-#define LOGGING
+#ifndef FUSE_ROOT_ID
+#define FUSE_ROOT_ID	1
+#endif
 
-#include "main.h"
-#include "log.h"
-#include "misc.h"
-
-#include "workspace.h"
-#include "workspace-interface.h"
-#include "fuse.h"
-
-static struct fuse_fs_s browse_fs;
+#include "fs-virtual.h"
+#include "fs-service-browse.h"
+#include "fs-service-path.h"
 
 /* get the context which is linked to the inode
     this is used only here since in the browse part of the virtual network path every inode is linked via data link
     to a context */
 
-static struct service_context_s *get_browse_context(struct inode_s *inode)
+static struct service_context_s *get_browse_context(struct service_context_s *context, struct inode_s *inode)
 {
     struct data_link_s *link=inode->ptr;
     struct service_context_s *ctx=NULL;
 
-    if (link) {
+    if (get_ino_system_stat(&inode->stat)==FUSE_ROOT_ID) {
 
-	if (link->type==DATA_LINK_TYPE_DIRECTORY) {
-	    struct directory_s *directory=(struct directory_s *) ((char *) link - offsetof(struct directory_s, link));
+	return context;
 
-	    link=directory->ptr;
+    } else if (link==NULL) {
 
-	    if (link) {
+	logoutput_debug("get_browse_context: no link");
+	return NULL;
 
-		if (link->type==DATA_LINK_TYPE_CONTEXT) ctx=(struct service_context_s *) ((char *) link - offsetof(struct service_context_s, link));
+    } else if (link->type==DATA_LINK_TYPE_DIRECTORY) {
+	struct directory_s *directory=(struct directory_s *) ((char *) link - offsetof(struct directory_s, link));
 
+	link=directory->ptr;
+	if (link==NULL) {
 
-	    }
-
-	} else if (link->type==DATA_LINK_TYPE_CONTEXT) {
-
-	    ctx=(struct service_context_s *) ((char *) link - offsetof(struct service_context_s, link));
+	    logoutput_debug("get_browse_context: directory points not to a context");
+	    return NULL;
 
 	}
 
     }
 
+    if (link->type==DATA_LINK_TYPE_CONTEXT) {
+
+	ctx=(struct service_context_s *) ((char *) link - offsetof(struct service_context_s, link));
+
+    } else {
+
+	logoutput_debug("get_browse_context: link is not pointing to context (type=%u)", link->type);
+
+    }
+
+    out:
     return ctx;
 }
 
@@ -108,25 +104,23 @@ static void _fs_browse_forget(struct service_context_s *context, struct inode_s 
 
 }
 
-static void _fs_filesystem_root_lookup(struct service_context_s *context, struct fuse_request_s *request, struct entry_s *entry)
+static void fs_filesystem_root_lookup(struct service_context_s *ctx, struct fuse_request_s *request, struct entry_s *entry)
 {
-    struct pathinfo_s pathinfo=PATHINFO_INIT;
-    unsigned int pathlen=0;
-    char path[3];
-    struct service_fs_s *fs=context->service.filesystem.fs;
+    struct workspace_mount_s *w=get_workspace_mount_ctx(ctx);
+    unsigned int pathlen=get_pathmax(w) + 1;
+    char buffer[sizeof(struct fuse_path_s) + pathlen + 1];
+    struct fuse_path_s *fpath=(struct fuse_path_s *) buffer;
+    struct path_service_fs_s *fs=ctx->service.filesystem.fs;
 
-    logoutput("_fs_filesystem_root_lookup: use context %s", context->name);
+    logoutput("fs_filesystem_root_lookup: use context %s", ctx->name);
 
-    path[2]='\0';
-    path[1]='.';
-    path[0]='/';
+    init_fuse_path(fpath, pathlen + 1);
+    start_directory_fpath(fpath);
+    fpath->context=ctx;
 
-    pathinfo.len=2;
-    pathinfo.path=path;
+    (* fs->lookup_existing)(ctx, request, entry, fpath);
 
-    (* fs->lookup_existing)(context, request, entry, &pathinfo);
 }
-
 
 /* LOOKUP */
 
@@ -135,22 +129,14 @@ static void _fs_browse_lookup(struct service_context_s *context, struct fuse_req
     struct name_s xname={(char *)name, len, 0};
     struct entry_s *entry=NULL;
     struct directory_s *directory=NULL;
-    struct service_fs_s *fs=get_service_context_fs(context);
-    unsigned int error=(* fs->access)(context, request, SERVICE_OP_TYPE_LOOKUP);
     struct workspace_mount_s *w=get_workspace_mount_ctx(context);
+    unsigned int error=0;
 
-    logoutput("_fs_browse_lookup: ino %li name %s", (unsigned long) pinode->stat.sst_ino, name);
+    logoutput("_fs_browse_lookup: ino %li name %s", (unsigned long) get_ino_system_stat(&pinode->stat), name);
 
-    if (error) {
+    context=get_browse_context(context, pinode);
 
-	reply_VFS_error(request, error);
-	return;
-
-    }
-
-    context=get_browse_context(pinode);
-
-    if (context==NULL || (context->type != SERVICE_CTX_TYPE_BROWSE && context->type != SERVICE_CTX_TYPE_WORKSPACE)) {
+    if (context==NULL) {
 
 	reply_VFS_error(request, EIO);
 	logoutput_warning("_fs_browse_lookup: ino %li internal error wrong or no context", (unsigned long) pinode->stat.sst_ino);
@@ -158,7 +144,6 @@ static void _fs_browse_lookup(struct service_context_s *context, struct fuse_req
 
     }
 
-    fs=get_service_context_fs(context);
     directory=get_directory(w, pinode, 0);
     calculate_nameindex(&xname);
     entry=find_entry(directory, &xname, &error);
@@ -166,36 +151,27 @@ static void _fs_browse_lookup(struct service_context_s *context, struct fuse_req
     if (entry) {
 	struct inode_s *inode=entry->inode;
 
-	error=(* fs->access)(context, request, SERVICE_OP_TYPE_LOOKUP_EXISTING);
-
-	if (error) {
-
-	    reply_VFS_error(request, error);
-	    return;
-
-	}
-
 	logoutput("_fs_browse_lookup: context %s (thread %i) %.*s (entry found)", context->name, (int) gettid(), len, name);
 
 	if (inode->ptr) {
 	    struct data_link_s *link=inode->ptr;
 
-	    if (link->type==DATA_LINK_TYPE_SPECIAL_ENTRY) {
-
-		(* fs->lookup_existing)(context, request, entry, NULL);
-		return;
-
-	    } else if (link->type==DATA_LINK_TYPE_DIRECTORY) {
+	    if (link->type==DATA_LINK_TYPE_DIRECTORY) {
 		struct directory_s *tmp=(struct directory_s *)((char *) link - offsetof(struct directory_s, link));
 
-		if (tmp->ptr) {
+		link=tmp->ptr;
 
-		    context=(struct service_context_s *)((char *) tmp->ptr - offsetof(struct service_context_s, link));
+		if (link) {
 
-		    if (context->type == SERVICE_CTX_TYPE_FILESYSTEM) {
+		    if (link->type==DATA_LINK_TYPE_CONTEXT) {
+			struct service_context_s *tmpctx=(struct service_context_s *)((char *) link - offsetof(struct service_context_s, link));
 
-			_fs_filesystem_root_lookup(context, request, entry);
-			return;
+			if (tmpctx->type == SERVICE_CTX_TYPE_FILESYSTEM) {
+
+			    fs_filesystem_root_lookup(tmpctx, request, entry);
+			    return;
+
+			}
 
 		    }
 
@@ -209,18 +185,21 @@ static void _fs_browse_lookup(struct service_context_s *context, struct fuse_req
 
     } else {
 
-	error=(* fs->access)(context, request, SERVICE_OP_TYPE_LOOKUP_NEW);
-
-	if (error) {
-
-	    reply_VFS_error(request, error);
-	    return;
-
-	}
-
 	logoutput("_fs_browse_lookup: context %s (thread %i) %.*s (entry new)", context->name, (int) gettid(), len, name);
 
-	(* fs->lookup_new)(context, request, pinode, &xname, NULL);
+	if (context->type==SERVICE_CTX_TYPE_WORKSPACE) {
+
+	    (* context->service.workspace.fs->lookup_new)(context, request, pinode, &xname);
+
+	} else if (context->type==SERVICE_CTX_TYPE_BROWSE) {
+
+	    (* context->service.browse.fs->lookup_new)(context, request, pinode, &xname);
+
+	} else {
+
+	    reply_VFS_error(request, EIO);
+
+	}
 
     }
 
@@ -230,30 +209,57 @@ static void _fs_browse_lookup(struct service_context_s *context, struct fuse_req
 
 static void _fs_browse_getattr(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode)
 {
-    struct service_fs_s *fs=get_service_context_fs(context);
-    unsigned int error=(* fs->access)(context, request, SERVICE_OP_TYPE_GETATTR);
 
-    logoutput("_fs_browse_getattr: context %s (thread %i) %.*s", context->name, (int) gettid(), inode->alias->name.len, inode->alias->name.name);
+    context=get_browse_context(context, inode);
 
-    if (error==0) {
+    if (context==NULL) {
 
-	context=get_browse_context(inode);
-	fs=get_service_context_fs(context);
-	error=(* fs->access)(context, request, SERVICE_OP_TYPE_GETATTR);
+	reply_VFS_error(request, EIO);
+	logoutput_warning("_fs_browse_getattr: ino %li internal error wrong or no context", (unsigned long) get_ino_system_stat(&inode->stat));
+	return;
 
-	if (error==0) {
+    }
 
-	    (* fs->getattr)(context, request, inode, NULL);
+    if (context->type==SERVICE_CTX_TYPE_WORKSPACE) {
 
-	} else {
+	(* context->service.workspace.fs->getattr)(context, request, inode);
 
-	    reply_VFS_error(request, error);
+    } else if (context->type==SERVICE_CTX_TYPE_BROWSE) {
 
-	}
+	(* context->service.browse.fs->getattr)(context, request, inode);
 
     } else {
 
-	reply_VFS_error(request, error);
+	reply_VFS_error(request, EIO);
+
+    }
+
+}
+
+static void _fs_browse_access(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, unsigned int mask)
+{
+
+    context=get_browse_context(context, inode);
+
+    if (context==NULL) {
+
+	reply_VFS_error(request, EIO);
+	logoutput_warning("_fs_browse_access: ino %li internal error wrong or no context", (unsigned long) get_ino_system_stat(&inode->stat));
+	return;
+
+    }
+
+    if (context->type==SERVICE_CTX_TYPE_WORKSPACE) {
+
+	(* context->service.workspace.fs->access)(context, request, inode, mask);
+
+    } else if (context->type==SERVICE_CTX_TYPE_BROWSE) {
+
+	(* context->service.browse.fs->access)(context, request, inode, mask);
+
+    } else {
+
+	reply_VFS_error(request, EIO);
 
     }
 
@@ -261,31 +267,28 @@ static void _fs_browse_getattr(struct service_context_s *context, struct fuse_re
 
 static void _fs_browse_setattr(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, struct system_stat_s *stat)
 {
-    struct service_fs_s *fs=get_service_context_fs(context);
-    struct entry_s *entry=inode->alias;
-    unsigned int error=(* fs->access)(context, request, SERVICE_OP_TYPE_SETATTR);
 
-    logoutput("_fs_browse_setattr: context root %s (thread %i): %.*s", context->name, (int) gettid(), entry->name.len, entry->name.name);
+    context=get_browse_context(context, inode);
 
-    if (error==0) {
+    if (context==NULL) {
 
-	context=get_browse_context(inode);
-	fs=get_service_context_fs(context);
-	error=(* fs->access)(context, request, SERVICE_OP_TYPE_SETATTR);
+	reply_VFS_error(request, EIO);
+	logoutput_warning("_fs_browse_setattr: ino %li internal error wrong or no context", (unsigned long) get_ino_system_stat(&inode->stat));
+	return;
 
-	if (error==0) {
+    }
 
-	    (* fs->setattr)(context, request, inode, NULL, stat);
+    if (context->type==SERVICE_CTX_TYPE_WORKSPACE) {
 
-	} else {
+	(* context->service.workspace.fs->setattr)(context, request, inode, stat);
 
-	    reply_VFS_error(request, error);
+    } else if (context->type==SERVICE_CTX_TYPE_BROWSE) {
 
-	}
+	(* context->service.browse.fs->setattr)(context, request, inode, stat);
 
     } else {
 
-	reply_VFS_error(request, error);
+	reply_VFS_error(request, EIO);
 
     }
 
@@ -359,41 +362,32 @@ static void _fs_browse_create(struct fuse_openfile_s *openfile, struct fuse_requ
 static void _fs_browse_opendir(struct fuse_opendir_s *opendir, struct fuse_request_s *request, unsigned int flags)
 {
     struct service_context_s *context=opendir->context;
-    struct service_fs_s *fs=get_service_context_fs(context);
-    unsigned int error=(* fs->access)(context, request, SERVICE_OP_TYPE_OPENDIR);
 
-    logoutput("OPENDIR browse %s (thread %i) %li", context->name, (int) gettid(), opendir->inode->stat.sst_ino);
+    context=get_browse_context(context, opendir->inode);
 
-    if (error==0) {
+    if (context==NULL) {
 
-	context=get_browse_context(opendir->inode);
+	reply_VFS_error(request, EIO);
+	logoutput_warning("_fs_browse_opendir: ino %li internal error wrong or no context", (unsigned long) get_ino_system_stat(&opendir->inode->stat));
+	return;
 
-	if (context==NULL || (context->type != SERVICE_CTX_TYPE_BROWSE && context->type != SERVICE_CTX_TYPE_WORKSPACE)) {
+    }
 
-	    reply_VFS_error(request, EIO);
-	    logoutput_warning("_fs_browse_opendir: ino %li internal error wrong or no context", (unsigned long) opendir->inode->stat.sst_ino);
-	    return;
+    opendir->context=context;
+    logoutput("OPENDIR browse %s (thread %i) %li", context->name, (int) gettid(), get_ino_system_stat(&opendir->inode->stat));
 
-	}
+    if (context->type==SERVICE_CTX_TYPE_WORKSPACE) {
 
-	fs=get_service_context_fs(context);
-	error=(* fs->access)(context, request, SERVICE_OP_TYPE_OPENDIR);
+	(* context->service.workspace.fs->opendir)(opendir, request, flags);
 
-	if (error==0) {
+    } else if (context->type==SERVICE_CTX_TYPE_BROWSE) {
 
-	    opendir->context=context;
-	    logoutput("OPENDIR browse %s (thread %i) %li", context->name, (int) gettid(), opendir->inode->stat.sst_ino);
-	    (* fs->opendir)(opendir, request, NULL, flags);
-
-	} else {
-
-	    reply_VFS_error(request, error);
-
-	}
+	(* context->service.browse.fs->opendir)(opendir, request, flags);
 
     } else {
 
-	reply_VFS_error(request, error);
+	logoutput_debug("_fs_browse_opendir: error ... context %u", context->type);
+	reply_VFS_error(request, EIO);
 
     }
 
@@ -403,32 +397,18 @@ static void _fs_browse_opendir(struct fuse_opendir_s *opendir, struct fuse_reque
 
 static void _fs_browse_statfs(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode)
 {
-    struct service_fs_s *fs=get_service_context_fs(context);
-    unsigned int error=(* fs->access)(context, request, SERVICE_OP_TYPE_STATFS);
 
-    if (error==0) {
+    if (inode) context=get_browse_context(context, inode);
 
-	context=get_browse_context(inode);
-	fs=get_service_context_fs(context);
-	error=(* fs->access)(context, request, SERVICE_OP_TYPE_STATFS);
+    logoutput("STATFS %s (thread %i) %li", context->name, (int) gettid(), get_ino_system_stat(&inode->stat));
+    _fs_common_statfs(context, request, inode);
+}
 
-	if (error==0) {
+static struct fuse_fs_s browse_fs;
 
-	    logoutput("STATFS %s (thread %i) %li", context->name, (int) gettid(), inode->stat.sst_ino);
-	    (* fs->statfs)(context, request, NULL);
-
-	} else {
-
-	    reply_VFS_error(request, error);
-
-	}
-
-    } else {
-
-	reply_VFS_error(request, error);
-
-    }
-
+void use_service_browse_fs(struct service_context_s *ctx, struct inode_s *inode)
+{
+    inode->fs=&browse_fs;
 }
 
 /*
@@ -438,7 +418,7 @@ static void _fs_browse_statfs(struct service_context_s *context, struct fuse_req
     - path resolution is simple, its / or /%name% for lookup
 */
 
-static void _set_browse_fs(struct fuse_fs_s *fs)
+static void _set_service_browse_fs(struct fuse_fs_s *fs)
 {
 
     set_virtual_fs(fs);
@@ -446,8 +426,9 @@ static void _set_browse_fs(struct fuse_fs_s *fs)
     fs->forget=_fs_browse_forget;
     fs->getattr=_fs_browse_getattr;
     fs->setattr=_fs_browse_setattr;
+    fs->access=_fs_browse_access;
 
-    fs->type.dir.use_fs=use_service_fs;
+    fs->type.dir.use_fs=use_service_browse_fs;
     fs->type.dir.lookup=_fs_browse_lookup;
 
     fs->type.dir.create=_fs_browse_create;
@@ -457,34 +438,22 @@ static void _set_browse_fs(struct fuse_fs_s *fs)
 
     fs->type.dir.unlink=_fs_browse_unlink;
     fs->type.dir.rmdir=_fs_browse_rmdir;
-
     fs->type.dir.rename=_fs_browse_rename;
 
     fs->type.dir.opendir=_fs_browse_opendir;
-
-    fs->type.dir.readdir=_fs_service_readdir;
-    fs->type.dir.readdirplus=_fs_service_readdirplus;
-    fs->type.dir.releasedir=_fs_service_releasedir;
-    fs->type.dir.fsyncdir=_fs_service_fsyncdir;
-    fs->type.dir.get_fuse_direntry=get_fuse_direntry_common;
 
     fs->statfs=_fs_browse_statfs;
 
 }
 
-void use_browse_fs(struct inode_s *inode)
-{
-    inode->fs=&browse_fs;
-}
-
-void init_browse_fs()
+void init_service_browse_fs()
 {
     memset(&browse_fs, 0, sizeof(struct fuse_fs_s));
     browse_fs.flags = FS_SERVICE_FLAG_ROOT | FS_SERVICE_FLAG_DIR;
-    _set_browse_fs(&browse_fs);
+    _set_service_browse_fs(&browse_fs);
 }
 
-void set_browse_fs(struct fuse_fs_s *fs)
+void set_service_browse_fs(struct fuse_fs_s *fs)
 {
-    _set_browse_fs(fs);
+    _set_service_browse_fs(fs);
 }

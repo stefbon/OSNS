@@ -17,36 +17,13 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/vfs.h>
-#include <pwd.h>
-#include <sys/syscall.h>
-
-#include "main.h"
-#include "log.h"
-#include "misc.h"
-#include "datatypes.h"
-#include "network.h"
+#include "libosns-log.h"
+#include "libosns-misc.h"
+#include "libosns-datatypes.h"
+#include "libosns-threads.h"
+#include "libosns-eventloop.h"
 
 #include "protocol.h"
 
@@ -319,12 +296,12 @@ static void _sftp_op_readdir(struct sftp_subsystem_s *sftp, struct commonhandle_
 		(* actx->ops.write_name_name_response)(actx, &abuff, &name);
 		(* abuff.ops->rw.write.write_uint32)(&abuff, (valid->mask | valid->flags));
 		write_attributes_generic(actx, &abuff, &r, &stat, valid);
-		size=(unsigned int)(abuff.pos - abuff.buffer);
+		size=(unsigned int)(abuff.pos);
 		logoutput("sftp_op_readdir: found %s size %i pos %i max %i", dentry->name, size, pos, SFTP_READDIR_NAMES_SIZE);
 
 		/* does it fit? */
 
-		if ((pos + size) > SFTP_READDIR_NAMES_SIZE) {
+		if ( (pos + size) > SFTP_READDIR_NAMES_SIZE) {
 
 		    (* dh->set_keep_dentry)(dh);
 		    /* 20211020: also keep the buffer with attributes just written? (where?) or */

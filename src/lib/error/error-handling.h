@@ -20,19 +20,6 @@
 #ifndef _LIB_ERROR_ERROR_HANDLING_H
 #define _LIB_ERROR_ERROR_HANDLING_H
 
-#include <stdio.h>
-#include <stdarg.h>
-#include <errno.h>
-#include <err.h>
-#include <syslog.h>
-#include <unistd.h>
-#include <inttypes.h>
-#include <ctype.h>
-#include <sys/types.h>
-#include <string.h>
-
-#include "log.h"
-
 #define _ERROR_TYPE_SYSTEM				1
 #define _ERROR_TYPE_APPLICATION				2
 #define _ERROR_TYPE_LIBRARY				3

@@ -21,8 +21,10 @@
 #define _SSH_CONNECTION_CONNECT_H
 
 int create_ssh_networksocket(struct ssh_connection_s *connection, char *address, unsigned int port);
-int connect_ssh_connection(struct ssh_connection_s *connection, char *address, unsigned int port);
+
+int connect_ssh_connection(struct ssh_connection_s *connection, struct host_address_s *address, struct network_port_s *port, struct beventloop_s *loop);
 void disconnect_ssh_connection(struct ssh_connection_s *connection);
+
 int add_ssh_connection_eventloop(struct ssh_connection_s *connection, unsigned int fd, unsigned int *error);
 void remove_ssh_connection_eventloop(struct ssh_connection_s *connection);
 

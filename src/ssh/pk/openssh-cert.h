@@ -17,8 +17,8 @@
 
 */
 
-#ifndef _SSH_PK_OPENSSH_CERT_H
-#define _SSH_PK_OPENSHH_CERT_H
+#ifndef SSH_PK_OPENSSH_CERT_H
+#define SSH_PK_OPENSHH_CERT_H
 
 void init_ssh_cert_openssh_com(struct openssh_cert_s *cert, struct ssh_pkalgo_s *pkalgo);
 int read_cert_openssh_com(struct openssh_cert_s *cert, struct ssh_string_s *data);

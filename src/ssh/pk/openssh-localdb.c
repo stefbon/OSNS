@@ -17,33 +17,16 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <sys/fsuid.h>
 
-#include "log.h"
-#include "main.h"
-#include "misc.h"
-#include "network.h"
+#include "libosns-log.h"
+#include "libosns-misc.h"
+#include "libosns-network.h"
+#include "libosns-datatypes.h"
+#include "libosns-connection.h"
 
-#include "datatypes.h"
 #include "ssh-utils.h"
 
 #include "pk-types.h"
@@ -135,11 +118,18 @@ static int is_host_pattern(char *host)
 	note host can be more than one specification, seperated by a comma
 */
 
-static int compare_host_openssh(char *host, char *ipv4, char *hostname)
+static int compare_host_openssh(char *host, struct network_peer_s *remote)
 {
+    char *ipv4=NULL;
+    char *hostname=NULL;
     char *sep=NULL;
     char *start=host;
     int match=-1;
+
+    ipv4=remote->host.ip.addr.v4;
+    hostname=remote->host.hostname;
+
+    logoutput_debug("compare_host_openssh: compare %s with %s:%s", host, ipv4, hostname);
 
     findhost:
 
@@ -182,7 +172,7 @@ static int compare_host_openssh(char *host, char *ipv4, char *hostname)
 
 /* look in the file fp for a hostkey */
 
-static int _check_serverkey_pk(FILE *fp, char *remotehost, char *remoteipv4, struct ssh_key_s *key, const char *what, unsigned int *error)
+static int _check_serverkey_pk(FILE *fp, struct network_peer_s *remote, struct ssh_key_s *key, const char *what, unsigned int *error)
 {
     int result=-1;
     char *line=NULL;
@@ -233,7 +223,7 @@ static int _check_serverkey_pk(FILE *fp, char *remotehost, char *remoteipv4, str
 
 	    *sep='\0';
 
-	    if (compare_host_openssh(start, remoteipv4, remotehost)==-1) {
+	    if (compare_host_openssh(start, remote)==-1) {
 
 		*sep=' ';
 		continue;
@@ -259,7 +249,6 @@ static int _check_serverkey_pk(FILE *fp, char *remotehost, char *remoteipv4, str
 	    /* algo */
 
 	    *sep='\0';
-
 	    algo=get_pkalgo(start, strlen(start), NULL);
 
 	    if (algo == NULL) {
@@ -305,6 +294,10 @@ static int _check_serverkey_pk(FILE *fp, char *remotehost, char *remoteipv4, str
 		clear_ssh_string(&decoded);
 		if (result==0) break;
 
+	    } else {
+
+		logoutput_debug("_check_serverkey_pk: unable to decode key (len=%u)", len);
+
 	    }
 
 	    clear_ssh_string(&decoded);
@@ -322,28 +315,19 @@ static int _check_serverkey_pk(FILE *fp, char *remotehost, char *remoteipv4, str
 
 /* check the server hostkey against the personal known_hosts file */
 
-int check_serverkey_localdb_openssh(struct fs_connection_s *conn, struct passwd *pwd, struct ssh_key_s *pkey, const char *what)
+int check_serverkey_localdb_openssh(struct connection_s *c, struct passwd *pwd, struct ssh_key_s *pkey, const char *what)
 {
     FILE *fp = NULL;
     unsigned int error=0;
-    char *remotehost=NULL;
-    char *remoteipv4=NULL;
+    struct network_peer_s remote;
     int result=-1;
 
-    remotehost=get_connection_hostname(conn, get_bevent_unix_fd(conn->io.socket.bevent), 1, NULL);
+    memset(&remote, 0, sizeof(struct network_peer_s));
+    remote.host.flags = (HOST_ADDRESS_FLAG_IP | HOST_ADDRESS_FLAG_HOSTNAME); /* get hostname AND ip address */
 
-    if (remotehost==NULL) {
+    if (get_network_peer_properties(&c->sock, &remote, "remote")==-1) {
 
-	logoutput("check_serverkey: error getting remote hostname (%s)", error, strerror(error));
-	goto finish;
-
-    }
-
-    remoteipv4=get_connection_ipv4(conn, get_bevent_unix_fd(conn->io.socket.bevent), 1, NULL);
-
-    if (remoteipv4==NULL) {
-
-	logoutput("check_serverkey: error %i getting remote ipv4 (%s)", error, strerror(error));
+	logoutput_debug("check_serverkey_localdb_openssh: error getting remote hostname/ip");
 	goto finish;
 
     }
@@ -354,7 +338,7 @@ int check_serverkey_localdb_openssh(struct fs_connection_s *conn, struct passwd 
 
     if (fp) {
 
-	result=_check_serverkey_pk(fp, remotehost, remoteipv4, pkey, what, &error);
+	result=_check_serverkey_pk(fp, &remote, pkey, what, &error);
 	fclose(fp);
 	if (result==0) goto finish;
 
@@ -374,7 +358,7 @@ int check_serverkey_localdb_openssh(struct fs_connection_s *conn, struct passwd 
 
     if (fp) {
 
-	result=_check_serverkey_pk(fp, remotehost, remoteipv4, pkey, what, &error);
+	result=_check_serverkey_pk(fp, &remote, pkey, what, &error);
 	fclose(fp);
 
     } else {
@@ -388,10 +372,6 @@ int check_serverkey_localdb_openssh(struct fs_connection_s *conn, struct passwd 
     }
 
     finish:
-
-    if (remotehost) free(remotehost);
-    if (remoteipv4) free(remoteipv4);
-
     return result;
 
 }

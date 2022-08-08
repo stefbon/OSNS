@@ -21,8 +21,7 @@
 #define OSNS_SFTP_SUBSYSTEM_H
 
 #include <pwd.h>
-#include "network.h"
-#include "users.h"
+#include "libosns-users.h"
 #include "sftp/attr-context.h"
 #include "ssh/subsystem/connection.h"
 
@@ -127,7 +126,7 @@ struct sftp_subsystem_s {
     struct sftp_protocol_s				protocol;
     struct ssh_subsystem_connection_s			connection;
     struct sftp_identity_s				identity;
-    struct common_signal_s				*signal;
+    struct shared_signal_s				*signal;
     struct sftp_receive_s				receive;
     struct sftp_send_s					send;
     struct attr_context_s				attrctx;

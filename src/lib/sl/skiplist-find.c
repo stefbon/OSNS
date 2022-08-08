@@ -17,33 +17,16 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <err.h>
-
-#include <inttypes.h>
-#include <ctype.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/param.h>
 #include <pthread.h>
-
-#ifndef ENOATTR
-#define ENOATTR ENODATA        /* No such attribute */
-#endif
 
 #include "skiplist.h"
 #include "skiplist-find.h"
 #include "skiplist-utils.h"
 #include "skiplist-lock.h"
-#include "log.h"
+
+#include "libosns-log.h"
 
 static void move_lock_vector_path_down(struct sl_skiplist_s *sl, struct sl_vector_s *vector)
 {
@@ -183,7 +166,7 @@ void sl_find_generic(struct sl_skiplist_s *sl, unsigned char opcode, struct sl_l
 
 	// logoutput_debug("sl_find_generic: level %i step %i", vector->level, dirnode->junction[vector->level].step);
 
-	diff=(* next->compare)(list, result->lookupdata);
+	if (next) diff=(* next->compare)(list, result->lookupdata);
 
 	if (diff>0) {
 
@@ -298,5 +281,6 @@ static void sl_find_cb(struct sl_skiplist_s *sl, struct sl_lockops_s *l, struct 
 void sl_find(struct sl_skiplist_s *sl, struct sl_searchresult_s *result)
 {
     struct sl_lockops_s *lockops=(result->flags & SL_SEARCHRESULT_FLAG_EXCLUSIVE) ? get_sl_lockops_nolock() : get_sl_lockops_default();
+
     sl_find_generic(sl, _SL_OPCODE_FIND, lockops, sl_find_cb, result);
 }

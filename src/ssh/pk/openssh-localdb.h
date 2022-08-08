@@ -17,11 +17,11 @@
 
 */
 
-#ifndef _SSH_PK_OPENSSH_LOCALDB_H
-#define _SSH_PK_OPENSSH_LOCALDB_H
+#ifndef SSH_PK_OPENSSH_LOCALDB_H
+#define SSH_PK_OPENSSH_LOCALDB_H
 
 /* prototypes */
 
-int check_serverkey_localdb_openssh(struct fs_connection_s *c, struct passwd *pwd, struct ssh_key_s *pkey, const char *what);
+int check_serverkey_localdb_openssh(struct connection_s *c, struct passwd *pwd, struct ssh_key_s *pkey, const char *what);
 
 #endif

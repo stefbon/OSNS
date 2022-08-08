@@ -17,29 +17,10 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
-#include "log.h"
-#include "main.h"
-#include "misc.h"
+#include "libosns-log.h"
+#include "libosns-misc.h"
 
 #include "ssh-common-protocol.h"
 #include "ssh-common.h"
@@ -58,28 +39,6 @@ void clean_ssh_channel_queue(struct ssh_channel_s *channel)
 void clear_ssh_channel(struct ssh_channel_s *channel)
 {
     clean_ssh_channel_queue(channel);
-
-    if (channel->type==_CHANNEL_TYPE_DIRECT_STREAMLOCAL) {
-
-	clear_ssh_string(&channel->target.direct_streamlocal.path);
-
-    } else if (channel->type==_CHANNEL_TYPE_DIRECT_TCPIP) {
-
-	clear_ssh_string(&channel->target.direct_tcpip.host);
-	clear_ssh_string(&channel->target.direct_tcpip.orig_ip);
-
-    } else if (channel->type==_CHANNEL_TYPE_SESSION) {
-
-	if (channel->target.session.type==_CHANNEL_SESSION_TYPE_EXEC) {
-
-	    clear_ssh_string(&channel->target.session.use.exec.command);
-
-	}
-
-    }
-
-    pthread_mutex_destroy(&channel->mutex);
-
 }
 
 void free_ssh_channel(struct ssh_channel_s **p_channel)
@@ -89,7 +48,7 @@ void free_ssh_channel(struct ssh_channel_s **p_channel)
     if (channel->flags & CHANNEL_FLAG_CONNECTION_REFCOUNT) {
 
 	decrease_refcount_ssh_connection(channel->connection);
-	channel->flags -= CHANNEL_FLAG_CONNECTION_REFCOUNT;
+	channel->flags &= ~CHANNEL_FLAG_CONNECTION_REFCOUNT;
     }
 
     clear_ssh_channel(channel);
@@ -111,21 +70,17 @@ static void process_incoming_bytes_default(struct ssh_channel_s *channel, unsign
 
 static void process_outgoing_bytes_default(struct ssh_channel_s *channel, unsigned int size)
 {
-    pthread_mutex_lock(&channel->mutex);
-
-    /* decrease the remote window */
+    signal_lock_flag(channel->signal, &channel->flags, CHANNEL_FLAG_OUTGOING_DATA);
     channel->remote_window-=size;
-
-    /* when remote window < max packet size wait for a window adjust message */
-
-    pthread_mutex_unlock(&channel->mutex);
+    signal_unlock_flag(channel->signal, &channel->flags, CHANNEL_FLAG_OUTGOING_DATA);
 }
 
-static int signal_ctx2channel_default(struct ssh_channel_s **p_channel, const char *what, struct ctx_option_s *o)
+static int signal_ctx2channel_default(struct ssh_channel_s **p_channel, const char *what, struct io_option_s *o, unsigned int type)
 {
     struct ssh_channel_s *channel=*p_channel;
+    const char *sender=get_name_interface_signal_sender(type);
 
-    logoutput("signal_ctx2channel_default: %s", what);
+    logoutput("signal_ctx2channel_default: %s by %s", what, sender);
 
     if (strncmp(what, "command:", 8)==0) {
 	unsigned int pos=8;
@@ -156,7 +111,7 @@ static int signal_ctx2channel_default(struct ssh_channel_s **p_channel, const ch
 	    struct ssh_session_s *session=channel->session;
 	    void *ptr=(void *) session;
 
-	    return (* session->context.signal_ctx2ssh)(&ptr, what, o);
+	    return (* session->context.signal_ctx2ssh)(&ptr, what, o, type);
 
 	}
 
@@ -166,15 +121,15 @@ static int signal_ctx2channel_default(struct ssh_channel_s **p_channel, const ch
 
 }
 
-static int signal_channel2ctx_default(struct ssh_channel_s *c, const char *w, struct ctx_option_s *o)
+static int signal_channel2ctx_default(struct ssh_channel_s *c, const char *w, struct io_option_s *o, unsigned int type)
 {
     return 0; /* nothing here since the context is not known: where to send it to */
 }
 
-static void receive_data_default(struct ssh_channel_s *c, char **p_buffer, unsigned int size, uint32_t seq, unsigned char flags)
+static void recv_data_default(struct ssh_channel_s *c, char **p_buffer, unsigned int size, uint32_t seq, unsigned char flags)
 {
 
-    logoutput("receive_data_default: receiving %i bytes, this should not happen...data is lost");
+    logoutput("recv_data_default: receiving %i bytes, this should not happen...data is lost");
 
     if (flags & _CHANNEL_DATA_RECEIVE_FLAG_ALLOC) {
 	char *buffer=*p_buffer;
@@ -191,15 +146,15 @@ void init_ssh_channel(struct ssh_session_s *session, struct ssh_connection_s *co
 
     channel->session=session;
     channel->connection=connection;
+    channel->signal=session->signal;
 
     channel->context.unique=0;
     channel->context.ctx=NULL;
     channel->context.signal_ctx2channel=signal_ctx2channel_default;
     channel->context.signal_channel2ctx=signal_channel2ctx_default;
-    channel->context.receive_data=receive_data_default;
+    channel->context.recv_data=recv_data_default;
 
     channel->type=type;
-    channel->name=NULL;
     channel->flags|=CHANNEL_FLAG_INIT;
 
     channel->local_channel=0;
@@ -214,7 +169,6 @@ void init_ssh_channel(struct ssh_session_s *session, struct ssh_connection_s *co
 
     init_payload_queue(connection, &channel->queue);
 
-    pthread_mutex_init(&channel->mutex, NULL);
     init_list_element(&channel->list, NULL);
     channel->start=start_channel;
     channel->close=close_channel;
@@ -226,7 +180,7 @@ void init_ssh_channel(struct ssh_session_s *session, struct ssh_connection_s *co
 
 }
 
-struct ssh_channel_s *create_channel(struct ssh_session_s *session, struct ssh_connection_s *connection, unsigned char type)
+struct ssh_channel_s *allocate_channel(struct ssh_session_s *session, struct ssh_connection_s *connection, unsigned char type)
 {
     struct ssh_channel_s *channel=NULL;
 
@@ -241,108 +195,6 @@ struct ssh_channel_s *create_channel(struct ssh_session_s *session, struct ssh_c
     }
 
     return channel;
-}
-
-struct ssh_channel_s *open_new_channel(struct ssh_connection_s *connection, struct ssh_string_s *type, unsigned int remote_channel, unsigned int windowsize, unsigned int maxpacketsize, struct ssh_string_s *data)
-{
-    struct ssh_session_s *session=get_ssh_connection_session(connection);
-    int result=-1;
-    struct ssh_channel_s *channel=NULL;
-
-    if (compare_ssh_string(type, 'c', _CHANNEL_NAME_SESSION)!=0 &&
-	compare_ssh_string(type, 'c', _CHANNEL_NAME_DIRECT_STREAMLOCAL_OPENSSH_COM)!=0 &&
-	compare_ssh_string(type, 'c', _CHANNEL_NAME_DIRECT_TCPIP)!=0) return NULL;
-
-
-    channel=create_channel(session, connection, _CHANNEL_TYPE_SESSION);
-
-    if (channel) {
-
-	channel->name=_CHANNEL_NAME_SESSION;
-	channel->remote_channel=remote_channel;
-	channel->max_packet_size=maxpacketsize;
-	channel->local_window=windowsize;
-
-	result=add_channel(channel, 0);
-
-	if (result==-1) {
-
-	    logoutput("open_new_channel: unable to add channel");
-	    goto out;
-
-	}
-
-    } else {
-
-	logoutput("open_new_channel: unable to create channel");
-	goto out;
-
-    }
-
-    if (compare_ssh_string(type, 'c', _CHANNEL_NAME_SESSION)==0) {
-
-	/* nothing to do */
-	result=0;
-
-    } else if (compare_ssh_string(type, 'c', _CHANNEL_NAME_DIRECT_STREAMLOCAL_OPENSSH_COM)==0) {
-
-	if (data->len>8) {
-	    struct ssh_string_s *path=&channel->target.direct_streamlocal.path;
-	    struct msg_buffer_s mb=INIT_SSH_MSG_BUFFER;
-	    struct ssh_string_s socket=SSH_STRING_INIT;
-
-	    set_msg_buffer_string(&mb, data);
-	    msg_read_ssh_string(&mb, &socket);
-
-	    if (mb.error>0) goto out;
-	    create_ssh_string(&path, socket.len, socket.ptr, SSH_STRING_FLAG_ALLOC);
-	    result=0;
-
-	} else {
-
-	    goto out;
-
-	}
-
-    } else if (compare_ssh_string(type, 'c', _CHANNEL_NAME_DIRECT_TCPIP)==0) {
-
-	if (data->len>8) {
-	    struct ssh_string_s *host=&channel->target.direct_tcpip.host;
-	    struct ssh_string_s *orig_ip=&channel->target.direct_tcpip.orig_ip;
-	    struct msg_buffer_s mb=INIT_SSH_MSG_BUFFER;
-	    struct ssh_string_s address=SSH_STRING_INIT;
-	    struct ssh_string_s ip=SSH_STRING_INIT;
-
-	    set_msg_buffer_string(&mb, data);
-	    msg_read_ssh_string(&mb, &address);
-	    msg_read_uint32(&mb, &channel->target.direct_tcpip.port);
-	    msg_read_ssh_string(&mb, &ip);
-	    msg_read_uint32(&mb, &channel->target.direct_tcpip.orig_port);
-
-	    if (mb.error>0) goto out;
-	    create_ssh_string(&host, address.len, address.ptr, SSH_STRING_FLAG_ALLOC);
-	    create_ssh_string(&orig_ip, ip.len, ip.ptr, SSH_STRING_FLAG_ALLOC);
-	    result=0;
-
-	} else {
-
-	    goto out;
-
-	}
-
-    }
-
-    out:
-
-    if (result==-1 && channel) {
-
-	remove_channel(channel, 0);
-	free_ssh_channel(&channel);
-
-    }
-
-    return channel;
-
 }
 
 /* TODO:

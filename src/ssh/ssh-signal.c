@@ -17,36 +17,15 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
+#include "libosns-log.h"
+#include "libosns-misc.h"
 
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
-#include "log.h"
-#include "main.h"
-#include "misc.h"
-#include "commonsignal.h"
 #include "ssh-common.h"
 #include "ssh-utils.h"
 
-void init_ssh_signal(struct ssh_signal_s *signal, unsigned int flags, struct common_signal_s *s)
+void init_ssh_signal(struct ssh_signal_s *signal, unsigned int flags, struct shared_signal_s *s)
 {
     signal->flags=flags;
     signal->signal=s;

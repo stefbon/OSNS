@@ -17,29 +17,10 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
-#include "log.h"
-#include "main.h"
-#include "misc.h"
+#include "libosns-log.h"
+#include "libosns-misc.h"
 
 #include "ssh-common-protocol.h"
 #include "ssh-common.h"
@@ -81,103 +62,6 @@
 
 static void receive_msg_channel_open(struct ssh_connection_s *connection, struct ssh_payload_s *payload)
 {
-    struct msg_buffer_s mb=INIT_SSH_MSG_BUFFER;
-    struct ssh_string_s type=SSH_STRING_INIT;
-    unsigned int senderchannel=0;
-    unsigned int windowsize=0;
-    unsigned int maxpacketsize=0;
-    struct ssh_string_s data=SSH_STRING_INIT;
-    struct ssh_channel_s *channel=NULL;
-    uint32_t seq=0;
-    int result=-1;
-
-    if (payload->len<17) {
-
-	logoutput("receive_msg_open: message too small (size: %i)", payload->len);
-	free_payload(&payload);
-	goto out;
-
-    }
-
-    set_msg_buffer_payload(&mb, payload);
-    msg_read_byte(&mb, NULL);
-    msg_read_ssh_string(&mb, &type);
-    msg_read_uint32(&mb, &senderchannel);
-    msg_read_uint32(&mb, &windowsize);
-    msg_read_uint32(&mb, &maxpacketsize);
-
-    if (mb.error>0) {
-
-	logoutput("receive_msg_channel_open: error %i reading message (%s)", mb.error, strerror(mb.error));
-	goto out;
-
-    }
-
-    data.len=(mb.len - mb.pos);
-    data.ptr=&mb.data[mb.pos];
-
-    /* what type of channel:
-	    - "session"					(send by client) -> subsystem, shell, exec !
-	    - "x11"					(send by client)
-	    - "forwarded-tcpip"				(send by server) -> connect to daemon/service like sql server, print server
-	    - "direct-tcpip"				(send by client)
-	    - "forwarded-streamlocal@openssh.com"	(send by server) -> idem see forwarded-tcpip
-	    - "direct-streamlocal@openssh.com"		(send by client)
-    */
-
-    channel=open_new_channel(connection, &type, senderchannel, windowsize, maxpacketsize, &data);
-    free_payload(&payload);
-    payload=NULL;
-
-    if (channel) {
-
-	logoutput("receive_msg_channel_open: open channel %s success (%i:%i)", channel->name, channel->local_channel, channel->remote_channel);
-
-    } else {
-
-	logoutput("receive_msg_channel_open: failed to open channel");
-	goto out;
-
-    }
-
-    if (send_channel_open_confirmation(channel, NULL, &seq)>0) {
-
-	logoutput("receive_msg_channel_open: send open confirmation (%s %i:%i)", channel->name, channel->local_channel, channel->remote_channel);
-	result=0;
-
-    } else {
-
-	logoutput("receive_msg_channel_open: failed to send open confirmation (%s %i:%i)", channel->name, channel->local_channel, channel->remote_channel);
-	goto out;
-
-    }
-
-    out:
-
-    if (result==-1) {
-
-	if (type.len>0) {
-
-	    if (send_channel_open_failure(connection, senderchannel, SSH_OPEN_UNKNOWN_CHANNEL_TYPE, &seq)>0) {
-
-		logoutput("receive_msg_open: send a channel open failure message");
-
-	    } else {
-
-		logoutput("receive_msg_open: failed to send a channel open failure message");
-
-	    }
-
-	} else {
-
-	    logoutput("receive_msg_open: failed to send a channel open failure message");
-
-	}
-
-	if (channel) free_ssh_channel(&channel);
-
-    }
-
 }
 
 static void forward_payload2channel(struct ssh_connection_s *connection, unsigned int local_channel, struct ssh_payload_s **p_payload)
@@ -185,7 +69,7 @@ static void forward_payload2channel(struct ssh_connection_s *connection, unsigne
     struct ssh_session_s *session=get_ssh_connection_session(connection);
     struct channel_table_s *table=&session->channel_table;
     struct ssh_channel_s *channel=NULL;
-    struct simple_lock_s rlock;
+    struct osns_lock_s rlock;
 
     channeltable_readlock(table, &rlock);
     channel=lookup_session_channel_for_payload(table, local_channel, p_payload);
@@ -198,7 +82,7 @@ static void forward_data2channel(struct ssh_connection_s *connection, unsigned i
     struct ssh_session_s *session=get_ssh_connection_session(connection);
     struct channel_table_s *table=&session->channel_table;
     struct ssh_channel_s *channel=NULL;
-    struct simple_lock_s rlock;
+    struct osns_lock_s rlock;
 
     channeltable_readlock(table, &rlock);
     channel=lookup_session_channel_for_data(table, local_channel, p_payload);
@@ -212,7 +96,7 @@ static void set_flag_signal_channel(struct ssh_connection_s *connection, unsigne
     struct channel_table_s *table=&session->channel_table;
     struct ssh_signal_s *signal=NULL;
     struct ssh_channel_s *channel=NULL;
-    struct simple_lock_s rlock;
+    struct osns_lock_s rlock;
 
     channeltable_readlock(table, &rlock);
     channel=lookup_session_channel_for_flag(table, local_channel, flag);
@@ -317,7 +201,7 @@ static void receive_msg_channel_window_adjust(struct ssh_connection_s *connectio
 	struct ssh_session_s *session=get_ssh_connection_session(connection);
 	struct channel_table_s *table=&session->channel_table;
 	struct ssh_channel_s *channel=NULL;
-	struct simple_lock_s rlock;
+	struct osns_lock_s rlock;
 
 	local_channel=get_uint32(&payload->buffer[pos]);
 	pos+=4;
@@ -326,14 +210,16 @@ static void receive_msg_channel_window_adjust(struct ssh_connection_s *connectio
 	logoutput("receive_msg_channel_window_adjust: channel %i size %i", local_channel, size);
 
 	channeltable_readlock(table, &rlock);
+
 	channel=lookup_session_channel(table, local_channel);
 	if (channel) {
 
-	    pthread_mutex_lock(&channel->mutex);
-	    channel->remote_window+=size;
-	    pthread_mutex_unlock(&channel->mutex);
+	    signal_lock_flag(channel->signal, &channel->flags, CHANNEL_FLAG_OUTGOING_DATA);
+	    channel->remote_window-=size;
+	    signal_unlock_flag(channel->signal, &channel->flags, CHANNEL_FLAG_OUTGOING_DATA);
 
 	}
+
 	channeltable_unlock(table, &rlock);
 	free_payload(&payload);
 
@@ -518,10 +404,8 @@ static void receive_msg_channel_request_s(struct ssh_connection_s *connection, s
 	    forward_data2channel(connection, local_channel, &payload);
 
 	} else {
-	    int fd=-1;
 
-	    if (connection->connection.io.socket.bevent) fd=get_bevent_unix_fd(connection->connection.io.socket.bevent);
-	    logoutput("receive_msg_channel_request_s: ssh fd %i received invalid message local channel %i", fd, local_channel);
+	    logoutput("receive_msg_channel_request_s: received invalid message local channel %i", local_channel);
 
 	}
 
@@ -537,20 +421,17 @@ static void receive_msg_channel_request_c(struct ssh_connection_s *connection, s
 	unsigned int local_channel=0;
 	unsigned int len=0;
 	unsigned int pos=1;
-	int fd=-1;
 
 	local_channel=get_uint32(&payload->buffer[pos]);
 	pos+=4;
 	len=get_uint32(&payload->buffer[pos]);
 	pos+=4;
 
-	if (connection->connection.io.socket.bevent) fd=get_bevent_unix_fd(connection->connection.io.socket.bevent);
-
 	if (len + pos <= payload->len) {
 	    struct ssh_string_s request=SSH_STRING_SET(len, &payload->buffer[pos]);
 
 	    pos+=len;
-	    logoutput("receive_msg_channel_request_c: ssh fd %i received request %.*s local channel %i", fd, request.len, request.ptr, local_channel);
+	    logoutput("receive_msg_channel_request_c: received request %.*s local channel %i", request.len, request.ptr, local_channel);
 
 	    if (compare_ssh_string(&request, 'c', "exit-status")==0) {
 		unsigned int exitstatus=0;
@@ -581,7 +462,7 @@ static void receive_msg_channel_request_c(struct ssh_connection_s *connection, s
 
 	} else {
 
-	    logoutput("receive_msg_channel_request_c: ssh fd %i received invalid message local channel %i", fd, local_channel);
+	    logoutput("receive_msg_channel_request_c: received invalid message local channel %i", local_channel);
 
 	}
 

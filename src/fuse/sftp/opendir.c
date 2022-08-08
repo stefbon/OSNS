@@ -17,40 +17,19 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
-#include "main.h"
-#include "log.h"
-#include "misc.h"
-
-#include "workspace-interface.h"
-#include "workspace.h"
-#include "fuse.h"
-#include "threads.h"
-#include "options.h"
+#include "libosns-log.h"
+#include "libosns-misc.h"
+#include "libosns-interface.h"
+#include "libosns-workspace.h"
+#include "libosns-context.h"
+#include "libosns-fuse-public.h"
 
 #include "sftp/common-protocol.h"
 #include "sftp/attr-context.h"
+
+#include "interface/sftp.h"
 #include "interface/sftp-attr.h"
 #include "interface/sftp-send.h"
 #include "interface/sftp-wait-response.h"
@@ -58,11 +37,106 @@
 #include "inode-stat.h"
 #include "symlink.h"
 
-extern struct fs_options_s fs_options;
+#include <linux/fuse.h>
 
 extern const char *dotdotname;
 extern const char *dotname;
 extern const char *rootpath;
+
+void _fs_sftp_readdir(struct fuse_opendir_s *opendir, struct fuse_request_s *r, size_t size, off_t offset)
+{
+    return _fs_common_readdir(opendir, r, size, offset);
+}
+
+void _fs_sftp_fsyncdir(struct fuse_opendir_s *opendir, struct fuse_request_s *r, unsigned char datasync)
+{
+    reply_VFS_error(r, 0);
+}
+
+void _fs_sftp_releasedir(struct fuse_opendir_s *opendir, struct fuse_request_s *f_request)
+{
+    struct service_context_s *context=opendir->context;
+    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
+    struct context_interface_s *interface=&context->interface;
+    struct sftp_request_s sftp_r;
+    unsigned int error=EIO;
+    struct osns_lock_s wlock;
+    struct directory_s *directory=NULL;
+
+    logoutput("_fs_sftp_releasedir");
+
+    set_flag_fuse_opendir(opendir, FUSE_OPENDIR_FLAG_FINISH);
+
+    init_sftp_request(&sftp_r, interface, f_request);
+    sftp_r.call.close.handle=(unsigned char *) opendir->handle->name;
+    sftp_r.call.close.len=opendir->handle->len;
+
+    if (send_sftp_close_ctx(interface, &sftp_r)>0) {
+	struct system_timespec_s timeout=SYSTEM_TIME_INIT;
+
+	get_sftp_request_timeout_ctx(interface, &timeout);
+
+	if (wait_sftp_response_ctx(interface, &sftp_r, &timeout)==1) {
+	    struct sftp_reply_s *reply=&sftp_r.reply;
+
+	    if (reply->type==SSH_FXP_STATUS) {
+
+		/* send ok reply to VFS no matter what the ssh server reports */
+
+		error=0;
+		if (reply->response.status.code>0) logoutput_notice("_fs_sftp_releasedir: got reply %i:%s when closing dir", reply->response.status.linux_error, strerror(reply->response.status.linux_error));
+
+	    } else {
+
+		error=EPROTO;
+
+	    }
+
+	}
+
+    }
+
+    out:
+
+    reply_VFS_error(f_request, error);
+    unset_fuse_request_flags_cb(f_request);
+
+    signal_lock(opendir->signal);
+
+    if ((opendir->flags & FUSE_OPENDIR_FLAG_THREAD)==0) {
+
+	/* free opendir handle */
+
+	if (opendir->handle) {
+
+	    release_fuse_handle(opendir->handle);
+	    opendir->handle=NULL;
+
+	}
+
+	/* free cached data */
+
+	if (opendir->data.abuff.buffer) {
+
+	    free(opendir->data.abuff.buffer);
+	    set_attr_buffer_read(&opendir->data.abuff, NULL, 0);
+
+	}
+
+    }
+
+    signal_unlock(opendir->signal);
+
+    if ((opendir->flags & FUSE_OPENDIR_FLAG_INCOMPLETE)==0) {
+
+	opendir->inode->flags &= ~INODE_FLAG_REMOTECHANGED;
+
+	/* remove local entries not found on server */
+	_fs_common_remove_nonsynced_dentries(opendir);
+
+    }
+
+}
 
 static void _cb_created(struct entry_s *entry, struct create_entry_s *ce)
 {
@@ -83,7 +157,7 @@ static void _cb_created(struct entry_s *entry, struct create_entry_s *ce)
 
     copy_system_time(&inode->stime, &directory->synctime);
     add_inode_context(context, inode);
-    set_inode_fuse_fs(context, inode);
+    (* directory->inode->fs->type.dir.use_fs)(context, inode);
 
     log_inode_information(inode, INODE_INFORMATION_OWNER | INODE_INFORMATION_SIZE | INODE_INFORMATION_MODE);
 
@@ -99,7 +173,6 @@ static void _cb_created(struct entry_s *entry, struct create_entry_s *ce)
 
     /* no matter what type: the mtime of the parent changes */
     set_mtime_system_stat(&directory->inode->stat, &directory->synctime);
-    set_entry_ops(entry);
 
 }
 
@@ -124,14 +197,6 @@ static void _cb_found(struct entry_s *entry, struct create_entry_s *ce)
     directory=(* ce->get_directory)(ce);
     opendir->count_found++;
     copy_system_time(&inode->stime, &directory->synctime);
-
-    if (system_stat_test_ISDIR(stat)) {
-	struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
-	struct directory_s *tmp=get_directory(workspace, inode, GET_DIRECTORY_FLAG_NOCREATE);
-
-	set_directory_pathcache(context, tmp, NULL);
-
-    }
 
 }
 
@@ -159,11 +224,9 @@ static unsigned int take_sftp_readdir_names(struct sftp_reply_s *reply, struct a
 
     names->buff = NULL;
     names->size = 0;
-
     return (unsigned int) count;
 
 }
-
 
 /* send readdir to server to get list of names
     return
@@ -190,8 +253,8 @@ static int _sftp_get_readdir_names(struct fuse_opendir_s *opendir, unsigned int 
 
     init_sftp_request_minimal(&sftp_r, interface);
 
-    sftp_r.call.readdir.handle=(unsigned char *) opendir->handle.name.name;
-    sftp_r.call.readdir.len=opendir->handle.name.len;
+    sftp_r.call.readdir.handle=(unsigned char *) opendir->handle->name;
+    sftp_r.call.readdir.len=opendir->handle->len;
 
     if (send_sftp_readdir_ctx(interface, &sftp_r)>0) {
 	struct system_timespec_s timeout=SYSTEM_TIME_INIT;
@@ -256,14 +319,14 @@ static void get_sftp_readdir_thread(void *ptr)
 
     signal_lock(opendir->signal);
 
-    if (opendir->flags & _FUSE_OPENDIR_FLAG_THREAD) {
+    if (opendir->flags & FUSE_OPENDIR_FLAG_THREAD) {
 
 	signal_unlock(opendir->signal);
 	return;
 
     }
 
-    opendir->flags |= _FUSE_OPENDIR_FLAG_THREAD;
+    opendir->flags |= FUSE_OPENDIR_FLAG_THREAD;
     signal_unlock(opendir->signal);
 
     init_create_entry(&ce, &xname, NULL, NULL, opendir, context, NULL, NULL);
@@ -272,10 +335,11 @@ static void get_sftp_readdir_thread(void *ptr)
     ce.cb_found=_cb_found;
     ce.cb_error=_cb_error;
     ce.cache.abuff=abuff;
+    // enable_ce_extended_adjust_pathmax(&ce); /* set pathlen from somewhere .... */
 
     init_name(&xname);
 
-    while ((opendir->flags & _FUSE_OPENDIR_FLAG_READDIR_FINISH)==0) {
+    while ((opendir->flags & FUSE_OPENDIR_FLAG_FINISH)==0) {
 	unsigned int total=0;
 
 	if (abuff->count<=0) {
@@ -291,15 +355,15 @@ static void get_sftp_readdir_thread(void *ptr)
 
 		if (error==EINTR || error==ETIMEDOUT) {
 
-		    set_flag_fuse_opendir(opendir, _FUSE_OPENDIR_FLAG_READDIR_INCOMPLETE);
+		    set_flag_fuse_opendir(opendir, FUSE_OPENDIR_FLAG_INCOMPLETE);
 
 		} else {
 
-		    set_flag_fuse_opendir(opendir, _FUSE_OPENDIR_FLAG_READDIR_ERROR);
+		    set_flag_fuse_opendir(opendir, FUSE_OPENDIR_FLAG_ERROR);
 
 		}
 
-		set_flag_fuse_opendir(opendir, _FUSE_OPENDIR_FLAG_READDIR_FINISH);
+		set_flag_fuse_opendir(opendir, FUSE_OPENDIR_FLAG_FINISH);
 		break;
 
 	    } else if (result==0) {
@@ -307,7 +371,7 @@ static void get_sftp_readdir_thread(void *ptr)
 		/* no more names from server */
 
 		finish_get_fuse_direntry(opendir);
-		set_flag_fuse_opendir(opendir, _FUSE_OPENDIR_FLAG_READDIR_FINISH);
+		set_flag_fuse_opendir(opendir, FUSE_OPENDIR_FLAG_FINISH);
 		break;
 
 	    }
@@ -339,7 +403,7 @@ static void get_sftp_readdir_thread(void *ptr)
 
 		/* create the entry (if not exist already) */
 
-		entry=create_entry_extended_batch(&ce);
+		entry=create_entry_extended(&ce);
 
 		if (entry) {
 
@@ -368,7 +432,7 @@ static void get_sftp_readdir_thread(void *ptr)
 	if (abuff->flags & ATTR_BUFFER_FLAG_EOF_SUPPORTED) {
 
 	    if ((abuff->count <= 0) && abuff->left>0) {
-		unsigned char eof= *(abuff->pos);
+		unsigned char eof= *(abuff->buffer + abuff->pos);
 
 		if (eof) {
 
@@ -404,16 +468,30 @@ void start_get_sftp_readdir_thread(struct fuse_opendir_s *opendir)
     -	use readdirplus
 */
 
-void _fs_sftp_opendir(struct fuse_opendir_s *opendir, struct fuse_request_s *f_request, struct pathinfo_s *pathinfo, unsigned int flags)
+void _fs_sftp_opendir(struct fuse_opendir_s *opendir, struct fuse_request_s *f_request, struct fuse_path_s *fpath, unsigned int flags)
 {
-    struct service_context_s *context=(struct service_context_s *) opendir->context;
-    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
-    struct context_interface_s *interface=&context->interface;
+    struct service_context_s *ctx=(struct service_context_s *) opendir->context;
+    struct workspace_mount_s *w=get_workspace_mount_ctx(ctx);
+    struct context_interface_s *i=&ctx->interface;
     struct sftp_request_s sftp_r;
     unsigned int error=EIO;
-    struct directory_s *directory=get_directory(workspace, opendir->inode, 0);
-    unsigned int pathlen=(* interface->backend.sftp.get_complete_pathlen)(interface, pathinfo->len);
-    char path[pathlen];
+    struct directory_s *directory=get_directory(w, opendir->inode, 0);
+    unsigned int pathlen=sftp_get_complete_pathlen(i, fpath);
+    unsigned int size=sftp_get_required_buffer_size_l2p(i, pathlen);
+    char buffer[size];
+    int result=0;
+
+    memset(buffer, 0, size);
+    result=sftp_convert_path_l2p(i, buffer, size, fpath->pathstart, pathlen);
+
+    if (result==-1) {
+
+	logoutput_debug("_fs_sftp_opendir: error converting local path");
+	goto out;
+
+    }
+
+    opendir->flags |= (FUSE_OPENDIR_FLAG_IGNORE_XDEV_SYMLINKS | FUSE_OPENDIR_FLAG_IGNORE_BROKEN_SYMLINKS | FUSE_OPENDIR_FLAG_HIDE_DOTFILES) ; /* sane flag */
 
     /* test a full opendir/readdir is required: test entries are deleted and/or created */
 
@@ -426,10 +504,9 @@ void _fs_sftp_opendir(struct fuse_opendir_s *opendir, struct fuse_request_s *f_r
 	    logoutput("_fs_sftp_opendir_common: remote directory has not changed since last visit: no full opendir is required");
 
 	    opendir->readdir=_fs_common_virtual_readdir;
-	    opendir->readdirplus=_fs_common_virtual_readdirplus;
 	    opendir->fsyncdir=_fs_common_virtual_fsyncdir;
 	    opendir->releasedir=_fs_common_virtual_releasedir;
-	    set_get_fuse_direntry_common(opendir);
+
 	    _fs_common_virtual_opendir(opendir, f_request, flags);
 	    return;
 
@@ -437,37 +514,37 @@ void _fs_sftp_opendir(struct fuse_opendir_s *opendir, struct fuse_request_s *f_r
 
     }
 
-    pathinfo->len += (* interface->backend.sftp.complete_path)(interface, path, pathinfo);
+    logoutput("_fs_sftp_opendir_common: send opendir %s", fpath->pathstart);
 
-    logoutput("_fs_sftp_opendir_common: send opendir %i %s", pathinfo->len, pathinfo->path);
+    init_sftp_request(&sftp_r, i, f_request);
+    sftp_r.call.opendir.path=(unsigned char *) buffer;
+    sftp_r.call.opendir.len=(unsigned int) size;
 
-    init_sftp_request(&sftp_r, interface, f_request);
-    sftp_r.call.opendir.path=(unsigned char *) pathinfo->path;
-    sftp_r.call.opendir.len=pathinfo->len;
-
-    if (send_sftp_opendir_ctx(interface, &sftp_r)>0) {
+    if (send_sftp_opendir_ctx(i, &sftp_r)>0) {
 	struct system_timespec_s timeout=SYSTEM_TIME_INIT;
 
 	/* it's possible to let this threat do things here since
 	    it goes into a wait state to receive the response from the server
 	    and this goes over the network so that gives a little time (interesting: how much ?)*/
 
-	get_sftp_request_timeout_ctx(interface, &timeout);
+	get_sftp_request_timeout_ctx(i, &timeout);
 
-	opendir->flags |= (_FUSE_OPENDIR_FLAG_IGNORE_XDEV_SYMLINKS | _FUSE_OPENDIR_FLAG_IGNORE_BROKEN_SYMLINKS) ; /* sane flag */
-	if (fs_options.sftp.hideflags & _OPTIONS_SFTP_HIDE_FLAG_DOTFILE) opendir->flags |= _FUSE_OPENDIR_FLAG_HIDE_DOTFILES;
-
-	if (wait_sftp_response_ctx(interface, &sftp_r, &timeout)==1) {
+	if (wait_sftp_response_ctx(i, &sftp_r, &timeout)==1) {
 	    struct sftp_reply_s *reply=&sftp_r.reply;
 
 	    if (reply->type==SSH_FXP_HANDLE) {
 		struct fuse_open_out open_out;
+		struct inode_s *inode=opendir->inode;
+		struct fuse_handle_s *handle=create_fuse_handle(ctx, get_ino_system_stat(&inode->stat), FUSE_HANDLE_FLAG_OPENDIR, (char *) reply->response.handle.name, reply->response.handle.len, 0);
 
-		/* take over handle */
-		opendir->handle.name.name=(char *) reply->response.handle.name;
-		opendir->handle.name.len=reply->response.handle.len;
-		reply->response.handle.name=NULL;
-		reply->response.handle.len=0;
+		if (handle==NULL) {
+
+		    error=ENOMEM;
+		    goto out;
+
+		}
+
+		opendir->handle=handle;
 
 		/* here start a thread which gets readdir data from server */
 		start_get_sftp_readdir_thread(opendir);
@@ -479,6 +556,13 @@ void _fs_sftp_opendir(struct fuse_opendir_s *opendir, struct fuse_request_s *f_r
 		reply_VFS_data(f_request, (char *) &open_out, sizeof(open_out));
 		get_current_time_system_time(&directory->synctime);
 		unset_fuse_request_flags_cb(f_request);
+
+		opendir->readdir=_fs_sftp_readdir;
+		opendir->fsyncdir=_fs_sftp_fsyncdir;
+		opendir->releasedir=_fs_sftp_releasedir;
+
+		//  cache_fuse_path(struct directory_s *directory, struct fuse_path_s *fpath)
+
 		return;
 
 	    } else if (reply->type==SSH_FXP_STATUS) {
@@ -505,7 +589,6 @@ void _fs_sftp_opendir(struct fuse_opendir_s *opendir, struct fuse_request_s *f_r
 	opendir->readdir=_fs_common_virtual_readdir;
 	opendir->fsyncdir=_fs_common_virtual_fsyncdir;
 	opendir->releasedir=_fs_common_virtual_releasedir;
-	opendir->get_fuse_direntry=get_fuse_direntry_virtual;
 	_fs_common_virtual_opendir(opendir, f_request, flags);
 	unset_fuse_request_flags_cb(f_request);
 
@@ -514,11 +597,11 @@ void _fs_sftp_opendir(struct fuse_opendir_s *opendir, struct fuse_request_s *f_r
     opendir->error=error;
     if (error==EINTR || error==ETIMEDOUT) {
 
-	set_flag_fuse_opendir(opendir, _FUSE_OPENDIR_FLAG_READDIR_INCOMPLETE);
+	set_flag_fuse_opendir(opendir, FUSE_OPENDIR_FLAG_INCOMPLETE);
 
     } else {
 
-	set_flag_fuse_opendir(opendir, _FUSE_OPENDIR_FLAG_READDIR_ERROR);
+	set_flag_fuse_opendir(opendir, FUSE_OPENDIR_FLAG_ERROR);
 
     }
 
@@ -526,96 +609,9 @@ void _fs_sftp_opendir(struct fuse_opendir_s *opendir, struct fuse_request_s *f_r
     unset_fuse_request_flags_cb(f_request);
 
 }
-void _fs_sftp_readdir(struct fuse_opendir_s *opendir, struct fuse_request_s *r, size_t size, off_t offset)
-{
-    return _fs_common_virtual_readdir(opendir, r, size, offset);
-}
 
-void _fs_sftp_readdirplus(struct fuse_opendir_s *opendir, struct fuse_request_s *r, size_t size, off_t offset)
-{
-    reply_VFS_error(r, EOPNOTSUPP);
-}
 
-void _fs_sftp_fsyncdir(struct fuse_opendir_s *opendir, struct fuse_request_s *r, unsigned char datasync)
-{
-    reply_VFS_error(r, 0);
-}
-
-void _fs_sftp_releasedir(struct fuse_opendir_s *opendir, struct fuse_request_s *f_request)
-{
-    struct service_context_s *context=opendir->context;
-    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
-    struct context_interface_s *interface=&context->interface;
-    struct sftp_request_s sftp_r;
-    unsigned int error=EIO;
-    struct simple_lock_s wlock;
-    struct directory_s *directory=NULL;
-
-    logoutput("_fs_sftp_releasedir");
-
-    set_flag_fuse_opendir(opendir, _FUSE_OPENDIR_FLAG_READDIR_FINISH);
-
-    init_sftp_request(&sftp_r, interface, f_request);
-    sftp_r.call.close.handle=(unsigned char *) opendir->handle.name.name;
-    sftp_r.call.close.len=opendir->handle.name.len;
-
-    if (send_sftp_close_ctx(interface, &sftp_r)>0) {
-	struct system_timespec_s timeout=SYSTEM_TIME_INIT;
-
-	get_sftp_request_timeout_ctx(interface, &timeout);
-
-	if (wait_sftp_response_ctx(interface, &sftp_r, &timeout)==1) {
-	    struct sftp_reply_s *reply=&sftp_r.reply;
-
-	    if (reply->type==SSH_FXP_STATUS) {
-
-		/* send ok reply to VFS no matter what the ssh server reports */
-
-		error=0;
-		if (reply->response.status.code>0) logoutput_notice("_fs_sftp_releasedir: got reply %i:%s when closing dir", reply->response.status.linux_error, strerror(reply->response.status.linux_error));
-
-	    } else {
-
-		error=EPROTO;
-
-	    }
-
-	}
-
-    }
-
-    out:
-
-    reply_VFS_error(f_request, error);
-    unset_fuse_request_flags_cb(f_request);
-
-    /* free opendir handle */
-
-    free(opendir->handle.name.name);
-    opendir->handle.name.name=NULL;
-    opendir->handle.name.len=0;
-
-    /* free cached data */
-
-    if (opendir->data.abuff.buffer) {
-
-	free(opendir->data.abuff.buffer);
-	set_attr_buffer_read(&opendir->data.abuff, NULL, 0);
-
-    }
-
-    if ((opendir->flags & _FUSE_OPENDIR_FLAG_READDIR_INCOMPLETE)==0) {
-
-	opendir->inode->flags &= ~INODE_FLAG_REMOTECHANGED;
-
-	/* remove local entries not found on server */
-	_fs_common_remove_nonsynced_dentries(opendir);
-
-    }
-
-}
-
-void _fs_sftp_opendir_disconnected(struct fuse_opendir_s *opendir, struct fuse_request_s *r, struct pathinfo_s *pathinfo, unsigned int flags)
+void _fs_sftp_opendir_disconnected(struct fuse_opendir_s *opendir, struct fuse_request_s *r, struct fuse_path_s *fpath, unsigned int flags)
 {
     _fs_common_virtual_opendir(opendir, r, flags);
 }
@@ -623,11 +619,6 @@ void _fs_sftp_opendir_disconnected(struct fuse_opendir_s *opendir, struct fuse_r
 void _fs_sftp_readdir_disconnected(struct fuse_opendir_s *opendir, struct fuse_request_s *r, size_t size, off_t offset)
 {
     _fs_common_virtual_readdir(opendir, r, size, offset);
-}
-
-void _fs_sftp_readdirplus_disconnected(struct fuse_opendir_s *opendir, struct fuse_request_s *r, size_t size, off_t offset)
-{
-    _fs_common_virtual_readdirplus(opendir, r, size, offset);
 }
 
 void _fs_sftp_fsyncdir_disconnected(struct fuse_opendir_s *opendir, struct fuse_request_s *r, unsigned char datasync)

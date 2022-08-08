@@ -17,24 +17,12 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <ctype.h>
-#include <inttypes.h>
+#include "libosns-misc.h"
+#include "libosns-log.h"
+#include "libosns-datatypes.h"
 
-#include <sys/param.h>
-#include <sys/types.h>
-#include <errno.h>
-
-#include "misc.h"
-#include "log.h"
-#include "datatypes.h"
 #include "pk-types.h"
 #include "pk-keys.h"
 #include "alloc/init.h"

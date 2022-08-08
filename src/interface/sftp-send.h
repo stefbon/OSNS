@@ -22,28 +22,28 @@
 
 /* prototypes */
 
-int send_sftp_open_ctx(struct context_interface_s *interface, struct sftp_request_s *sftp_r);
-int send_sftp_create_ctx(struct context_interface_s *interface, struct sftp_request_s *sftp_r);
-int send_sftp_opendir_ctx(struct context_interface_s *interface, struct sftp_request_s *sftp_r);
-int send_sftp_read_ctx(struct context_interface_s *interface, struct sftp_request_s *sftp_r);
-int send_sftp_write_ctx(struct context_interface_s *interface, struct sftp_request_s *sftp_r);
-int send_sftp_readdir_ctx(struct context_interface_s *interface, struct sftp_request_s *sftp_r);
-int send_sftp_close_ctx(struct context_interface_s *interface, struct sftp_request_s *sftp_r);
-int send_sftp_remove_ctx(struct context_interface_s *interface, struct sftp_request_s *sftp_r);
-int send_sftp_rename_ctx(struct context_interface_s *interface, struct sftp_request_s *sftp_r);
-int send_sftp_mkdir_ctx(struct context_interface_s *interface, struct sftp_request_s *sftp_r);
-int send_sftp_rmdir_ctx(struct context_interface_s *interface, struct sftp_request_s *sftp_r);
-int send_sftp_stat_ctx(struct context_interface_s *interface, struct sftp_request_s *sftp_r);
-int send_sftp_lstat_ctx(struct context_interface_s *interface, struct sftp_request_s *sftp_r);
-int send_sftp_fstat_ctx(struct context_interface_s *interface, struct sftp_request_s *sftp_r);
-int send_sftp_setstat_ctx(struct context_interface_s *interface, struct sftp_request_s *sftp_r);
-int send_sftp_fsetstat_ctx(struct context_interface_s *interface, struct sftp_request_s *sftp_r);
-int send_sftp_readlink_ctx(struct context_interface_s *interface, struct sftp_request_s *sftp_r);
-int send_sftp_symlink_ctx(struct context_interface_s *interface, struct sftp_request_s *sftp_r);
-int send_sftp_block_ctx(struct context_interface_s *interface, struct sftp_request_s *sftp_r);
-int send_sftp_unblock_ctx(struct context_interface_s *interface, struct sftp_request_s *sftp_r);
-int send_sftp_realpath_ctx(struct context_interface_s *interface, struct sftp_request_s *sftp_r);
-int send_sftp_extension_ctx(struct context_interface_s *interface, struct sftp_request_s *sftp_r);
-int send_sftp_custom_ctx(struct context_interface_s *interface, struct sftp_request_s *sftp_r);
+int send_sftp_open_ctx(struct context_interface_s *i, struct sftp_request_s *sftp_r);
+int send_sftp_create_ctx(struct context_interface_s *i, struct sftp_request_s *sftp_r);
+int send_sftp_opendir_ctx(struct context_interface_s *i, struct sftp_request_s *sftp_r);
+int send_sftp_read_ctx(struct context_interface_s *i, struct sftp_request_s *sftp_r);
+int send_sftp_write_ctx(struct context_interface_s *i, struct sftp_request_s *sftp_r);
+int send_sftp_readdir_ctx(struct context_interface_s *i, struct sftp_request_s *sftp_r);
+int send_sftp_close_ctx(struct context_interface_s *i, struct sftp_request_s *sftp_r);
+int send_sftp_remove_ctx(struct context_interface_s *i, struct sftp_request_s *sftp_r);
+int send_sftp_rename_ctx(struct context_interface_s *i, struct sftp_request_s *sftp_r);
+int send_sftp_mkdir_ctx(struct context_interface_s *i, struct sftp_request_s *sftp_r);
+int send_sftp_rmdir_ctx(struct context_interface_s *i, struct sftp_request_s *sftp_r);
+int send_sftp_stat_ctx(struct context_interface_s *i, struct sftp_request_s *sftp_r);
+int send_sftp_lstat_ctx(struct context_interface_s *i, struct sftp_request_s *sftp_r);
+int send_sftp_fstat_ctx(struct context_interface_s *i, struct sftp_request_s *sftp_r);
+int send_sftp_setstat_ctx(struct context_interface_s *i, struct sftp_request_s *sftp_r);
+int send_sftp_fsetstat_ctx(struct context_interface_s *i, struct sftp_request_s *sftp_r);
+int send_sftp_readlink_ctx(struct context_interface_s *i, struct sftp_request_s *sftp_r);
+int send_sftp_symlink_ctx(struct context_interface_s *i, struct sftp_request_s *sftp_r);
+int send_sftp_block_ctx(struct context_interface_s *i, struct sftp_request_s *sftp_r);
+int send_sftp_unblock_ctx(struct context_interface_s *i, struct sftp_request_s *sftp_r);
+int send_sftp_realpath_ctx(struct context_interface_s *i, struct sftp_request_s *sftp_r);
+int send_sftp_extension_ctx(struct context_interface_s *i, struct sftp_request_s *sftp_r);
+int send_sftp_custom_ctx(struct context_interface_s *i, struct sftp_request_s *sftp_r);
 
 #endif

@@ -24,7 +24,6 @@
 
 /* prototypes */
 
-void translate_context_network_port(struct service_address_s *service, unsigned int *port);
-void translate_context_address_network(struct host_address_s *host, struct service_address_s *service, char **target, unsigned int *port, unsigned int *family);
+void translate_context_address_network(struct host_address_s *host, struct network_port_s *port, char **target, unsigned int *portnr, unsigned int *family);
 
 #endif

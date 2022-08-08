@@ -17,8 +17,8 @@
 
 */
 
-#ifndef FS_WORKSPACE_SSH_PK_KEYSTORE_OPENSSH_H
-#define FS_WORKSPACE_SSH_PK_KEYSTORE_OPENSSH_H
+#ifndef SSH_PK_PK_KEYSTORE_OPENSSH_H
+#define SSH_PK_PK_KEYSTORE_OPENSSH_H
 
 int get_identity_records_openssh(struct pk_list_s *pkeys, const char *what, unsigned int *error);
 int get_key_file_openssh(struct pk_identity_s *identity, char *buffer, unsigned int size, unsigned char secret);

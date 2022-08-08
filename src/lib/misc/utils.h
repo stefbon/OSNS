@@ -52,5 +52,6 @@ uint32_t safe_atoi(char *b);
 uint64_t safe_atoii(char *b);
 
 void strdup_target_path(char *target, char **p_path, unsigned int *error);
+int compare_starting_substring(char *name, unsigned int len, const char *start);
 
 #endif

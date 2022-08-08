@@ -17,31 +17,11 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
-#include "main.h"
-#include "log.h"
-
-#include "common-utils/utils.h"
-#include "common-utils/workerthreads.h"
+#include "libosns-log.h"
+#include "libosns-misc.h"
+#include "libosns-threads.h"
 
 #include "ssh-utils.h"
 #include "ssh-common-protocol.h"
@@ -126,7 +106,7 @@ static void complete_ssh_session_connection_setup(void *ptr)
 
 }
 
-static void init_ssh_session_connection_cb(struct fs_connection_s *connection, unsigned int fd)
+static void init_ssh_session_connection_cb(struct connection_s *connection, unsigned int fd)
 {
     struct generic_error_s error=GENERIC_ERROR_INIT;
     struct ssh_server_session_helper_s *helper=malloc(sizeof(struct ssh_server_session_helper_s));
@@ -152,7 +132,7 @@ static void init_ssh_session_connection_cb(struct fs_connection_s *connection, u
     if (error->value.errnum>0) logoutput("init_ssh_session_connection_cb: error %s starting thread to complete the session", get_error_description(error));
 }
 
-static struct fs_connection_s *accept_ssh_session_connection(struct host_address_s *host, struct fs_connection_s *server)
+static struct connection_s *accept_ssh_session_connection(struct host_address_s *host, struct connection_s *server)
 {
     struct generic_error_s error=GENERIC_HOST_INIT;
     struct ssh_session_s *session=NULL;

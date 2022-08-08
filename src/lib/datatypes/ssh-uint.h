@@ -22,7 +22,7 @@
 
 /* prototypes */
 
-void store_uint16(char *buff, uint32_t value);
+void store_uint16(char *buff, uint16_t value);
 void store_uint32(char *buff, uint32_t value);
 void store_uint64(char *buff, uint64_t value);
 

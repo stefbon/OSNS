@@ -17,38 +17,21 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
-#include "log.h"
-#include "main.h"
-#include "misc.h"
-
-// #include "beventloop.h"
-// #include "beventloop-timer.h"
+#include "libosns-log.h"
+#include "libosns-misc.h"
+#include "libosns-threads.h"
+#include "libosns-interface.h"
+#include "libosns-workspace.h"
+#include "libosns-context.h"
+#include "libosns-fuse-public.h"
+#include "libosns-resources.h"
+#include "libosns-error.h"
+#include "libosns-list.h"
 
 #include "sftp/common-protocol.h"
-#include "commonsignal.h"
 #include "common.h"
-#include "error.h"
-#include "list.h"
 
 /*
 
@@ -83,8 +66,6 @@
 */
 
 static struct list_header_s hashtable[SFTP_SENDHASH_TABLE_SIZE_DEFAULT];
-static pthread_mutex_t hashmutex=PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t hashcond=PTHREAD_COND_INITIALIZER;
 static unsigned int hashsize=SFTP_SENDHASH_TABLE_SIZE_DEFAULT;
 static unsigned char initdone=0;
 
@@ -98,9 +79,9 @@ static void add_request_hashtable(struct sftp_request_s *sftp_r)
     unsigned int hash=sftp_r->id % hashsize;
     struct list_header_s *header=&hashtable[hash];
 
-    write_lock_list_header(header, &hashmutex, &hashcond);
+    write_lock_list_header(header);
     add_list_element_last(header, &sftp_r->list);
-    write_unlock_list_header(header, &hashmutex, &hashcond);
+    write_unlock_list_header(header);
 }
 
 static void remove_request_hashtable(struct sftp_request_s *sftp_r)
@@ -108,9 +89,9 @@ static void remove_request_hashtable(struct sftp_request_s *sftp_r)
     unsigned int hash=sftp_r->id % hashsize;
     struct list_header_s *header=&hashtable[hash];
 
-    write_lock_list_header(header, &hashmutex, &hashcond);
+    write_lock_list_header(header);
     remove_list_element(&sftp_r->list);
-    write_unlock_list_header(header, &hashmutex, &hashcond);
+    write_unlock_list_header(header);
 }
 
 /*	lookup the request in the request group hash
@@ -127,7 +108,7 @@ static struct sftp_request_s *lookup_request_hashtable(struct sftp_client_s *sft
     /* writelock the hash table row
 	it's very simple here since only write locks are */
 
-    write_lock_list_header(header, &hashmutex, &hashcond);
+    write_lock_list_header(header);
     list=get_list_head(header, 0);
 
     while (list) {
@@ -146,7 +127,7 @@ static struct sftp_request_s *lookup_request_hashtable(struct sftp_client_s *sft
 
     }
 
-    write_unlock_list_header(header, &hashmutex, &hashcond);
+    write_unlock_list_header(header);
     return sftp_r;
 
 }
@@ -185,7 +166,7 @@ struct sftp_request_s *get_sftp_request(struct sftp_client_s *sftp, unsigned int
 
 int signal_sftp_received_id(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r)
 {
-    struct common_signal_s *signal=sftp->signal.signal;
+    struct shared_signal_s *signal=sftp->signal.signal;
     int result=0;
 
     signal_lock(signal);
@@ -209,7 +190,7 @@ int signal_sftp_received_id(struct sftp_client_s *sftp, struct sftp_request_s *s
 
 void signal_sftp_received_id_error(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r, struct generic_error_s *error)
 {
-    struct common_signal_s *signal=sftp->signal.signal;
+    struct shared_signal_s *signal=sftp->signal.signal;
 
     signal_lock(signal);
     sftp_r->status |= SFTP_REQUEST_STATUS_ERROR;
@@ -228,7 +209,7 @@ void signal_sftp_received_id_error(struct sftp_client_s *sftp, struct sftp_reque
 
 unsigned char wait_sftp_response(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r, struct system_timespec_s *timeout)
 {
-    struct common_signal_s *signal=sftp->signal.signal;
+    struct shared_signal_s *signal=sftp->signal.signal;
     unsigned int hash=sftp_r->id % hashsize;
     struct list_header_s *header=&hashtable[hash];
     struct system_timespec_s expire=SYSTEM_TIME_INIT;
@@ -358,7 +339,7 @@ unsigned char wait_sftp_response(struct sftp_client_s *sftp, struct sftp_request
 
 unsigned char wait_sftp_service_complete(struct sftp_client_s *sftp, struct system_timespec_s *timeout)
 {
-    struct common_signal_s *signal=sftp->signal.signal;
+    struct shared_signal_s *signal=sftp->signal.signal;
     struct system_timespec_s expire;
     int result=-1;
 
@@ -394,14 +375,14 @@ unsigned char wait_sftp_service_complete(struct sftp_client_s *sftp, struct syst
 
 void init_sftp_sendhash()
 {
-    pthread_mutex_lock(&hashmutex);
+
     if (initdone==0) {
 
 	for (unsigned int i=0; i<(sizeof(hashtable)/sizeof(hashtable[0])); i++) init_list_header(&hashtable[i], SIMPLE_LIST_TYPE_EMPTY, NULL);
 	initdone=1;
 
     }
-    pthread_mutex_unlock(&hashmutex);
+
 }
 
 void clear_sftp_reply(struct sftp_reply_s *r)

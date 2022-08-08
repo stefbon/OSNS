@@ -17,30 +17,11 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
+#include "libosns-log.h"
+#include "libosns-list.h"
 
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
-#include "log.h"
-#include "list.h"
 #include "sftp/common.h"
 #include "sftp/attr-context.h"
 #include "rw-attr-generic.h"
@@ -52,8 +33,6 @@
 #endif
 
 static struct list_header_s header_attrcbs[HASH_ATTRCB_TABLE_SIZE];
-static pthread_mutex_t hash_mutex=PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t hash_cond=PTHREAD_COND_INITIALIZER;
 static unsigned char refcount=0;
 static unsigned int attr_subsecond_times=SSH_FILEXFER_ATTR_SUBSECOND_TIMES;
 
@@ -64,7 +43,7 @@ static void add_attrcb_hashtable(struct hashed_attrcb_s *hcb)
     struct hashed_attrcb_s *tmp=NULL;
     struct list_element_s *list=NULL;
 
-    write_lock_list_header(header, &hash_mutex, &hash_cond);
+    write_lock_list_header(header);
     list=get_list_head(header, 0);
 
     /* test it's not added in the meantime for sure */
@@ -88,7 +67,7 @@ static void add_attrcb_hashtable(struct hashed_attrcb_s *hcb)
 
     }
 
-    write_unlock_list_header(header, &hash_mutex, &hash_cond);
+    write_unlock_list_header(header);
 }
 
 static void remove_attrcb_hashtable(struct hashed_attrcb_s *hcb)
@@ -96,9 +75,9 @@ static void remove_attrcb_hashtable(struct hashed_attrcb_s *hcb)
     unsigned int hash = hcb->valid.mask % HASH_ATTRCB_TABLE_SIZE;
     struct list_header_s *header=&header_attrcbs[hash];
 
-    write_lock_list_header(header, &hash_mutex, &hash_cond);
+    write_lock_list_header(header);
     remove_list_element(&hcb->list);
-    write_unlock_list_header(header, &hash_mutex, &hash_cond);
+    write_unlock_list_header(header);
 }
 
 struct hashed_attrcb_s *lookup_hashed_attrcb(struct sftp_valid_s *valid, unsigned char version)
@@ -108,7 +87,7 @@ struct hashed_attrcb_s *lookup_hashed_attrcb(struct sftp_valid_s *valid, unsigne
     struct list_element_s *list=NULL;
     struct hashed_attrcb_s *hcb=NULL;
 
-    read_lock_list_header(header, &hash_mutex, &hash_cond);
+    read_lock_list_header(header);
     list=get_list_head(header, 0);
 
     while (list) {
@@ -121,7 +100,7 @@ struct hashed_attrcb_s *lookup_hashed_attrcb(struct sftp_valid_s *valid, unsigne
 
     }
 
-    read_unlock_list_header(header, &hash_mutex, &hash_cond);
+    read_unlock_list_header(header);
     return hcb;
 
 }
@@ -221,7 +200,7 @@ static void _attr_read_cb(struct attr_context_s *actx, struct attr_buffer_s *buf
     r->done |= actx->attrcb[ctr].code;
     r->todo &= ~actx->attrcb[ctr].code;
     (* actx->attrcb[ctr].r_cb)(actx, buffer, r, stat);
-    logoutput_debug("_attr_read_cb: ctr %i name %s index %i code %i done %i todo %i pos %i", ctr, actx->attrcb[ctr].name, actx->attrcb[ctr].shift, actx->attrcb[ctr].code, r->done, r->todo, (unsigned int)(buffer->pos - buffer->buffer));
+    logoutput_debug("_attr_read_cb: ctr %i name %s index %i code %i done %i todo %i pos %i", ctr, actx->attrcb[ctr].name, actx->attrcb[ctr].shift, actx->attrcb[ctr].code, r->done, r->todo, buffer->pos);
 }
 
 void read_attributes_generic(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat, unsigned int valid_bits)
@@ -263,7 +242,7 @@ static void _attr_write_cb(struct attr_context_s *actx, struct attr_buffer_s *bu
     r->done |= actx->attrcb[ctr].code;
     r->todo &= ~actx->attrcb[ctr].code;
     (* actx->attrcb[ctr].w_cb)(actx, buffer, r, stat);
-    logoutput_debug("_attr_write_cb: ctr %i name %s index %i code %i done %i todo %i pos %i", ctr, actx->attrcb[ctr].name, actx->attrcb[ctr].shift, actx->attrcb[ctr].code, r->done, r->todo, (unsigned int)(buffer->pos - buffer->buffer));
+    logoutput_debug("_attr_write_cb: ctr %i name %s index %i code %i done %i todo %i pos %i", ctr, actx->attrcb[ctr].name, actx->attrcb[ctr].shift, actx->attrcb[ctr].code, r->done, r->todo, buffer->pos);
 }
 
 void write_attributes_generic(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat, struct sftp_valid_s *valid)
@@ -444,19 +423,13 @@ void parse_sftp_attributes_stat_mask(struct attr_context_s *actx, struct rw_attr
 void init_hashattr_generic()
 {
 
-    pthread_mutex_lock(&hash_mutex);
-
     if (refcount==0) for (unsigned int i=0; i<HASH_ATTRCB_TABLE_SIZE; i++) init_list_header(&header_attrcbs[i], SIMPLE_LIST_TYPE_EMPTY, NULL);
     refcount++;
-
-    pthread_mutex_unlock(&hash_mutex);
 
 }
 
 void clear_hashattr_generic(unsigned char force)
 {
-
-    pthread_mutex_lock(&hash_mutex);
 
     if (refcount>0) {
 
@@ -485,7 +458,5 @@ void clear_hashattr_generic(unsigned char force)
 	}
 
     }
-
-    pthread_mutex_unlock(&hash_mutex);
 
 }

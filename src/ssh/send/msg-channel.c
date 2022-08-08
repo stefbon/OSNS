@@ -17,30 +17,10 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
-#include "main.h"
-#include "log.h"
-
-#include "misc.h"
+#include "libosns-log.h"
+#include "libosns-misc.h"
 
 #include "ssh-common.h"
 #include "ssh-common-protocol.h"
@@ -91,6 +71,49 @@
 
 */
 
+static char *get_name_ssh_channel(unsigned char type)
+{
+    char *name="";
+
+    if (type==_CHANNEL_TYPE_SESSION) {
+
+	name="session";
+
+    } else if (type==_CHANNEL_TYPE_DIRECT_STREAMLOCAL) {
+
+	name="direct-streamlocal@openssh.com";
+
+    } else if (type==_CHANNEL_TYPE_DIRECT_TCPIP) {
+
+	name="direct-tcpip";
+
+    }
+
+    return name;
+
+}
+
+static char *get_subsys_name_session_channel(unsigned char type)
+{
+    char *name="";
+
+    if (type==_CHANNEL_SESSION_TYPE_EXEC) {
+
+	name="exec";
+
+    } else if (type==_CHANNEL_SESSION_TYPE_SHELL) {
+
+	name="shell";
+
+    } else if (type==_CHANNEL_SESSION_TYPE_SUBSYSTEM) {
+
+	name="subsystem";
+
+    }
+
+    return name;
+}
+
 static int _send_channel_open_message(struct msg_buffer_s *mb, struct ssh_channel_s *channel)
 {
     struct ssh_session_s *session=channel->session;
@@ -98,34 +121,32 @@ static int _send_channel_open_message(struct msg_buffer_s *mb, struct ssh_channe
     logoutput_debug("_send_channel_open_message");
 
     msg_write_byte(mb, SSH_MSG_CHANNEL_OPEN);
-    msg_write_ssh_string(mb, 'c', (void *) channel->name);
+    msg_write_ssh_string(mb, 'c', (void *) get_name_ssh_channel(channel->type));
     msg_store_uint32(mb, channel->local_channel);
     msg_store_uint32(mb, channel->local_window);
     msg_store_uint32(mb, get_max_packet_size(session));
 
     if (channel->type==_CHANNEL_TYPE_DIRECT_STREAMLOCAL) {
 
-	if (channel->target.direct_streamlocal.type==_CHANNEL_DIRECT_STREAMLOCAL_TYPE_OPENSSH_COM) {
+	msg_write_ssh_string(mb, 'c', (void *) channel->target.direct_streamlocal.path);
 
-	    msg_write_ssh_string(mb, 's', (void *) &channel->target.direct_streamlocal.path);
+	/* 20170528: string and uint32 for future use, now empty */
 
-	    /* 20170528: string and uint32 for future use, now empty */
-
-	    msg_store_uint32(mb, 0);
-	    msg_store_uint32(mb, 0);
-
-	} else {
-
-	    return -1;
-
-	}
+	msg_store_uint32(mb, 0);
+	msg_store_uint32(mb, 0);
 
     } else if (channel->type==_CHANNEL_TYPE_DIRECT_TCPIP) {
+	char *target=NULL;
+	struct ip_address_s *orig_ip=&channel->target.direct_tcpip.orig_ip;
+	char *ip=NULL;
 
-	msg_write_ssh_string(mb, 's', (void *) &channel->target.direct_tcpip.host);
-	msg_store_uint32(mb, channel->target.direct_tcpip.port);
-	msg_write_ssh_string(mb, 'c', (void *) "127.0.0.1");
-	msg_store_uint32(mb, 0);
+	translate_context_host_address(&channel->target.direct_tcpip.address, &target, NULL);
+	ip=((orig_ip->family==IP_ADDRESS_FAMILY_IPv6) ? orig_ip->addr.v6 : orig_ip->addr.v4);
+
+	msg_write_ssh_string(mb, 'c', (void *) target);
+	msg_store_uint32(mb, channel->target.direct_tcpip.portnr);
+	msg_write_ssh_string(mb, 'c', (void *) ip);
+	msg_store_uint32(mb, channel->target.direct_tcpip.orig_portnr);
 
     }
 
@@ -197,28 +218,18 @@ int send_channel_window_adjust_message(struct ssh_channel_s *channel, unsigned i
 
 }
 
-static unsigned int get_data_len(struct ssh_channel_s *channel)
+static unsigned int get_session_channel_data_len(struct ssh_channel_s *channel)
 {
     unsigned int len=5;
 
     if (channel->type==_CHANNEL_TYPE_SESSION) {
 
-	len += 4 + strlen(channel->target.session.name);
+	len += 4 + strlen(get_subsys_name_session_channel(channel->target.session.type)) +
+	    4 + ((channel->target.session.type==_CHANNEL_SESSION_TYPE_EXEC) || (channel->target.session.type==_CHANNEL_SESSION_TYPE_SUBSYSTEM) ? strlen(channel->target.session.buffer) : 0);
 
     }
 
     len++;
-
-    if (channel->target.session.type==_CHANNEL_SESSION_TYPE_EXEC) {
-
-	len += 4 + channel->target.session.use.exec.command.len;
-
-    } else if (channel->target.session.type==_CHANNEL_SESSION_TYPE_SUBSYSTEM) {
-
-	len += 4 + strlen(channel->target.session.use.subsystem.name);
-
-    }
-
     return len;
 
 }
@@ -228,14 +239,14 @@ static unsigned int get_data_len(struct ssh_channel_s *channel)
 
     - byte 	SSH_MSG_CHANNEL_REQUEST
     - uint32    remote channel
-    - string	"subsystem"/"exec"
+    - string	"subsystem"/"exec"/"shell"
     - boolean	want reply
     - string 	subsystem name/command
 */
 
 int send_channel_start_command_message(struct ssh_channel_s *channel, unsigned char reply, uint32_t *seq)
 {
-    unsigned int len=get_data_len(channel);
+    unsigned int len=get_session_channel_data_len(channel);
     char buffer[sizeof(struct ssh_payload_s) + len];
     struct ssh_payload_s *payload=(struct ssh_payload_s *) buffer;
     char *pos=payload->buffer;
@@ -247,29 +258,15 @@ int send_channel_start_command_message(struct ssh_channel_s *channel, unsigned c
     pos++;
     store_uint32(pos, channel->remote_channel);
     pos+=4;
-    if (channel->type==_CHANNEL_TYPE_SESSION) {
-
-	pos+=write_ssh_string(pos, 0, 'c', (void *) channel->target.session.name);
-
-    } else {
-
-	/* only possible to start a command, shell or subsystem as session*/
-	return -1;
-
-    }
-
+    pos+=write_ssh_string(pos, 0, 'c', (void *) get_subsys_name_session_channel(channel->target.session.type));
     *pos=(reply>0) ? 1 : 0;
     pos++;
 
     /* with exec provide also the command, and with subsystem the name */
 
-    if (channel->target.session.type==_CHANNEL_SESSION_TYPE_EXEC) {
+    if ((channel->target.session.type==_CHANNEL_SESSION_TYPE_EXEC) || (channel->target.session.type==_CHANNEL_SESSION_TYPE_SUBSYSTEM)) {
 
-	pos+=write_ssh_string(pos, 0, 's', (void *) &channel->target.session.use.exec.command);
-
-    } else if (channel->target.session.type==_CHANNEL_SESSION_TYPE_SUBSYSTEM) {
-
-	pos+=write_ssh_string(pos, 0, 'c', (void *) channel->target.session.use.subsystem.name);
+	pos+=write_ssh_string(pos, 0, 'c', (void *) channel->target.session.buffer);
 
     }
 

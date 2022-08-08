@@ -20,12 +20,13 @@
 #ifndef _LIB_USERS_MONITOR_H
 #define _LIB_USERS_MONITOR_H
 
-#include "eventloop.h"
+#include "libosns-eventloop.h"
 
 /* prototypes */
 
-int create_user_monitor(void (* cb)(uid_t uid, int what, void *ptr), void *ptr, int (* filter)(uid_t uid, void *ptr));
 void close_user_monitor();
-void read_user_monitor_event(int fd, void *data, struct event_s *event);
+struct bevent_s *monitor_users(void (* cb)(uid_t uid, int what, void *ptr), void *ptr, int (* filter)(uid_t uid, void *ptr));
+void monitor_user_do_read();
+
 
 #endif

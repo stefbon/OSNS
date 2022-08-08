@@ -17,30 +17,10 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
-#include "main.h"
-#include "log.h"
-
-#include "misc.h"
+#include "libosns-log.h"
+#include "libosns-misc.h"
 
 #include "ssh-common.h"
 #include "ssh-utils.h"
@@ -48,28 +28,14 @@
 
 unsigned int create_greeter(char *pos)
 {
-    unsigned int len0=strlen("SSH-2.0-sftpfs_");
-#ifdef FS_WORKSPACE_VERSION
-    unsigned int len1=strlen(FS_WORKSPACE_VERSION);
-#else
+    unsigned int len0=strlen("SSH-2.0-osns_");
     unsigned int len1=strlen("1.0a1");
-#endif
 
     if (pos) {
 
-	memcpy(pos, "SSH-2.0-sftpfs_", len0);
+	memcpy(pos, "SSH-2.0-osns_", len0);
 	pos+=len0;
-
-#ifdef FS_WORKSPACE_VERSION
-
-	memcpy(pos, FS_WORKSPACE_VERSION, len1);
-
-#else
-
 	memcpy(pos, "1.0a1", len1);
-
-#endif
-
 	pos+=len1;
 
     }
@@ -81,7 +47,7 @@ unsigned int create_greeter(char *pos)
 int send_ssh_greeter(struct ssh_connection_s *connection)
 {
     struct ssh_session_s *session=get_ssh_connection_session(connection);
-    struct socket_ops_s *sops=connection->connection.io.socket.sops;
+    struct system_socket_s *sock=&connection->connection.sock;
     struct ssh_string_s *greeter=&session->data.greeter_client;
     unsigned int len=create_greeter(NULL);
     char line[len+2];
@@ -95,7 +61,7 @@ int send_ssh_greeter(struct ssh_connection_s *connection)
     line[len]=(unsigned char) 13;
     line[len+1]=(unsigned char) 10;
 
-    if ((* sops->send)(&connection->connection.io.socket, line, len+2, 0)==-1) {
+    if (socket_send(sock, line, len+2, 0)==-1) {
 
 	logoutput("send_greeter: error %i:%s", errno, strerror(errno));
 	return -1;

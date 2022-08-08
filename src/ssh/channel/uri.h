@@ -23,5 +23,6 @@
 /* prototypes */
 
 int translate_channel_uri(struct ssh_channel_s *channel, char *uri);
+void set_orig_address_ssh_channel_direct_tcpip(struct ssh_channel_s *channel, struct ip_address_s *ip, unsigned int portnr);
 
 #endif

@@ -17,23 +17,7 @@
 
 */
 
-#include "global-defines.h"
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
+#include "libosns-basic-system-headers.h"
 
 #include "ssh-string.h"
 #include "name.h"
@@ -130,14 +114,8 @@ int compare_name(struct name_s *a, const unsigned char type, void *ptr)
 
 }
 
-void calculate_nameindex(struct name_s *name)
+uint64_t calculate_nameindex_hlp(char* buffer)
 {
-    char buffer[6];
-    unsigned char count=(name->len > 5) ? 6 : name->len;
-
-    memset(buffer, 32, 6);
-    memcpy(buffer, name->name, count);
-
     unsigned char firstletter		= buffer[0] - 32;
     unsigned char secondletter		= buffer[1] - 32;
     unsigned char thirdletter		= buffer[2] - 32;
@@ -145,6 +123,16 @@ void calculate_nameindex(struct name_s *name)
     unsigned char fifthletter		= buffer[4] - 32;
     unsigned char sixthletter		= buffer[5] - 32;
 
-    name->index=(firstletter * NAMEINDEX_ROOT5) + (secondletter * NAMEINDEX_ROOT4) + (thirdletter * NAMEINDEX_ROOT3) + (fourthletter * NAMEINDEX_ROOT2) + (fifthletter * NAMEINDEX_ROOT1) + sixthletter;
+    return (firstletter * NAMEINDEX_ROOT5) + (secondletter * NAMEINDEX_ROOT4) + (thirdletter * NAMEINDEX_ROOT3) + (fourthletter * NAMEINDEX_ROOT2) + (fifthletter * NAMEINDEX_ROOT1) + sixthletter;
+}
+
+void calculate_nameindex(struct name_s *name)
+{
+    char buffer[6];
+    unsigned char count=(name->len > 5) ? 6 : name->len;
+
+    memset(buffer, 32, 6);
+    memcpy(buffer, name->name, count);
+    name->index=calculate_nameindex_hlp(buffer);
 
 }

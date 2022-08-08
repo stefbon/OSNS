@@ -191,7 +191,7 @@ static void end_osns_user_sessions(void *ptr)
     struct osns_user_s *user=NULL;
     void *index=NULL;
     unsigned int hashvalue=0;
-    struct simple_lock_s wlock;
+    struct osns_lock_s wlock;
 
     logoutput("end_osns_user_sessions");
     init_wlock_users_hash(&wlock);
@@ -302,7 +302,7 @@ static void add_osns_user_session(uid_t uid)
 static void change_usersessions(uid_t uid, signed char change, void *ptr)
 {
     struct osns_user_s *user=NULL;
-    struct simple_lock_s wlock;
+    struct osns_lock_s wlock;
 
     logoutput("change_usersession: %s user %i", (change==1) ? "add" : "remove", uid);
 
@@ -441,7 +441,7 @@ static void workspace_signal_handler(struct beventloop_s *bloop, void *data, str
 struct fs_connection_s *accept_client_connection(uid_t uid, gid_t gid, pid_t pid, struct fs_connection_s *s_conn)
 {
     struct osns_user_s *user=NULL;
-    struct simple_lock_s wlock;
+    struct osns_lock_s wlock;
 
     logoutput_info("accept_client_connection");
     init_wlock_users_hash(&wlock);
@@ -474,6 +474,7 @@ int main(int argc, char *argv[])
     unsigned int error=0;
     struct bevent_s *bevent=NULL;
     struct fs_connection_s socket;
+    int fd=-1;
 
     switch_logging_backend("std");
     setlogmask(LOG_UPTO(LOG_DEBUG));
@@ -652,7 +653,7 @@ int main(int argc, char *argv[])
     }
 
     create_pid_file(&fs_options.socket);
-    res=create_user_monitor(change_usersessions, NULL, filter_user_login);
+    fd=create_user_monitor(change_usersessions, NULL, filter_user_login);
 
     if (res<0) {
 
@@ -660,6 +661,8 @@ int main(int argc, char *argv[])
 	goto out;
 
     } else {
+
+	bevent=
 
 	if (add_to_beventloop(res, BEVENT_CODE_IN, read_user_monitor_event, NULL, NULL, NULL)) {
 
@@ -674,7 +677,6 @@ int main(int argc, char *argv[])
     }
 
     read_user_monitor_event(0, NULL, 0);
-
     res=start_beventloop(NULL);
 
     out:

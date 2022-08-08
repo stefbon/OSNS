@@ -17,100 +17,64 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <stdint.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/vfs.h>
-
-#include "main.h"
-#include "log.h"
-#include "misc.h"
-
-#include "workspace-interface.h"
-#include "workspace.h"
-#include "fuse.h"
+#include "libosns-log.h"
+#include "libosns-misc.h"
+#include "libosns-interface.h"
+#include "libosns-workspace.h"
+#include "libosns-context.h"
+#include "libosns-fuse-public.h"
 
 #include "sftp/common-protocol.h"
 #include "sftp/attr-context.h"
+
+#include "interface/sftp.h"
 #include "interface/sftp-attr.h"
 #include "interface/sftp-send.h"
 #include "interface/sftp-wait-response.h"
-#include "interface/sftp-extensions.h"
+
 #include "datatypes/ssh-uint.h"
+
+#include <linux/fuse.h>
 
 #define UINT32_T_MAX		0xFFFFFFFF
 
-static struct statfs fallback_statfs;
-
-static void _fs_sftp_statfs_unsupp(struct service_context_s *context, struct fuse_request_s *f_request, struct pathinfo_s *pathinfo)
-{
-    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
-    struct fuse_statfs_out statfs_out;
-
-    memset(&statfs_out, 0, sizeof(struct fuse_statfs_out));
-
-    statfs_out.st.blocks=fallback_statfs.f_blocks;
-    statfs_out.st.bfree=fallback_statfs.f_bfree;
-    statfs_out.st.bavail=fallback_statfs.f_bavail;
-    statfs_out.st.bsize=fallback_statfs.f_bsize;
-
-    statfs_out.st.frsize=fallback_statfs.f_bsize;
-
-    statfs_out.st.files=(uint64_t) workspace->inodes.nrinodes;
-    statfs_out.st.ffree=(uint64_t) (UINT32_T_MAX - statfs_out.st.files);
-
-    statfs_out.st.namelen=255;
-    statfs_out.st.padding=0;
-
-    reply_VFS_data(f_request, (char *) &statfs_out, sizeof(struct fuse_statfs_out));
-
-}
-
 /* STATVFS */
 
-void _fs_sftp_statfs(struct service_context_s *context, struct fuse_request_s *f_request, struct pathinfo_s *pathinfo)
+void _fs_sftp_statfs(struct service_context_s *ctx, struct fuse_request_s *f_request, struct inode_s *inode, struct fuse_path_s *fpath)
 {
-    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
-    struct context_interface_s *interface=&context->interface;
+    struct workspace_mount_s *w=get_workspace_mount_ctx(ctx);
+    struct context_interface_s *i=&ctx->interface;
     unsigned int error=EIO;
-    unsigned int pathlen=(* interface->backend.sftp.get_complete_pathlen)(interface, pathinfo->len);
-    char path[pathlen];
+    unsigned int pathlen=sftp_get_complete_pathlen(i, fpath);
     struct sftp_request_s sftp_r;
+    unsigned int size=sftp_get_required_buffer_size_l2p(i, pathlen);
+    char buffer[size];
+    int result=0;
 
-    pathinfo->len += (* interface->backend.sftp.complete_path)(interface, path, pathinfo);
+    memset(buffer, 0, size);
+    result=sftp_convert_path_l2p(i, buffer, size, fpath->pathstart, pathlen);
 
-    logoutput("_fs_sftp_statfs: path %.*s", pathinfo->len, pathinfo->path);
+    if (result==-1) {
 
-    init_sftp_request(&sftp_r, interface, f_request);
+	logoutput_debug("_fs_sftp_statfs: error converting local path");
+	goto out;
 
-    sftp_r.call.statvfs.path=(unsigned char *)pathinfo->path;
-    sftp_r.call.statvfs.len=pathinfo->len;
+    }
 
-    if (send_sftp_statvfs_ctx(interface, &sftp_r, &error)>=0) {
+    logoutput("_fs_sftp_statfs: path %s", fpath->pathstart);
+
+    init_sftp_request(&sftp_r, i, f_request);
+    sftp_r.call.statvfs.path=(unsigned char *) buffer;
+    sftp_r.call.statvfs.len=(unsigned int) result;
+
+    if (send_sftp_statvfs_ctx(i, &sftp_r, &error)>=0) {
 	struct system_timespec_s timeout=SYSTEM_TIME_INIT;
 
-	get_sftp_request_timeout_ctx(interface, &timeout);
+	get_sftp_request_timeout_ctx(i, &timeout);
 
-	if (wait_sftp_response_ctx(interface, &sftp_r, &timeout)==1) {
+	if (wait_sftp_response_ctx(i, &sftp_r, &timeout)==1) {
 	    struct sftp_reply_s *reply=&sftp_r.reply;
 
 	    if (reply->type==SSH_FXP_EXTENDED_REPLY) {
@@ -154,7 +118,7 @@ void _fs_sftp_statfs(struct service_context_s *context, struct fuse_request_s *f
 		statfs_out.st.bavail=get_uint64(pos);
 		pos+=8;
 
-		statfs_out.st.files=(uint64_t) workspace->inodes.nrinodes;
+		statfs_out.st.files=(uint64_t) w->inodes.nrinodes;
 		pos+=8;
 
 		statfs_out.st.ffree=(uint64_t) (UINT32_T_MAX - statfs_out.st.files);
@@ -188,7 +152,7 @@ void _fs_sftp_statfs(struct service_context_s *context, struct fuse_request_s *f
 
 		    logoutput("_fs_sftp_statfs: statvfs is unsupported ... ");
 
-		    _fs_sftp_statfs_unsupp(context, f_request, pathinfo);
+		    _fs_common_statfs(ctx, f_request, inode);
 		    unset_fuse_request_flags_cb(f_request);
 		    return;
 
@@ -216,12 +180,7 @@ void _fs_sftp_statfs(struct service_context_s *context, struct fuse_request_s *f
 
 }
 
-void set_fallback_statfs_sftp(struct statfs *fallback)
+void _fs_sftp_statfs_disconnected(struct service_context_s *context, struct fuse_request_s *f_request, struct inode_s *inode, struct fuse_path_s *fpath)
 {
-    memcpy(&fallback_statfs, fallback, sizeof(struct statfs));
-}
-
-void _fs_sftp_statfs_disconnected(struct service_context_s *context, struct fuse_request_s *f_request, struct pathinfo_s *pathinfo)
-{
-    _fs_sftp_statfs_unsupp(context, f_request, pathinfo);
+    _fs_common_statfs(context, f_request, inode);
 }

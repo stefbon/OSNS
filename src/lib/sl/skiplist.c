@@ -17,32 +17,13 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <err.h>
-
-#include <inttypes.h>
-#include <ctype.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/param.h>
-#include <pthread.h>
 #include <math.h>
-
-#ifndef ENOATTR
-#define ENOATTR ENODATA        /* No such attribute */
-#endif
 
 #include "skiplist.h"
 #include "skiplist-utils.h"
-#include "log.h"
+#include "libosns-log.h"
 
 static char *get_logname_default(struct list_element_s *l)
 {
@@ -56,10 +37,8 @@ static int compare_end(struct list_element_s *l, void *n)
 
 int init_sl_skiplist(struct sl_skiplist_s *sl,
 		    int (* compare) (struct list_element_s *l, void *b),
-		    void (* insert) (struct list_element_s *l),
-		    void (* delete) (struct list_element_s *l),
 		    struct list_element_s *(* get_list_element) (void *lookupdata, struct sl_skiplist_s *sl),
-		    char *(* get_logname)(struct list_element_s *l))
+		    char *(* get_logname)(struct list_element_s *l), void *ptr)
 {
     unsigned int error=0;
 
@@ -67,7 +46,7 @@ int init_sl_skiplist(struct sl_skiplist_s *sl,
 
 	error=EINVAL;
 
-    } else if (! get_list_element || ! compare || ! insert || ! delete) {
+    } else if (! get_list_element || ! compare) {
 
 	error=EINVAL;
 
@@ -76,18 +55,8 @@ int init_sl_skiplist(struct sl_skiplist_s *sl,
     if (error==0) {
 
 	sl->ops.compare=compare;
-	sl->ops.insert=insert;
-	sl->ops.delete=delete;
 	sl->ops.get_list_element=get_list_element;
-	if (get_logname) {
-
-	    sl->ops.get_logname=get_logname;
-
-	} else {
-
-	    sl->ops.get_logname=get_logname_default;
-
-	}
+	sl->ops.get_logname=(get_logname ? get_logname : get_logname_default);
 
 	for (unsigned int i=0; i<=sl->maxlevel+1; i++) {
 

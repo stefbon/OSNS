@@ -18,27 +18,12 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <err.h>
-
-#include <inttypes.h>
-#include <ctype.h>
-
-#include <sys/stat.h>
-#include <sys/param.h>
-#include <sys/types.h>
 #include <time.h>
 
 #include "time.h"
-#include "logging.h"
+#include "libosns-log.h"
 
 #define SYSTEM_TIME_NSEC_MAX	1000000000
 
@@ -231,6 +216,8 @@ void system_time_add(struct system_timespec_s *time, unsigned char what, uint32_
 int system_time_test_earlier(struct system_timespec_s *a, struct system_timespec_s *b)
 {
     int result=0;
+
+    // logoutput_debug("system_time_test_earlier: test %li:%u is earlier than %li:%u", a->st_sec, a->st_nsec, b->st_sec, b->st_nsec);
 
     if (a->st_sec > b->st_sec) {
 

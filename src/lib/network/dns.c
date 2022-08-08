@@ -17,27 +17,12 @@
 
 */
 
-#define _GNU_SOURCE
-#define _XOPEN_SOURCE 500
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-
-#include "log.h"
+#include "libosns-log.h"
 #include "utils.h"
+
+#ifdef HAVE_GIO2
 
 #include <gio/gio.h>
 
@@ -50,3 +35,11 @@ char *lookupname_dns(char *ip)
     return (char *) name;
 }
 
+#else
+
+char *lookupname_dns(char *ip)
+{
+    return NULL;
+}
+
+#endif

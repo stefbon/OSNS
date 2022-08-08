@@ -17,43 +17,30 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
+#include <sys/stat.h>
 
 #include <sys/param.h>
 #include <sys/types.h>
-#include <sys/stat.h>
 #include <sys/sysmacros.h>
 
-#include "log.h"
-#include "misc.h"
-#include "datatypes.h"
+#include "libosns-log.h"
+#include "libosns-misc.h"
+#include "libosns-datatypes.h"
 
 #include "open.h"
 #include "path.h"
 #include "location.h"
 #include "stat.h"
 
-#ifdef HAVE_STATX
+#ifdef STATX_TYPE
 
 int system_getstat(struct fs_location_path_s *path, unsigned int mask, struct system_stat_s *stat)
 {
     struct statx *stx=&stat->stx;
+
+    if (mask==0) mask=SYSTEM_STAT_ALL;
 
     if (statx(0, path->ptr, AT_STATX_SYNC_AS_STAT, mask, stx)==-1) {
 
@@ -69,6 +56,8 @@ int system_getstat(struct fs_location_path_s *path, unsigned int mask, struct sy
 int system_getlstat(struct fs_location_path_s *path, unsigned int mask, struct system_stat_s *stat)
 {
     struct statx *stx=&stat->stx;
+
+    if (mask==0) mask=SYSTEM_STAT_ALL;
 
     if (statx(0, path->ptr, AT_STATX_DONT_SYNC | AT_SYMLINK_NOFOLLOW, mask, stx)==-1) {
 
@@ -222,6 +211,8 @@ int system_fgetstat(struct fs_socket_s *socket, unsigned int mask, struct system
 {
     struct statx *stx=&stat->stx;
     int fd=get_unix_fd_fs_socket(socket);
+
+    if (mask==0) mask=SYSTEM_STAT_ALL;
 
     if (statx(fd, "", AT_EMPTY_PATH, mask, stx)==-1) {
 
@@ -380,6 +371,7 @@ int system_fgetstatat(struct fs_socket_s *socket, char *name, unsigned int mask,
     int flags=(name) ? 0 : AT_EMPTY_PATH;
     int fd=get_unix_fd_fs_socket(socket);
 
+    if (mask==0) mask=SYSTEM_STAT_ALL;
     flags |= ((stat->flags & SYSTEM_STAT_FLAG_FOLLOW_SYMLINK) ? 0 : AT_SYMLINK_NOFOLLOW);
 
     if (statx(fd, name, flags, mask, stx)==-1) {
@@ -547,12 +539,12 @@ void set_nlink_system_stat(struct system_stat_s *stat, uint32_t nlink)
     stat->mask |= SYSTEM_STAT_NLINK;
 }
 
-void increase_nlink_system_stat(struct system_stat_s *stat, uint32_t count)
+void increase_nlink_system_stat(struct system_stat_s *stat, int32_t count)
 {
     stat->stx.stx_nlink+=count;
 }
 
-void decrease_nlink_system_stat(struct system_stat_s *stat, uint32_t count)
+void decrease_nlink_system_stat(struct system_stat_s *stat, int32_t count)
 {
 
     if (count > stat->stx.stx_nlink) {
@@ -692,11 +684,18 @@ void set_blksize_system_stat(struct system_stat_s *stat, uint32_t blksize)
     stat->stx.stx_blksize=blksize;
 }
 
+void set_blocks_system_stat(struct system_stat_s *stat, uint32_t blocks)
+{
+    stat->stx.stx_blocks=blocks;
+}
+
 #else
 
-int system_getstat(struct fs_location_path_s *path, unsigned int mask, struct system_stat_s *stat)
+int system_getstat(struct fs_location_path_s *path, unsigned int mask, struct system_stat_s *sst)
 {
-    struct stat *st=&stat->st;
+    struct stat *st=&sst->st;
+
+    if (mask==0) mask=SYSTEM_STAT_ALL;
 
     if (stat(path->ptr, st)==-1) {
 
@@ -705,13 +704,15 @@ int system_getstat(struct fs_location_path_s *path, unsigned int mask, struct sy
 
     }
 
-    stat->mask = (mask & SYSTEM_STAT_BASIC_STATS); /* stat return all attributes by default */
+    sst->mask = (mask & SYSTEM_STAT_BASIC_STATS); /* stat return all attributes by default */
     return 0;
 }
 
-int system_getlstat(struct fs_location_path_s *path, unsigned int mask, struct system_stat_s *stat)
+int system_getlstat(struct fs_location_path_s *path, unsigned int mask, struct system_stat_s *sst)
 {
-    struct stat *st=&stat->st;
+    struct stat *st=&sst->st;
+
+    if (mask==0) mask=SYSTEM_STAT_ALL;
 
     if (lstat(path->ptr, st)==-1) {
 
@@ -720,16 +721,16 @@ int system_getlstat(struct fs_location_path_s *path, unsigned int mask, struct s
 
     }
 
-    stat->mask = (mask & SYSTEM_STAT_BASIC_STATS); /* lstat return all attributes by default */
+    sst->mask = (mask & SYSTEM_STAT_BASIC_STATS); /* lstat return all attributes by default */
     return 0;
 }
 
-int system_setstat(struct fs_location_path_s *path, unsigned int mask, struct system_stat_s *stat)
+int system_setstat(struct fs_location_path_s *path, unsigned int mask, struct system_stat_s *sst)
 {
-    struct stat *st=&stat->st;
+    struct stat *st=&sst->st;
     unsigned int error=0;
 
-    stat->mask=0;
+    sst->mask=0;
 
     if (mask & SYSTEM_STAT_SIZE) {
 
@@ -742,7 +743,7 @@ int system_setstat(struct fs_location_path_s *path, unsigned int mask, struct sy
 	} else {
 
 	    logoutput("system_setstat: size set to %li", st->st_size);
-	    stat->mask |= SYSTEM_STAT_SIZE;
+	    sst->mask |= SYSTEM_STAT_SIZE;
 	    mask &= ~SYSTEM_STAT_SIZE;
 
 	}
@@ -761,11 +762,11 @@ int system_setstat(struct fs_location_path_s *path, unsigned int mask, struct sy
 
 	    logoutput("system_setstat: error %i set user and/or group (%s)", errno, strerror(errno));
 	    error=errno;
-	    goto out;
+	    goto error;
 
 	} else {
 
-	    stat->mask |= ((mask & SYSTEM_STAT_UID) ? SYSTEM_STAT_UID : 0) | ((mask & SYSTEM_STAT_GID) ? SYSTEM_STAT_GID : 0);
+	    sst->mask |= ((mask & SYSTEM_STAT_UID) ? SYSTEM_STAT_UID : 0) | ((mask & SYSTEM_STAT_GID) ? SYSTEM_STAT_GID : 0);
 	    mask &= ~(SYSTEM_STAT_UID | SYSTEM_STAT_GID);
 
 	}
@@ -779,11 +780,11 @@ int system_setstat(struct fs_location_path_s *path, unsigned int mask, struct sy
 
 	    logoutput("system_setstat: error %i set mode (%s)", errno, strerror(errno));
 	    error=errno;
-	    goto out;
+	    goto error;
 
 	} else {
 
-	    stat->mask |= SYSTEM_STAT_MODE;
+	    sst->mask |= SYSTEM_STAT_MODE;
 	    mask &= ~SYSTEM_STAT_MODE;
 
 	}
@@ -796,8 +797,8 @@ int system_setstat(struct fs_location_path_s *path, unsigned int mask, struct sy
 
 	if (mask & SYSTEM_STAT_ATIME) {
 
-	    times[0].tv_sec=st->st_atime.sec;
-	    times[0].tv_nsec=st->st_atime.nsec;
+	    times[0].tv_sec=st->st_atim.tv_sec;
+	    times[0].tv_nsec=st->st_atim.tv_nsec;
 	    todo |= SYSTEM_STAT_ATIME;
 
 	} else {
@@ -807,10 +808,10 @@ int system_setstat(struct fs_location_path_s *path, unsigned int mask, struct sy
 
 	}
 
-	if (mask & SYSTEM_STAT_MTIME]) {
+	if (mask & SYSTEM_STAT_MTIME) {
 
-	    times[1].tv_sec=st->st_mtime.sec;
-	    times[1].tv_nsec=st->st_mtime.nsec;
+	    times[1].tv_sec=st->st_mtim.tv_sec;
+	    times[1].tv_nsec=st->st_mtim.tv_nsec;
 	    todo |= SYSTEM_STAT_MTIME;
 
 	} else {
@@ -820,7 +821,7 @@ int system_setstat(struct fs_location_path_s *path, unsigned int mask, struct sy
 
 	}
 
-	if (utimensat1(0, path->ptr, times, 0)==-1) {
+	if (utimensat(0, path->ptr, times, 0)==-1) {
 
 	    logoutput("system_setstat: error %i set atime and/or mtime (%s)", errno, strerror(errno));
 	    error=errno;
@@ -828,7 +829,7 @@ int system_setstat(struct fs_location_path_s *path, unsigned int mask, struct sy
 
 	}
 
-	stat->mask |= todo;
+	sst->mask |= todo;
 	mask &= ~todo;
 
     }
@@ -842,11 +843,11 @@ int system_setstat(struct fs_location_path_s *path, unsigned int mask, struct sy
 
     if (mask>0) {
 
-	logoutput_warning("system_setstat: still actions (%i) requested but ignored (done %i)", mask, stat->mask);
+	logoutput_warning("system_setstat: still actions (%i) requested but ignored (done %i)", mask, sst->mask);
 
     } else {
 
-	logoutput("system_setstat: all actions done %i", stat->mask);
+	logoutput("system_setstat: all actions done %i", sst->mask);
 
     }
 
@@ -861,10 +862,12 @@ int system_setstat(struct fs_location_path_s *path, unsigned int mask, struct sy
 
 }
 
-int system_fgetstat(struct fs_socket_s *socket, unsigned int mask, struct system_stat_s *stat)
+int system_fgetstat(struct fs_socket_s *socket, unsigned int mask, struct system_stat_s *sst)
 {
-    struct stat *st=&stat->st;
-    int fd=get_unix_fd_fssocket(socket);
+    struct stat *st=&sst->st;
+    int fd=get_unix_fd_fs_socket(socket);
+
+    if (mask==0) mask=SYSTEM_STAT_ALL;
 
     if (fstat(fd, st)==-1) {
 
@@ -873,30 +876,30 @@ int system_fgetstat(struct fs_socket_s *socket, unsigned int mask, struct system
 
     }
 
-    stat->mask = (mask & SYSTEM_STAT_BASIC_STATS);
+    sst->mask = (mask & SYSTEM_STAT_BASIC_STATS);
     return 0;
 }
 
-int system_fsetstat(struct fs_socket_s *socket, unsigned int mask, struct system_stat_s *stat)
+int system_fsetstat(struct fs_socket_s *socket, unsigned int mask, struct system_stat_s *sst)
 {
-    struct stat *st=&stat->st;
-    int fd=get_unix_fd_fssocket(socket);
+    struct stat *st=&sst->st;
+    int fd=get_unix_fd_fs_socket(socket);
     unsigned int error=0;
 
-    stat->mask=0;
+    sst->mask=0;
 
     if (mask & SYSTEM_STAT_SIZE) {
 
 	if (ftruncate(fd, st->st_size)==-1) {
 
-	    logoutput_warning("system_fsetstat: error %i set size to %li (%s)", errno, (long unsigned int) st->s_size, strerror(errno));
+	    logoutput_warning("system_fsetstat: error %i set size to %li (%s)", errno, (long unsigned int) st->st_size, strerror(errno));
 	    error=errno;
 	    goto error;
 
 	} else {
 
 	    logoutput("system_fsetstat: set size to %li", (long unsigned int) st->st_size);
-	    stat->mask |= SYSTEM_STAT_SIZE;
+	    sst->mask |= SYSTEM_STAT_SIZE;
 	    mask &= ~SYSTEM_STAT_SIZE;
 
 	}
@@ -920,7 +923,7 @@ int system_fsetstat(struct fs_socket_s *socket, unsigned int mask, struct system
 	} else {
 
 	    logoutput("system_fsetstat: set uid %i and gid %i", uid, gid);
-	    stat->mask |= ((mask & SYSTEM_STAT_UID) ? SYSTEM_STAT_UID : 0) | ((mask & SYSTEM_STAT_GID) ? SYSTEM_STAT_GID : 0);
+	    sst->mask |= ((mask & SYSTEM_STAT_UID) ? SYSTEM_STAT_UID : 0) | ((mask & SYSTEM_STAT_GID) ? SYSTEM_STAT_GID : 0);
 	    mask &= ~(SYSTEM_STAT_UID | SYSTEM_STAT_GID);
 
 	}
@@ -939,7 +942,7 @@ int system_fsetstat(struct fs_socket_s *socket, unsigned int mask, struct system
 	} else {
 
 	    logoutput("system_fsetstat: mode set to %i", mode);
-	    stat->mask |= SYSTEM_STAT_MODE;
+	    sst->mask |= SYSTEM_STAT_MODE;
 	    mask &= ~SYSTEM_STAT_MODE;
 
 	}
@@ -952,8 +955,8 @@ int system_fsetstat(struct fs_socket_s *socket, unsigned int mask, struct system
 
 	if (mask & SYSTEM_STAT_ATIME) {
 
-	    times[0].tv_sec=st->st_atime.sec;
-	    times[0].tv_nsec=st->st_atime.nsec;
+	    times[0].tv_sec=st->st_atim.tv_sec;
+	    times[0].tv_nsec=st->st_atim.tv_nsec;
 	    todo |= SYSTEM_STAT_ATIME;
 
 	} else {
@@ -965,8 +968,8 @@ int system_fsetstat(struct fs_socket_s *socket, unsigned int mask, struct system
 
 	if (mask & SYSTEM_STAT_MTIME) {
 
-	    times[1].tv_sec=st->st_mtime.sec;
-	    times[1].tv_nsec=st->st_mtime.nsec;
+	    times[1].tv_sec=st->st_mtim.tv_sec;
+	    times[1].tv_nsec=st->st_mtim.tv_nsec;
 	    todo |= SYSTEM_STAT_MTIME;
 
 	} else {
@@ -984,7 +987,7 @@ int system_fsetstat(struct fs_socket_s *socket, unsigned int mask, struct system
 
 	}
 
-	stat->mask |= todo;
+	sst->mask |= todo;
 	mask &= ~todo;
 
     }
@@ -998,11 +1001,11 @@ int system_fsetstat(struct fs_socket_s *socket, unsigned int mask, struct system
 
     if (mask>0) {
 
-	logoutput_warning("system_fsetstat: still actions (%i) requested but ignored (done %i)", mask, stat->mask);
+	logoutput_warning("system_fsetstat: still actions (%i) requested but ignored (done %i)", mask, sst->mask);
 
     } else {
 
-	logoutput("system_fsetstat: all actions done %i", stat->mask);
+	logoutput("system_fsetstat: all actions done %i", sst->mask);
 
     }
 
@@ -1017,13 +1020,14 @@ int system_fsetstat(struct fs_socket_s *socket, unsigned int mask, struct system
 
 }
 
-int system_fgetstatat(struct fs_socket_s *socket, char *name, unsigned int mask, struct system_stat_s *stat)
+int system_fgetstatat(struct fs_socket_s *socket, char *name, unsigned int mask, struct system_stat_s *sst)
 {
-    struct stat *st=&stat->st;
+    struct stat *st=&sst->st;
     int flags=(name) ? 0 : AT_EMPTY_PATH;
-    int fd=get_unix_fd_fssocket(socket);
+    int fd=get_unix_fd_fs_socket(socket);
 
-    flags |= ((stat->flags & SYSTEM_STAT_FLAG_FOLLOW_SYMLINK) ? 0 : AT_SYMLINK_NOFOLLOW);
+    if (mask==0) mask=SYSTEM_STAT_ALL;
+    flags |= ((sst->flags & SYSTEM_STAT_FLAG_FOLLOW_SYMLINK) ? 0 : AT_SYMLINK_NOFOLLOW);
 
     if (fstatat(fd, name, st, flags)==-1) {
 
@@ -1032,97 +1036,96 @@ int system_fgetstatat(struct fs_socket_s *socket, char *name, unsigned int mask,
 
     }
 
-    stat->mask = (mask & SYSTEM_STAT_BASIC_STATS);
+    sst->mask = (mask & SYSTEM_STAT_BASIC_STATS);
     return 0;
 }
 
 /* GET stat values */
 
-uint64_t get_ino_system_stat(struct system_stat_s *stat)
+uint64_t get_ino_system_stat(struct system_stat_s *sst)
 {
-    return (uint64_t) stat->st.st_ino;
+    return (uint64_t) sst->st.st_ino;
 }
 
-uint16_t get_type_system_stat(struct system_stat_s *stat)
+uint16_t get_type_system_stat(struct system_stat_s *sst)
 {
-    return (uint16_t) stat->st.st_mode & S_IFMT;
+    return (uint16_t) sst->st.st_mode & S_IFMT;
 }
 
-uint16_t get_mode_system_stat(struct system_stat_s *stat)
+uint16_t get_mode_system_stat(struct system_stat_s *sst)
 {
-    return (uint16_t) stat->st.st_mode & ~S_IFMT;
+    return (uint16_t) sst->st.st_mode & ~S_IFMT;
 }
 
-uint32_t get_nlink_system_stat(struct system_stat_s *stat)
+uint32_t get_nlink_system_stat(struct system_stat_s *sst)
 {
-    return (uint32_t) stat->st.st_nlink;
+    return (uint32_t) sst->st.st_nlink;
 }
 
-uint32_t get_uid_system_stat(struct system_stat_s *stat)
+uint32_t get_uid_system_stat(struct system_stat_s *sst)
 {
-    return (uint32_t) stat->st.st_uid;
+    return (uint32_t) sst->st.st_uid;
 }
 
-uint32_t get_gid_system_stat(struct system_stat_s *stat)
+uint32_t get_gid_system_sst(struct system_stat_s *sst)
 {
-    return (uint32_t) stat->st.st_gid;
+    return (uint32_t) sst->st.st_gid;
 }
 
-uint32_t get_size_system_stat(struct system_stat_s *stat)
+uint32_t get_size_system_stat(struct system_stat_s *sst)
 {
-    return (uint32_t) stat->st.st_size;
+    return (uint32_t) sst->st.st_size;
 }
 
-void get_atime_system_stat(struct system_stat_s *stat, struct system_timespec_s *atime)
+void get_atime_system_stat(struct system_stat_s *sst, struct system_timespec_s *atime)
 {
-    atime->st_sec=(int64_t) stat->st.st_atim.tv_sec;
-    atime->st_nsec=(uint32_t) stat->st.st_atim.tv_nsec;
+    atime->st_sec=(int64_t) sst->st.st_atim.tv_sec;
+    atime->st_nsec=(uint32_t) sst->st.st_atim.tv_nsec;
 }
 
-int64_t get_atime_sec_system_stat(struct system_stat_s *stat)
+int64_t get_atime_sec_system_stat(struct system_stat_s *sst)
 {
-    return (int64_t) stat->stx.stx_atime.tv_sec;
+    return (int64_t) sst->st.st_atim.tv_sec;
 }
 
-uint32_t get_atime_nsec_system_stat(struct system_stat_s *stat)
+uint32_t get_atime_nsec_system_stat(struct system_stat_s *sst)
 {
-    return (uint32_t) stat->stx.stx_atime.tv_nsec;
+    return (uint32_t) sst->st.st_atim.tv_nsec;
 }
 
-void get_mtime_system_stat(struct system_stat_s *stat, struct system_timespec_s *mtime)
+void get_mtime_system_stat(struct system_stat_s *sst, struct system_timespec_s *mtime)
 {
-    mtime->st_sec=(int64_t) stat->st.st_mtim.tv_sec;
-    mtime->st_nsec=(uint32_t) stat->st.st_mtim.tv_nsec;
+    mtime->st_sec=(int64_t) sst->st.st_mtim.tv_sec;
+    mtime->st_nsec=(uint32_t) sst->st.st_mtim.tv_nsec;
 }
 
-int64_t get_mtime_sec_system_stat(struct system_stat_s *stat)
+int64_t get_mtime_sec_system_stat(struct system_stat_s *sst)
 {
-    return (int64_t) stat->stx.stx_mtime.tv_sec;
+    return (int64_t) sst->st.st_mtim.tv_sec;
 }
 
-uint32_t get_mtime_nsec_system_stat(struct system_stat_s *stat)
+uint32_t get_mtime_nsec_system_stat(struct system_stat_s *sst)
 {
-
-    return (uint32_t) stat->stx.stx_mtime.tv_nsec;
+    return (uint32_t) sst->st.st_mtim.tv_nsec;
 }
 
-void get_ctime_system_stat(struct system_stat_s *stat, struct system_timespec_s *ctime)
+void get_ctime_system_stat(struct system_stat_s *sst, struct system_timespec_s *ctime)
 {
-    ctime->st_sec=(int64_t) stat->st.st_ctim.tv_sec;
-    ctime->st_nsec=(uint32_t) stat->st.st_ctim.tv_nsec;
+    ctime->st_sec=(int64_t) sst->st.st_ctim.tv_sec;
+    ctime->st_nsec=(uint32_t) sst->st.st_ctim.tv_nsec;
 }
 
-int64_t get_ctime_sec_system_stat(struct system_stat_s *stat)
+int64_t get_ctime_sec_system_stat(struct system_stat_s *sst)
 {
-    return (int64_t) stat->stx.stx_ctime.tv_sec;
+    return (int64_t) sst->st.st_ctim.tv_sec;
 }
 
-uint32_t get_ctime_nsec_system_stat(struct system_stat_s *stat)
+uint32_t get_ctime_nsec_system_stat(struct system_stat_s *sst)
 {
-    return (uint32_t) stat->stx.stx_ctime.tv_nsec;
+    return (uint32_t) sst->st.st_ctim.tv_nsec;
 }
 
-void get_btime_system_stat(struct system_stat_s *stat, struct system_timespec_s *btime)
+void get_btime_system_stat(struct system_stat_s *sst, struct system_timespec_s *btime)
 {
     btime->st_sec=0;
     btime->st_nsec=0;
@@ -1138,91 +1141,91 @@ uint32_t get_btime_nsec_system_stat(struct system_stat_s *stat)
     return 0;
 }
 
-void get_dev_system_stat(struct system_stat_s *stat, struct system_dev_t *dev)
+void get_dev_system_stat(struct system_stat_s *sst, struct system_dev_s *dev)
 {
-    dev->major=major(stat->st.st_dev);
-    dev->minor=minor(stat->st.st_dev);
+    dev->major=major(sst->st.st_dev);
+    dev->minor=minor(sst->st.st_dev);
 }
 
-void get_rdev_system_stat(struct system_stat_s *stat, struct system_dev_t *dev)
+void get_rdev_system_stat(struct system_stat_s *sst, struct system_dev_s *dev)
 {
-    dev->major=major(stat->st.st_rdev);
-    dev->minor=minor(stat->st.st_rdev);
+    dev->major=major(sst->st.st_rdev);
+    dev->minor=minor(sst->st.st_rdev);
 
 }
 
-uint32_t get_blocks_system_stat(struct system_stat_s *stat)
+uint32_t get_blocks_system_stat(struct system_stat_s *sst)
 {
-    return stat->st.st_blocks;
+    return sst->st.st_blocks;
 }
 
-uint32_t get_blksize_system_stat(struct system_stat_s *stat)
+uint32_t get_blksize_system_stat(struct system_stat_s *sst)
 {
-    return stat->st.st_blksize;
+    return sst->st.st_blksize;
 }
 
 /* SET stat values */
 
-void set_ino_system_stat(struct system_stat_s *stat, uint64_t ino)
+void set_ino_system_stat(struct system_stat_s *sst, uint64_t ino)
 {
-    stat->st.st_ino=ino;
+    sst->st.st_ino=ino;
 }
 
-void set_type_system_stat(struct system_stat_s *stat, uint16_t type)
+void set_type_system_stat(struct system_stat_s *sst, uint16_t type)
 {
-    uint16_t perm=(stat->st.st_mode & ~S_IFMT);
+    uint16_t perm=(sst->st.st_mode & ~S_IFMT);
 
-    stat->st.st_mode = (type & S_IFMT) | perm;
-    stat->mask |= SYSTEM_STAT_TYPE;
+    sst->st.st_mode = (type & S_IFMT) | perm;
+    sst->mask |= SYSTEM_STAT_TYPE;
 }
 
-void set_mode_system_stat(struct system_stat_s *stat, uint16_t mode)
+void set_mode_system_stat(struct system_stat_s *sst, uint16_t mode)
 {
-    uint16_t type=(stat->st.st_mode & S_IFMT);
+    uint16_t type=(sst->st.st_mode & S_IFMT);
 
-    stat->st.st_mode = type | (mode & ~S_IFMT);
-    stat->mask |= SYSTEM_STAT_MODE;
+    sst->st.st_mode = type | (mode & ~S_IFMT);
+    sst->mask |= SYSTEM_STAT_MODE;
 }
 
-void set_uid_system_stat(struct system_stat_s *stat, uint32_t uid)
+void set_uid_system_stat(struct system_stat_s *sst, uint32_t uid)
 {
-    stat->st.st_uid=uid;
-    stat->mask |= SYSTEM_STAT_UID;
+    sst->st.st_uid=uid;
+    sst->mask |= SYSTEM_STAT_UID;
 }
 
-void set_gid_system_stat(struct system_stat_s *stat, uint32_t gid)
+void set_gid_system_stat(struct system_stat_s *sst, uint32_t gid)
 {
-    stat->st.st_gid=gid;
-    stat->mask |= SYSTEM_STAT_GID;
+    sst->st.st_gid=gid;
+    sst->mask |= SYSTEM_STAT_GID;
 }
 
-void set_size_system_stat(struct system_stat_s *stat, uint64_t size)
+void set_size_system_stat(struct system_stat_s *sst, uint64_t size)
 {
-    stat->st.st_size=size;
-    stat->mask |= SYSTEM_STAT_SIZE;
+    sst->st.st_size=size;
+    sst->mask |= SYSTEM_STAT_SIZE;
 }
 
-void set_nlink_system_stat(struct system_stat_s *stat, uint32_t nlink)
+void set_nlink_system_stat(struct system_stat_s *sst, uint32_t nlink)
 {
-    stat->st.st_nlink=nlink;
-    stat->mask |= SYSTEM_STAT_NLINK;
+    sst->st.st_nlink=nlink;
+    sst->mask |= SYSTEM_STAT_NLINK;
 }
 
-void increase_nlink_system_stat(struct system_stat_s *stat, int32_t count)
+void increase_nlink_system_stat(struct system_stat_s *sst, int32_t count)
 {
-    stat->st.st_nlink+=count;
+    sst->st.st_nlink+=count;
 }
 
-void decrease_nlink_system_stat(struct system_stat_s *stat, int32_t count)
+void decrease_nlink_system_stat(struct system_stat_s *sst, int32_t count)
 {
 
-    if (count > stat->st.st_nlink) {
+    if (count > sst->st.st_nlink) {
 
-	stat->st.st_nlink=0;
+	sst->st.st_nlink=0;
 
     } else {
 
-	stat->st.st_nlink-=count;
+	sst->st.st_nlink-=count;
 
     }
 
@@ -1230,78 +1233,78 @@ void decrease_nlink_system_stat(struct system_stat_s *stat, int32_t count)
 
 /* with the stat a timespec is used, tv_sec is of type time_t, tv_nsec of long */
 
-void set_atime_system_stat(struct system_stat_s *stat, struct system_timespec_s *time)
+void set_atime_system_stat(struct system_stat_s *sst, struct system_timespec_s *time)
 {
-    stat->st.st_atim.tv_sec=(time_t) time->st_sec;
-    stat->st.st_atim.tv_nsec=(long) time->st_nsec;
-    stat->mask |= SYSTEM_STAT_ATIME;
+    sst->st.st_atim.tv_sec=(time_t) time->st_sec;
+    sst->st.st_atim.tv_nsec=(long) time->st_nsec;
+    sst->mask |= SYSTEM_STAT_ATIME;
 }
 
-void set_atime_sec_system_stat(struct system_stat_s *stat, int64_t sec)
+void set_atime_sec_system_stat(struct system_stat_s *sst, int64_t sec)
 {
-    stat->st.st_atim.tv_sec=(time_t) sec;
+    sst->st.st_atim.tv_sec=(time_t) sec;
 }
 
-void set_atime_nsec_system_stat(struct system_stat_s *stat, uint32_t nsec)
+void set_atime_nsec_system_stat(struct system_stat_s *sst, uint32_t nsec)
 {
-    stat->st.st_atim.tv_nsec=(long) nsec;
+    sst->st.st_atim.tv_nsec=(long) nsec;
 }
 
-void set_mtime_system_stat(struct system_stat_s *stat, struct system_timespec_s *time)
+void set_mtime_system_stat(struct system_stat_s *sst, struct system_timespec_s *time)
 {
-    stat->st.st_btim.tv_sec=(time_t) time->st_sec;
-    stat->st.st_btim.tv_nsec=(long) time->st_nsec;
-    stat->mask |= SYSTEM_STAT_MTIME;
+    sst->st.st_mtim.tv_sec=(time_t) time->st_sec;
+    sst->st.st_mtim.tv_nsec=(long) time->st_nsec;
+    sst->mask |= SYSTEM_STAT_MTIME;
 }
 
-void set_mtime_sec_system_stat(struct system_stat_s *stat, int64_t sec)
+void set_mtime_sec_system_stat(struct system_stat_s *sst, int64_t sec)
 {
-    stat->st.st_mtim.tv_sec=(time_t) sec;
+    sst->st.st_mtim.tv_sec=(time_t) sec;
 }
 
-void set_mtime_nsec_system_stat(struct system_stat_s *stat, uint32_t nsec)
+void set_mtime_nsec_system_stat(struct system_stat_s *sst, uint32_t nsec)
 {
-    stat->st.st_mtim.tv_nsec=(long) nsec;
+    sst->st.st_mtim.tv_nsec=(long) nsec;
 }
 
-void set_ctime_system_stat(struct system_stat_s *stat, struct system_timespec_s *time)
+void set_ctime_system_stat(struct system_stat_s *sst, struct system_timespec_s *time)
 {
-    stat->st.st_ctim.tv_sec=(time_t) time->st_sec;
-    stat->st.st_ctim.tv_nsec=(long) time->st_nsec;
-    stat->mask |= SYSTEM_STAT_CTIME;
+    sst->st.st_ctim.tv_sec=(time_t) time->st_sec;
+    sst->st.st_ctim.tv_nsec=(long) time->st_nsec;
+    sst->mask |= SYSTEM_STAT_CTIME;
 }
 
-void set_ctime_sec_system_stat(struct system_stat_s *stat, int64_t sec)
+void set_ctime_sec_system_stat(struct system_stat_s *sst, int64_t sec)
 {
-    stat->st.st_ctim.tv_sec=(time_t) sec;
+    sst->st.st_ctim.tv_sec=(time_t) sec;
 }
 
-void set_ctime_nsec_system_stat(struct system_stat_s *stat, uint32_t nsec)
+void set_ctime_nsec_system_stat(struct system_stat_s *sst, uint32_t nsec)
 {
-    stat->st.st_ctim.tv_nsec=(long) nsec;
+    sst->st.st_ctim.tv_nsec=(long) nsec;
 }
 
-void set_btime_system_stat(struct system_stat_s *stat, struct system_timespec_s *time)
+void set_btime_system_stat(struct system_stat_s *sst, struct system_timespec_s *time)
 {
-    stat->mask |= SYSTEM_STAT_BTIME;
+    sst->mask |= SYSTEM_STAT_BTIME;
 }
 
-void set_btime_sec_system_stat(struct system_stat_s *stat, int64_t sec)
-{
-}
-
-void set_btime_nsec_system_stat(struct system_stat_s *stat, uint32_t nsec)
+void set_btime_sec_system_stat(struct system_stat_s *sst, int64_t sec)
 {
 }
 
-void set_dev_system_stat(struct system_stat_s *stat, struct system_dev_t *dev)
+void set_btime_nsec_system_stat(struct system_stat_s *sst, uint32_t nsec)
 {
-    stat->st.st_dev=makedev(dev->major, dev->minor);
 }
 
-void set_rdev_system_stat(struct system_stat_s *stat, struct system_dev_t *dev)
+void set_dev_system_stat(struct system_stat_s *sst, struct system_dev_s *dev)
 {
-    stat->st.st_rdev=makedev(dev->major, dev->minor);
+    sst->st.st_dev=makedev(dev->major, dev->minor);
+}
+
+void set_rdev_system_stat(struct system_stat_s *sst, struct system_dev_s *dev)
+{
+    sst->st.st_rdev=makedev(dev->major, dev->minor);
 }
 
 void copy_atime_system_stat(struct system_stat_s *to, struct system_stat_s *from)
@@ -1324,9 +1327,14 @@ void copy_btime_system_stat(struct system_stat_s *to, struct system_stat_s *from
     /* create time not supported for stat */
 }
 
-void set_blksize_system_stat(struct system_stat_s *stat, uint32_t blksize)
+void set_blksize_system_stat(struct system_stat_s *sst, uint32_t blksize)
 {
-    stat->st.st_blksize=blksize;
+    sst->st.st_blksize=blksize;
+}
+
+void set_blocks_system_stat(struct system_stat_s *sst, uint32_t blocks)
+{
+    sst->st.st_blocks=blocks;
 }
 
 #endif
@@ -1345,14 +1353,14 @@ uint32_t calc_amount_blocks(uint64_t size, uint32_t blksize)
     return count;
 }
 
-void calc_blocks_system_stat(struct system_stat_s *stat)
+void calc_blocks_system_stat(struct system_stat_s *sst)
 {
-    uint32_t blksize=get_blksize_system_stat(stat);
+    uint32_t blksize=get_blksize_system_stat(sst);
 
     if (blksize>0) {
-	uint64_t size=get_size_system_stat(stat);
+	uint64_t size=get_size_system_stat(sst);
 
-	stat->sst_blocks=calc_amount_blocks(size, blksize);
+	sst->sst_blocks=calc_amount_blocks(size, blksize);
 
     }
 
@@ -1363,34 +1371,58 @@ uint32_t get_unique_system_dev(struct system_dev_s *dev)
     return makedev(dev->major, dev->minor);
 }
 
-int system_stat_test_ISDIR(struct system_stat_s *stat)
+int system_stat_test_ISDIR(struct system_stat_s *sst)
 {
-
 #ifdef __linux__
-
-    return S_ISDIR(stat->sst_mode);
-
+    return S_ISDIR(sst->sst_mode);
 #else
-
     return 0;
-
 #endif
-
 }
 
-int system_stat_test_ISLNK(struct system_stat_s *stat)
+int system_stat_test_ISLNK(struct system_stat_s *sst)
 {
-
 #ifdef __linux__
-
-    return S_ISLNK(stat->sst_mode);
-
+    return S_ISLNK(sst->sst_mode);
 #else
-
     return 0;
-
 #endif
+}
 
+int system_stat_test_ISSOCK(struct system_stat_s *sst)
+{
+#ifdef __linux__
+    return S_ISSOCK(sst->sst_mode);
+#else
+    return 0;
+#endif
+}
+
+int system_stat_test_ISCHR(struct system_stat_s *sst)
+{
+#ifdef __linux__
+    return S_ISCHR(sst->sst_mode);
+#else
+    return 0;
+#endif
+}
+
+int system_stat_test_ISBLK(struct system_stat_s *sst)
+{
+#ifdef __linux__
+    return S_ISBLK(sst->sst_mode);
+#else
+    return 0;
+#endif
+}
+
+int system_stat_test_ISREG(struct system_stat_s *sst)
+{
+#ifdef __linux__
+    return S_ISREG(sst->sst_mode);
+#else
+    return 0;
+#endif
 }
 
 int system_getstatvfs(struct fs_location_path_s *path, struct system_statvfs_s *s)
@@ -1411,3 +1443,37 @@ int system_getstatvfs(struct fs_location_path_s *path, struct system_statvfs_s *
 
 }
 
+unsigned int enable_mode_permission(unsigned int mode, unsigned int role, unsigned int perm)
+{
+
+#ifdef __linux__
+
+    if (role & STAT_MODE_ROLE_USER) {
+
+	if (perm & STAT_MODE_PERM_READ) mode |= S_IRUSR;
+	if (perm & STAT_MODE_PERM_WRITE) mode |= S_IWUSR;
+	if (perm & STAT_MODE_PERM_EXEC) mode |= S_IXUSR;
+
+    }
+
+    if (role & STAT_MODE_ROLE_GROUP) {
+
+	if (perm & STAT_MODE_PERM_READ) mode |= S_IRGRP;
+	if (perm & STAT_MODE_PERM_WRITE) mode |= S_IWGRP;
+	if (perm & STAT_MODE_PERM_EXEC) mode |= S_IXGRP;
+
+    }
+
+    if (role & STAT_MODE_ROLE_OTHERS) {
+
+	if (perm & STAT_MODE_PERM_READ) mode |= S_IROTH;
+	if (perm & STAT_MODE_PERM_WRITE) mode |= S_IWOTH;
+	if (perm & STAT_MODE_PERM_EXEC) mode |= S_IXOTH;
+
+    }
+
+#endif
+
+    return mode;
+
+}

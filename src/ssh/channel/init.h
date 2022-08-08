@@ -27,9 +27,7 @@ void clear_ssh_channel(struct ssh_channel_s *channel);
 void free_ssh_channel(struct ssh_channel_s **channel);
 
 void init_ssh_channel(struct ssh_session_s *session, struct ssh_connection_s *connection, struct ssh_channel_s *channel, unsigned char type);
-struct ssh_channel_s *create_channel(struct ssh_session_s *session, struct ssh_connection_s *c, unsigned char type);
-struct ssh_channel_s *open_new_channel(struct ssh_connection_s *connection, struct ssh_string_s *type, unsigned int remote_channel, unsigned int windowsize, unsigned int maxpacketsize, struct ssh_string_s *data);
-
+struct ssh_channel_s *allocate_channel(struct ssh_session_s *session, struct ssh_connection_s *connection, unsigned char type);
 unsigned int get_ssh_channel_buffer_size();
 
 #endif

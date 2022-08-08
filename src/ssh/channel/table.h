@@ -27,7 +27,7 @@ struct ssh_channel_s *lookup_session_channel_for_payload(struct channel_table_s 
 struct ssh_channel_s *lookup_session_channel_for_data(struct channel_table_s *table, unsigned int nr, struct ssh_payload_s **p_payload);
 struct ssh_channel_s *lookup_session_channel(struct channel_table_s *table, unsigned int nr);
 
-void init_ssh_channels_table(struct ssh_session_s *session, unsigned int size);
+void init_ssh_channels_table(struct ssh_session_s *session, struct shared_signal_s *signal, unsigned int size);
 void free_ssh_channels_table(struct ssh_session_s *session);
 
 struct ssh_channel_s *find_channel(struct ssh_session_s *session, unsigned int type);
@@ -39,9 +39,9 @@ void table_remove_channel(struct ssh_channel_s *channel);
 int add_channel(struct ssh_channel_s *channel, unsigned int flags);
 void remove_channel(struct ssh_channel_s *channel, unsigned int flags);
 
-int channeltable_readlock(struct channel_table_s *table, struct simple_lock_s *l);
-int channeltable_upgrade_readlock(struct channel_table_s *table, struct simple_lock_s *l);
-int channeltable_writelock(struct channel_table_s *table, struct simple_lock_s *l);
-int channeltable_unlock(struct channel_table_s *table, struct simple_lock_s *l);
+int channeltable_readlock(struct channel_table_s *table, struct osns_lock_s *l);
+int channeltable_upgrade_readlock(struct channel_table_s *table, struct osns_lock_s *l);
+int channeltable_writelock(struct channel_table_s *table, struct osns_lock_s *l);
+int channeltable_unlock(struct channel_table_s *table, struct osns_lock_s *l);
 
 #endif

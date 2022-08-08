@@ -17,31 +17,10 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
-#include "main.h"
-#include "log.h"
-#include "misc.h"
+#include "libosns-log.h"
+#include "libosns-misc.h"
 
 #include "ssh-common.h"
 #include "ssh-common-protocol.h"
@@ -52,9 +31,7 @@
 #include "ssh-keyexchange.h"
 #include "ssh-send.h"
 #include "ssh-receive.h"
-#include "options.h"
 
-extern struct fs_options_s fs_options;
 static struct list_header_s list_keyex_ops=INIT_LIST_HEADER;
 
 static unsigned int populate_keyex_dhnone(struct ssh_connection_s *c, struct keyex_ops_s *ops, struct algo_list_s *alist, unsigned int start)
@@ -191,17 +168,13 @@ static int get_support_publickey_system_config(struct ssh_session_s *session, ch
     int result=0;
 
     if (snprintf(what, len, "option:ssh.crypto.pubkey.%s", name)>0) {
-	struct ctx_option_s option;
+	struct io_option_s option;
 
-	init_ctx_option(&option, _CTX_OPTION_TYPE_INT);
+	init_io_option(&option, _IO_OPTION_TYPE_INT);
 
-	if ((* session->context.signal_ssh2ctx)(session, what, &option)>=0) {
+	if ((* session->context.signal_ssh2ctx)(session, what, &option, INTERFACE_CTX_SIGNAL_TYPE_SSH_SESSION)>=0) {
 
-	    if (ctx_option_uint(&option)) {
-
-		result=ctx_option_get_uint(&option);
-
-	    }
+	    if (option.type==_IO_OPTION_TYPE_INT) result=option.value.integer;
 
 	}
 
@@ -234,7 +207,7 @@ static unsigned int build_hostkey_list(struct ssh_connection_s *c, struct algo_l
 
 	    /* skip certificates if they are not supported/used here */
 
-	    if ((fs_options.ssh.flags & _OPTIONS_SSH_FLAG_SUPPORT_CERTIFICATES)==0) goto next1;
+	    if ((session->config.flags & SSH_CONFIG_FLAG_SUPPORT_CERTIFICATES)==0) goto next1;
 
 	} else if (algo->flags & SSH_PKALGO_FLAG_PKA) {
 	    int support=get_support_publickey_system_config(session, algo->sshname);
@@ -287,7 +260,7 @@ static unsigned int build_keyex_list(struct ssh_connection_s *c, struct algo_lis
 
     if ((c->setup.flags & SSH_SETUP_FLAG_TRANSPORT)==0) {
 
-	if (fs_options.ssh.flags & _OPTIONS_SSH_FLAG_SUPPORT_EXT_INFO) {
+	if (session->config.flags & SSH_CONFIG_FLAG_SUPPORT_EXT_INFO) {
 
 	    if (alist) {
 

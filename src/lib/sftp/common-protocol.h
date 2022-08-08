@@ -20,8 +20,7 @@
 #define _SFTP_COMMON_PROTOCOL_H
 
 #include "datatypes/ssh-string.h"
-#include "list.h"
-#include "system.h"
+#include "libosns-list.h"
 #include "sftp/protocol.h"
 
 #define SFTP_REQUEST_STATUS_SEND		1

@@ -20,25 +20,71 @@
 #ifndef LIB_MOUNTINFO_MONITOR_H
 #define LIB_MOUNTINFO_MONITOR_H
 
-#include "list.h"
+#include "libosns-list.h"
+#include "libosns-socket.h"
 
-#define MOUNTMONITOR_FLAG_INIT				1
+#define MOUNT_MONITOR_DEFAULT_BUFFER_SIZE		1024
+#define MOUNT_MONITOR_FLAG_IGNORE_PSEUDOFS		1
 
-typedef int (* update_cb_t) (uint64_t generation, struct mountentry_s *(*next) (struct mountentry_s *me, uint64_t generation, unsigned char type), void *data, unsigned char flags);
-typedef unsigned char (* ignore_cb_t) (char *source, char *fs, char *path, void *data);
+#define MOUNTENTRY_STATUS_FREE				1
+#define MOUNTENTRY_STATUS_LOCK				2
 
-struct bevent_s *open_mountmonitor();
+struct mountentry_s {
+    uint64_t 				found;
+    uint64_t 				generation;
+    unsigned char			refcount;
+    unsigned int			status;
+    struct system_timespec_s		created;
+    struct mount_monitor_s		*monitor;
+    char 				*mountpoint;
+    char 				*rootpath;
+    char 				*fs;
+    char 				*source;
+    char 				*options;
+    unsigned char 			flags;
+    struct list_element_s		list;
+    unsigned int			mountid;
+    unsigned int			parentid;
+    unsigned int			major;
+    unsigned int			minor;
+    void				(* free)(struct mountentry_s *me);
+};
+
+#define MOUNTMONITOR_ACTION_ADDED			1
+#define MOUNTMONITOR_ACTION_REMOVED			2
+
+#define MOUNT_MONITOR_STATUS_INIT			1
+#define MOUNT_MONITOR_STATUS_MOUNTEVENT			2
+#define MOUNT_MONITOR_STATUS_GENERATION			4
+#define MOUNT_MONITOR_STATUS_PROCESS			8
+#define MOUNT_MONITOR_STATUS_CHANGED			16
+
+struct mount_monitor_s {
+    unsigned int				status;
+    unsigned int				flags;
+    uint64_t					generation;
+    struct shared_signal_s			*signal;
+    int 					(*update) (unsigned char what, struct mountentry_s *me);
+    unsigned char 				(*ignore) (char *source, char *fs, char *path, void *data);
+    struct system_socket_s			sock;
+    void					*data;
+    struct list_header_s			mountentries;
+    struct list_header_s			removedentries;
+    char					*buffer;
+    unsigned int				size;
+};
+
+/* prototypes */
+
+struct mount_monitor_s *get_default_mount_monitor();
+
+struct bevent_s *open_mountmonitor(struct shared_signal_s *signal, void *ptr, unsigned int flags);
 void close_mountmonitor();
+FILE *fopen_mountmonitor();
 
-void set_updatefunc_mountmonitor(update_cb_t cb);
-void set_ignorefunc_mountmonitor(ignore_cb_t cb);
-void set_threadsqueue_mountmonitor(void *ptr);
-void set_userdata_mountmonitor(void *data);
+void read_mounttable();
 
-struct mountentry_s *get_next_mountentry(struct mountentry_s *m, uint64_t generation, unsigned char type);
-
-int lock_mountlist_read(struct simple_lock_s *lock);
-int lock_mountlist_write(struct simple_lock_s *lock);
-int unlock_mountlist(struct simple_lock_s *lock);
+void set_mount_monitor_ignore_cb(struct mount_monitor_s *monitor, unsigned char (* ignore_cb) (char *source, char *fs, char *path, void *data));
+void set_mount_monitor_update_cb(struct mount_monitor_s *monitor, int (* update_cb) (unsigned char what, struct mountentry_s *me));
 
 #endif

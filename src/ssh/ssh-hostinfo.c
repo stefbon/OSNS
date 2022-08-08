@@ -17,36 +17,15 @@
 
 */
 
-#include "global-defines.h"
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
+#include "libosns-basic-system-headers.h"
 
 #include "pwd.h"
 #include "grp.h"
 
-#include "log.h"
-#include "main.h"
+#include "libosns-log.h"
+#include "libosns-misc.h"
+#include "libosns-interface.h"
 
-#include "misc.h"
-#include "commonsignal.h"
 #include "ssh-common.h"
 #include "ssh-utils.h"
 #include "users/mapping.h"
@@ -163,7 +142,7 @@ void start_timecorrection_ssh_server(struct ssh_session_s *session)
 {
     struct ssh_connection_s *connection=session->connections.main;
     struct system_timespec_s send_c=SYSTEM_TIME_INIT;
-    struct ctx_option_s option;
+    struct io_option_s option;
 
     signal_lock(connection->setup.signal);
 
@@ -177,33 +156,26 @@ void start_timecorrection_ssh_server(struct ssh_session_s *session)
     connection->setup.flags|=SSH_SETUP_FLAG_HOSTINFO;
     signal_unlock(connection->setup.signal);
 
-    init_ctx_option(&option, _CTX_OPTION_TYPE_BUFFER);
+    init_io_option(&option, _IO_OPTION_TYPE_BUFFER);
     get_current_time_system_time(&send_c);
 
-    if ((* session->context.signal_ssh2remote)(session, "info:remotetime:", &option)>=0) {
+    if ((* session->context.signal_ssh2remote)(session, "info:remotetime:", &option, INTERFACE_CTX_SIGNAL_TYPE_SSH_SESSION)>=0) {
 
-	if (ctx_option_error(&option)) {
+	if (option.flags & _IO_OPTION_FLAG_ERROR) {
 
-	    if (ctx_option_buffer(&option)==0) {
-
-		logoutput("start_timecorrection_ssh_server: unknown error");
-
-	    } else {
-		unsigned int len=0;
-		char *data=ctx_option_get_buffer(&option, &len);
-		char tmp[len+1];
+	    if (option.type==_IO_OPTION_TYPE_BUFFER) {
+		unsigned int len=option.value.buffer.len;
+		char tmp[len + 1];
 
 		memset(tmp, 0, len+1);
-		memcpy(tmp, data, len);
-
+		memcpy(tmp, option.value.buffer.ptr, len);
 		logoutput("start_timecorrection_ssh_server: error %s", tmp);
 
 	    }
 
-	} else if (ctx_option_buffer(&option)) {
+	} else if (option.type==_IO_OPTION_TYPE_BUFFER) {
 	    struct system_timespec_s recv_c=SYSTEM_TIME_INIT;
-	    unsigned int len=0;
-	    char *data=ctx_option_get_buffer(&option, &len);
+	    unsigned int len=option.value.buffer.len;
 	    char tmp[len + 1];
 	    char *sep=NULL;
 
@@ -213,7 +185,7 @@ void start_timecorrection_ssh_server(struct ssh_session_s *session)
 	    get_current_time_system_time(&recv_c);
 
 	    memset(tmp, 0, len+1);
-	    memcpy(tmp, data, len);
+	    memcpy(tmp, option.value.buffer.ptr, len);
 	    tmp[len]='\0';
 
 	    sep=memchr(tmp, '.', len);
@@ -238,7 +210,7 @@ void start_timecorrection_ssh_server(struct ssh_session_s *session)
 
 	}
 
-	ctx_option_free(&option);
+	(* option.free)(&option);
 
     }
 

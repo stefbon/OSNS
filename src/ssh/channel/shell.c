@@ -17,29 +17,10 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
-#include "log.h"
-#include "main.h"
-#include "misc.h"
+#include "libosns-log.h"
+#include "libosns-misc.h"
 
 #include "ssh-common-protocol.h"
 #include "ssh-common.h"
@@ -65,7 +46,6 @@ int start_remote_shell(struct ssh_channel_s *channel, unsigned int *error)
     }
 
     channel->target.session.type=_CHANNEL_SESSION_TYPE_SHELL;
-    channel->target.session.name=_CHANNEL_SESSION_NAME_SHELL;
 
     /* start the remote shell on the channel */
 
@@ -165,7 +145,7 @@ void add_shell_channel(struct ssh_session_s *session)
 
     logoutput("add_shell_channel");
 
-    channel=create_channel(session, session->connections.main, _CHANNEL_TYPE_SESSION);
+    // channel=create_channel(session, session->connections.main, _CHANNEL_TYPE_SESSION);
 
     if (! channel) {
 
@@ -175,7 +155,7 @@ void add_shell_channel(struct ssh_session_s *session)
     }
 
     logoutput("add_shell_channel: add channel to table and open it");
-    channel->name=_CHANNEL_SESSION_NAME_SHELL;
+    channel->target.session.type=_CHANNEL_SESSION_TYPE_SHELL;
 
     if (add_channel(channel, CHANNEL_FLAG_OPEN)==-1) {
 

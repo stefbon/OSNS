@@ -17,43 +17,17 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
-#include "log.h"
-
-#include "main.h"
-#include "misc.h"
-#include "datatypes.h"
-
-#include "threads.h"
-#include "eventloop.h"
-#include "users.h"
-#include "mountinfo.h"
-#include "misc.h"
+#include "libosns-log.h"
+#include "libosns-misc.h"
+#include "libosns-datatypes.h"
+#include "libosns-threads.h"
+#include "libosns-eventloop.h"
 
 #include "osns_sftp_subsystem.h"
 #include "ssh/subsystem/connection.h"
-#include "lib/sftp.h"
+#include "libosns-sftp.h"
 
 #include "receive.h"
 #include "send.h"
@@ -378,10 +352,10 @@ int init_sftp_subsystem(struct sftp_subsystem_s *sftp)
 
     init_sftp_prefix(sftp);
     init_sftp_identity(&sftp->identity);
-    init_ssh_subsystem_connection(&sftp->connection, 0, sftp->signal);
+    init_ssh_subsystem_connection(&sftp->connection, 0, sftp->signal, read_ssh_subsystem_connection_socket);
     init_sftp_receive(&sftp->receive);
     init_sftp_payload_queue(&sftp->queue);
-    sftp->signal=get_default_common_signal();
+    sftp->signal=get_default_shared_signal();
 
     set_sftp_protocol_version(sftp, 6);
     init_sftp_subsystem_attr_context(sftp);
@@ -422,8 +396,8 @@ void free_sftp_subsystem(struct sftp_subsystem_s *sftp)
     free_sftp_identity(&sftp->identity);
     free_sftp_payload_queue(&sftp->queue);
     free_sftp_receive(&sftp->receive);
-    free_ssh_subsystem_connection(&sftp->connection);
 
+    clear_ssh_subsystem_connection(-1, &sftp->connection);
     clear_hashattr_generic(0);
 }
 

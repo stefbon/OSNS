@@ -17,32 +17,11 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/epoll.h>
-
-#include "log.h"
-#include "main.h"
-#include "threads.h"
-
-#include "misc.h"
+#include "libosns-log.h"
+#include "libosns-threads.h"
+#include "libosns-misc.h"
 
 #include "ssh-common.h"
 #include "ssh-common-protocol.h"
@@ -50,14 +29,14 @@
 #include "ssh-utils.h"
 #include "ssh-connections.h"
 
-static void _disconnect_ssh_connection(struct ssh_connection_s *connection)
+static void _disconnect_ssh_connection(struct ssh_connection_s *sshc, unsigned char remote)
 {
 
-    if (change_ssh_connection_setup(connection, "setup", 0, SSH_SETUP_FLAG_DISCONNECTING, SSH_SETUP_OPTION_XOR, NULL, 0)==0) {
+    if (change_ssh_connection_setup(sshc, "setup", 0, SSH_SETUP_FLAG_DISCONNECTING, SSH_SETUP_OPTION_XOR, NULL, 0)==0) {
+	struct connection_s *c=&sshc->connection;
 
-	remove_ssh_connection_eventloop(connection);
-	disconnect_ssh_connection(connection);
-	change_ssh_connection_setup(connection, "setup", 0, SSH_SETUP_FLAG_DISCONNECTED, 0, NULL, 0);
+	(* c->ops.client.disconnect)(c, remote);
+	change_ssh_connection_setup(sshc, "setup", 0, SSH_SETUP_FLAG_DISCONNECTED, 0, NULL, 0);
 
     }
 
@@ -68,10 +47,11 @@ static void _disconnect_ssh_connection(struct ssh_connection_s *connection)
     and queue it
 */
 
-static int read_ssh_connection_socket(struct ssh_connection_s *connection, int fd, struct event_s *event)
+void read_ssh_connection_socket(struct connection_s *c)
 {
-    struct socket_ops_s *sops=connection->connection.io.socket.sops;
-    struct ssh_receive_s *receive=&connection->receive;
+    struct ssh_connection_s *sshc=(struct ssh_connection_s *)((char *)c - offsetof(struct ssh_connection_s, connection));
+    struct system_socket_s *sock=&c->sock;
+    struct ssh_receive_s *receive=&sshc->receive;
     unsigned int error=0;
     int bytesread=0;
 
@@ -81,10 +61,8 @@ static int read_ssh_connection_socket(struct ssh_connection_s *connection, int f
 
     readbuffer:
 
-    bytesread=(* sops->recv)(&connection->connection.io.socket, (void *) (receive->buffer + receive->read), (size_t) (receive->size - receive->read), 0);
+    bytesread=socket_recv(sock, (void *) (receive->buffer + receive->read), (size_t) (receive->size - receive->read), 0);
     error=errno;
-
-    // logoutput("read_ssh_data: bytesread %i", bytesread);
 
     if (bytesread<=0) {
 
@@ -98,20 +76,20 @@ static int read_ssh_connection_socket(struct ssh_connection_s *connection, int f
 
 	    /* peer has performed an orderly shutdown */
 
-	    _disconnect_ssh_connection(connection);
-	    return -1;
+	    _disconnect_ssh_connection(sshc, 1);
+	    return;
 
 	} else if (error==EAGAIN || error==EWOULDBLOCK) {
 
-	    return 0;
+	    return;
 
-	} else if (socket_network_connection_error(error)) {
+	} else if (socket_connection_error(error)) {
 
 	    logoutput_warning("read_ssh_connection_socket: socket is not connected? error %i:%s", error, strerror(error));
-	    connection->flags |= SSH_CONNECTION_FLAG_TROUBLE;
-	    connection->setup.error=error;
-	    connection->setup.flags |= SSH_SETUP_FLAG_RECV_ERROR;
-	    start_thread_ssh_connection_problem(connection);
+	    sshc->flags |= SSH_CONNECTION_FLAG_TROUBLE;
+	    sshc->setup.error=error;
+	    sshc->setup.flags |= SSH_SETUP_FLAG_RECV_ERROR;
+	    start_thread_ssh_connection_problem(sshc);
 
 	} else {
 
@@ -135,7 +113,7 @@ static int read_ssh_connection_socket(struct ssh_connection_s *connection, int f
 
 	    /* start a thread (but max number of threads may not exceed 2)*/
 
-	    read_ssh_connection_buffer(connection);
+	    read_ssh_connection_buffer(sshc);
 
 	}
 
@@ -143,45 +121,6 @@ static int read_ssh_connection_socket(struct ssh_connection_s *connection, int f
 
     }
 
-    return 0;
-
-    disconnect:
-
-    disconnect_ssh_connection(connection);
-    return 0;
-
-}
-
-void read_ssh_connection_signal(int fd, void *ptr, struct event_s *event)
-{
-    struct ssh_connection_s *connection=(struct ssh_connection_s *) ptr;
-
-    if (signal_is_data(event)) {
-
-	logoutput("read_ssh_connection_signal: data is available (fd=%i)", fd);
-	int result=read_ssh_connection_socket(connection, fd, event);
-
-    } else if (signal_is_close(event)) {
-
-	goto disconnect;
-
-    } else if (signal_is_error(event)) {
-
-	/* the remote side disconnected */
-
-        logoutput("read_ssh_connection_signal: connection break (fd=%i)", fd);
-        connection->flags |= SSH_CONNECTION_FLAG_TROUBLE;
-	start_thread_ssh_connection_problem(connection);
-
-    } else {
-
-	logoutput_warning("read_ssh_connection_signal: event not reckognized (fd=%i) value events %i", fd, printf_event_uint(event));
-
-    }
-
     return;
-
-    disconnect:
-    _disconnect_ssh_connection(connection);
 
 }

@@ -17,198 +17,36 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
-#include <errno.h>
 
-#include <sys/types.h>
-#include <errno.h>
-#include <stdbool.h>
-#include <strings.h>
-
-#include <sys/stat.h>
-#include <sys/param.h>
-#include <pthread.h>
-
+#ifdef HAVE_GLIB2
 #include <glib.h>
+#endif
 
-#include "log.h"
-#include "eventloop.h"
-#include "threads.h"
-#include "mountinfo.h"
-#include "monitor.h"
-#include "utils.h"
+#ifdef HAVE_GLIB2
 
-/* simple function which gets the device (/dev/sda1 for example) from the uuid  */
-
-char *get_device_from_uuid(const char *uuid)
+char *get_unescaped_string(char *str)
 {
-    int len0=256;
-    char *path;
-    char *device=NULL;
-
-    path=malloc(len0);
-
-    if (path) {
-	size_t size=32;
-	char *buff=NULL;
-
-	snprintf(path, len0, "/dev/disk/by-uuid/%s", uuid);
-
-	while(1) {
-
-	    if (buff) {
-
-		buff=realloc(buff, size);
-
-	    } else {
-
-		buff=malloc(size);
-
-	    }
-
-	    if (buff) {
-		int res=0;
-
-		res=readlink(path, buff, size);
-
-		if (res==-1) {
-
-		    free(buff);
-		    break;
-
-		} else if (res==size) {
-
-		    size+=32;
-		    continue;
-
-		} else {
-
-		    *(buff+res)='\0';
-
-		    if ( ! strncmp(buff, "/", 1)==0) {
-
-			/* relative symlink */
-
-			if (strlen("/dev/disk/by-uuid/") + res + 1 > len0) {
-
-			    len0=strlen("/dev/disk/by-uuid/") + res + 1;
-
-			    path=realloc(path, len0);
-
-			    if ( ! path ) {
-
-				free(buff);
-				goto out;
-
-			    }
-
-			}
-
-			snprintf(path, len0, "/dev/disk/by-uuid/%s", buff);
-			device=realpath(path, NULL);
-
-		    } else {
-
-			/* absolute symlink */
-
-			device=realpath(buff, NULL);
-
-		    }
-
-		    free(buff);
-		    break;
-
-		}
-
-	    } else {
-
-		break;
-
-	    }
-
-	}
-
-	free(path);
-
-    }
-
-    out:
-
-    return device;
-
+    return (char *) g_strcompress(str);
 }
 
-char *get_real_root_device(int major, int minor)
+void free_unescaped_string(char *ptr)
 {
-    int res, nreturn=0, len0=32;
-    char path[len0];
-    char *buff=NULL;
-    int size=64;
-
-    /* try first /dev/block/major:minor, which is a symlink to the device */
-
-    snprintf(path, len0, "/dev/block/%i:%i", major, minor);
-
-    resize:
-
-    if (buff) {
-
-	buff=realloc(buff, size);
-
-    } else {
-
-	buff=malloc(size);
-
-    }
-
-    if (buff) {
-
-	res=readlink(path, buff, size);
-
-	if (res>=size) {
-
-	    /* huh?? still not big enough */
-	    size+=64;
-	    goto resize;
-
-	} else if (res==-1) {
-
-	    logoutput_error("get_real_root_device: error %i reading link %s", errno, path);
-
-	} else {
-
-	    *(buff+res)='\0';
-
-	    /* possibly a relative symlink */
-
-	    if ( ! strncmp(buff, "/", 1)==0) {
-		char relsymlink[strlen("/dev/block/") + res + 1];
-
-		snprintf(relsymlink, len0, "/dev/block/%s", buff);
-		free(buff);
-
-		/* get the real target, without the slashes and .. */
-
-		buff=realpath(path, NULL);
-
-	    } else {
-
-		logoutput_notice("get_real_root_device: found %s", buff);
-
-	    }
-
-	}
-
-    }
-
-    out:
-
-    return buff;
-
+    g_free(ptr);
 }
+
+#else
+
+char *get_unescaped_string(char *str)
+{
+    return NULL;
+}
+
+void free_unescaped_string(char *ptr)
+{
+    if (ptr) free(ptr);
+}
+
+#endif
 

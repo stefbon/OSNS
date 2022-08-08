@@ -20,8 +20,8 @@
 #ifndef _SSH_CONNECTION_UTILS_H
 #define _SSH_CONNECTION_UTILS_H
 
-struct ssh_connection_s *get_next_ssh_connection(struct ssh_connections_s *connections, struct ssh_connection_s *connection, const char *how);
-signed char compare_ssh_connection(struct ssh_connection_s *connection, char *address, unsigned int port);
+struct ssh_connection_s *get_main_ssh_connection(struct ssh_connections_s *connections);
+struct ssh_connection_s *get_next_ssh_connection(struct ssh_connections_s *connections, struct ssh_connection_s *connection, unsigned char remove);
 
 void get_ssh_connection_expire_init(struct ssh_connection_s *c, struct system_timespec_s *expire);
 void get_ssh_connection_expire_session(struct ssh_connection_s *c, struct system_timespec_s *expire);
@@ -35,6 +35,6 @@ void decrease_refcount_ssh_connection(struct ssh_connection_s *connection);
 
 struct ssh_session_s *get_ssh_connection_session(struct ssh_connection_s *connection);
 struct ssh_connections_s *get_ssh_connection_connections(struct ssh_connection_s *connection);
-struct fs_connection_s *get_session_fs_connection(struct ssh_session_s *s);
+struct connection_s *get_session_connection(struct ssh_session_s *s);
 
 #endif

@@ -17,27 +17,17 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
 #include <errno.h>
 
 #ifdef HAVE_GLIB2
 #include <glib.h>
 #endif
 
-#include "misc.h"
-#include "datatypes.h"
+#include "libosns-misc.h"
+#include "libosns-datatypes.h"
+
 #include "pk-types.h"
 
 #ifdef HAVE_GLIB2

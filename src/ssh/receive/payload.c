@@ -17,31 +17,11 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
-#include "main.h"
-#include "log.h"
-#include "threads.h"
-
-#include "misc.h"
+#include "libosns-log.h"
+#include "libosns-threads.h"
+#include "libosns-misc.h"
 
 #include "ssh-common.h"
 #include "ssh-common-protocol.h"
@@ -108,7 +88,7 @@ struct ssh_payload_s *get_ssh_payload(struct ssh_connection_s *connection, struc
 	    break;
 
 	} else if (result==ETIMEDOUT) {
-	    struct fs_connection_s *conn=&connection->connection;
+	    struct connection_s *conn=&connection->connection;
 
 	    ssh_signal_unlock(signal);
 	    set_generic_error_system(error, ETIMEDOUT, NULL);
@@ -116,7 +96,7 @@ struct ssh_payload_s *get_ssh_payload(struct ssh_connection_s *connection, struc
 	    /* is there a better error causing this timeout?
 		the timeout is possibly caused by connection problems */
 
-	    if (conn->status & FS_CONNECTION_FLAG_DISCONNECT) set_generic_error_system(error, ((conn->error) ? conn->error : ENOTCONN), NULL);
+	    if (conn->status & CONNECTION_STATUS_DISCONNECT) set_generic_error_system(error, ((conn->error) ? conn->error : ENOTCONN), NULL);
 	    return NULL;
 
 	} else if (signal->error>0 && (seq && *seq==signal->sequence_number_error)) {

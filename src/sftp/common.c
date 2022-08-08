@@ -17,33 +17,16 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/vfs.h>
-
-#include "main.h"
-#include "log.h"
-#include "misc.h"
-#include "threads.h"
-#include "error.h"
-#include "users.h"
+#include "libosns-log.h"
+#include "libosns-misc.h"
+#include "libosns-threads.h"
+#include "libosns-interface.h"
+#include "libosns-workspace.h"
+#include "libosns-context.h"
+#include "libosns-fuse-public.h"
+#include "libosns-resources.h"
 
 #include "sftp/common-protocol.h"
 #include "sftp/common.h"
@@ -101,7 +84,6 @@ int init_sftp_client(struct sftp_client_s *sftp, uid_t uid, struct net_idmapping
 
     sftp->context.unique=0;
     sftp->context.ctx=NULL;
-    sftp->context.conn=NULL;
     init_sftp_default_context(sftp);
 
     sftp->signal.flags=0;

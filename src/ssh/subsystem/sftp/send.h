@@ -33,6 +33,4 @@ int reply_sftp_handle(struct sftp_subsystem_s *sftp, uint32_t id, char *handle, 
 int reply_sftp_names(struct sftp_subsystem_s *sftp, uint32_t id, unsigned int count, char *names, unsigned int len, unsigned char eof);
 int reply_sftp_extension(struct sftp_subsystem_s *sftp, uint32_t id, char *data, unsigned int len);
 
-void write_ssh_subsystem_connection_signal(int fd, void *ptr, struct event_s *event);
-
 #endif

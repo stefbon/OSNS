@@ -17,18 +17,16 @@
 
 */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <err.h>
+#include "libosns-basic-system-headers.h"
 
 #include <pthread.h>
+
+#include "libosns-log.h"
+
 #include "simple-list.h"
 
-#include "log.h"
+static pthread_mutex_t default_mutex=PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t default_cond=PTHREAD_COND_INITIALIZER;
 
 static void set_header_ops_empty(struct list_header_s *h);
 static void set_header_ops_one(struct list_header_s *h);
@@ -113,8 +111,6 @@ static void insert_element_after_default(struct list_header_s *h, struct list_el
 {
     struct list_element_s *n=p->n;
 
-    logoutput_debug("insert_element_after_default");
-
     init_list_element(e, h);
 
     /* insert after p (and before n) */
@@ -132,8 +128,6 @@ static void insert_element_after_default(struct list_header_s *h, struct list_el
 static void insert_element_before_default(struct list_header_s *h, struct list_element_s *n, struct list_element_s *e)
 {
     struct list_element_s *p=n->p;
-
-    logoutput_debug("insert_element_before_default");
 
     init_list_element(e, h);
 
@@ -156,9 +150,8 @@ static void delete_empty_header(struct list_header_s *h, struct list_element_s *
 
 static void insert_common_empty_header(struct list_header_s *h, struct list_element_s *a, struct list_element_s *e)
 {
-    struct list_element_s *prev=&h->head;
 
-    insert_element_after_default(h, prev, e);
+    insert_element_after_default(h, &h->head, e);
 
     /* set header ops to ones suitable for a list with one element */
 
@@ -177,6 +170,11 @@ struct header_ops_s empty_header_ops = {
 static void set_header_ops_empty(struct list_header_s *h)
 {
     h->ops = &empty_header_ops;
+}
+
+struct header_ops_s *get_empty_header_ops()
+{
+    return &empty_header_ops;
 }
 
 /* HEADER ops for a list with one element */
@@ -255,6 +253,7 @@ void add_list_element_last(struct list_header_s *h, struct list_element_s *e)
 void add_list_element_first(struct list_header_s *h, struct list_element_s *e)
 {
     struct list_element_s *head=&h->head;
+
     init_list_element(e, h);
     (* h->ops->insert_after)(h, head, e);
 }
@@ -345,7 +344,6 @@ void init_list_header(struct list_header_s *h, unsigned char type, struct list_e
     tail->ops.get_element=get_element_system;
 
     init_list_lock(&h->lock);
-    h->readers=0;
     h->count=0;
     h->flags|=SIMPLE_LIST_FLAG_INIT;
 
@@ -387,68 +385,42 @@ signed char list_element_is_last(struct list_element_s *e)
     return (e==&h->tail) ? 0 : -1;
 }
 
-void write_lock_list_header(struct list_header_s *header, pthread_mutex_t *mutex, pthread_cond_t *cond)
+void write_lock_list_header(struct list_header_s *h)
 {
-    unsigned char block=(SIMPLE_LIST_LOCK_WRITE | SIMPLE_LIST_LOCK_PREWRITE);
-    unsigned char lock=0;
-
-    pthread_mutex_lock(mutex);
-
-    if ((header->lock.value & SIMPLE_LIST_LOCK_PREWRITE)==0) {
-
-	header->lock.value |= SIMPLE_LIST_LOCK_PREWRITE;
-	lock |= SIMPLE_LIST_LOCK_PREWRITE;
-	block &= ~SIMPLE_LIST_LOCK_PREWRITE; /* do not block ourselves */
-
-    }
-
-    while ((header->lock.value & block) || header->lock.value > (SIMPLE_LIST_LOCK_WRITE | SIMPLE_LIST_LOCK_PREWRITE)) {
-
-	pthread_cond_wait(cond, mutex);
-
-	if ((header->lock.value & block)==0 && header->lock.value <= (SIMPLE_LIST_LOCK_WRITE | SIMPLE_LIST_LOCK_PREWRITE)) {
-
-	    break;
-
-	} else if ((block & SIMPLE_LIST_LOCK_PREWRITE) && (header->lock.value & SIMPLE_LIST_LOCK_PREWRITE)==0) {
-
-	    header->lock.value |= SIMPLE_LIST_LOCK_PREWRITE;
-	    lock |= SIMPLE_LIST_LOCK_PREWRITE;
-	    block &= ~SIMPLE_LIST_LOCK_PREWRITE; /* do not block ourselves */
-
-	}
-
-    }
-
-    header->lock.value |= SIMPLE_LIST_LOCK_WRITE;
-    header->lock.value &= ~lock; /* remove the pre lock if any */
-    pthread_cond_broadcast(cond);
-    pthread_mutex_unlock(mutex);
-
+    write_lock_list(&h->lock);
 }
 
-void write_unlock_list_header(struct list_header_s *header, pthread_mutex_t *mutex, pthread_cond_t *cond)
+void write_unlock_list_header(struct list_header_s *h)
 {
-    pthread_mutex_lock(mutex);
-    header->lock.value &= ~SIMPLE_LIST_LOCK_WRITE;
-    pthread_cond_broadcast(cond);
-    pthread_mutex_unlock(mutex);
+    write_unlock_list(&h->lock);
 }
 
-void read_lock_list_header(struct list_header_s *header, pthread_mutex_t *mutex, pthread_cond_t *cond)
+void read_lock_list_header(struct list_header_s *h)
 {
-    unsigned char block=(SIMPLE_LIST_LOCK_WRITE | SIMPLE_LIST_LOCK_PREWRITE);
-
-    pthread_mutex_lock(mutex);
-    while (header->lock.value & block) pthread_cond_wait(cond, mutex);
-    header->lock.value+=SIMPLE_LIST_LOCK_READ;
-    pthread_mutex_unlock(mutex);
+    read_lock_list(&h->lock);
 }
 
-void read_unlock_list_header(struct list_header_s *header, pthread_mutex_t *mutex, pthread_cond_t *cond)
+void read_unlock_list_header(struct list_header_s *h)
 {
-    pthread_mutex_lock(mutex);
-    if (header->lock.value>=SIMPLE_LIST_LOCK_READ) header->lock.value-=SIMPLE_LIST_LOCK_READ;
-    pthread_cond_broadcast(cond);
-    pthread_mutex_unlock(mutex);
+    read_unlock_list(&h->lock);
+}
+
+void write_lock_list_element(struct list_element_s *l)
+{
+    write_lock_list(&l->lock);
+}
+
+void write_unlock_list_element(struct list_element_s *l)
+{
+    write_unlock_list(&l->lock);
+}
+
+void read_lock_list_element(struct list_element_s *l)
+{
+    read_lock_list(&l->lock);
+}
+
+void read_unlock_list_element(struct list_element_s *l)
+{
+    read_unlock_list(&l->lock);
 }

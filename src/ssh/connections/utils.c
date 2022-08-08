@@ -17,48 +17,36 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <sys/socket.h>
 #include <netdb.h>
 
-#include "log.h"
-#include "main.h"
-#include "misc.h"
-#include "network.h"
-#include "eventloop.h"
-#include "workspace-interface.h"
-#include "threads.h"
-#include "commonsignal.h"
+#include "libosns-log.h"
+#include "libosns-misc.h"
+#include "libosns-network.h"
+#include "libosns-eventloop.h"
+#include "libosns-interface.h"
+#include "libosns-threads.h"
 
 #include "ssh-common.h"
 #include "ssh-connections.h"
 #include "ssh-utils.h"
 
-struct ssh_connection_s *get_next_ssh_connection(struct ssh_connections_s *connections, struct ssh_connection_s *connection, const char *how)
+struct ssh_connection_s *get_main_ssh_connection(struct ssh_connections_s *connections)
+{
+    struct list_header_s *h=&connections->header;
+    struct list_element_s *list=get_list_head(h, 0);
+
+    return ((list) ? ((struct ssh_connection_s *)((char *) list - offsetof(struct ssh_connection_s, list))) : NULL);
+
+}
+
+struct ssh_connection_s *get_next_ssh_connection(struct ssh_connections_s *connections, struct ssh_connection_s *connection, unsigned char remove)
 {
     struct list_element_s *next=NULL;
 
-    if (strcmp(how, "remove")==0) {
+    if (remove) {
 
 	next=get_list_head(&connections->header, SIMPLE_LIST_FLAG_REMOVE);
 
@@ -71,46 +59,14 @@ struct ssh_connection_s *get_next_ssh_connection(struct ssh_connections_s *conne
     return (next) ? (struct ssh_connection_s *)(((char *) next) - offsetof(struct ssh_connection_s, list)) : NULL;
 }
 
-signed char compare_ssh_connection(struct ssh_connection_s *connection, char *address, unsigned int port)
-{
-    return (signed char) compare_network_address(&connection->connection, address, port);
-}
-
 unsigned int get_status_ssh_connection(struct ssh_connection_s *connection)
 {
-    int error=0;
-    int fd=-1;
-
-    if (connection->connection.io.socket.bevent) fd=get_bevent_unix_fd(connection->connection.io.socket.bevent);
-
-    if (fd>=0) {
-	socklen_t len=sizeof(int);
-	struct socket_ops_s *sops=connection->connection.io.socket.sops;
-
-	if ((* sops->getsockopt)(fd, SOL_SOCKET, SO_ERROR, (void *) &error, &len)==0) {
-
-	    logoutput("get_status_ssh_connection: got error %i (%s)", error, strerror(error));
-
-	} else {
-
-	    error=errno;
-	    logoutput("get_status_ssh_connection: error %i (%s)", errno, strerror(errno));
-
-	}
-
-    } else {
-
-	error=ENOTCONN;
-
-    }
-
-    return abs(error);
-
+    return get_status_system_socket(&connection->connection.sock);
 }
 
 void get_ssh_connection_expire_init(struct ssh_connection_s *c, struct system_timespec_s *expire)
 {
-    struct fs_connection_s *connection=&c->connection;
+    struct connection_s *connection=&c->connection;
 
     get_current_time_system_time(expire);
     system_time_add(expire, SYSTEM_TIME_ADD_ZERO, c->connection.expire); /* connection expire is only in sec */
@@ -197,7 +153,7 @@ struct ssh_connections_s *get_ssh_connection_connections(struct ssh_connection_s
     return ((h) ? (struct ssh_connections_s *)(((char *) h) - offsetof(struct ssh_connections_s, header)) : NULL);
 }
 
-struct fs_connection_s *get_session_fs_connection(struct ssh_session_s *s)
+struct connection_s *get_session_connection(struct ssh_session_s *s)
 {
     struct ssh_connection_s *conn=s->connections.main;
     return (conn) ? &conn->connection : NULL;

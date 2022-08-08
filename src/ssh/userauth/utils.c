@@ -17,34 +17,15 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <pwd.h>
 #include <shadow.h>
 #include <crypt.h>
 
-#include "main.h"
-#include "log.h"
-#include "misc.h"
+#include "libosns-log.h"
+#include "libosns-misc.h"
+#include "libosns-network.h"
 
 #include "ssh-common.h"
 #include "ssh-common-protocol.h"
@@ -54,7 +35,6 @@
 #include "ssh-hostinfo.h"
 #include "ssh-utils.h"
 #include "utils.h"
-#include "network.h"
 
 /*
     generic function to read the comma seperated name list of names of authentications that can continue
@@ -281,7 +261,7 @@ unsigned int read_private_pwlist(struct ssh_connection_s *connection, struct pw_
 	    struct pw_list_s *element=NULL;
 
 	    element=malloc(sizeof(struct pw_list_s));
-	    if (element==NULL) goto credhostname;
+	    if (element==NULL) goto out;
 	    init_pwlist(element);
 	    element->type=PW_TYPE_GLOBAL;
 
@@ -298,135 +278,6 @@ unsigned int read_private_pwlist(struct ssh_connection_s *connection, struct pw_
 	    }
 
 	}
-
-    }
-
-    credhostname:
-
-    fd=get_bevent_unix_fd(connection->connection.io.socket.bevent);
-    if (fd>0) hostname=get_connection_hostname(&connection->connection, fd, 1, NULL);
-
-    if (hostname) {
-	char *sep=NULL;
-
-	/* look the credentials file for the domain */
-
-	sep=strchr(hostname, '.');
-
-	if (sep) {
-	    char *domain=NULL;
-
-	    domain=sep+1;
-	    *sep='\0';
-
-	    if (strlen(domain)>0) {
-
-		len = strlen(session->identity.pwd.pw_dir) + 2 + strlen(".auth/cred.") + strlen(domain);
-
-		char path[len];
-
-		if (snprintf(path, len, "%s/.auth/cred.%s", session->identity.pwd.pw_dir, domain)>0) {
-		    struct pw_list_s *element=NULL;
-
-		    element=malloc(sizeof(struct pw_list_s));
-		    if (element==NULL) goto credfullhostname;
-		    init_pwlist(element);
-		    element->type=PW_TYPE_DOMAIN;
-
-		    if (read_credentials(path, &element->pword)==(READ_CREDENTIALS_USER|READ_CREDENTIALS_PW)) {
-
-			element->next=*pwlist;
-			*pwlist=element;
-			count++;
-
-		    } else {
-
-			free_pwlist(element);
-
-		    }
-
-		}
-
-	    }
-
-	    *sep='.';
-
-	}
-
-	credfullhostname:
-
-	len = strlen(session->identity.pwd.pw_dir) + 2 + strlen(".auth/cred.") + strlen(hostname);
-	char path[len];
-
-	if (snprintf(path, len, "%s/.auth/cred.%s", session->identity.pwd.pw_dir, hostname)>0) {
-	    struct pw_list_s *element=NULL;
-
-	    element=malloc(sizeof(struct pw_list_s));
-	    if (element==NULL) {
-
-		free(hostname);
-		goto credipv4;
-
-	    }
-	    init_pwlist(element);
-	    element->type=PW_TYPE_HOSTNAME;
-
-	    if (read_credentials(path, &element->pword)==(READ_CREDENTIALS_USER|READ_CREDENTIALS_PW)) {
-
-		element->next=*pwlist;
-		*pwlist=element;
-		count++;
-
-	    } else {
-
-		free_pwlist(element);
-
-	    }
-
-	}
-
-	free(hostname);
-
-    }
-
-    credipv4:
-
-    fd=get_bevent_unix_fd(connection->connection.io.socket.bevent);
-    if (fd>0) ipv4=get_connection_ipv4(&connection->connection, fd, 1, NULL);
-
-    if (ipv4) {
-
-	len = strlen(session->identity.pwd.pw_dir) + 2 + strlen(".auth/cred.") + strlen(ipv4);
-	char path[len];
-
-	if (snprintf(path, len, "%s/.auth/cred.%s", session->identity.pwd.pw_dir, ipv4)>0) {
-	    struct pw_list_s *element=NULL;
-
-	    element=malloc(sizeof(struct pw_list_s));
-	    if (element==NULL) {
-
-		free(ipv4);
-		goto out;
-
-	    }
-	    init_pwlist(element);
-	    element->type=PW_TYPE_IPV4;
-
-	    if (read_credentials(path, &element->pword)==(READ_CREDENTIALS_USER|READ_CREDENTIALS_PW)) {
-
-		element->next=*pwlist;
-		*pwlist=element;
-		count++;
-
-	    } else {
-
-		free_pwlist(element);
-
-	    }
-
-	}
-
-	free(ipv4);
 
     }
 

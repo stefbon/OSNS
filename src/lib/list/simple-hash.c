@@ -17,20 +17,13 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <err.h>
 
-#include <pthread.h>
+#include "libosns-basic-system-headers.h"
+
+#include "libosns-log.h"
 
 #include "simple-list.h"
 #include "simple-hash.h"
-#undef LOGGING
-#include "log.h"
 
 static inline struct hash_element_s *get_hash_element(struct list_element_s *list)
 {
@@ -89,24 +82,24 @@ struct hash_element_s *lookup_simple_hash(struct simple_hash_s *group, void *dat
 
 }
 
-int lock_hashtable(struct simple_lock_s *lock)
+int lock_hashtable(struct osns_lock_s *lock)
 {
-    return simple_lock(lock);
+    return osns_lock(lock);
 }
 
-int unlock_hashtable(struct simple_lock_s *lock)
+int unlock_hashtable(struct osns_lock_s *lock)
 {
-    return simple_unlock(lock);
+    return osns_unlock(lock);
 }
 
-void init_rlock_hashtable(struct simple_hash_s *group, struct simple_lock_s *lock)
+void init_rlock_hashtable(struct simple_hash_s *group, struct osns_lock_s *lock)
 {
-    init_simple_readlock(&group->locking, lock);
+    init_osns_readlock(&group->locking, lock);
 }
 
-void init_wlock_hashtable(struct simple_hash_s *group, struct simple_lock_s *lock)
+void init_wlock_hashtable(struct simple_hash_s *group, struct osns_lock_s *lock)
 {
-    init_simple_writelock(&group->locking, lock);
+    init_osns_writelock(&group->locking, lock);
 }
 
 int initialize_group(struct simple_hash_s *group, unsigned int (*hashfunction) (void *data), unsigned int len, unsigned int *error)
@@ -115,7 +108,7 @@ int initialize_group(struct simple_hash_s *group, unsigned int (*hashfunction) (
 
     if (error) *error=ENOMEM;
 
-    if (init_simple_locking(&group->locking, 0)==-1) goto error;
+    if (init_osns_locking(&group->locking, 0)==-1) goto error;
 
     group->hashfunction=hashfunction;
     group->len=len;
@@ -140,7 +133,7 @@ int initialize_group(struct simple_hash_s *group, unsigned int (*hashfunction) (
 
 void free_group(struct simple_hash_s *group, void (*free_data) (void *data))
 {
-    struct simple_lock_s wlock;
+    struct osns_lock_s wlock;
 
     init_wlock_hashtable(group, &wlock);
     lock_hashtable(&wlock);
@@ -172,7 +165,7 @@ void free_group(struct simple_hash_s *group, void (*free_data) (void *data))
     }
 
     unlock_hashtable(&wlock);
-    clear_simple_locking(&group->locking);
+    clear_osns_locking(&group->locking);
 
 }
 

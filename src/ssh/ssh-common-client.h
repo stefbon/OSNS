@@ -27,7 +27,8 @@
 unsigned int get_ssh_session_buffer_size();
 
 int init_ssh_identity_client(struct ssh_session_s *session, uid_t uid);
-int init_ssh_session_client(struct ssh_session_s *session, uid_t uid, void *ctx);
-int connect_ssh_session_client(struct ssh_session_s *session, char *target, unsigned int port);
+int init_ssh_session_client(struct ssh_session_s *session, uid_t uid, void *ctx, struct shared_signal_s *signal);
+
+int connect_ssh_session_client(struct ssh_session_s *session, struct host_address_s *target, struct network_port_s *port, struct beventloop_s *loop);
 
 #endif

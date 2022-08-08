@@ -17,30 +17,12 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <ctype.h>
-#include <inttypes.h>
+#include "libosns-list.h"
+#include "libosns-log.h"
+#include "libosns-datatypes.h"
 
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
-#include "list.h"
-#include "log.h"
-#include "datatypes.h"
-
-#include "sftp/common-protocol.h"
 #include "buffer.h"
 
 #if __BIG_ENDIAN__
@@ -138,12 +120,13 @@ static int64_t convert_2c_int64(uint64_t value)
 static void nowrite_uchar(struct attr_buffer_s *ab, unsigned char b)
 {
     ab->pos++;
-    ab->left--;
 }
 
 static void write_uchar(struct attr_buffer_s *ab, unsigned char b)
 {
-    *(ab->pos)=b;
+    unsigned char *buffer=ab->buffer;
+
+    buffer[ab->pos]=b;
     ab->pos++;
     ab->left--;
 }
@@ -151,12 +134,13 @@ static void write_uchar(struct attr_buffer_s *ab, unsigned char b)
 static void nowrite_uchars(struct attr_buffer_s *ab, unsigned char *bytes, unsigned int len)
 {
     ab->pos+=len;
-    ab->left-=len;
 }
 
 static void write_uchars(struct attr_buffer_s *ab, unsigned char *bytes, unsigned int len)
 {
-    memcpy(ab->pos, bytes, len);
+    unsigned char *buffer=ab->buffer;
+
+    memcpy(&buffer[ab->pos], bytes, len);
     ab->pos+=len;
     ab->left-=len;
 }
@@ -164,12 +148,12 @@ static void write_uchars(struct attr_buffer_s *ab, unsigned char *bytes, unsigne
 static void nowrite_uint32(struct attr_buffer_s *ab, uint32_t value)
 {
     ab->pos += 4;
-    ab->left -= 4;
 }
 
 static void write_uint32(struct attr_buffer_s *ab, uint32_t value)
 {
-    unsigned char *four=(unsigned char *) ab->pos;
+    unsigned char *buffer=ab->buffer;
+    unsigned char *four=&buffer[ab->pos];
 
     four[0] = (value >> 24) & 0xFF;
     four[1] = (value >> 16) & 0xFF;
@@ -182,12 +166,12 @@ static void write_uint32(struct attr_buffer_s *ab, uint32_t value)
 static void nowrite_uint64(struct attr_buffer_s *ab, uint64_t value)
 {
     ab->pos += 8;
-    ab->left -= 8;
 }
 
 static void write_uint64(struct attr_buffer_s *ab, uint64_t value)
 {
-    unsigned char *eight=(unsigned char *) ab->pos;
+    unsigned char *buffer=ab->buffer;
+    unsigned char *eight=&buffer[ab->pos];
 
     eight[0] = (value >> 56) & 0xFF;
     eight[1] = (value >> 48) & 0xFF;
@@ -204,13 +188,13 @@ static void write_uint64(struct attr_buffer_s *ab, uint64_t value)
 static void nowrite_int64(struct attr_buffer_s *ab, int64_t value)
 {
     ab->pos += 8;
-    ab->left -= 8;
 }
 
 static void write_int64(struct attr_buffer_s *ab, int64_t value)
 {
+    unsigned char *buffer=ab->buffer;
     uint64_t tc_value=convert_int64_2c(value);
-    unsigned char *eight=(unsigned char *) ab->pos;
+    unsigned char *eight=&buffer[ab->pos];
 
     eight[0] = (tc_value >> 56) & 0xFF;
     eight[1] = (tc_value >> 48) & 0xFF;
@@ -227,14 +211,14 @@ static void write_int64(struct attr_buffer_s *ab, int64_t value)
 static void nowrite_uint16(struct attr_buffer_s *ab, uint16_t value)
 {
     ab->pos += 2;
-    ab->left -= 2;
 }
 
 static void write_uint16(struct attr_buffer_s *ab, uint16_t value)
 {
-    unsigned char *two=(unsigned char *) ab->pos;
+    unsigned char *buffer=ab->buffer;
+    unsigned char *two=&buffer[ab->pos];
 
-    two[0] = (value >> 8) & 0xFF;
+    two[0] = (unsigned char) (value >> 8);
     two[1] = value & 0xFF;
     ab->pos += 2;
     ab->left -= 2;
@@ -252,23 +236,31 @@ static void write_skip(struct attr_buffer_s *ab, unsigned int len)
     ab->left -= len;
 }
 
+static void nowrite_skip(struct attr_buffer_s *ab, unsigned int len)
+{
+    ab->pos += len;
+}
+
 static uint8_t read_uchar(struct attr_buffer_s *ab)
 {
-    uint8_t u=(uint8_t) *ab->pos;
+    unsigned char *buffer=ab->buffer;
+    uint8_t u=(uint8_t) buffer[ab->pos];
+
     ab->pos++;
     ab->left--;
+
     return u;
 }
 
 static uint32_t read_string(struct attr_buffer_s *ab, struct ssh_string_s *s, void (* cb)(struct attr_buffer_s *ab, struct ssh_string_s *s, void *ptr), void *ptr)
 {
-    s->len=(* ab->ops->rw.read.read_uint32)(ab);
+    unsigned char *buffer=ab->buffer;
 
-    logoutput("read_string: s->len %i left %i", s->len, ab->left);
+    s->len=(* ab->ops->rw.read.read_uint32)(ab);
 
     if (s->len>0 && ab->left>= s->len) {
 
-	s->ptr=(char *) ab->pos;
+	s->ptr=(char *) &buffer[ab->pos];
 	ab->pos+=s->len;
 	ab->left-=s->len;
 	(* cb)(ab, s, ptr);
@@ -282,32 +274,41 @@ static uint32_t read_string(struct attr_buffer_s *ab, struct ssh_string_s *s, vo
 
 static uint16_t read_uint16(struct attr_buffer_s *ab)
 {
-    unsigned char *two=(unsigned char *) ab->pos;
+    unsigned char *buffer=ab->buffer;
+    unsigned char *two=&buffer[ab->pos];
+
     ab->pos+=2;
     ab->left-=2;
+
     return (uint32_t) ((two[0] << 8)  | two[1]);
 }
 
 static uint32_t read_uint32(struct attr_buffer_s *ab)
 {
-    uint32_t result=get_uint32((char *) ab->pos);
-    logoutput_debug("read_uint32: %i", result);
+    unsigned char *buffer=ab->buffer;
+    uint32_t result=get_uint32((char *) &buffer[ab->pos]);
+
     ab->pos+=4;
     ab->left-=4;
+
     return result;
 }
 
 static uint64_t read_uint64(struct attr_buffer_s *ab)
 {
-    uint64_t result=get_uint64((char *) ab->pos);
+    unsigned char *buffer=ab->buffer;
+    uint64_t result=get_uint64((char *) &buffer[ab->pos]);
+
     ab->pos+=8;
     ab->left-=8;
+
     return result;
 }
 
 static int64_t read_int64(struct attr_buffer_s *ab)
 {
-    unsigned char *tmp=(unsigned char *) ab->pos;
+    unsigned char *buffer=ab->buffer;
+    unsigned char *tmp=&buffer[ab->pos];
     uint64_t a;
 
     a = (uint64_t) ((tmp[0] << 56) | (tmp[1] << 48) | (tmp[2] << 40) | (tmp[3] << 32));
@@ -327,7 +328,7 @@ static struct attr_buffer_ops_s ab_nowrite = {
     .rw.write.write_int64		= nowrite_int64,
     .rw.write.write_uint16		= nowrite_uint16,
     .rw.write.write_string		= write_string,
-    .rw.write.write_skip		= write_skip,
+    .rw.write.write_skip		= nowrite_skip,
 };
 
 static struct attr_buffer_ops_s ab_write = {
@@ -354,7 +355,7 @@ void set_attr_buffer_read(struct attr_buffer_s *ab, char *buffer, unsigned int l
 {
     ab->flags=ATTR_BUFFER_FLAG_READ;
     ab->buffer=(unsigned char *) buffer;
-    ab->pos=ab->buffer;
+    ab->pos=0;
     ab->left=(int) len;
     ab->len=len;
     ab->count=0;
@@ -371,7 +372,7 @@ void set_attr_buffer_write(struct attr_buffer_s *ab, char *buffer, unsigned int 
 {
     ab->flags=ATTR_BUFFER_FLAG_WRITE;
     ab->buffer=(unsigned char *) buffer;
-    ab->pos=ab->buffer;
+    ab->pos=0;
     ab->left=(int) len;
     ab->len=len;
     ab->count=0;
@@ -380,7 +381,7 @@ void set_attr_buffer_write(struct attr_buffer_s *ab, char *buffer, unsigned int 
 
 void reset_attr_buffer_write(struct attr_buffer_s *ab)
 {
-    ab->pos=ab->buffer;
+    ab->pos=0;
     ab->left=(int) ab->len;
     ab->count=0;
 }
@@ -388,7 +389,7 @@ void reset_attr_buffer_write(struct attr_buffer_s *ab)
 struct attr_buffer_s init_read_attr_buffer = {
     .flags			= ATTR_BUFFER_FLAG_READ,
     .buffer			= NULL,
-    .pos			= NULL,
+    .pos			= 0,
     .left			= 0,
     .len			= 0,
     .count			= 0,
@@ -398,7 +399,7 @@ struct attr_buffer_s init_read_attr_buffer = {
 struct attr_buffer_s init_nowrite_attr_buffer = {
     .flags			= ATTR_BUFFER_FLAG_NOWRITE,
     .buffer			= NULL,
-    .pos			= NULL,
+    .pos			= 0,
     .left			= 0,
     .len			= 0,
     .count			= 0,

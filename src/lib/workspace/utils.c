@@ -17,35 +17,15 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <err.h>
-
-#include <inttypes.h>
-#include <ctype.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/param.h>
 #include <dirent.h>
-
 #include <pwd.h>
 
-#ifndef ENOATTR
-#define ENOATTR ENODATA        /* No such attribute */
-#endif
+#include "libosns-misc.h"
+#include "libosns-log.h"
 
-#include "misc.h"
 #include "utils.h"
-
-#undef LOGGING
-#include "log.h"
 
 /* function to get the "real" path from a template, which has has the 
    strings $HOME and $USER in it, which have to be replaced by the real value

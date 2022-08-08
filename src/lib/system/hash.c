@@ -17,33 +17,12 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/vfs.h>
-
-#include "log.h"
-#include "misc.h"
-#include "datatypes.h"
-#include "list.h"
+#include "libosns-log.h"
+#include "libosns-misc.h"
+#include "libosns-datatypes.h"
+#include "libosns-list.h"
 
 #include "fshandle.h"
 
@@ -59,19 +38,19 @@ void remove_commonhandle_hash(struct commonhandle_s *handle)
     remove_data_from_hash(&ino_group, (void *) handle);
 }
 
-int writelock_commonhandles(struct simple_lock_s *lock)
+int writelock_commonhandles(struct osns_lock_s *lock)
 {
     init_wlock_hashtable(&ino_group, lock);
     return lock_hashtable(lock);
 }
 
-int readlock_commonhandles(struct simple_lock_s *lock)
+int readlock_commonhandles(struct osns_lock_s *lock)
 {
     init_rlock_hashtable(&ino_group, lock);
     return lock_hashtable(lock);
 }
 
-int unlock_commonhandles(struct simple_lock_s *lock)
+int unlock_commonhandles(struct osns_lock_s *lock)
 {
     return unlock_hashtable(lock);
 }
@@ -113,7 +92,7 @@ struct commonhandle_s *find_commonhandle(dev_t dev, uint64_t ino, unsigned int p
     struct commonhandle_s *handle=NULL;
     unsigned int hashvalue=0;
     void *index=NULL;
-    struct simple_lock_s lock;
+    struct osns_lock_s lock;
     unsigned int flag=(type==COMMONHANDLE_TYPE_DIR) ? COMMONHANDLE_FLAG_DIR : COMMONHANDLE_FLAG_FILE;
 
     logoutput_debug("find_commonhandle: look for dev %i ino %i pid %i fd %i flag %i", dev, ino, pid, fd, flag);

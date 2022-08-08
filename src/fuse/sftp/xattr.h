@@ -20,9 +20,9 @@
 #ifndef _FUSE_SFTP_XATTR_H
 #define _FUSE_SFTP_XATTR_H
 
-void _fs_sftp_setxattr(struct service_context_s *context, struct fuse_request_s *request, struct pathinfo_s *pathinfo, struct inode_s *inode, const char *name, const char *value, size_t size, int flags);
-void _fs_sftp_getxattr(struct service_context_s *context, struct fuse_request_s *request, struct pathinfo_s *pathinfo, struct inode_s *inode, const char *name, size_t size);
-void _fs_sftp_listxattr(struct service_context_s *context, struct fuse_request_s *request, struct pathinfo_s *pathinfo, struct inode_s *inode, size_t size);
-void _fs_sftp_removexattr(struct service_context_s *context, struct fuse_request_s *request, struct pathinfo_s *pathinfo, struct inode_s *inode, const char *name);
+void _fs_sftp_setxattr(struct service_context_s *context, struct fuse_request_s *request, struct fuse_path_s *path, struct inode_s *inode, const char *name, const char *value, size_t size, int flags);
+void _fs_sftp_getxattr(struct service_context_s *context, struct fuse_request_s *request, struct fuse_path_s *path, struct inode_s *inode, const char *name, size_t size);
+void _fs_sftp_listxattr(struct service_context_s *context, struct fuse_request_s *request, struct fuse_path_s *path, struct inode_s *inode, size_t size);
+void _fs_sftp_removexattr(struct service_context_s *context, struct fuse_request_s *request, struct fuse_path_s *path, struct inode_s *inode, const char *name);
 
 #endif

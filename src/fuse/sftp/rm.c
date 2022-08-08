@@ -17,38 +17,19 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
-#include "main.h"
-#include "log.h"
-#include "misc.h"
-
-#include "workspace-interface.h"
-#include "workspace.h"
-#include "fuse.h"
+#include "libosns-log.h"
+#include "libosns-misc.h"
+#include "libosns-interface.h"
+#include "libosns-workspace.h"
+#include "libosns-context.h"
+#include "libosns-fuse-public.h"
 
 #include "sftp/common-protocol.h"
 #include "sftp/attr-context.h"
+
+#include "interface/sftp.h"
 #include "interface/sftp-attr.h"
 #include "interface/sftp-send.h"
 #include "interface/sftp-wait-response.h"
@@ -60,7 +41,7 @@ static void _remove_entry_common(struct entry_s **pentry)
 
     if (directory) {
 	unsigned int error=0;
-        struct simple_lock_s wlock;
+        struct osns_lock_s wlock;
 
         /* remove entry from directory */
 
@@ -81,30 +62,39 @@ static void _remove_entry_common(struct entry_s **pentry)
 
 /* REMOVE a file and a directory */
 
-void _fs_sftp_unlink(struct service_context_s *context, struct fuse_request_s *f_request, struct entry_s **pentry, struct pathinfo_s *pathinfo)
+void _fs_sftp_unlink(struct service_context_s *ctx, struct fuse_request_s *f_request, struct entry_s **pentry, struct fuse_path_s *fpath)
 {
-    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
-    struct context_interface_s *interface=&context->interface;
+    struct workspace_mount_s *w=get_workspace_mount_ctx(ctx);
+    struct context_interface_s *i=&ctx->interface;
     struct sftp_request_s sftp_r;
     unsigned int error=EIO;
-    unsigned int pathlen=(* interface->backend.sftp.get_complete_pathlen)(interface, pathinfo->len);
-    char path[pathlen];
+    unsigned int pathlen=sftp_get_complete_pathlen(i, fpath);
+    unsigned int size=sftp_get_required_buffer_size_l2p(i, pathlen);
+    char buffer[size];
+    int result=0;
 
-    pathinfo->len += (* interface->backend.sftp.complete_path)(interface, path, pathinfo);
+    memset(buffer, 0, size);
+    result=sftp_convert_path_l2p(i, buffer, size, fpath->pathstart, pathlen);
 
-    logoutput("_fs_sftp_unlink: remove %.*s", pathinfo->len, pathinfo->path);
+    if (result==-1) {
 
-    init_sftp_request(&sftp_r, interface, f_request);
+	logoutput_debug("_fs_sftp_unlink: error converting local path");
+	goto out;
 
-    sftp_r.call.remove.path=(unsigned char *) pathinfo->path;
-    sftp_r.call.remove.len=pathinfo->len;
+    }
 
-    if (send_sftp_remove_ctx(interface, &sftp_r)>0) {
+    logoutput("_fs_sftp_unlink: remove %s", fpath->pathstart);
+
+    init_sftp_request(&sftp_r, i, f_request);
+    sftp_r.call.remove.path=(unsigned char *) buffer;
+    sftp_r.call.remove.len=(unsigned int) result;
+
+    if (send_sftp_remove_ctx(i, &sftp_r)>0) {
 	struct system_timespec_s timeout=SYSTEM_TIME_INIT;
 
-	get_sftp_request_timeout_ctx(interface, &timeout);
+	get_sftp_request_timeout_ctx(i, &timeout);
 
-	if (wait_sftp_response_ctx(interface, &sftp_r, &timeout)==1) {
+	if (wait_sftp_response_ctx(i, &sftp_r, &timeout)==1) {
 	    struct sftp_reply_s *reply=&sftp_r.reply;
 
 	    if (reply->type==SSH_FXP_STATUS) {
@@ -114,7 +104,6 @@ void _fs_sftp_unlink(struct service_context_s *context, struct fuse_request_s *f
 		if (reply->response.status.code==0) {
 
 		    _remove_entry_common(pentry);
-
 		    reply_VFS_error(f_request, 0);
 		    unset_fuse_request_flags_cb(f_request);
 		    return;
@@ -141,28 +130,37 @@ void _fs_sftp_unlink(struct service_context_s *context, struct fuse_request_s *f
 
 }
 
-void _fs_sftp_rmdir(struct service_context_s *context, struct fuse_request_s *f_request, struct entry_s **pentry, struct pathinfo_s *pathinfo)
+void _fs_sftp_rmdir(struct service_context_s *ctx, struct fuse_request_s *f_request, struct entry_s **pentry, struct fuse_path_s *fpath)
 {
-    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
-    struct context_interface_s *interface=&context->interface;
+    struct workspace_mount_s *w=get_workspace_mount_ctx(ctx);
+    struct context_interface_s *i=&ctx->interface;
     struct sftp_request_s sftp_r;
     unsigned int error=EIO;
-    unsigned int pathlen=(* interface->backend.sftp.get_complete_pathlen)(interface, pathinfo->len);
-    char path[pathlen];
+    unsigned int pathlen=sftp_get_complete_pathlen(i, fpath);
+    unsigned int size=sftp_get_required_buffer_size_l2p(i, pathlen);
+    char buffer[size];
+    int result=0;
 
-    pathinfo->len += (* interface->backend.sftp.complete_path)(interface, path, pathinfo);
+    memset(buffer, 0, size);
+    result=sftp_convert_path_l2p(i, buffer, size, fpath->pathstart, pathlen);
 
-    init_sftp_request(&sftp_r, interface, f_request);
+    if (result==-1) {
 
-    sftp_r.call.rmdir.path=(unsigned char *) pathinfo->path;
-    sftp_r.call.rmdir.len=pathinfo->len;
+	logoutput_debug("_fs_sftp_rmdir: error converting local path");
+	goto out;
 
-    if (send_sftp_rmdir_ctx(interface, &sftp_r)>0) {
+    }
+
+    init_sftp_request(&sftp_r, i, f_request);
+    sftp_r.call.rmdir.path=(unsigned char *) buffer;
+    sftp_r.call.rmdir.len=(unsigned int) result;
+
+    if (send_sftp_rmdir_ctx(i, &sftp_r)>0) {
 	struct system_timespec_s timeout=SYSTEM_TIME_INIT;
 
-	get_sftp_request_timeout_ctx(interface, &timeout);
+	get_sftp_request_timeout_ctx(i, &timeout);
 
-	if (wait_sftp_response_ctx(interface, &sftp_r, &timeout)==1) {
+	if (wait_sftp_response_ctx(i, &sftp_r, &timeout)==1) {
 	    struct sftp_reply_s *reply=&sftp_r.reply;
 
 	    if (reply->type==SSH_FXP_STATUS) {
@@ -170,7 +168,6 @@ void _fs_sftp_rmdir(struct service_context_s *context, struct fuse_request_s *f_
 		if (reply->response.status.code==0) {
 
 		    _remove_entry_common(pentry);
-
 		    reply_VFS_error(f_request, 0);
 		    unset_fuse_request_flags_cb(f_request);
 		    return;
@@ -198,12 +195,12 @@ void _fs_sftp_rmdir(struct service_context_s *context, struct fuse_request_s *f_
 
 }
 
-void _fs_sftp_unlink_disconnected(struct service_context_s *context, struct fuse_request_s *f_request, struct entry_s **pentry, struct pathinfo_s *pathinfo)
+void _fs_sftp_unlink_disconnected(struct service_context_s *context, struct fuse_request_s *f_request, struct entry_s **pentry, struct fuse_path_s *fpath)
 {
     reply_VFS_error(f_request, ENOTCONN);
 }
 
-void _fs_sftp_rmdir_disconnected(struct service_context_s *context, struct fuse_request_s *f_request, struct entry_s **pentry, struct pathinfo_s *pathinfo)
+void _fs_sftp_rmdir_disconnected(struct service_context_s *context, struct fuse_request_s *f_request, struct entry_s **pentry, struct fuse_path_s *fpath)
 {
     reply_VFS_error(f_request, ENOTCONN);
 }

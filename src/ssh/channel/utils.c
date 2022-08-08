@@ -17,31 +17,10 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
-#include "log.h"
-#include "main.h"
-#include "misc.h"
+#include "libosns-log.h"
+#include "libosns-misc.h"
 
 #include "ssh-common.h"
 #include "ssh-channel.h"
@@ -90,15 +69,10 @@ unsigned int get_channel_interface_info(struct ssh_channel_s *channel, char *buf
 	    store_uint32(buffer, ENODEV); /* connected with server but backend on server not */
 	    result=4;
 
-	} else if (channel->flags & (CHANNEL_FLAG_SERVER_EOF | CHANNEL_FLAG_CLIENT_EOF)) {
-
-	    store_uint32(buffer, ENOTCONN); /* not connected with server */
-	    result=4;
-
 	} else {
-	    struct fs_connection_s *connection=&channel->connection->connection;
+	    struct connection_s *connection=&channel->connection->connection;
 
-	    if (connection->status & FS_CONNECTION_FLAG_DISCONNECT ) {
+	    if (connection->status & CONNECTION_STATUS_DISCONNECT ) {
 
 		store_uint32(buffer, ENOTCONN); /* not connected with server */
 		result=4;
@@ -133,23 +107,21 @@ static void receive_msg_channel_data_context(struct ssh_channel_s *channel, stru
     unsigned char flags = payload->flags;
     char *buffer=(char *) payload;
 
-    // logoutput("receive_msg_channel_data_context: resize from %i to %i", sizeof(struct ssh_payload_s) + size, size);
-
     memmove(buffer, payload->buffer, size);
     memset(&buffer[size], 0, offsetof(struct ssh_payload_s, buffer));
     *p_payload=NULL;
 
     (* channel->process_incoming_bytes)(channel, size);
-    (* channel->context.receive_data)(channel, &buffer, size, seq, flags);
+    (* channel->context.recv_data)(channel, &buffer, size, seq, flags);
     if (buffer) free(buffer);
 }
 
-void switch_msg_channel_receive_data(struct ssh_channel_s *channel, const char *name, void (* cb)(struct ssh_channel_s *c, char **b, unsigned int size, uint32_t seq, unsigned char f))
+void switch_msg_channel_receive_data(struct ssh_channel_s *channel, const char *name, void (* cb)(struct ssh_channel_s *channel, char **b, unsigned int size, uint32_t seq, unsigned char f))
 {
 
     logoutput("switch_msg_channel_receive_data: %s", name);
 
-    pthread_mutex_lock(&channel->mutex);
+    signal_lock_flag(channel->signal, &channel->flags, CHANNEL_FLAG_RECV_DATA);
 
     channel->receive_msg_channel_data=receive_msg_channel_data_down;
 
@@ -160,7 +132,7 @@ void switch_msg_channel_receive_data(struct ssh_channel_s *channel, const char *
     } else if (strcmp(name, "context")==0) {
 
 	channel->receive_msg_channel_data=receive_msg_channel_data_context;
-	if (cb) channel->context.receive_data=cb;
+	if (cb) channel->context.recv_data=cb;
 
     } else if (strcmp(name, "down")==0) {
 
@@ -168,14 +140,16 @@ void switch_msg_channel_receive_data(struct ssh_channel_s *channel, const char *
 
     }
 
-    pthread_mutex_unlock(&channel->mutex);
+    signal_unlock_flag(channel->signal, &channel->flags, CHANNEL_FLAG_RECV_DATA);
 
 }
 
 void switch_channel_send_data(struct ssh_channel_s *channel, const char *what)
 {
 
-    pthread_mutex_lock(&channel->mutex);
+    signal_lock_flag(channel->signal, &channel->flags, CHANNEL_FLAG_SEND_DATA);
+
+    logoutput_debug("switch_channel_send_data: channel %u what %s", channel->local_channel, what);
 
     if (strcmp(what, "error")==0 || strcmp(what, "eof")==0 || strcmp(what, "close")==0) {
 
@@ -191,6 +165,6 @@ void switch_channel_send_data(struct ssh_channel_s *channel, const char *what)
 
     }
 
-    pthread_mutex_unlock(&channel->mutex);
+    signal_unlock_flag(channel->signal, &channel->flags, CHANNEL_FLAG_SEND_DATA);
 
 }

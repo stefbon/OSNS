@@ -16,36 +16,16 @@
   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
+#include "libosns-basic-system-headers.h"
 
-#include "global-defines.h"
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
-#include "main.h"
-#include "misc.h"
-#include "log.h"
+#include "libosns-misc.h"
+#include "libosns-log.h"
 
 #include "ssh-common.h"
 #include "ssh-utils.h"
 #include "ssh-connections.h"
 #include "ssh-send.h"
 #include "ssh-receive.h"
-#include "options.h"
 
 extern struct fs_options_s fs_options;
 
@@ -184,7 +164,7 @@ void find_globalrequests_supported(struct ssh_connection_s *connection)
 {
     struct ssh_session_s *session=get_ssh_connection_session(connection);
     struct ssh_extensions_s *extensions=&session->extensions;
-    unsigned int index=_OPTIONS_SSH_EXTENSION_GR_SUPPORT - 1;
+    unsigned int index=SSH_EXTENSION_GR_SUPPORT - 1;
 
     if ((session->config.extensions & (2 * index))==0) {
 

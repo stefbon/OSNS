@@ -17,8 +17,8 @@
 
 */
 
-#ifndef FS_WORKSPACE_SSH_PK_CREATE_H
-#define FS_WORKSPACE_SSH_PK_CREATE_H
+#ifndef SSH_PK_PK_CREATE_H
+#define SSH_PK_PK_CREATE_H
 
 int create_ssh_key(struct ssh_pkalgo_s *algo, struct ssh_key_s *pkey, struct ssh_key_s *skey);
 

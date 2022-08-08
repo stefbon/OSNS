@@ -17,31 +17,11 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
-#include "log.h"
-#include "main.h"
-#include "threads.h"
-
-#include "misc.h"
+#include "libosns-log.h"
+#include "libosns-threads.h"
+#include "libosns-misc.h"
 
 #include "ssh-common.h"
 #include "ssh-common-protocol.h"
@@ -50,7 +30,7 @@
 
 int write_socket(struct ssh_connection_s *connection, struct ssh_packet_s *packet, unsigned int *error)
 {
-    struct socket_ops_s *sops=connection->connection.io.socket.sops;
+    struct system_socket_s *sock=&connection->connection.sock;
     ssize_t written=0;
     char *pos=packet->buffer;
     int left=(int) packet->size;
@@ -59,7 +39,7 @@ int write_socket(struct ssh_connection_s *connection, struct ssh_packet_s *packe
 
     logoutput("write_socket: seq %i len %i", packet->sequence, left);
 
-    written=(* sops->send)(&connection->connection.io.socket, pos, left, 0);
+    written=socket_send(sock, pos, left, 0);
 
     if (written==-1) {
 

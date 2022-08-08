@@ -17,34 +17,15 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-
-#include "log.h"
-#include "main.h"
-#include "misc.h"
+#include "libosns-log.h"
+#include "libosns-misc.h"
+#include "libosns-list.h"
 
 #include "ssh-common.h"
 #include "ssh-utils.h"
 #include "ssh-receive.h"
-
-#include "list.h"
 
 static char fallback_buffer[sizeof(struct ssh_decompressor_s)];
 static struct ssh_decompressor_s *fallback=(struct ssh_decompressor_s *) fallback_buffer;

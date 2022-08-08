@@ -18,25 +18,9 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <err.h>
-
-#include <inttypes.h>
-#include <ctype.h>
-
-#include <sys/stat.h>
-#include <sys/param.h>
-#include <sys/types.h>
 #include <fcntl.h>
-#include <time.h>
 #include <dirent.h>
 
 #include "utils.h"
@@ -72,10 +56,7 @@ void unslash(char *p)
 
 	if (q[-1] == '/') {
 
-	    while (*p == '/') {
-
-		p++;
-	    }
+	    while (*p == '/') p++;
 
 	}
     }
@@ -134,7 +115,6 @@ unsigned char belongtosameprocess(pid_t process_id, pid_t thread_id)
     struct stat st;
 
     snprintf(tmppath, 40, "/proc/%i/task/%i", process_id, thread_id);
-
     if (lstat(tmppath, &st)==0) sameprocess=1;
 
     return sameprocess;
@@ -187,7 +167,7 @@ int custom_fork()
     int result=0;
     pid_t pid=fork();
 
-    switch(pid) {
+    switch (pid) {
 
 	case -1:
 
@@ -219,7 +199,6 @@ int custom_fork()
 	(void) dup2(nullfd, 0);
 	(void) dup2(nullfd, 1);
 	(void) dup2(nullfd, 2);
-
 	if (nullfd > 2) close(nullfd);
 
     }
@@ -257,4 +236,11 @@ void strdup_target_path(char *target, char **p_path, unsigned int *error)
 
     }
 
+}
+
+int compare_starting_substring(char *name, unsigned int len, const char *start)
+{
+    unsigned int lens=strlen(start);
+
+    return ((len>=lens && strncmp(name, start, lens)==0) ? 0 : -1);
 }

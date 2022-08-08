@@ -17,42 +17,16 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
+#include "libosns-log.h"
+#include "libosns-misc.h"
+#include "libosns-error.h"
 
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/syscall.h>
-#include <sys/statvfs.h>
-#include <sys/mount.h>
+#include "libosns-threads.h"
+#include "libosns-eventloop.h"
+#include "libosns-users.h"
 
-#include "log.h"
-
-#include "main.h"
-#include "misc.h"
-#include "datatypes.h"
-
-#include "threads.h"
-#include "eventloop.h"
-#include "users.h"
-
-#include "misc.h"
 #include "osns_sftp_subsystem.h"
 #include "ssh/subsystem/connection.h"
 
@@ -65,12 +39,12 @@
 
 char *program_name=NULL;
 
-static void workspace_signal_handler(struct beventloop_s *loop, unsigned int signo, pid_t pid, int fd)
+static void workspace_signal_handler(struct beventloop_s *loop, struct bsignal_event_s *bse)
 {
 
-    logoutput("workspace_signal_handler: received %i", signo);
+    logoutput("workspace_signal_handler: received %i", bse->signo);
 
-    switch (signo) {
+    switch (bse->signo) {
 
 	case SIGHUP:
 	case SIGINT:
@@ -78,7 +52,7 @@ static void workspace_signal_handler(struct beventloop_s *loop, unsigned int sig
 	case SIGABRT:
 	case SIGSTOP:
 
-	    logoutput("workspace_signal_handler: got signal (%i): terminating", signo);
+	    logoutput("workspace_signal_handler: got signal (%i): terminating", bse->signo);
 	    stop_beventloop(loop);
 	    break;
 
@@ -115,7 +89,7 @@ static void workspace_signal_handler(struct beventloop_s *loop, unsigned int sig
 
 	default:
 
-    	    logoutput("workspace_signal_handler: received unknown %i signal", signo);
+    	    logoutput("workspace_signal_handler: received unknown %i signal", bse->signo);
 
     }
 
@@ -123,15 +97,15 @@ static void workspace_signal_handler(struct beventloop_s *loop, unsigned int sig
 
 int main(int argc, char *argv[])
 {
-    int res=0;
+    int result=0;
     unsigned int error=0;
     struct bevent_s *bevent=NULL;
     struct sftp_subsystem_s sftp;
     char *pidfile=NULL;
+    int id_signal_subsystem=0;
 
     switch_logging_backend("std");
     set_logging_level(LOG_DEBUG);
-
     logoutput("%s started", argv[0]);
 
     /* output to stdout/stderr is useless since daemonized */
@@ -141,29 +115,34 @@ int main(int argc, char *argv[])
 
     if (init_beventloop(NULL)==-1) {
 
-        logoutput_error("MAIN: error creating eventloop, error: %i (%s).", error, strerror(error));
+        logoutput_error("MAIN: error creating eventloop.");
         goto post;
 
     } else {
 
-	logoutput_info("MAIN: initializing eventloop");
+	logoutput_info("MAIN: eventloop initialized");
 
     }
 
-    if (enable_beventloop_signal(NULL, workspace_signal_handler)==-1) {
+    id_signal_subsystem=create_bevent_signal_subsystem(NULL, workspace_signal_handler);
 
-	logoutput_error("MAIN: error adding signal handler to eventloop: %i (%s).", error, strerror(error));
+    if (id_signal_subsystem==-1) {
+
+	logoutput_error("MAIN: error adding signal handler to eventloop.");
         goto out;
 
     } else {
 
-	logoutput_info("MAIN: adding signal handler to eventloop");
+	logoutput_info("MAIN: signal handler added to main eventloop");
 
     }
 
+    result=start_bsignal_subsystem(NULL, id_signal_subsystem);
+    logoutput("MAIN: signal handler started (%i)", result);
+
     if (init_hash_commonhandles(&error)==0) {
 
-	logoutput_info("MAIN: initializing common handles (open and opendir)");
+	logoutput_info("MAIN: initializing common handles (for open/read/write, opendir/readir, fstatat, mkdirat etc)");
 
     } else {
 
@@ -178,8 +157,6 @@ int main(int argc, char *argv[])
     init_workerthreads(NULL);
     set_max_numberthreads(NULL, 6); /* depends on the number of users and connected workspaces, 6 is a reasonable amount for this moment */
     start_default_workerthreads(NULL);
-
-    /* add SDTIN fileno to the eventloop  */
 
     if (init_sftp_subsystem(&sftp)==0) {
 
@@ -205,28 +182,15 @@ int main(int argc, char *argv[])
 
     set_process_sftp_payload_init(&sftp);
 
-    if (add_ssh_subsystem_connection_eventloop(&sftp.connection, read_ssh_subsystem_connection_signal, write_ssh_subsystem_connection_signal)==0) {
-
-	logoutput("MAIN: sftp subsystem added tot eventloop");
-
-    } else {
-
-	logoutput_warning("MAIN: failed to add sftp subsystem to eventloop");
-	goto out;
-
-    }
-
     /* disable pidfile for now: find a location with write access first */
 
     // create_pid_file(PIDFILE_PATH, "osns_sftp_subsystem", sftp.identity.pwd.pw_name, getpid(), &pidfile);
 
-    res=start_beventloop(NULL);
+    start_beventloop(NULL);
 
     out:
 
-    remove_ssh_subsystem_connection_eventloop(-1, &sftp.connection);
-    finish_ssh_subsystem_connection(-1, &sftp.connection);
-    free_ssh_subsystem_connection(&sftp.connection);
+    clear_ssh_subsystem_connection(-1, &sftp.connection);
 
     logoutput_info("MAIN: stop workerthreads");
     stop_workerthreads(NULL);

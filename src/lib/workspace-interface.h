@@ -1,1 +1,1 @@
-interface.h
+libosns-interface.h

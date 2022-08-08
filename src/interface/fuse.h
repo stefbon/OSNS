@@ -19,6 +19,19 @@
 #ifndef INTERFACE_FUSE_H
 #define INTERFACE_FUSE_H
 
-void init_fusesocket_interface();
+/* prototypes */
+
+void init_fuse_interface();
+
+void set_fuse_interface_eventloop(struct context_interface_s *i, struct beventloop_s *loop);
+struct beventloop_s *get_fuse_interface_eventloop(struct context_interface_s *i);
+
+void signal_fuse_request_interrupted(struct context_interface_s *interface, uint64_t unique);
+
+struct fuse_config_s *get_fuse_interface_config(struct context_interface_s *i);
+
+int fuse_notify_VFS_delete(struct context_interface_s *interface, uint64_t pino, uint64_t ino, char *name, unsigned int len);
+int fuse_reply_VFS_data(struct context_interface_s *i, uint64_t unique, char *data, unsigned int len);
+int fuse_reply_VFS_error(struct context_interface_s *i, uint64_t unique, unsigned int errcode);
 
 #endif

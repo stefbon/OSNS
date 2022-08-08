@@ -17,35 +17,22 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
+#include <math.h>
 
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
-#include "log.h"
-#include "misc.h"
-#include "datatypes.h"
+#include "libosns-log.h"
+#include "libosns-misc.h"
+#include "libosns-datatypes.h"
 
 #include "path.h"
 #include "open.h"
 #include "location.h"
+
+static unsigned int get_fieldsize_uint(unsigned int value)
+{
+    return (unsigned int)(log10((double) value) + 1);
+}
 
 unsigned int append_location_path_get_required_size(struct fs_location_path_s *path, const unsigned char type, void *ptr)
 {
@@ -77,6 +64,23 @@ unsigned int append_location_path_get_required_size(struct fs_location_path_s *p
 
 	}
 
+	case 'n' : {
+	    struct name_string_s *other=(struct name_string_s *) ptr;
+
+	    len=path->len + 2 + other->len;
+	    break;
+
+	}
+
+	case 'u' : {
+	    unsigned int tmp=*((unsigned int *) ptr);
+
+	    len=path->len + 2 + get_fieldsize_uint(tmp);
+	    break;
+
+	}
+
+
     }
 
     return len;
@@ -87,7 +91,7 @@ void assign_buffer_location_path(struct fs_location_path_s *path, char *buffer, 
 {
     path->flags=0;
     path->ptr=buffer;
-    path->len=len; /* ? */
+    path->len=0;
     path->size=len;
 }
 
@@ -109,6 +113,19 @@ void set_location_path(struct fs_location_path_s *path, const unsigned char type
 
 	}
 
+	case 'p': {
+
+	    struct fs_location_path_s *tmp=(struct fs_location_path_s *) ptr;
+
+	    path->flags=0;
+	    path->ptr=tmp->ptr;
+	    path->len=tmp->len;
+	    path->size=tmp->size;
+
+	    break;
+
+	}
+
 	case 'c': {
 	    char *buffer=(char *) ptr;
 
@@ -122,6 +139,19 @@ void set_location_path(struct fs_location_path_s *path, const unsigned char type
 	}
 
 	case 'n': {
+
+	    struct name_string_s *tmp=(struct name_string_s *) ptr;
+
+	    path->flags=0;
+	    path->ptr=tmp->ptr;
+	    path->len=tmp->len;
+	    path->size=tmp->len;
+
+	    break;
+
+	}
+
+	case 'z': {
 
 	    path->flags=0;
 	    path->ptr=NULL;
@@ -154,67 +184,73 @@ void clear_location_path(struct fs_location_path_s *path)
 
 unsigned int combine_location_path(struct fs_location_path_s *result, struct fs_location_path_s *path, const unsigned char type, void *ptr)
 {
-    int tmp=0;
+    int size=0;
+    char *tmp=NULL;
+    unsigned int len=0;
 
     memset(result->ptr, 0, result->size);
 
     switch (type) {
 
 	case 'c' : {
-	    char *name=(char *) ptr;
 
-#ifdef __linux__
-
-	    tmp=snprintf(result->ptr, result->size, "%.*s/%s", path->len, path->ptr, name);
-
-	    if (tmp<0) {
-
-		logoutput("combine_location_path: error %i appending %s (%s)", errno, name, strerror(errno));
-		return 0;
-
-	    }
-#endif
+	    tmp=(char *) ptr;
+	    len=strlen(tmp);
+	    break;
 
 	}
 
 	case 's' : {
 	    struct ssh_string_s *other=(struct ssh_string_s *) ptr;
 
-#ifdef __linux__
-
-	    tmp=snprintf(result->ptr, result->size, "%.*s/%.*s", path->len, path->ptr, other->len, other->ptr);
-
-	    if (tmp<0) {
-
-		logoutput("combine_location_path: error %i appending %.*s (%s)", errno, other->len, other->ptr, strerror(errno));
-		return 0;
-
-	    }
-#endif
+	    tmp=other->ptr;
+	    len=other->len;
+	    break;
 
 	}
 
 	case 'p' : {
 	    struct fs_location_path_s *other=(struct fs_location_path_s *) ptr;
 
-#ifdef __linux__
-
-	    tmp=snprintf(result->ptr, result->size, "%.*s/%.*s", path->len, path->ptr, other->len, other->ptr);
-
-	    if (tmp<0) {
-
-		logoutput("combine_location_path: error %i appending %.*s (%s)", errno, other->len, other->ptr, strerror(errno));
-		return 0;
-
-	    }
-#endif
+	    tmp=other->ptr;
+	    len=other->len;
+	    break;
 
 	}
 
+	case 'n' : {
+	    struct name_string_s *other=(struct name_string_s *) ptr;
+
+	    tmp=other->ptr;
+	    len=other->len;
+	    break;
+
+
+	}
+
+
     }
 
-    result->len=(unsigned int) tmp;
-    return result->len;
+    if (tmp) {
+
+#ifdef __linux__
+
+	size=snprintf(result->ptr, result->size, "%.*s/%.*s", path->len, path->ptr, len, tmp);
+
+	if (size<0) {
+
+	    logoutput_error("combine_location_path: error %i appending (%s)", errno, strerror(errno));
+	    result=0;
+
+	}
+
+	result->len=size;
+
+#endif
+
+    }
+
+    return size;
 
 }
 
@@ -323,16 +359,15 @@ static unsigned int append_bytes_location_path(struct fs_location_path_s *path, 
 
 	buffer[pos]='/';
 	pos++;
-	memcpy(&buffer[pos], ptr, len);
+	memcpy(&buffer[pos], tmp, len);
 	result=len+1;
 
     } else if (left>0) {
-	char tmp[len + 1]; /* create a temp buffer to ease the copy */
+	char tmp2[len + 1]; /* create a temp buffer to ease the copy */
 
-	tmp[0]='/';
-	memcpy(&tmp[1], ptr, len);
-	memcpy(&buffer[pos], tmp, left);
-
+	tmp2[0]='/';
+	memcpy(&tmp2[1], tmp, len);
+	memcpy(&buffer[pos], tmp2, left);
 	result=left;
 
     }
@@ -384,6 +419,42 @@ unsigned int append_location_path(struct fs_location_path_s *path, const unsigne
 
 	}
 
+	case 'n' : {
+	    struct name_string_s *n=(struct name_string_s *) ptr;
+
+#ifdef __linux__
+
+	    result=append_bytes_location_path(path, n->ptr, n->len);
+
+#endif
+
+	    break;
+
+	}
+
+	case 'u' : {
+	    unsigned int value=*((unsigned int *) ptr);
+	    unsigned int tmp=get_fieldsize_uint(value);
+	    char buffer[tmp+1];
+
+	    memset(buffer, 0, tmp+1);
+
+#ifdef __linux__
+
+	    /* use snprintf to convert an unsigned int to char buffer
+		(note the - flag here: make it left alligned) */
+
+	    if (snprintf(buffer, tmp+1, "%-u", value)>0) {
+
+		result=append_bytes_location_path(path, buffer, strlen(buffer));
+
+	    }
+
+#endif
+
+	    break;
+
+	}
 
     }
 
@@ -393,11 +464,15 @@ unsigned int append_location_path(struct fs_location_path_s *path, const unsigne
 
 unsigned int get_unix_location_path_length(struct fs_location_path_s *path)
 {
+
+    logoutput_debug("get_unix_location_path_length: path size %u len %u", path->size, path->len);
+
 #ifdef __linux__
     return path->len;
 #else
     return 0;
 #endif
+
 }
 
 unsigned int copy_unix_location_path(struct fs_location_path_s *path, char *buffer, unsigned int size)
@@ -405,6 +480,8 @@ unsigned int copy_unix_location_path(struct fs_location_path_s *path, char *buff
     unsigned int len=0;
 
 #ifdef __linux__
+
+    logoutput_debug("copy_unix_location_path: buffer %.*s (path len %u)", size, buffer, path->len);
 
     len=((path->len < size) ? path->len : size);
     memcpy(buffer, path->ptr, len);
@@ -494,7 +571,7 @@ unsigned char test_location_path_subdirectory(struct fs_location_path_s *path, c
 
     }
 
-    if (ptr) {
+    if (tmp) {
 
 	if ((path->len > len) && (strncmp(path->ptr, tmp, len)==0) && (path->ptr[len]=='/')) {
 

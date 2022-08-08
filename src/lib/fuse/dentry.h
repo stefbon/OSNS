@@ -20,27 +20,24 @@
 #ifndef _LIB_FUSE_DENTRY_H
 #define _LIB_FUSE_DENTRY_H
 
-#include "list.h"
-#include "datatypes.h"
+#include "libosns-list.h"
+#include "libosns-datatypes.h"
 #include "system/stat.h"
-
-#define MODEMASK 07777
 
 #define _ENTRY_FLAG_TEMP					1
 #define _ENTRY_FLAG_VIRTUAL					2
 #define _ENTRY_FLAG_ROOT					4
 #define _ENTRY_FLAG_NOBUFFER					8
-
-#define _INODE_DIRECTORY_SIZE					4096
-#define _DEFAULT_BLOCKSIZE					4096
+#define _ENTRY_FLAG_SPECIAL					16
 
 #define DATA_LINK_TYPE_CONTEXT					1
-#define DATA_LINK_TYPE_ID					2
-#define DATA_LINK_TYPE_SPECIAL_ENTRY				3
-#define DATA_LINK_TYPE_SYMLINK					4
-#define DATA_LINK_TYPE_DATA					5
-#define DATA_LINK_TYPE_DIRECTORY				6
+#define DATA_LINK_TYPE_DIRECTORY				2
+#define DATA_LINK_TYPE_ID					3
+#define DATA_LINK_TYPE_SPECIAL_ENTRY				4
+#define DATA_LINK_TYPE_SYMLINK					5
+#define DATA_LINK_TYPE_DATA					6
 #define DATA_LINK_TYPE_CACHE					7
+#define DATA_LINK_TYPE_PATH					8
 
 #define INODE_FLAG_HASHED					1
 #define INODE_FLAG_STAT_CACHED					2
@@ -48,23 +45,6 @@
 #define INODE_FLAG_DELETED					8
 #define INODE_FLAG_REMOVED					16
 #define INODE_FLAG_REMOTECHANGED				32
-
-#define INODECACHE_CACHE_STAT					0
-#define INODECACHE_CACHE_READDIR				1
-#define INODECACHE_CACHE_XATTR					2
-
-#define INODECACHE_FLAG_STAT					1
-#define INODECACHE_FLAG_READDIR					2
-#define INODECACHE_FLAG_XATTR					4
-#define INODECACHE_FLAG_STAT_EQUAL_READDIR			8
-
-struct inodecache_s {
-    uint32_t				dev;
-    ino_t				ino;
-    unsigned int			flags;
-    struct list_element_s		list;
-    struct ssh_string_s			data[3];
-};
 
 struct data_link_s {
     unsigned char			type;
@@ -84,12 +64,11 @@ struct inode_s {
 };
 
 struct entry_s {
+    unsigned char			flags;
     struct name_s			name;
     struct inode_s 			*inode;
     struct list_element_s		list;
-    struct data_link_s			*ptr;
-    struct entry_ops_s			*ops;
-    unsigned char			flags;
+    unsigned short			size;
     char				buffer[];
 };
 
@@ -97,19 +76,13 @@ struct entry_s {
 
 void init_data_link(struct data_link_s *link);
 
-void init_entry(struct entry_s *entry);
+void init_entry(struct entry_s *entry, unsigned int size);
 struct entry_s *create_entry(struct name_s *xname);
 void destroy_entry(struct entry_s *entry);
 
 void init_inode(struct inode_s *inode);
 struct inode_s *create_inode();
 void free_inode(struct inode_s *inode);
-
-void create_inodecache_stat(struct inode_s *inode, unsigned int size, char *buffer);
-void create_inodecache_readdir(struct inode_s *inode, unsigned int size, char *buffer);
-
-int compare_inodecache_stat(struct inode_s *inode, unsigned int size, char *buffer, int (* compare_cache)(struct ssh_string_s *data, unsigned int size, char *buffer, void *ptr), void *ptr);
-int compare_inodecache_readdir(struct inode_s *inode, unsigned int size, char *buffer, int (* compare_cache)(struct ssh_string_s *data, unsigned int size, char *buffer, void *ptr), void *ptr);
 
 void fill_inode_stat(struct inode_s *inode, struct system_stat_s *stat);
 void get_inode_stat(struct inode_s *inode, struct system_stat_s *stat);
@@ -129,6 +102,5 @@ void get_inode_stat(struct inode_s *inode, struct system_stat_s *stat);
 #define INODE_INFORMATION_FS_COUNT					(1 << 12)
 
 void log_inode_information(struct inode_s *inode, uint64_t what);
-void init_dentry_once();
 
 #endif

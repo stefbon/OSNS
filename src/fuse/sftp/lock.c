@@ -17,35 +17,15 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
+#include "libosns-log.h"
+#include "libosns-misc.h"
+#include "libosns-interface.h"
+#include "libosns-workspace.h"
+#include "libosns-context.h"
+#include "libosns-fuse-public.h"
 
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
-#include "main.h"
-#include "log.h"
-#include "misc.h"
-
-#include "workspace-interface.h"
-#include "workspace.h"
-#include "fuse.h"
 
 #include "sftp/common-protocol.h"
 #include "sftp/attr-context.h"
@@ -65,8 +45,8 @@ static void _fs_sftp_flock_lock(struct fuse_openfile_s *openfile, struct fuse_re
 
     init_sftp_request(&sftp_r, interface, f_request);
 
-    sftp_r.call.block.handle=(unsigned char *) openfile->handle.name.name;
-    sftp_r.call.block.len=openfile->handle.name.len;
+    sftp_r.call.block.handle=(unsigned char *) openfile->handle->name;
+    sftp_r.call.block.len=openfile->handle->len;
     sftp_r.call.block.offset=0;
     sftp_r.call.block.size=0;
     sftp_r.call.block.type=type;
@@ -127,8 +107,8 @@ static void _fs_sftp_flock_unlock(struct fuse_openfile_s *openfile, struct fuse_
     init_sftp_request(&sftp_r, interface, f_request);
 
     sftp_r.id=0;
-    sftp_r.call.unblock.handle=(unsigned char *) openfile->handle.name.name;
-    sftp_r.call.unblock.len=openfile->handle.name.len;
+    sftp_r.call.unblock.handle=(unsigned char *) openfile->handle->name;
+    sftp_r.call.unblock.len=openfile->handle->len;
     sftp_r.call.unblock.offset=0;
     sftp_r.call.unblock.size=0;
 
@@ -199,7 +179,7 @@ void _fs_sftp_getlock(struct fuse_openfile_s *openfile, struct fuse_request_s *f
     reply_VFS_error(f_request, ENOSYS);
 }
 
-void _fs_sftp_setlock(struct fuse_openfile_s *openfile, struct fuse_request_s *f_request, struct flock *flock)
+void _fs_sftp_setlock(struct fuse_openfile_s *openfile, struct fuse_request_s *f_request, struct flock *flock, unsigned int flags)
 {
     reply_VFS_error(f_request, ENOSYS);
 }

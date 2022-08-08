@@ -27,10 +27,9 @@
 #include <stdarg.h>
 #include <errno.h>
 #include <err.h>
-#include <syslog.h>
 #include <unistd.h>
+#include <syslog.h>
 #include <sys/syscall.h>
-
 #include <syslog.h>
 
 struct logging_s {
@@ -46,6 +45,10 @@ struct logging_s {
 
 extern struct logging_s *logging;
 
+#if __GLIBC__ < 2 || ( __GLIBC__ == 2 && __GLIBC_MINOR__ < 30) 
+unsigned int gettid();
+#endif
+
 /* without extension defaults to debug */
 #define logoutput(...) (* logging->info)(__VA_ARGS__)
 
@@ -54,10 +57,6 @@ extern struct logging_s *logging;
 #define logoutput_notice(...) (* logging->notice)(__VA_ARGS__)
 #define logoutput_warning(...) (* logging->warning)(__VA_ARGS__)
 #define logoutput_error(...) (* logging->error)(__VA_ARGS__)
-
-#if __GLIBC__ < 2 || ( __GLIBC__ == 2 && __GLIBC_MINOR__ < 30) 
-unsigned int gettid();
-#endif
 
 void switch_logging_backend(const char *what);
 void set_logging_level(unsigned int level);

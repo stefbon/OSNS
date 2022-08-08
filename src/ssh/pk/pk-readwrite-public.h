@@ -17,8 +17,8 @@
 
 */
 
-#ifndef FS_WORKSPACE_SSH_PK_READWRITE_PUBLIC_H
-#define FS_WORKSPACE_SSH_PK_READWRITE_PUBLIC_H
+#ifndef SSH_PK_PK_READWRITE_PUBLIC_H
+#define SSH_PK_PK_READWRITE_PUBLIC_H
 
 int read_pkey_rsa(struct ssh_key_s *pkey, char *buffer, unsigned int size, unsigned int format, unsigned int *error);
 int read_pkey_dss(struct ssh_key_s *pkey, char *buffer, unsigned int size, unsigned int format, unsigned int *error);

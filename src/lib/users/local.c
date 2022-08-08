@@ -17,35 +17,14 @@
 
 */
 
-#include "global-defines.h"
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
+#include "libosns-basic-system-headers.h"
 
 #include "pwd.h"
 #include "grp.h"
 
-#include "log.h"
-#include "main.h"
-#include "misc.h"
-#include "datatypes.h"
+#include "libosns-log.h"
+#include "libosns-misc.h"
+#include "libosns-datatypes.h"
 
 static pthread_mutex_t pwd_mutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t grp_mutex=PTHREAD_MUTEX_INITIALIZER;
@@ -98,6 +77,7 @@ void get_local_user_byuid(uid_t uid, void (* cb_found)(char *name, void *ptr), v
 
     } else {
 
+	logoutput_warning("get_local_user_byuid: uid %i not found", uid);
 	(* cb_notfound)(ptr);
 
     }
@@ -157,6 +137,7 @@ void get_local_group_bygid(gid_t gid, void (* cb_found)(char *name, void *ptr), 
 
     } else {
 
+	logoutput_warning("get_local_group_bygid: gid %i not found", gid);
 	(* cb_notfound)(ptr);
 
     }

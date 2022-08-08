@@ -20,14 +20,12 @@
 #ifndef _FUSE_SFTP_READLINK_H
 #define _FUSE_SFTP_READLINK_H
 
-unsigned int check_target_symlink_sftp_client(struct context_interface_s *interface, struct fs_location_path_s *syml, struct fs_location_path_s *sub);
+void _fs_sftp_readlink(struct service_context_s *c, struct fuse_request_s *f, struct inode_s *inode, struct fuse_path_s *fpath);
+void _fs_sftp_symlink(struct service_context_s *c, struct fuse_request_s *f, struct entry_s *entry, struct fuse_path_s *fpath, struct fs_location_path_s *target);
+int _fs_sftp_symlink_validate(struct service_context_s *context, struct fuse_path_s *fpath, char *target, struct fs_location_path_s *sub);
 
-void _fs_sftp_readlink(struct service_context_s *c, struct fuse_request_s *f, struct inode_s *inode, struct pathinfo_s *pathinfo);
-void _fs_sftp_symlink(struct service_context_s *c, struct fuse_request_s *f, struct entry_s *entry, struct pathinfo_s *pathinfo, struct fs_location_path_s *target);
-int _fs_sftp_symlink_validate(struct service_context_s *context, struct pathinfo_s *pathinfo, char *target, struct fs_location_path_s *sub);
-
-void _fs_sftp_readlink_disconnected(struct service_context_s *context, struct fuse_request_s *f_request, struct inode_s *inode, struct pathinfo_s *pathinfo);
-void _fs_sftp_symlink_disconnected(struct service_context_s *context, struct fuse_request_s *f_request, struct entry_s *entry, struct pathinfo_s *pathinfo, struct fs_location_path_s *target);
-int _fs_sftp_symlink_validate_disconnected(struct service_context_s *context, struct pathinfo_s *pathinfo, char *target, struct fs_location_path_s *sub);
+void _fs_sftp_readlink_disconnected(struct service_context_s *context, struct fuse_request_s *f_request, struct inode_s *inode, struct fuse_path_s *fpath);
+void _fs_sftp_symlink_disconnected(struct service_context_s *context, struct fuse_request_s *f_request, struct entry_s *entry, struct fuse_path_s *fpath, struct fs_location_path_s *target);
+int _fs_sftp_symlink_validate_disconnected(struct service_context_s *context, struct fuse_path_s *fpath, char *target, struct fs_location_path_s *sub);
 
 #endif

@@ -17,29 +17,10 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
-#include "log.h"
-#include "main.h"
-#include "misc.h"
+#include "libosns-log.h"
+#include "libosns-misc.h"
 
 #include "ssh-common.h"
 #include "ssh-channel.h"
@@ -51,74 +32,104 @@
 
 int translate_channel_uri(struct ssh_channel_s *channel, char *uri)
 {
+    int result=-1;
 
-    if (strncmp(uri, "socket://", 9)==0) {
-	char *sep=strchr(&uri[8], ':');
-	struct ssh_string_s *path=&channel->target.direct_streamlocal.path;
+    if (uri==NULL || strlen(uri)==0) return -1;
 
-	if (sep) *sep='\0';
-	channel->type = _CHANNEL_TYPE_DIRECT_STREAMLOCAL;
-	channel->name = _CHANNEL_NAME_DIRECT_STREAMLOCAL_OPENSSH_COM;
+    if (compare_starting_substring(uri, strlen(uri), "direct-streamlocal://")==0) {
+	unsigned int len=strlen("direct-streamlocal://");
+	char *path=(char *)(uri + len - 1);					/* -1: start at the second slash to get the absolute path */
 
-	create_ssh_string(&path, strlen(&uri[9]), &uri[9], SSH_STRING_FLAG_ALLOC);
+	if (strlen(path) < _CHANNEL_DIRECT_STREAMLOCAL_PATH_MAX) {
 
-    } else if (strncmp(uri, "ssh://", 6)==0) {
-	unsigned int len=strlen(uri);
-	char *sep=NULL;
-	char target[len];
-
-	channel->type = _CHANNEL_TYPE_DIRECT_TCPIP;
-	channel->name = _CHANNEL_NAME_DIRECT_TCPIP;
-
-	/* there must be a host and a port in the uri like
-	ssh://192.168.2.10:4400 */
-
-	strcpy(target, &uri[6]);
-	sep=strchr(target, ':');
-	if (sep) {
-	    struct ssh_string_s *host=&channel->target.direct_tcpip.host;
-
-	    *sep='\0';
-	    create_ssh_string(&host, strlen(target), target, SSH_STRING_FLAG_ALLOC);
-	    channel->target.direct_tcpip.port=atoi(sep+1);
-
-	} else {
-
-	    return -1;
+	    strcpy(channel->target.direct_streamlocal.path, path);
+	    channel->type = _CHANNEL_TYPE_DIRECT_STREAMLOCAL;
 
 	}
 
-    } else if (strncmp(uri, "exec://", 7)==0) {
-	struct ssh_string_s *command=&channel->target.session.use.exec.command;
+    } else if (compare_starting_substring(uri, strlen(uri), "direct-tcpip://")==0) {
+	unsigned int len=strlen("direct-tcpip://");
+	char *target=(char *)(uri + len);
+	char *sep=memchr(target, ':', strlen(uri) - len);
 
-	channel->type = _CHANNEL_TYPE_SESSION;
-	channel->target.session.type=_CHANNEL_SESSION_TYPE_EXEC;
-	channel->target.session.name=_CHANNEL_SESSION_NAME_EXEC;
-	create_ssh_string(&command, strlen(&uri[7]), &uri[7], SSH_STRING_FLAG_ALLOC);
+	if (sep) {
+	    unsigned int portnr=atoi(sep+1);
+	    unsigned int tmplen=(unsigned int)(sep - target);
+	    char tmp[tmplen + 1];
 
-    } else if (strncmp(uri, "shell://", 8)==0) {
+	    memset(tmp, 0, tmplen + 1);
+	    memcpy(tmp, target, tmplen);
+
+	    if (check_family_ip_address(tmp, "ipv4")) {
+
+		set_host_address(&channel->target.direct_tcpip.address, NULL, tmp, NULL);
+
+	    } else if (check_family_ip_address(tmp, "ipv6")) {
+
+		set_host_address(&channel->target.direct_tcpip.address, NULL, NULL, tmp);
+
+	    } else {
+
+		set_host_address(&channel->target.direct_tcpip.address, tmp, NULL, NULL);
+
+	    }
+
+	    channel->type = _CHANNEL_TYPE_DIRECT_TCPIP;
+	    channel->target.direct_tcpip.portnr=atoi(sep+1);
+	    result=strlen(uri) - len;
+
+	}
+
+    } else if (compare_starting_substring(uri, strlen(uri), "session-exec://")==0) {
+	unsigned int len=strlen("session-exec://");
+	char *command=(char *)(uri + len);
+	unsigned int tmplen=strlen(command);
+
+	if (tmplen>0 && tmplen<_CHANNEL_SESSION_BUFFER_MAXLEN) {
+
+	    memset(channel->target.session.buffer, 0, _CHANNEL_SESSION_BUFFER_MAXLEN);
+	    memcpy(channel->target.session.buffer, command, tmplen);
+	    channel->type = _CHANNEL_TYPE_SESSION;
+	    channel->target.session.type=_CHANNEL_SESSION_TYPE_EXEC;
+	    result=strlen(uri) - len;
+
+	}
+
+    } else if (compare_starting_substring(uri, strlen(uri), "session-shell://")==0) {
 
 	channel->type = _CHANNEL_TYPE_SESSION;
 	channel->target.session.type=_CHANNEL_SESSION_TYPE_SHELL;
-	channel->target.session.name=_CHANNEL_SESSION_NAME_SHELL;
 
-    } else if (strncmp(uri, "subsystem://", 12)==0) {
+    } else if (compare_starting_substring(uri, strlen(uri), "session-subsystem://")==0) {
+	unsigned int len=strlen("session-subsystem://");
+	char *name=(char *)(uri + len);
+	unsigned int tmplen=strlen(name);
 
-	channel->type = _CHANNEL_TYPE_SESSION;
-	channel->target.session.type=_CHANNEL_SESSION_TYPE_SUBSYSTEM;
-	channel->target.session.name=_CHANNEL_SESSION_NAME_SUBSYSTEM;
+	if (tmplen>0 && tmplen<_CHANNEL_SESSION_BUFFER_MAXLEN) {
 
-	if (strcmp(&uri[12], "sftp")==0) {
+	    memset(channel->target.session.buffer, 0, _CHANNEL_SESSION_BUFFER_MAXLEN);
+	    memcpy(channel->target.session.buffer, name, tmplen);
 
-	    channel->target.session.use.subsystem.type=_CHANNEL_SUBSYSTEM_TYPE_SFTP;
-	    channel->target.session.use.subsystem.name=_CHANNEL_SUBSYSTEM_NAME_SFTP;
+	    channel->type = _CHANNEL_TYPE_SESSION;
+	    channel->target.session.type=_CHANNEL_SESSION_TYPE_SUBSYSTEM;
+	    result=strlen(uri) - len;
 
 	}
 
     }
 
-    return 0;
+    return result;
 
 }
 
+void set_orig_address_ssh_channel_direct_tcpip(struct ssh_channel_s *channel, struct ip_address_s *ip, unsigned int portnr)
+{
 
+    if (channel->type==_CHANNEL_TYPE_DIRECT_TCPIP) {
+
+	if (ip) memcpy(&channel->target.direct_tcpip.orig_ip, ip, sizeof(struct ip_address_s));
+	if (portnr>0) channel->target.direct_tcpip.orig_portnr=portnr;
+
+    }
+
+}

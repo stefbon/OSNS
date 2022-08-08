@@ -17,38 +17,19 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
-#include "log.h"
-#include "main.h"
-#include "misc.h"
-
-#include "workspace-interface.h"
-#include "workspace.h"
-#include "fuse.h"
+#include "libosns-log.h"
+#include "libosns-misc.h"
+#include "libosns-interface.h"
+#include "libosns-workspace.h"
+#include "libosns-context.h"
+#include "libosns-fuse-public.h"
 
 #include "sftp/common-protocol.h"
 #include "sftp/attr-context.h"
+
+#include "interface/sftp.h"
 #include "interface/sftp-attr.h"
 #include "interface/sftp-send.h"
 #include "interface/sftp-wait-response.h"
@@ -109,18 +90,32 @@ void filter_setting_attributes(struct inode_s *inode, struct system_stat_s *stat
 
 /* SETATTR */
 
-void _fs_sftp_setattr(struct service_context_s *context, struct fuse_request_s *f_request, struct inode_s *inode, struct pathinfo_s *pathinfo, struct system_stat_s *stat)
+void _fs_sftp_setattr(struct service_context_s *ctx, struct fuse_request_s *f_request, struct inode_s *inode, struct fuse_path_s *fpath, struct system_stat_s *stat)
 {
-    struct context_interface_s *interface=&context->interface;
+    struct context_interface_s *i=&ctx->interface;
     struct sftp_request_s sftp_r;
     unsigned int error=EIO;
     struct rw_attr_result_s r=RW_ATTR_RESULT_INIT;
     struct get_supported_sftp_attr_s gssa;
-    unsigned int size=get_attr_buffer_size(interface, &r, stat, &gssa) + 5;
-    char buffer[size];
-    unsigned int pathlen=(* interface->backend.sftp.get_complete_pathlen)(interface, pathinfo->len);
-    char path[pathlen];
+    unsigned int attrsize=get_attr_buffer_size(i, &r, stat, &gssa) + 5;
+    char attrs[attrsize];
     struct attr_buffer_s abuff;
+    unsigned int pathlen=sftp_get_complete_pathlen(i, fpath);
+    unsigned int size=sftp_get_required_buffer_size_l2p(i, pathlen);
+    char buffer[size];
+    int result=0;
+
+    logoutput_debug("_fs_sftp_setattr: %li %s", get_ino_system_stat(&inode->stat), fpath->pathstart);
+
+    memset(buffer, 0, size);
+    result=sftp_convert_path_l2p(i, buffer, size, fpath->pathstart, pathlen);
+
+    if (result==-1) {
+
+	logoutput_debug("_fs_sftp_setattr: error converting local path");
+	goto out;
+
+    }
 
     /* test attributes really differ from the current */
 
@@ -134,18 +129,14 @@ void _fs_sftp_setattr(struct service_context_s *context, struct fuse_request_s *
 
     /* compare the stat mask as asked by FUSE and the ones SFTP can set using this protocol version */
 
-    if (gssa.stat_mask_result != gssa.stat_mask_asked) {
-
-
+    if (gssa.stat_mask_result != gssa.stat_mask_asked)
 	logoutput_warning("_fs_sftp_setattr: not able to set every stat attr: asked %i to set %i", gssa.stat_mask_asked, gssa.stat_mask_result);
-
-    }
 
     /* enable writing of subseconds (only of course if one of the time attr is included)*/
 
     if (gssa.stat_mask_result & (SYSTEM_STAT_ATIME | SYSTEM_STAT_MTIME | SYSTEM_STAT_BTIME | SYSTEM_STAT_CTIME)) {
 
-	if (enable_attributes_ctx(interface, &gssa.valid, "subseconds")==1) {
+	if (enable_attributes_ctx(i, &gssa.valid, "subseconds")==1) {
 
 	    logoutput_info("_fs_sftp_setattr: enabled setting subseconds");
 
@@ -157,25 +148,23 @@ void _fs_sftp_setattr(struct service_context_s *context, struct fuse_request_s *
 
     }
 
-    pathinfo->len += (* interface->backend.sftp.complete_path)(interface, path, pathinfo);
-
-    set_attr_buffer_write(&abuff, buffer, size);
+    set_attr_buffer_write(&abuff, attrs, attrsize);
     (* abuff.ops->rw.write.write_uint32)(&abuff, gssa.valid.mask);
-    write_attributes_ctx(interface, &abuff, &r, stat, &gssa.valid);
+    write_attributes_ctx(i, &abuff, &r, stat, &gssa.valid);
 
-    init_sftp_request(&sftp_r, interface, f_request);
+    init_sftp_request(&sftp_r, i, f_request);
 
-    sftp_r.call.setstat.path=(unsigned char *) pathinfo->path;
-    sftp_r.call.setstat.len=pathinfo->len;
-    sftp_r.call.setstat.size=(unsigned int)(abuff.pos - abuff.buffer);
-    sftp_r.call.setstat.buff=(unsigned char *)abuff.buffer;
+    sftp_r.call.setstat.path=(unsigned char *) buffer;
+    sftp_r.call.setstat.len=(unsigned int) result;
+    sftp_r.call.setstat.size=(unsigned int) abuff.pos;
+    sftp_r.call.setstat.buff=(unsigned char *) abuff.buffer;
 
-    if (send_sftp_setstat_ctx(interface, &sftp_r)>0) {
+    if (send_sftp_setstat_ctx(i, &sftp_r)>0) {
 	struct system_timespec_s timeout=SYSTEM_TIME_INIT;
 
-	get_sftp_request_timeout_ctx(interface, &timeout);
+	get_sftp_request_timeout_ctx(i, &timeout);
 
-	if (wait_sftp_response_ctx(interface, &sftp_r, &timeout)==1) {
+	if (wait_sftp_response_ctx(i, &sftp_r, &timeout)==1) {
 	    struct sftp_reply_s *reply=&sftp_r.reply;
 
 	    if (reply->type==SSH_FXP_STATUS) {
@@ -187,8 +176,8 @@ void _fs_sftp_setattr(struct service_context_s *context, struct fuse_request_s *
 		    /* TODO: do a getattr to the server to check which attributes are set
 			now is assumed that this status code == 0 means that everythis is set as asked */
 
-		    set_local_attributes(interface, inode, stat);
-		    _fs_common_getattr(get_root_context(context), f_request, inode);
+		    set_local_attributes(i, inode, stat);
+		    _fs_common_getattr(get_root_context(ctx), f_request, inode);
 		    unset_fuse_request_flags_cb(f_request);
 		    return;
 
@@ -222,13 +211,13 @@ void _fs_sftp_setattr(struct service_context_s *context, struct fuse_request_s *
 
 void _fs_sftp_fsetattr(struct fuse_openfile_s *openfile, struct fuse_request_s *f_request, struct system_stat_s *stat)
 {
-    struct service_context_s *context=(struct service_context_s *) openfile->context;
-    struct context_interface_s *interface=&context->interface;
+    struct service_context_s *ctx=(struct service_context_s *) openfile->context;
+    struct context_interface_s *i=&ctx->interface;
     struct sftp_request_s sftp_r;
     unsigned int error=EIO;
     struct rw_attr_result_s r=RW_ATTR_RESULT_INIT;
     struct get_supported_sftp_attr_s gssa;
-    unsigned int size=get_attr_buffer_size(interface, &r, stat, &gssa) + 4;
+    unsigned int size=get_attr_buffer_size(i, &r, stat, &gssa) + 4;
     char buffer[size];
     struct attr_buffer_s abuff;
 
@@ -244,18 +233,14 @@ void _fs_sftp_fsetattr(struct fuse_openfile_s *openfile, struct fuse_request_s *
 
     /* compare the stat mask as asked by FUSE and the ones SFTP can set using this protocol version */
 
-    if (gssa.stat_mask_result != gssa.stat_mask_asked) {
-
-
+    if (gssa.stat_mask_result != gssa.stat_mask_asked)
 	logoutput_warning("_fs_sftp_fsetattr: not able to set every stat attr: asked %i to set %i", gssa.stat_mask_asked, gssa.stat_mask_result);
-
-    }
 
     /* enable writing of subseconds (only of course if one of the time attr is included)*/
 
     if (gssa.stat_mask_result & (SYSTEM_STAT_ATIME | SYSTEM_STAT_MTIME | SYSTEM_STAT_BTIME | SYSTEM_STAT_CTIME)) {
 
-	if (enable_attributes_ctx(interface, &gssa.valid, "subseconds")==1) {
+	if (enable_attributes_ctx(i, &gssa.valid, "subseconds")==1) {
 
 	    logoutput_info("_fs_sftp_fsetattr: enabled setting subseconds");
 
@@ -269,23 +254,23 @@ void _fs_sftp_fsetattr(struct fuse_openfile_s *openfile, struct fuse_request_s *
 
     set_attr_buffer_write(&abuff, buffer, size);
     (* abuff.ops->rw.write.write_uint32)(&abuff, gssa.valid.mask);
-    write_attributes_ctx(interface, &abuff, &r, stat, &gssa.valid);
+    write_attributes_ctx(i, &abuff, &r, stat, &gssa.valid);
 
-    init_sftp_request(&sftp_r, interface, f_request);
+    init_sftp_request(&sftp_r, i, f_request);
 
-    sftp_r.call.fsetstat.handle=(unsigned char *) openfile->handle.name.name;
-    sftp_r.call.fsetstat.len=openfile->handle.name.len;
-    sftp_r.call.fsetstat.size=(unsigned int)(abuff.pos - abuff.buffer);
+    sftp_r.call.fsetstat.handle=(unsigned char *) openfile->handle->name;
+    sftp_r.call.fsetstat.len=openfile->handle->len;
+    sftp_r.call.fsetstat.size=(unsigned int) abuff.pos;
     sftp_r.call.fsetstat.buff=(unsigned char *) abuff.buffer;
 
     /* send fsetstat cause a handle is available */
 
-    if (send_sftp_fsetstat_ctx(interface, &sftp_r)>0) {
+    if (send_sftp_fsetstat_ctx(i, &sftp_r)>0) {
 	struct system_timespec_s timeout=SYSTEM_TIME_INIT;
 
-	get_sftp_request_timeout_ctx(interface, &timeout);
+	get_sftp_request_timeout_ctx(i, &timeout);
 
-	if (wait_sftp_response_ctx(interface, &sftp_r, &timeout)==1) {
+	if (wait_sftp_response_ctx(i, &sftp_r, &timeout)==1) {
 	    struct sftp_reply_s *reply=&sftp_r.reply;
 
 	    if (reply->type==SSH_FXP_STATUS) {
@@ -294,8 +279,8 @@ void _fs_sftp_fsetattr(struct fuse_openfile_s *openfile, struct fuse_request_s *
 
 		    /* TODO: do a getattr to the server to check which attributes are set */
 
-		    set_local_attributes(interface, openfile->inode, stat);
-		    _fs_common_getattr(get_root_context(context), f_request, openfile->inode);
+		    set_local_attributes(i, openfile->inode, stat);
+		    _fs_common_getattr(get_root_context(ctx), f_request, openfile->inode);
 		    unset_fuse_request_flags_cb(f_request);
 		    return;
 
@@ -324,7 +309,7 @@ void _fs_sftp_fsetattr(struct fuse_openfile_s *openfile, struct fuse_request_s *
 
 }
 
-void _fs_sftp_setattr_disconnected(struct service_context_s *context, struct fuse_request_s *f_request, struct inode_s *inode, struct pathinfo_s *pathinfo, struct system_stat_s *stat)
+void _fs_sftp_setattr_disconnected(struct service_context_s *context, struct fuse_request_s *f_request, struct inode_s *inode, struct fuse_path_s *fpath, struct system_stat_s *stat)
 {
     reply_VFS_error(f_request, ENOTCONN);
 }

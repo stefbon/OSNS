@@ -17,35 +17,14 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
-#include "log.h"
-#include "misc.h"
-#include "main.h"
-
-#include "workspace-interface.h"
-#include "workspace.h"
-#include "fuse.h"
+#include "libosns-log.h"
+#include "libosns-misc.h"
+#include "libosns-interface.h"
+#include "libosns-workspace.h"
+#include "libosns-context.h"
+#include "libosns-fuse-public.h"
 
 #include "sftp/common-protocol.h"
 #include "sftp/attr-context.h"
@@ -54,7 +33,10 @@
 #include "interface/sftp-wait-response.h"
 #include "inode-stat.h"
 
-int _fs_sftp_access(struct service_context_s *context, struct fuse_request_s *request, unsigned char what)
+void _fs_sftp_access(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, struct fuse_path_s *fpath, unsigned int mask)
 {
-    return 0;
+
+    /* for now .... */
+
+    _fs_common_access(context, request, inode, mask);
 }

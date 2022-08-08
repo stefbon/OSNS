@@ -19,14 +19,16 @@
 #ifndef LIB_SYSTEM_HASH_H
 #define LIB_SYSTEM_HASH_H
 
-#include "list.h"
+#include "libosns-list.h"
+#include "libosns-lock.h"
+
 #include "fshandle.h"
 
 /* Prototypes */
 
-int writelock_commonhandles(struct simple_lock_s *lock);
-int readlock_commonhandles(struct simple_lock_s *lock);
-int unlock_commonhandles(struct simple_lock_s *lock);
+int writelock_commonhandles(struct osns_lock_s *lock);
+int readlock_commonhandles(struct osns_lock_s *lock);
+int unlock_commonhandles(struct osns_lock_s *lock);
 
 void insert_commonhandle_hash(struct commonhandle_s *handle);
 void remove_commonhandle_hash(struct commonhandle_s *handle);

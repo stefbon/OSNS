@@ -19,8 +19,8 @@
 #ifndef LIB_SYSTEM_FSHANDLE_H
 #define LIB_SYSTEM_FSHANDLE_H
 
-#include "datatypes.h"
-#include "network.h"
+#include "libosns-datatypes.h"
+#include "libosns-network.h"
 
 #include "path.h"
 #include "open.h"

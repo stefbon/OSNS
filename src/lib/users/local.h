@@ -23,7 +23,7 @@
 #include "pwd.h"
 #include "grp.h"
 
-#include "datatypes.h"
+#include "libosns-datatypes.h"
 
 /* prototypes */
 

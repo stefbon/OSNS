@@ -17,40 +17,14 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <pthread.h>
-#include <ctype.h>
-#include <inttypes.h>
+#include "libosns-log.h"
+#include "libosns-misc.h"
+#include "libosns-datatypes.h"
+#include "libosns-threads.h"
+#include "libosns-eventloop.h"
 
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
-#include "log.h"
-
-#include "main.h"
-#include "misc.h"
-#include "datatypes.h"
-
-#include "threads.h"
-#include "eventloop.h"
-#include "users.h"
-#include "mountinfo.h"
-
-#include "misc.h"
 #include "osns_sftp_subsystem.h"
 #include "protocol.h"
 
@@ -183,49 +157,5 @@ int reply_sftp_extension(struct sftp_subsystem_s *sftp, uint32_t id, char *bytes
 
     store_uint32(&data[0], pos-4);
     return send_sftp_subsystem(sftp, data, pos);
-}
-
-void write_ssh_subsystem_connection_signal(int fd, void *ptr, struct event_s *event)
-{
-    struct ssh_subsystem_connection_s *connection=(struct ssh_subsystem_connection_s *) ptr;
-    struct common_signal_s *signal=connection->signal;
-    int result=0;
-
-    if (signal_is_error(event)) {
-
-	/* TODO: there is trouble with the outgoing channel ... not with the whole connection */
-
-	connection->flags |= SSH_SUBSYSTEM_CONNECTION_FLAG_TROUBLE;
-	start_thread_ssh_subsystem_connection_problem(connection);
-
-    } else if (signal_is_close(event)) {
-
-	goto close;
-
-    } else if (signal_is_buffer(event)) {
-
-	/* signal write buffer is available (again after being blocked)
-	    use the common signal for that to let any waiting thread know the buffer is available again */
-
-	if (signal_outgoing_connection_unblock(connection)) {
-
-	    logoutput("write_ssh_subsystem_connection_signal:");
-
-	}
-
-    } else {
-
-	logoutput_warning("write_ssh_subsystem_connection_signal: event not reckognized (fd=%i) value events %i", fd, printf_event_uint(event));
-
-    }
-
-    return;
-
-    close:
-    finish_ssh_subsystem_connection(-1, connection);
-    logoutput("read_ssh_subsystem_connection_signal: disconnected.. exit..");
-    stop_beventloop(NULL);
-    return;
-
 }
 

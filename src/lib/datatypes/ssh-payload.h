@@ -20,7 +20,7 @@
 #ifndef LIB_DATATYPES_SSH_PAYLOAD_H
 #define LIB_DATATYPES_SSH_PAYLOAD_H
 
-#include "list.h"
+#include "libosns-list.h"
 
 #define SSH_PAYLOAD_FLAG_ALLOCATED	1
 #define SSH_PAYLOAD_FLAG_ERROR		2

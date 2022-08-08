@@ -17,35 +17,13 @@
 
 */
 
-#include "global-defines.h"
+#include "libosns-basic-system-headers.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <err.h>
+#include "libosns-log.h"
+#include "libosns-interface.h"
 
-#include <inttypes.h>
-#include <ctype.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/param.h>
-#include <pthread.h>
-
-#include "log.h"
-#include "workspace-interface.h"
-
-void translate_context_network_port(struct service_address_s *service, unsigned int *port)
-{
-    // logoutput("translate_context_network_port");
-    if (port) *port=service->target.port.nr;
-}
-
-void translate_context_address_network(struct host_address_s *host, struct service_address_s *service, char **target, unsigned int *port, unsigned int *family)
+void translate_context_address_network(struct host_address_s *host, struct network_port_s *port, char **target, unsigned int *portnr, unsigned int *family)
 {
     translate_context_host_address(host, target, family);
-    translate_context_network_port(service, port);
+    if (portnr && port) *portnr=port->nr;
 }
