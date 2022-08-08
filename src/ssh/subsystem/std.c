@@ -165,7 +165,7 @@ static int open_ssh_subsystem_std(struct ssh_subsystem_connection_s *connection)
 
 static int send_data_cb_default(struct system_socket_s *sock, char *data, unsigned int size, void *ptr)
 {
-    return socket_send(sock, data, size, 0);
+    return socket_write(sock, data, size);
 }
 
 int write_ssh_subsystem_std(struct ssh_subsystem_connection_s *connection, char *data, unsigned int size)

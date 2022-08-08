@@ -163,3 +163,8 @@ int socket_read(struct system_socket_s *sock, char *buffer, unsigned int size)
 {
     return (* sock->sops.type.system.read)(sock, buffer, size);
 }
+
+int socket_write(struct system_socket_s *sock, char *buffer, unsigned int size)
+{
+    return (* sock->sops.type.system.write)(sock, buffer, size);
+}

@@ -25,6 +25,8 @@
 
 void init_system_socket_system(struct system_socket_s *sock, struct fs_location_path_s *path);
 void set_unix_fd_system(struct system_socket_s *sock);
+
 int socket_read(struct system_socket_s *sock, char *buffer, unsigned int size);
+int socket_write(struct system_socket_s *sock, char *buffer, unsigned int size);
 
 #endif
