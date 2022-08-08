@@ -370,6 +370,7 @@ void set_beventloop_epoll(struct beventloop_s *loop)
     loop->BEVENT_HUP=EPOLLHUP | EPOLLRDHUP;
     loop->BEVENT_PRI=EPOLLPRI;
     loop->BEVENT_INIT=(loop->BEVENT_ERR | loop->BEVENT_HUP);
+    loop->BEVENT_ET=EPOLLET;
 }
 
 int init_beventloop_epoll(struct beventloop_s *loop)

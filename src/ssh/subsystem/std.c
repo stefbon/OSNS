@@ -104,9 +104,13 @@ static int open_ssh_subsystem_std(struct ssh_subsystem_connection_s *connection)
     if (bevent) {
 
 	set_bevent_cb(bevent, (BEVENT_FLAG_CB_ERROR | BEVENT_FLAG_CB_CLOSE), handle_std_connection_event_errorclose);
-	enable_bevent_write_watch(bevent);
-	set_bevent_system_socket(bevent, sock);
 
+	if (bevent_set_property(bevent, "edge-triggered", 1)==1) {
+
+	    enable_bevent_write_watch(bevent);
+	}
+
+	set_bevent_system_socket(bevent, sock);
 	add_bevent_watch(bevent);
 
     } else {
@@ -126,9 +130,14 @@ static int open_ssh_subsystem_std(struct ssh_subsystem_connection_s *connection)
 
 	set_bevent_cb(bevent, (BEVENT_FLAG_CB_ERROR | BEVENT_FLAG_CB_CLOSE), handle_std_connection_event_errorclose);
 	set_bevent_cb(bevent, (BEVENT_FLAG_CB_DATAAVAIL), handle_stderr_connection_event_data);
-	enable_bevent_write_watch(bevent); /* stderr is in- and output */
-	set_bevent_system_socket(bevent, sock);
 
+	if (bevent_set_property(bevent, "edge-triggered", 1)==1) {
+
+	    enable_bevent_write_watch(bevent); /* stderr is in- and output */
+
+	}
+
+	set_bevent_system_socket(bevent, sock);
 	add_bevent_watch(bevent);
 
     } else {

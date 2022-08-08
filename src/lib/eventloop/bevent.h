@@ -38,6 +38,7 @@ void set_bevent_cb(struct bevent_s *bevent, unsigned int flag, void (* cb)(struc
 int modify_bevent_watch(struct bevent_s *bevent);
 int add_bevent_watch(struct bevent_s *bevent);
 void remove_bevent_watch(struct bevent_s *bevent, unsigned int flags);
+unsigned char bevent_set_property(struct bevent_s *bevent, const char *what, unsigned char enable);
 
 void init_bevent(struct bevent_s *bevent);
 void free_bevent(struct bevent_s **p_bevent);

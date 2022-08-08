@@ -270,6 +270,7 @@ void set_beventloop_glib(struct beventloop_s *loop)
     loop->BEVENT_HUP=G_IO_HUP;
     loop->BEVENT_PRI=G_IO_PRI;
     loop->BEVENT_INIT=(loop->BEVENT_ERR | loop->BEVENT_HUP);
+    loop->BEVENT_ET=0; /* edge triggered supported in gmainloop ? I think not */
 }
 
 int init_beventloop_glib(struct beventloop_s *loop)

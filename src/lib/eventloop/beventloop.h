@@ -174,6 +174,7 @@ struct beventloop_s {
     uint32_t					BEVENT_HUP;
     uint32_t					BEVENT_PRI;
     uint32_t					BEVENT_INIT;
+    uint32_t					BEVENT_ET;
     union {
 #ifdef __linux__
 	struct _beventloop_epoll_s 		epoll;
