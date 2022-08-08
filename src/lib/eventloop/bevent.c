@@ -296,10 +296,10 @@ void remove_bevent_watch(struct bevent_s *bevent, unsigned int flags)
 
 unsigned char bevent_set_property(struct bevent_s *bevent, const char *what, unsigned char enable)
 {
-    unsigned char set=(* bevent->ops->set_propery)(bevent, what, enable);
+    unsigned char set=(* bevent->ops->set_property)(bevent, what, enable);
 
     if (set) modify_bevent_watch(bevent);
-    return set
+    return set;
 
 }
 
