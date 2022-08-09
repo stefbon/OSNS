@@ -48,7 +48,7 @@ void write_attr_ownergroup_v04(struct attr_context_s *actx, struct attr_buffer_s
     struct net_entity_s user;
     struct net_entity_s group;
 
-    user.net.name.ptr=(char *) (buffer->pos+4); /* use buffer to write name to */
+    user.net.name.ptr=(char *) (buffer->buffer + buffer->pos + 4); /* use buffer to write name to */
     user.net.name.len=(unsigned int) (buffer->left - 4); /* available space */
     user.local.uid=get_uid_system_stat(stat);
 
@@ -59,7 +59,7 @@ void write_attr_ownergroup_v04(struct attr_context_s *actx, struct attr_buffer_s
     (* buffer->ops->rw.write.write_uint32)(buffer, user.net.name.len);
     (* buffer->ops->rw.write.write_skip)(buffer, user.net.name.len); /* name is already written above to the buffer */
 
-    group.net.name.ptr=(char *) (buffer->pos+4); /* use buffer to write name to */
+    group.net.name.ptr=(char *) (buffer->buffer + buffer->pos + 4); /* use buffer to write name to */
     group.net.name.len=(unsigned int) (buffer->left - 4); /* available space */
     group.local.gid=get_gid_system_stat(stat);
 
