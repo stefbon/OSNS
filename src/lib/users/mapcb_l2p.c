@@ -96,6 +96,8 @@ void _cb_id_found(char *name, void *ptr)
     /* cb when name is found for the local id
 	NOTE: the buffers for writing the name to have to be large enough ( to hold at least one user/group/other name) */
 
+    logoutput_debug("_cb_id_found: name %s", name);
+
     ent->net.name.len=len;
     memcpy(ent->net.name.ptr, name, len);
 
