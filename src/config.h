@@ -212,10 +212,10 @@
 /* #undef WITH_OSNSCTL */
 
 /* Define to build OSNS client */
-/* #undef WITH_OSNS_CLIENT */
+#define WITH_OSNS_CLIENT 1
 
 /* Define to build OSNS SSH Server */
-#define WITH_OSNS_SFTP_SUBSYSTEM 1
+/* #undef WITH_OSNS_SFTP_SUBSYSTEM */
 
 /* Define to build OSNS system */
 /* #undef WITH_OSNS_SYSTEM */

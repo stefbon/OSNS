@@ -74,7 +74,7 @@ static struct sftp_request_s *get_container_sftp_r(struct list_element_s *list)
     return (struct sftp_request_s *)(((char *) list) - offsetof(struct sftp_request_s, list));
 }
 
-static void add_request_hashtable(struct sftp_request_s *sftp_r)
+void add_request_hashtable(struct sftp_request_s *sftp_r)
 {
     unsigned int hash=sftp_r->id % hashsize;
     struct list_header_s *header=&hashtable[hash];
@@ -84,7 +84,7 @@ static void add_request_hashtable(struct sftp_request_s *sftp_r)
     write_unlock_list_header(header);
 }
 
-static void remove_request_hashtable(struct sftp_request_s *sftp_r)
+void remove_request_hashtable(struct sftp_request_s *sftp_r)
 {
     unsigned int hash=sftp_r->id % hashsize;
     struct list_header_s *header=&hashtable[hash];
@@ -98,7 +98,7 @@ static void remove_request_hashtable(struct sftp_request_s *sftp_r)
 	the request id is used
 	the request is removed from the hash table when found */
 
-static struct sftp_request_s *lookup_request_hashtable(struct sftp_client_s *sftp, unsigned int id)
+struct sftp_request_s *lookup_request_hashtable(struct sftp_client_s *sftp, unsigned int id)
 {
     unsigned int hash=id % hashsize;
     struct list_header_s *header=&hashtable[hash];

@@ -168,3 +168,65 @@ void switch_channel_send_data(struct ssh_channel_s *channel, const char *what)
     signal_unlock_flag(channel->signal, &channel->flags, CHANNEL_FLAG_SEND_DATA);
 
 }
+
+unsigned int get_ssh_channel_exit_signal(struct ssh_string_s *name)
+{
+    unsigned int exit_signal=0;
+
+    if (compare_ssh_string(name, 'c', "ABRT")==0) {
+
+	exit_signal=CHANNEL_EXIT_SIGNAL_ABRT;
+
+    } else if (compare_ssh_string(name, 'c', "ALRM")==0) {
+
+	exit_signal=CHANNEL_EXIT_SIGNAL_ALRM;
+
+    } else if (compare_ssh_string(name, 'c', "FPE")==0) {
+
+	exit_signal=CHANNEL_EXIT_SIGNAL_FPE;
+
+    } else if (compare_ssh_string(name, 'c', "HUP")==0) {
+
+	exit_signal=CHANNEL_EXIT_SIGNAL_HUP;
+
+    } else if (compare_ssh_string(name, 'c', "ILL")==0) {
+
+	exit_signal=CHANNEL_EXIT_SIGNAL_ILL;
+
+    } else if (compare_ssh_string(name, 'c', "INT")==0) {
+
+	exit_signal=CHANNEL_EXIT_SIGNAL_INT;
+
+    } else if (compare_ssh_string(name, 'c', "KILL")==0) {
+
+	exit_signal=CHANNEL_EXIT_SIGNAL_KILL;
+
+    } else if (compare_ssh_string(name, 'c', "PIPE")==0) {
+
+	exit_signal=CHANNEL_EXIT_SIGNAL_PIPE;
+
+    } else if (compare_ssh_string(name, 'c', "QUIT")==0) {
+
+	exit_signal=CHANNEL_EXIT_SIGNAL_QUIT;
+
+    } else if (compare_ssh_string(name, 'c', "SEGV")==0) {
+
+	exit_signal=CHANNEL_EXIT_SIGNAL_SEGV;
+
+    } else if (compare_ssh_string(name, 'c', "TERM")==0) {
+
+	exit_signal=CHANNEL_EXIT_SIGNAL_TERM;
+
+    } else if (compare_ssh_string(name, 'c', "USR1")==0) {
+
+	exit_signal=CHANNEL_EXIT_SIGNAL_USR1;
+
+    } else if (compare_ssh_string(name, 'c', "USR2")==0) {
+
+	exit_signal=CHANNEL_EXIT_SIGNAL_USR2;
+
+    }
+
+    return exit_signal;
+
+}

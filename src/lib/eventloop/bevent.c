@@ -82,7 +82,6 @@ void unset_bevent_system_socket(struct bevent_s *bevent, struct system_socket_s 
 
 struct system_socket_s *get_bevent_system_socket(struct bevent_s *bevent)
 {
-    logoutput_debug("get_bevent_system_socket");
     return bevent->sock;
 }
 

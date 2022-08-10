@@ -20,6 +20,9 @@
 #ifndef _SFTP_REQUEST_HASH_H
 #define _SFTP_REQUEST_HASH_H
 
+void add_request_hashtable(struct sftp_request_s *sftp_r);
+void remove_request_hashtable(struct sftp_request_s *sftp_r);
+
 struct sftp_request_s *get_sftp_request(struct sftp_client_s *sftp, unsigned int id, struct generic_error_s *error);
 int signal_sftp_received_id(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r);
 void signal_sftp_received_id_error(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r, struct generic_error_s *error);

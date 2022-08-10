@@ -31,4 +31,6 @@ unsigned int get_channel_interface_info(struct ssh_channel_s *channel, char *buf
 void switch_msg_channel_receive_data(struct ssh_channel_s *channel, const char *name, void (* cb)(struct ssh_channel_s *c, char **b, unsigned int size, uint32_t seq, unsigned char f));
 void switch_channel_send_data(struct ssh_channel_s *channel, const char *what);
 
+unsigned int get_ssh_channel_exit_signal(struct ssh_string_s *name);
+
 #endif

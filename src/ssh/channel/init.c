@@ -164,6 +164,8 @@ void init_ssh_channel(struct ssh_session_s *session, struct ssh_connection_s *co
     channel->process_incoming_bytes=process_incoming_bytes_default;
     channel->remote_window=0; /* to be received from server */
     channel->process_outgoing_bytes=process_outgoing_bytes_default;
+    channel->exit_status=0;
+    channel->exit_signal=0;
 
     /* make use of the central mutex/cond for announcing payload has arrived */
 

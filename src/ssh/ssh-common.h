@@ -114,12 +114,28 @@ struct ssh_config_s {
 
 #define CHANNEL_FLAG_SEND_DATA				(1 << 9)
 #define CHANNEL_FLAG_RECV_DATA				(1 << 10)
+#define CHANNEL_FLAG_EXIT_SIGNAL			(1 << 11)
+#define CHANNEL_FLAG_EXIT_STATUS			(1 << 12)
 
 #define CHANNEL_FLAG_UDP				(1 << 20)
 #define CHANNEL_FLAG_CONNECTION_REFCOUNT		(1 << 21)
 #define CHANNEL_FLAG_ALLOCATED				(1 << 22)
 #define CHANNEL_FLAG_OUTGOING_DATA			(1 << 23)
 #define CHANNEL_FLAG_INCOMING_DATA			(1 << 24)
+
+#define CHANNEL_EXIT_SIGNAL_ABRT			1
+#define CHANNEL_EXIT_SIGNAL_ALRM			2
+#define CHANNEL_EXIT_SIGNAL_FPE				3
+#define CHANNEL_EXIT_SIGNAL_HUP				4
+#define CHANNEL_EXIT_SIGNAL_ILL				5
+#define CHANNEL_EXIT_SIGNAL_INT				6
+#define CHANNEL_EXIT_SIGNAL_KILL			7
+#define CHANNEL_EXIT_SIGNAL_PIPE			8
+#define CHANNEL_EXIT_SIGNAL_QUIT			9
+#define CHANNEL_EXIT_SIGNAL_SEGV			10
+#define CHANNEL_EXIT_SIGNAL_TERM			11
+#define CHANNEL_EXIT_SIGNAL_USR1			12
+#define CHANNEL_EXIT_SIGNAL_USR2			13
 
 #define CHANNELS_TABLE_SIZE				8
 
@@ -206,6 +222,8 @@ struct ssh_channel_s {
     struct shared_signal_s				*signal;
     unsigned char					type;
     unsigned int					flags;
+    unsigned int					exit_signal;
+    unsigned int					exit_status;
     unsigned int 					local_channel;
     unsigned int					remote_channel;
     unsigned int					max_packet_size;

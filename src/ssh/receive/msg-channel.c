@@ -69,11 +69,8 @@ static void forward_payload2channel(struct ssh_connection_s *connection, unsigne
     struct ssh_session_s *session=get_ssh_connection_session(connection);
     struct channel_table_s *table=&session->channel_table;
     struct ssh_channel_s *channel=NULL;
-    struct osns_lock_s rlock;
 
-    channeltable_readlock(table, &rlock);
     channel=lookup_session_channel_for_payload(table, local_channel, p_payload);
-    channeltable_unlock(table, &rlock);
 
 }
 
@@ -82,34 +79,8 @@ static void forward_data2channel(struct ssh_connection_s *connection, unsigned i
     struct ssh_session_s *session=get_ssh_connection_session(connection);
     struct channel_table_s *table=&session->channel_table;
     struct ssh_channel_s *channel=NULL;
-    struct osns_lock_s rlock;
 
-    channeltable_readlock(table, &rlock);
     channel=lookup_session_channel_for_data(table, local_channel, p_payload);
-    channeltable_unlock(table, &rlock);
-
-}
-
-static void set_flag_signal_channel(struct ssh_connection_s *connection, unsigned int local_channel, unsigned int flag, unsigned int code)
-{
-    struct ssh_session_s *session=get_ssh_connection_session(connection);
-    struct channel_table_s *table=&session->channel_table;
-    struct ssh_signal_s *signal=NULL;
-    struct ssh_channel_s *channel=NULL;
-    struct osns_lock_s rlock;
-
-    channeltable_readlock(table, &rlock);
-    channel=lookup_session_channel_for_flag(table, local_channel, flag);
-    signal=(channel) ? channel->queue.signal : NULL;
-    channeltable_unlock(table, &rlock);
-
-    if (signal) {
-
-	ssh_signal_lock(signal);
-	ssh_signal_broadcast(signal);
-	ssh_signal_unlock(signal);
-
-    }
 
 }
 
@@ -139,7 +110,6 @@ static void receive_msg_channel_open_confirmation(struct ssh_connection_s *conne
 	pos+=4;
 
 	logoutput("receive_msg_open_confirmation: local channel %i", local_channel);
-
 	forward_payload2channel(connection, local_channel, &payload);
 
     }
@@ -179,7 +149,6 @@ static void receive_msg_channel_open_failure(struct ssh_connection_s *connection
 	pos+=4;
 
 	logoutput("receive_msg_open_failure: local channel %i", local_channel);
-
 	forward_payload2channel(connection, local_channel, &payload);
 
     }
@@ -188,44 +157,43 @@ static void receive_msg_channel_open_failure(struct ssh_connection_s *connection
 
 }
 
+struct set_window_size_hlpr_s
+{
+    int					size;
+};
+
+void set_window_size_cb(struct ssh_channel_s *channel, void *ptr)
+{
+    struct set_window_size_hlpr_s *hlpr=(struct set_window_size_hlpr_s *) ptr;
+
+    channel->remote_window-=hlpr->size;
+}
+
 static void receive_msg_channel_window_adjust(struct ssh_connection_s *connection, struct ssh_payload_s *payload)
 {
+
     if (payload->len<9) {
 
 	logoutput("receive_msg_channel_window_adjust: message too small (size: %i)", payload->len);
 
     } else {
-	unsigned int pos=1;
-	unsigned int local_channel=0;
-	unsigned int size=0;
 	struct ssh_session_s *session=get_ssh_connection_session(connection);
 	struct channel_table_s *table=&session->channel_table;
-	struct ssh_channel_s *channel=NULL;
-	struct osns_lock_s rlock;
+	unsigned int pos=1;
+	unsigned int local_channel=0;
+	struct set_window_size_hlpr_s hlpr;
 
 	local_channel=get_uint32(&payload->buffer[pos]);
 	pos+=4;
-	size=get_uint32(&payload->buffer[pos]);
+	hlpr.size=get_uint32(&payload->buffer[pos]);
 
-	logoutput("receive_msg_channel_window_adjust: channel %i size %i", local_channel, size);
+	logoutput("receive_msg_channel_window_adjust: channel %i size %i", local_channel, hlpr.size);
 
-	channeltable_readlock(table, &rlock);
-
-	channel=lookup_session_channel(table, local_channel);
-	if (channel) {
-
-	    signal_lock_flag(channel->signal, &channel->flags, CHANNEL_FLAG_OUTGOING_DATA);
-	    channel->remote_window-=size;
-	    signal_unlock_flag(channel->signal, &channel->flags, CHANNEL_FLAG_OUTGOING_DATA);
-
-	}
-
-	channeltable_unlock(table, &rlock);
-	free_payload(&payload);
+	lookup_session_channel_for_cb(table, local_channel, set_window_size_cb, &hlpr);
 
     }
 
-    if (payload) free_payload(&payload);
+    free_payload(&payload);
 
 }
 
@@ -326,7 +294,19 @@ static void receive_msg_channel_extended_data(struct ssh_connection_s *connectio
 
 }
 
-/* TODO: call a handler per channel which will close the channel and anything related like sftp */
+struct set_channel_flag_hlpr_s {
+    unsigned int				flags;
+    unsigned int				exit_status;
+    unsigned int				exit_signal;
+};
+
+static void set_channel_flag_cb(struct ssh_channel_s *channel, void *ptr)
+{
+    struct ssh_signal_s *signal=channel->queue.signal;
+    struct set_channel_flag_hlpr_s *hlpr=(struct set_channel_flag_hlpr_s *) ptr;
+
+    signal_set_flag(channel->signal, &channel->flags, hlpr->flags);
+}
 
 static void receive_msg_channel_eof(struct ssh_connection_s *connection, struct ssh_payload_s *payload)
 {
@@ -336,18 +316,23 @@ static void receive_msg_channel_eof(struct ssh_connection_s *connection, struct 
 	logoutput("receive_msg_channel_eof: message too small (size: %i)", payload->len);
 
     } else {
+	struct ssh_session_s *session=get_ssh_connection_session(connection);
+	struct channel_table_s *table=&session->channel_table;
+	struct ssh_channel_s *channel=NULL;
+	struct set_channel_flag_hlpr_s hlpr;
 	unsigned int pos=1;
 	unsigned int local_channel=0;
 
 	local_channel=get_uint32(&payload->buffer[pos]);
 	pos+=4;
-
 	logoutput_debug("receive_msg_channel_eof: channel %i", local_channel);
-	set_flag_signal_channel(connection, local_channel, CHANNEL_FLAG_SERVER_EOF, 0);
+
+	hlpr.flags = CHANNEL_FLAG_SERVER_EOF;
+	lookup_session_channel_for_cb(table, local_channel, set_channel_flag_cb, (void *) &hlpr);
 
     }
 
-    if (payload) free_payload(&payload);
+    free_payload(&payload);
 
 }
 
@@ -366,18 +351,22 @@ static void receive_msg_channel_close(struct ssh_connection_s *connection, struc
 	logoutput("receive_msg_channel_close: message too small (size: %i)", payload->len);
 
     } else {
+	struct ssh_session_s *session=get_ssh_connection_session(connection);
+	struct channel_table_s *table=&session->channel_table;
+	struct set_channel_flag_hlpr_s hlpr;
 	unsigned int pos=1;
 	unsigned int local_channel=0;
 
 	local_channel=get_uint32(&payload->buffer[pos]);
 	pos+=4;
-
 	logoutput_debug("receive_msg_channel_close: channel %i", local_channel);
-	set_flag_signal_channel(connection, local_channel, CHANNEL_FLAG_SERVER_CLOSE, 0);
+
+	hlpr.flags = CHANNEL_FLAG_SERVER_CLOSE;
+	lookup_session_channel_for_cb(table, local_channel, set_channel_flag_cb, (void *) &hlpr);
 
     }
 
-    if (payload) free_payload(&payload);
+    free_payload(&payload);
 }
 
 static void receive_msg_channel_request_s(struct ssh_connection_s *connection, struct ssh_payload_s *payload)
@@ -414,6 +403,28 @@ static void receive_msg_channel_request_s(struct ssh_connection_s *connection, s
     free_payload(&payload);
 }
 
+/* Receive exit status and/or exit signal from remote shell, command and subsystem
+    see: https://www.rfc-editor.org/rfc/rfc4254.html#section-6.10 Returning Exit Status
+*/
+
+static void set_channel_exit_status_cb(struct ssh_channel_s *channel, void *ptr)
+{
+    struct ssh_signal_s *signal=channel->queue.signal;
+    struct set_channel_flag_hlpr_s *hlpr=(struct set_channel_flag_hlpr_s *) ptr;
+
+    channel->exit_status=hlpr->exit_status;
+    signal_set_flag(channel->signal, &channel->flags, hlpr->flags);
+}
+
+static void set_channel_exit_signal_cb(struct ssh_channel_s *channel, void *ptr)
+{
+    struct ssh_signal_s *signal=channel->queue.signal;
+    struct set_channel_flag_hlpr_s *hlpr=(struct set_channel_flag_hlpr_s *) ptr;
+
+    channel->exit_signal=hlpr->exit_signal;
+    signal_set_flag(channel->signal, &channel->flags, hlpr->flags);
+}
+
 static void receive_msg_channel_request_c(struct ssh_connection_s *connection, struct ssh_payload_s *payload)
 {
 
@@ -428,35 +439,40 @@ static void receive_msg_channel_request_c(struct ssh_connection_s *connection, s
 	pos+=4;
 
 	if (len + pos <= payload->len) {
+	    struct ssh_session_s *session=get_ssh_connection_session(connection);
+	    struct channel_table_s *table=&session->channel_table;
 	    struct ssh_string_s request=SSH_STRING_SET(len, &payload->buffer[pos]);
 
 	    pos+=len;
-	    logoutput("receive_msg_channel_request_c: received request %.*s local channel %i", request.len, request.ptr, local_channel);
 
 	    if (compare_ssh_string(&request, 'c', "exit-status")==0) {
-		unsigned int exitstatus=0;
+		struct set_channel_flag_hlpr_s hlpr;
 
-		pos++;
-		exitstatus=get_uint32(&payload->buffer[pos]);
-		logoutput("receive_msg_channel_request_c: local channel %i exit status %i", local_channel, exitstatus);
+		pos++; /* skip the boolean */
+		hlpr.exit_status=get_uint32(&payload->buffer[pos]);
+		hlpr.flags=CHANNEL_FLAG_EXIT_STATUS;
+		logoutput("receive_msg_channel_request_c: local channel %i exit status %i", local_channel, hlpr.exit_status);
+		lookup_session_channel_for_cb(table, local_channel, set_channel_exit_status_cb, (void *) &hlpr);
 
 	    } else if (compare_ssh_string(&request, 'c', "exit-signal")==0) {
-		struct ssh_string_s signal=SSH_STRING_INIT;
+		struct ssh_string_s name=SSH_STRING_INIT;
 		struct ssh_string_s message=SSH_STRING_INIT;
+		struct set_channel_flag_hlpr_s hlpr;
 
-		pos++;
-		pos += read_ssh_string(&payload->buffer[pos], payload->len - pos, &signal);
-		pos++;
+		pos++; /* skip the boolean */
+		pos += read_ssh_string(&payload->buffer[pos], payload->len - pos, &name);
+		pos++; /* skip the boolean (core dumped) */
 		pos += read_ssh_string(&payload->buffer[pos], payload->len - pos, &message);
 
-		logoutput("receive_msg_channel_request_c: local channel %i exit signal %.*s message %.*s", local_channel, signal.len, signal.ptr, message.len, message.ptr);
+		logoutput("receive_msg_channel_request_c: local channel %i exit signal %.*s", local_channel, name.len, name.ptr);
 
-		/* TODO 20211214: set the type signal somewhere
-		    see: https://www.rfc-editor.org/rfc/rfc4254.html#section-6.10 Returning Exit Status
-		    it is for example SIGV, ABRT or KILL */
+		hlpr.exit_signal=get_ssh_channel_exit_signal(&name);
+		hlpr.flags=CHANNEL_FLAG_EXIT_SIGNAL;
+		lookup_session_channel_for_cb(table, local_channel, set_channel_exit_signal_cb, (void *) &hlpr);
 
-		set_flag_signal_channel(connection, local_channel, CHANNEL_FLAG_SERVER_SIGNAL, 0);
+	    } else {
 
+		logoutput("receive_msg_channel_request_c: request %.*s local channel %i not supported", request.len, request.ptr, local_channel);
 
 	    }
 
@@ -490,7 +506,6 @@ static void receive_msg_channel_request_reply(struct ssh_connection_s *connectio
 
 	local_channel=get_uint32(&payload->buffer[pos]);
 	pos+=4;
-
 	forward_payload2channel(connection, local_channel, &payload);
 
     }

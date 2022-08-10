@@ -183,8 +183,7 @@ static int compare_path_custom(struct context_interface_s *i, char *path, unsign
     return result;
 }
 
-
-static struct ssh_channel_s *get_ssh_channel_sftp_client(struct sftp_client_s *sftp)
+struct ssh_channel_s *get_ssh_channel_sftp_client(struct sftp_client_s *sftp)
 {
     struct context_interface_s *i=(struct context_interface_s *)((char *) sftp - offsetof(struct context_interface_s, buffer));
     struct context_interface_s *primary=i->link.primary;
@@ -192,7 +191,7 @@ static struct ssh_channel_s *get_ssh_channel_sftp_client(struct sftp_client_s *s
     return (struct ssh_channel_s *) primary->buffer;
 }
 
-static struct sftp_client_s *get_sftp_client_ssh_channel(struct ssh_channel_s *channel)
+struct sftp_client_s *get_sftp_client_ssh_channel(struct ssh_channel_s *channel)
 {
     struct context_interface_s *i=(struct context_interface_s *)((char *) channel - offsetof(struct context_interface_s, buffer));
     struct context_interface_s *secondary=i->link.secondary.interface;

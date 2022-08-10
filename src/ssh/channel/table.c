@@ -111,7 +111,7 @@ struct ssh_channel_s *lookup_session_channel_for_data(struct channel_table_s *ta
     return channel;
 }
 
-struct ssh_channel_s *lookup_session_channel_for_flag(struct channel_table_s *table, unsigned int nr, unsigned char flag)
+struct ssh_channel_s *lookup_session_channel_for_cb(struct channel_table_s *table, unsigned int nr, void (* cb)(struct ssh_channel_s *c, void *ptr), void *ptr)
 {
     unsigned int hashvalue = nr % CHANNELS_TABLE_SIZE;
     struct list_header_s *h=&table->hash[hashvalue];
@@ -127,7 +127,7 @@ struct ssh_channel_s *lookup_session_channel_for_flag(struct channel_table_s *ta
 
 	if (channel->local_channel==nr) {
 
-	    signal_set_flag(channel->signal, &channel->flags, flag);
+	    (* cb)(channel, ptr);
 	    break;
 
 	}

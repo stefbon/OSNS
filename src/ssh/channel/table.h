@@ -22,9 +22,11 @@
 
 /* prototypes */
 
-struct ssh_channel_s *lookup_session_channel_for_flag(struct channel_table_s *table, unsigned int nr, unsigned char flag);
+struct ssh_channel_s *lookup_session_channel_for_cb(struct channel_table_s *table, unsigned int nr, void (* cb)(struct ssh_channel_s *c, void *ptr), void *ptr);
+
 struct ssh_channel_s *lookup_session_channel_for_payload(struct channel_table_s *table, unsigned int nr, struct ssh_payload_s **p_payload);
 struct ssh_channel_s *lookup_session_channel_for_data(struct channel_table_s *table, unsigned int nr, struct ssh_payload_s **p_payload);
+
 struct ssh_channel_s *lookup_session_channel(struct channel_table_s *table, unsigned int nr);
 
 void init_ssh_channels_table(struct ssh_session_s *session, struct shared_signal_s *signal, unsigned int size);

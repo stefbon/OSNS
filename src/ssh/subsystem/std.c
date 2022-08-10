@@ -34,20 +34,21 @@ static void handle_std_connection_event_errorclose(struct bevent_s *bevent, unsi
     struct ssh_subsystem_connection_s *connection=(struct ssh_subsystem_connection_s *) bevent->ptr;
     struct system_socket_s *sock=get_bevent_system_socket(bevent);
 
-    /* TODO */
-    /* since this function is used for every socket/bevent, first find out which one */
+    if (flag & BEVENT_FLAG_CB_CLOSE) {
+	int fd=-1;
 
-    if (&connection->type.std.stdin==sock) {
+	if ((&connection->type.std.stdin==sock) || (&connection->type.std.stdout==sock) || (&connection->type.std.stderr==sock)) {
+
+	    int fd=(* sock->sops.get_unix_fd)(sock);
+
+	    if (fd>=0) (* connection->close)(fd, connection, 0);
 
 
-    } else if (&connection->type.std.stdout==sock) {
+	} else {
 
+	    /* HUH ?? */
 
-    } else if (&connection->type.std.stderr==sock) {
-
-    } else {
-
-	/* HUH ?? */
+	}
 
     }
 
@@ -107,6 +108,7 @@ static int open_ssh_subsystem_std(struct ssh_subsystem_connection_s *connection)
 
 	if (bevent_set_property(bevent, "edge-triggered", 1)==1) {
 
+	    logoutput_debug("open_std_connection: edge triggering available: enable watched writes for stdout");
 	    enable_bevent_write_watch(bevent);
 	}
 
@@ -133,6 +135,7 @@ static int open_ssh_subsystem_std(struct ssh_subsystem_connection_s *connection)
 
 	if (bevent_set_property(bevent, "edge-triggered", 1)==1) {
 
+	    logoutput_debug("open_std_connection: edge triggering available: enable watched writes for stderr");
 	    enable_bevent_write_watch(bevent); /* stderr is in- and output */
 
 	}
