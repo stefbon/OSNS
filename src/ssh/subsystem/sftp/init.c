@@ -397,7 +397,7 @@ void free_sftp_subsystem(struct sftp_subsystem_s *sftp)
     free_sftp_payload_queue(&sftp->queue);
     free_sftp_receive(&sftp->receive);
 
-    clear_ssh_subsystem_connection(-1, &sftp->connection);
+    clear_ssh_subsystem_connection(&sftp->connection);
     clear_hashattr_generic(0);
 }
 

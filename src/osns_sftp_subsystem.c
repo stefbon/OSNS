@@ -190,7 +190,7 @@ int main(int argc, char *argv[])
 
     out:
 
-    clear_ssh_subsystem_connection(-1, &sftp.connection);
+    clear_ssh_subsystem_connection(&sftp.connection);
 
     logoutput_info("MAIN: stop workerthreads");
     stop_workerthreads(NULL);

@@ -54,13 +54,13 @@ struct ssh_subsystem_connection_s {
     void						(* read)(struct ssh_subsystem_connection_s *c, struct system_socket_s *sock);
     void						(* read_error)(struct ssh_subsystem_connection_s *c, struct system_socket_s *sock);
     int							(* write)(struct ssh_subsystem_connection_s *c, char *data, unsigned int size);
-    void						(* close)(struct ssh_subsystem_connection_s *c);
+    void						(* close)(struct ssh_subsystem_connection_s *c, struct system_socket_s *sock, unsigned char free);
 };
 
 /* prototypes */
 
 int init_ssh_subsystem_connection(struct ssh_subsystem_connection_s *connection, unsigned char type, struct shared_signal_s *signal, void (* read_cb)(struct ssh_subsystem_connection_s *connection, struct system_socket_s *sock));
 int connect_ssh_subsystem_connection(struct ssh_subsystem_connection_s *c);
-void clear_ssh_subsystem_connection(int fd, struct ssh_subsystem_connection_s *connection);
+void clear_ssh_subsystem_connection(struct ssh_subsystem_connection_s *connection);
 
 #endif

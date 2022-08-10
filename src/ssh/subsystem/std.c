@@ -206,24 +206,24 @@ int init_ssh_subsystem_std(struct ssh_subsystem_connection_s *connection)
 
 }
 
-void close_ssh_subsystem_std(int fd, struct ssh_subsystem_connection_s *connection, unsigned char free)
+void close_ssh_subsystem_std(struct ssh_subsystem_connection_s *connection, struct system_socket_s *sock, unsigned char free)
 {
 
     /* STDIN */
 
-    close_socket_hlpr(fd, &connection->type.std.stdin, free);
+    if ((sock==NULL) || (sock==&connection->type.std.stdin)) close_socket_hlpr(&connection->type.std.stdin, free);
 
     /* STDOUT */
 
-    close_socket_hlpr(fd, &connection->type.std.stdout, free);
+    if ((sock==NULL) || (sock==&connection->type.std.stdout)) close_socket_hlpr(&connection->type.std.stdout, free);
 
     /* STDERR */
 
-    close_socket_hlpr(fd, &connection->type.std.stderr, free);
+    if ((sock==NULL) || (sock==&connection->type.std.stderr)) close_socket_hlpr(&connection->type.std.stderr, free);
 
 }
 
-void clear_ssh_subsystem_std(int fd, struct ssh_subsystem_connection_s *connection)
+void clear_ssh_subsystem_std(struct ssh_subsystem_connection_s *connection)
 {
-    close_ssh_subsystem_std(fd, connection, 1);
+    close_ssh_subsystem_std(connection, NULL, 1);
 }

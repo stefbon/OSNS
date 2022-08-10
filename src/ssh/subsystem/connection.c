@@ -75,12 +75,12 @@ int connect_ssh_subsystem_connection(struct ssh_subsystem_connection_s *connecti
 
 }
 
-void clear_ssh_subsystem_connection(int fd, struct ssh_subsystem_connection_s *connection)
+void clear_ssh_subsystem_connection(struct ssh_subsystem_connection_s *connection)
 {
 
     if (connection->flags & SSH_SUBSYSTEM_CONNECTION_FLAG_STD) {
 
-	clear_ssh_subsystem_std(fd, connection);
+	clear_ssh_subsystem_std(connection);
 
     }
 

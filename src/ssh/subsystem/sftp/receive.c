@@ -187,7 +187,7 @@ static void read_sftp_buffer(void *ptr)
     disconnect:
 
     logoutput_warning("read_ssh_buffer_packet: ignoring received data");
-    clear_ssh_subsystem_connection(-1, connection);
+    clear_ssh_subsystem_connection(connection);
 
 }
 

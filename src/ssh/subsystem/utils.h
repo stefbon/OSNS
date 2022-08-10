@@ -25,6 +25,6 @@
 /* prototypes */
 
 void free_bevent_hlpr(struct system_socket_s *sock);
-void close_socket_hlpr(int fd, struct system_socket_s *sock, unsigned char free);
+void close_socket_hlpr(struct system_socket_s *sock, unsigned char free);
 
 #endif
