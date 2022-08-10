@@ -72,7 +72,7 @@ static int check_target_symlink_sftp_client(struct workspace_mount_s *w, struct 
 	    result=-EXDEV;
 	    logoutput_debug("check_target_symlink_sftp_client: path has too many backslashes");
 
-	} else {
+	} else if (buffer[0]=="/") {
 
 	    size=strlen(buffer);
 	    tmp=sftp_compare_path(i, buffer, size, SFTP_COMPARE_PATH_PREFIX_SUBDIR);
@@ -82,7 +82,6 @@ static int check_target_symlink_sftp_client(struct workspace_mount_s *w, struct 
 		/* target of link is a subdirectory of (remote) prefix */
 
 		result=tmp;
-		logoutput_debug("check_target_symlink_sftp_client: result %u", result);
 		reply_VFS_data(request, &buffer[result], (unsigned int)(size - result));
 
 		tmp=set_inode_fuse_cache_symlink(w, inode, &buffer[result]);
@@ -93,6 +92,12 @@ static int check_target_symlink_sftp_client(struct workspace_mount_s *w, struct 
 		result=-EXDEV;
 
 	    }
+
+	} else {
+
+	    result=0;
+	    size=strlen(buffer);
+	    reply_VFS_data(request, buffer, size);
 
 	}
 

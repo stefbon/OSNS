@@ -35,14 +35,12 @@ static void handle_std_connection_event_errorclose(struct bevent_s *bevent, unsi
     struct system_socket_s *sock=get_bevent_system_socket(bevent);
 
     if (flag & BEVENT_FLAG_CB_CLOSE) {
-	int fd=-1;
+
+	logoutput_debug("handle_std_connection_event_errorclose: close");
 
 	if ((&connection->type.std.stdin==sock) || (&connection->type.std.stdout==sock) || (&connection->type.std.stderr==sock)) {
 
-	    int fd=(* sock->sops.get_unix_fd)(sock);
-
-	    if (fd>=0) (* connection->close)(fd, connection, 0);
-
+	    (* connection->close)(connection, sock, 1);
 
 	} else {
 

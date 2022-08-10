@@ -44,6 +44,8 @@ void free_bevent_hlpr(struct system_socket_s *sock)
 void close_socket_hlpr(struct system_socket_s *sock, unsigned char free)
 {
 
+    logoutput_debug("close_socket_hlpr: fd %i", (* sock->sops.get_unix_fd)(sock));
+
     (* sock->sops.close)(sock);
     (* sock->sops.set_unix_fd)(sock, -1);
     if (free) free_bevent_hlpr(sock);
