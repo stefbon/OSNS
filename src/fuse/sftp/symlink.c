@@ -72,7 +72,7 @@ static int check_target_symlink_sftp_client(struct workspace_mount_s *w, struct 
 	    result=-EXDEV;
 	    logoutput_debug("check_target_symlink_sftp_client: path has too many backslashes");
 
-	} else if (buffer[0]=="/") {
+	} else if (buffer[0]=='/') {
 
 	    size=strlen(buffer);
 	    tmp=sftp_compare_path(i, buffer, size, SFTP_COMPARE_PATH_PREFIX_SUBDIR);

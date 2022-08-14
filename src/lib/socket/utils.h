@@ -24,27 +24,24 @@
 
 /* Prototypes */
 
-int translate_system_socket_flags(unsigned int flags);
+int translate_osns_socket_flags(unsigned int flags);
 int check_status_hlpr(unsigned int status, unsigned int set, unsigned int notset);
-unsigned int get_status_system_socket(struct system_socket_s *sock);
+unsigned int get_status_osns_socket(struct osns_socket_s *sock);
 
-void set_system_socket_nonblocking(struct system_socket_s *sock);
-void unset_system_socket_nonblocking(struct system_socket_s *sock);
+void set_osns_socket_nonblocking(struct osns_socket_s *sock);
+void unset_osns_socket_nonblocking(struct osns_socket_s *sock);
 
 unsigned char socket_connection_error(unsigned int error);
 unsigned char socket_blocking_error(unsigned int error);
 
-int set_socket_properties(struct system_socket_s *sock, struct socket_properties_s *prop);
+int set_socket_properties(struct osns_socket_s *sock, struct socket_properties_s *prop);
 
-unsigned int get_client_flags_from_server(struct system_socket_s *server);
-unsigned int get_client_type_from_server(struct system_socket_s *server);
+int get_local_peer_properties(struct osns_socket_s *sock, struct local_peer_s *peer);
+int get_network_peer_properties(struct osns_socket_s *sock, struct network_peer_s *peer, const char *what);
 
-int get_local_peer_properties(struct system_socket_s *sock, struct local_peer_s *peer);
-int get_network_peer_properties(struct system_socket_s *sock, struct network_peer_s *peer, const char *what);
+int set_path_osns_sockaddr(struct osns_socket_s *sock, struct fs_location_path_s *path);
+unsigned int get_path_osns_sockaddr(struct osns_socket_s *sock, struct fs_location_path_s *path);
 
-int set_path_system_sockaddr(struct system_socket_s *sock, struct fs_location_path_s *path);
-unsigned int get_path_system_sockaddr(struct system_socket_s *sock, struct fs_location_path_s *path);
-
-int set_address_system_sockaddr(struct system_socket_s *sock, struct ip_address_s *address, unsigned int port);
+int set_address_osns_sockaddr(struct osns_socket_s *sock, struct ip_address_s *address, unsigned int port);
 
 #endif

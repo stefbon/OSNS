@@ -110,7 +110,7 @@ struct fuse_fs_s {
 struct fuse_request_s {
     struct context_interface_s			*interface;
     void					*ptr;
-    struct system_socket_s			*sock;
+    struct osns_socket_s			*sock;
     unsigned int				opcode;
     uint64_t					ino;
     unsigned int				uid;

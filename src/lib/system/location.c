@@ -23,7 +23,6 @@
 #include "libosns-misc.h"
 #include "libosns-datatypes.h"
 
-#include "open.h"
 #include "location.h"
 #include "stat.h"
 
@@ -91,7 +90,7 @@ eint get_target_unix_symlink(char *path, unsigned int len, unsigned int extra, s
 
 #endif
 
-int get_target_fs_socket(struct fs_socket_s *socket, char *name, struct fs_location_path_s *result)
+int get_target_osns_socket(struct osns_socket_s *socket, char *name, struct fs_location_path_s *result)
 {
     unsigned int extra=(name) ? strlen(name) : 0;
     int tmp=-1;
@@ -100,7 +99,7 @@ int get_target_fs_socket(struct fs_socket_s *socket, char *name, struct fs_locat
 
     char procpath[64]; /* more than enough */
 
-    tmp=snprintf(procpath, 64, "/proc/%i/fd/%i", get_unix_pid_fs_socket(socket), get_unix_fd_fs_socket(socket));
+    tmp=snprintf(procpath, 64, "/proc/%i/fd/%i", socket->pid, socket->fd);
 
     if (tmp>0) {
 
@@ -182,14 +181,14 @@ static int compare_devino_location_path(struct fs_location_path_s *path, struct 
     return differ;
 }
 
-int compare_fs_socket_location(struct fs_location_s *a, struct fs_location_s *b)
+int compare_osns_socket_location(struct fs_location_s *a, struct fs_location_s *b)
 {
     int equal=-1;
 
     if (b->flags & FS_LOCATION_FLAG_PATH) {
 	struct fs_location_path_s result=FS_LOCATION_PATH_INIT;
 
-	if (get_target_fs_socket(&a->type.socket, a->name, &result)==0) {
+	if (get_target_osns_socket(&a->type.socket, a->name, &result)==0) {
 
 	    equal=compare_location_path(&b->type.path, b->name, 'p', (void *) &result);
 
@@ -205,7 +204,7 @@ int compare_fs_socket_location(struct fs_location_s *a, struct fs_location_s *b)
 	    if (strcmp(b->name, a->name)==0) {
 		struct fs_location_path_s result=FS_LOCATION_PATH_INIT;
 
-		if (get_target_fs_socket(&a->type.socket, NULL, &result)==0) {
+		if (get_target_osns_socket(&a->type.socket, NULL, &result)==0) {
 
 		    equal=compare_devino_location_path(&result, devino);
 
@@ -218,7 +217,7 @@ int compare_fs_socket_location(struct fs_location_s *a, struct fs_location_s *b)
 	} else if (b->name) {
 	    struct fs_location_path_s result=FS_LOCATION_PATH_INIT;
 
-	    if (get_target_fs_socket(&a->type.socket, NULL, &result)==0) {
+	    if (get_target_osns_socket(&a->type.socket, NULL, &result)==0) {
 		struct ssh_string_s filename=SSH_STRING_INIT;
 
 		detach_filename_location_path(&result, &filename);
@@ -236,7 +235,7 @@ int compare_fs_socket_location(struct fs_location_s *a, struct fs_location_s *b)
 	} else {
 	    struct fs_location_path_s result=FS_LOCATION_PATH_INIT;
 
-	    if (get_target_fs_socket(&a->type.socket, a->name, &result)==0) {
+	    if (get_target_osns_socket(&a->type.socket, a->name, &result)==0) {
 
 		equal=compare_devino_location_path(&result, devino);
 
@@ -250,7 +249,7 @@ int compare_fs_socket_location(struct fs_location_s *a, struct fs_location_s *b)
 	struct fs_location_path_s tmp1=FS_LOCATION_PATH_INIT;
 	struct fs_location_path_s tmp2=FS_LOCATION_PATH_INIT;
 
-	if (get_target_fs_socket(&a->type.socket, a->name, &tmp1)==0 && get_target_fs_socket(&b->type.socket, b->name, &tmp2)==0) {
+	if (get_target_osns_socket(&a->type.socket, a->name, &tmp1)==0 && get_target_osns_socket(&b->type.socket, b->name, &tmp2)==0) {
 
 	    if (compare_location_paths(&tmp1, &tmp2)==0) equal=0;
 
@@ -343,7 +342,7 @@ int compare_fs_locations(struct fs_location_s *a, struct fs_location_s *b)
 
 	} else if (b->flags & FS_LOCATION_FLAG_SOCKET) {
 
-	    equal=compare_fs_socket_location(b, a);
+	    equal=compare_osns_socket_location(b, a);
 
 	}
 
@@ -359,13 +358,13 @@ int compare_fs_locations(struct fs_location_s *a, struct fs_location_s *b)
 
 	} else if (b->flags & FS_LOCATION_FLAG_SOCKET) {
 
-	    equal=compare_fs_socket_location(b, a);
+	    equal=compare_osns_socket_location(b, a);
 
 	}
 
     } else if (a->flags & FS_LOCATION_FLAG_SOCKET) {
 
-	equal=compare_fs_socket_location(a, b);
+	equal=compare_osns_socket_location(a, b);
 
     }
 

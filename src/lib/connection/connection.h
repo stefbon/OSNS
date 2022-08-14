@@ -79,7 +79,7 @@ struct connection_s {
     struct shared_signal_s			*signal;
     void 					*data;
     struct list_element_s			list;
-    struct system_socket_s			sock;
+    struct osns_socket_s			sock;
     union {
 	struct server_ops_s {
 	    struct connection_s			*(* accept_peer)(struct connection_s *c_conn, struct connection_s *s_conn);

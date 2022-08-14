@@ -23,7 +23,6 @@
 #include "libosns-network.h"
 
 #include "path.h"
-#include "open.h"
 #include "location.h"
 #include "stat.h"
 
@@ -100,6 +99,7 @@ struct fs_dentry_s {
 
 struct dirhandle_s {
     unsigned int					flags;
+    unsigned int					valid;
     int							(* open)(struct dirhandle_s *dh, struct fs_location_s *l, unsigned int flags);
     struct fs_dentry_s					*(* readdentry)(struct dirhandle_s *dh);
     int							(* fstatat)(struct dirhandle_s *dh, char *name, unsigned int mask, struct system_stat_s *st);

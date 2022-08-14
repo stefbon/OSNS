@@ -69,7 +69,7 @@ static int dummy_update(unsigned char what, struct mountentry_s *me)
     return 1;
 }
 
-static int open_mountmonior_system_watch(struct system_socket_s *sock)
+static int open_mountmonior_system_watch(struct osns_socket_s *sock)
 {
 
 #ifdef __linux__
@@ -78,11 +78,11 @@ static int open_mountmonior_system_watch(struct system_socket_s *sock)
 
     set_location_path(&path, 'c', MOUNTINFO_FILE);
     logoutput_debug("open_mountmonior_system_watch: open file %s", MOUNTINFO_FILE);
-    init_system_socket(&monitor.sock, SYSTEM_SOCKET_TYPE_SYSTEM_FILE, 0, &path);
+    init_osns_socket(sock, OSNS_SOCKET_TYPE_FILESYSTEM, OSNS_SOCKET_FLAG_FILE, &path);
 
 #endif
 
-    return ((sock->status & SOCKET_STATUS_OPEN) ? 0 : -1);
+    return ((* sock->sops.filesystem.file.open)(NULL, &path, sock, NULL, 0);
 
 }
 
@@ -95,7 +95,7 @@ FILE *fopen_mountmonitor()
 #endif
 }
 
-static void close_mountmonitor_system_watch(struct system_socket_s *sock)
+static void close_mountmonitor_system_watch(struct osns_socket_s *sock)
 {
     (* sock->sops.close)(sock);
 
@@ -152,7 +152,7 @@ struct bevent_s *open_mountmonitor(struct shared_signal_s *signal, void *ptr, un
 
     bevent=create_fd_bevent(NULL, (void *) &monitor);
     if (bevent==NULL) goto error;
-    set_bevent_system_socket(bevent, &monitor.sock);
+    set_bevent_osns_socket(bevent, &monitor.sock);
     set_bevent_cb(bevent, (BEVENT_FLAG_CB_PRI | BEVENT_FLAG_CB_ERROR), process_mountinfo_event);
     return bevent;
 

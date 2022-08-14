@@ -21,6 +21,7 @@
 #define LIB_SYSTEM_LOCATION_H
 
 #include "libosns-datatypes.h"
+#include "libosns-socket.h"
 
 #define FS_LOCATION_FLAG_ALLOC					( 1 << 0 )
 #define FS_LOCATION_FLAG_NAME					( 1 << 1 )
@@ -43,7 +44,7 @@ struct fs_location_s {
     union _location_u {
 	struct fs_location_path_s				path;
 	struct fs_location_devino_s				devino;
-	struct fs_socket_s					socket;
+	struct osns_socket_s					socket;
     } type;
     char							*name;
     unsigned int						size;
@@ -54,7 +55,7 @@ struct fs_location_s {
 
 int get_target_unix_symlink(char *path, unsigned int len, unsigned int extra, struct fs_location_path_s *result);
 int get_realpath_fs_location_path(struct fs_location_path_s *result, struct fs_location_path_s *path);
-int get_target_fs_socket(struct fs_socket_s *socket, char *name, struct fs_location_path_s *result);
+int get_target_osns_socket(struct osns_socket_s *socket, char *name, struct fs_location_path_s *result);
 int compare_fs_locations(struct fs_location_s *a, struct fs_location_s *b);
 
 #endif

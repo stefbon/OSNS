@@ -22,23 +22,23 @@
 
 /* Prototypes */
 
-int socket_connect_dummy(struct system_socket_s *sock);
-int socket_readwrite_dummy(struct system_socket_s *sock, char *buffer, unsigned int size);
-int socket_recvsend_dummy(struct system_socket_s *sock, char *buffer, unsigned int size, unsigned int flags);
-int socket_writevreadv_dummy(struct system_socket_s *sock, struct iovec *iov, unsigned int count);
-int socket_recvmsg_dummy(struct system_socket_s *sock, struct msghdr *msg);
-int socket_sendmsg_dummy(struct system_socket_s *sock, const struct msghdr *msg);
+int socket_connect_dummy(struct osns_socket_s *sock);
+int socket_readwrite_dummy(struct osns_socket_s *sock, char *buffer, unsigned int size);
+int socket_recvsend_dummy(struct osns_socket_s *sock, char *buffer, unsigned int size, unsigned int flags);
+int socket_writevreadv_dummy(struct osns_socket_s *sock, struct iovec *iov, unsigned int count);
+int socket_recvmsg_dummy(struct osns_socket_s *sock, struct msghdr *msg);
+int socket_sendmsg_dummy(struct osns_socket_s *sock, const struct msghdr *msg);
 
-int socket_read_common(struct system_socket_s *sock, char *buffer, unsigned int size);
-int socket_write_common(struct system_socket_s *sock, char *buffer, unsigned int size);
+int socket_read_common(struct osns_socket_s *sock, char *buffer, unsigned int size);
+int socket_write_common(struct osns_socket_s *sock, char *buffer, unsigned int size);
 
-int socket_recv_common(struct system_socket_s *s, char *buffer, unsigned int size, unsigned int flags);
-int socket_send_common(struct system_socket_s *s, char *buffer, unsigned int size, unsigned int flags);
+int socket_recv_common(struct osns_socket_s *s, char *buffer, unsigned int size, unsigned int flags);
+int socket_send_common(struct osns_socket_s *s, char *buffer, unsigned int size, unsigned int flags);
 
-int socket_writev_common(struct system_socket_s *s, struct iovec *iov, unsigned int count);
-int socket_readv_common(struct system_socket_s *s, struct iovec *iov, unsigned int count);
+int socket_writev_common(struct osns_socket_s *s, struct iovec *iov, unsigned int count);
+int socket_readv_common(struct osns_socket_s *s, struct iovec *iov, unsigned int count);
 
-int socket_sendmsg_common(struct system_socket_s *sock, const struct msghdr *msg);
-int socket_recvmsg_common(struct system_socket_s *sock, struct msghdr *msg);
+int socket_sendmsg_common(struct osns_socket_s *sock, const struct msghdr *msg);
+int socket_recvmsg_common(struct osns_socket_s *sock, struct msghdr *msg);
 
 #endif

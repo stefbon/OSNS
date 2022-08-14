@@ -32,7 +32,7 @@
 static void handle_std_connection_event_errorclose(struct bevent_s *bevent, unsigned int flag, struct bevent_argument_s *arg)
 {
     struct ssh_subsystem_connection_s *connection=(struct ssh_subsystem_connection_s *) bevent->ptr;
-    struct system_socket_s *sock=get_bevent_system_socket(bevent);
+    struct osns_socket_s *sock=get_bevent_osns_socket(bevent);
 
     if (flag & BEVENT_FLAG_CB_CLOSE) {
 
@@ -55,7 +55,7 @@ static void handle_std_connection_event_errorclose(struct bevent_s *bevent, unsi
 static void handle_stdin_connection_event_data(struct bevent_s *bevent, unsigned int flag, struct bevent_argument_s *arg)
 {
     struct ssh_subsystem_connection_s *connection=(struct ssh_subsystem_connection_s *) bevent->ptr;
-    struct system_socket_s *sock=get_bevent_system_socket(bevent);
+    struct osns_socket_s *sock=get_bevent_osns_socket(bevent);
 
     (* connection->read)(connection, sock);
 }
@@ -63,27 +63,27 @@ static void handle_stdin_connection_event_data(struct bevent_s *bevent, unsigned
 static void handle_stderr_connection_event_data(struct bevent_s *bevent, unsigned int flag, struct bevent_argument_s *arg)
 {
     struct ssh_subsystem_connection_s *connection=(struct ssh_subsystem_connection_s *) bevent->ptr;
-    struct system_socket_s *sock=get_bevent_system_socket(bevent);
+    struct osns_socket_s *sock=get_bevent_osns_socket(bevent);
 
     (* connection->read_error)(connection, sock);
 }
 
 static int open_ssh_subsystem_std(struct ssh_subsystem_connection_s *connection)
 {
-    struct system_socket_s *sock=NULL;
+    struct osns_socket_s *sock=NULL;
     struct bevent_s *bevent=NULL;
 
     /* STDIN */
 
     sock=&connection->type.std.stdin;
-    (* sock->sops.set_unix_fd)(sock, fileno(stdin));
+    (* sock->set_unix_fd)(sock, fileno(stdin));
     bevent=create_fd_bevent(NULL, (void *) connection);
 
     if (bevent) {
 
 	set_bevent_cb(bevent, (BEVENT_FLAG_CB_ERROR | BEVENT_FLAG_CB_CLOSE), handle_std_connection_event_errorclose);
 	set_bevent_cb(bevent, (BEVENT_FLAG_CB_DATAAVAIL), handle_stdin_connection_event_data);
-	set_bevent_system_socket(bevent, sock);
+	set_bevent_osns_socket(bevent, sock);
 
 	add_bevent_watch(bevent);
 
@@ -97,7 +97,7 @@ static int open_ssh_subsystem_std(struct ssh_subsystem_connection_s *connection)
     /* STDOUT */
 
     sock=&connection->type.std.stdout;
-    (* sock->sops.set_unix_fd)(sock, fileno(stdout));
+    (* sock->set_unix_fd)(sock, fileno(stdout));
     bevent=create_fd_bevent(NULL, (void *) connection);
 
     if (bevent) {
@@ -110,7 +110,7 @@ static int open_ssh_subsystem_std(struct ssh_subsystem_connection_s *connection)
 	    enable_bevent_write_watch(bevent);
 	}
 
-	set_bevent_system_socket(bevent, sock);
+	set_bevent_osns_socket(bevent, sock);
 	add_bevent_watch(bevent);
 
     } else {
@@ -123,7 +123,7 @@ static int open_ssh_subsystem_std(struct ssh_subsystem_connection_s *connection)
     /* STDERR */
 
     sock=&connection->type.std.stderr;
-    (* sock->sops.set_unix_fd)(sock, fileno(stderr));
+    (* sock->set_unix_fd)(sock, fileno(stderr));
     bevent=create_fd_bevent(NULL, (void *) connection);
 
     if (bevent) {
@@ -138,7 +138,7 @@ static int open_ssh_subsystem_std(struct ssh_subsystem_connection_s *connection)
 
 	}
 
-	set_bevent_system_socket(bevent, sock);
+	set_bevent_osns_socket(bevent, sock);
 	add_bevent_watch(bevent);
 
     } else {
@@ -164,7 +164,7 @@ static int open_ssh_subsystem_std(struct ssh_subsystem_connection_s *connection)
 }
 
 
-static int send_data_cb_default(struct system_socket_s *sock, char *data, unsigned int size, void *ptr)
+static int send_data_cb_default(struct osns_socket_s *sock, char *data, unsigned int size, void *ptr)
 {
     return socket_write(sock, data, size);
 }
@@ -173,7 +173,7 @@ int write_ssh_subsystem_std(struct ssh_subsystem_connection_s *connection, char 
 {
     int byteswritten=-1;
     struct bevent_write_data_s wdata;
-    struct system_socket_s *sock=&connection->type.std.stdout; /* use stdout for writing */
+    struct osns_socket_s *sock=&connection->type.std.stdout; /* use stdout for writing */
     struct bevent_s *bevent=sock->event.link.bevent;
 
     wdata.flags=0;
@@ -192,9 +192,9 @@ int init_ssh_subsystem_std(struct ssh_subsystem_connection_s *connection)
 
     connection->flags |= SSH_SUBSYSTEM_CONNECTION_FLAG_STD;
 
-    init_system_socket(&connection->type.std.stdin, (SYSTEM_SOCKET_TYPE_SYSTEM | SYSTEM_SOCKET_TYPE_SYSTEM_FILE), (SYSTEM_SOCKET_FLAG_NOOPEN), NULL);
-    init_system_socket(&connection->type.std.stdout, (SYSTEM_SOCKET_TYPE_SYSTEM | SYSTEM_SOCKET_TYPE_SYSTEM_FILE), (SYSTEM_SOCKET_FLAG_WRONLY | SYSTEM_SOCKET_FLAG_NOOPEN), NULL);
-    init_system_socket(&connection->type.std.stderr, (SYSTEM_SOCKET_TYPE_SYSTEM | SYSTEM_SOCKET_TYPE_SYSTEM_FILE), (SYSTEM_SOCKET_FLAG_RDWR | SYSTEM_SOCKET_FLAG_NOOPEN), NULL);
+    init_osns_socket(&connection->type.std.stdin, OSNS_SOCKET_TYPE_DEVICE, 0);
+    init_osns_socket(&connection->type.std.stdout, OSNS_SOCKET_TYPE_DEVICE, OSNS_SOCKET_FLAG_WRONLY);
+    init_osns_socket(&connection->type.std.stderr, OSNS_SOCKET_TYPE_DEVICE, OSNS_SOCKET_FLAG_RDWR);
 
     connection->open=open_ssh_subsystem_std;
     connection->close=close_ssh_subsystem_std;
@@ -204,7 +204,7 @@ int init_ssh_subsystem_std(struct ssh_subsystem_connection_s *connection)
 
 }
 
-void close_ssh_subsystem_std(struct ssh_subsystem_connection_s *connection, struct system_socket_s *sock, unsigned char free)
+void close_ssh_subsystem_std(struct ssh_subsystem_connection_s *connection, struct osns_socket_s *sock, unsigned char free)
 {
 
     /* STDIN */

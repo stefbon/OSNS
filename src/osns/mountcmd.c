@@ -42,7 +42,7 @@ static void cb_mountcmd_response(struct osns_packet_s *p, unsigned char type, ch
     if (type==OSNS_MSG_MOUNTED) {
 
 	if (ctrl->type==OSNS_CONTROL_TYPE_FD) {
-	    struct system_socket_s *sock=(struct system_socket_s *) p->ptr;
+	    struct osns_socket_s *sock=(struct osns_socket_s *) p->ptr;
 	    struct osns_control_info_s info;
 	    unsigned int pos=0;
 
@@ -57,14 +57,14 @@ static void cb_mountcmd_response(struct osns_packet_s *p, unsigned char type, ch
 
 	    if (pos<=2) {
 
-		info.info.osns_socket.type=SYSTEM_SOCKET_TYPE_SYSTEM | SYSTEM_SOCKET_TYPE_CHAR_DEVICE;
-		info.info.osns_socket.flags=SYSTEM_SOCKET_FLAG_RDWR;
+		info.info.osns_socket.type=OSNS_SOCKET_TYPE_DEVICE;
+		info.info.osns_socket.flags=(OSNS_SOCKET_FLAG_CHAR_DEVICE | OSNS_SOCKET_FLAG_RDWR);
 
 	    }
 
 	    logoutput("cb_mountcmd_response: received fd %i socket type %u flags %u", ctrl->data.fd, info.info.osns_socket.type, info.info.osns_socket.flags);
-	    init_system_socket(sock, info.info.osns_socket.type, (info.info.osns_socket.flags | SYSTEM_SOCKET_FLAG_NOOPEN), NULL);
-	    (* sock->sops.set_unix_fd)(sock, ctrl->data.fd);
+	    // init_osns_socket(sock, info.info.osns_socket.type, info.info.osns_socket.flags);
+	    (* sock->set_unix_fd)(sock, ctrl->data.fd);
 	    signal_set_flag(r->signal, &p->status, OSNS_PACKET_STATUS_FINISH);
 	    return;
 
@@ -86,7 +86,7 @@ static void cb_mountcmd_response(struct osns_packet_s *p, unsigned char type, ch
 
 }
 
-int process_mountcmd(struct osns_connection_s *oc, unsigned char type, unsigned int maxread, struct system_socket_s *sock)
+int process_mountcmd(struct osns_connection_s *oc, unsigned char type, unsigned int maxread, struct osns_socket_s *sock)
 {
     struct osns_receive_s *r=&oc->receive;
     struct osns_packet_s packet;

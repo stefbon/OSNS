@@ -153,11 +153,11 @@ static int start_ssh_userauth_client(struct ssh_session_s *session, struct ssh_c
 
     set_ssh_string(&auth->c_hostname, 'c', local.host.hostname);
 
-    if (local.host.ip.family==SYSTEM_SOCKET_FLAG_IPv4) {
+    if (local.host.ip.family==IP_ADDRESS_FAMILY_IPv4) {
 
 	set_ssh_string(&auth->c_ip, 'c', local.host.ip.addr.v4);
 
-    } else if (local.host.ip.family==SYSTEM_SOCKET_FLAG_IPv6) {
+    } else if (local.host.ip.family==IP_ADDRESS_FAMILY_IPv6) {
 
 	set_ssh_string(&auth->c_ip, 'c', local.host.ip.addr.v6);
 

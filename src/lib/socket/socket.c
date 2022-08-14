@@ -25,21 +25,22 @@
 
 #include "socket.h"
 #include "connection.h"
-#include "system.h"
+#include "device.h"
+#include "file.h"
+#include "directory.h"
 #include "utils.h"
 
-static void cb_change_backend_default(struct system_socket_s *sock, unsigned char action)
+static int cb_open_socket_default(struct osns_socket_s *sock, unsigned int flags)
 {
-    /* default does nothing since the backend/context (->eventloop) is not known here */
+    return -1;
 }
 
-static int cb_getsockopt_default(struct system_socket_s *sock, struct generic_socket_option_s *option)
+static int cb_getsockopt_default(struct osns_socket_s *sock, struct generic_socket_option_s *option)
 {
 
 #ifdef __linux__
 
-    int fd=(* sock->sops.get_unix_fd)(sock);
-
+    int fd=(* sock->get_unix_fd)(sock);
     return ((fd>=0) ? getsockopt(fd, option->level, option->type, option->value, &option->len) : -1);
 
 #else
@@ -50,14 +51,13 @@ static int cb_getsockopt_default(struct system_socket_s *sock, struct generic_so
 
 }
 
-static int cb_setsockopt_default(struct system_socket_s *sock, struct generic_socket_option_s *option)
+static int cb_setsockopt_default(struct osns_socket_s *sock, struct generic_socket_option_s *option)
 {
 
 #ifdef __linux__
 
-    int fd=(* sock->sops.get_unix_fd)(sock);
-
-    return ((fd>=0) ? getsockopt(fd, option->level, option->type, option->value, &option->len) : -1);
+    int fd=(* sock->get_unix_fd)(sock);
+    return ((fd>=0) ? setsockopt(fd, option->level, option->type, option->value, option->len) : -1);
 
 #else
 
@@ -67,31 +67,29 @@ static int cb_setsockopt_default(struct system_socket_s *sock, struct generic_so
 
 }
 
-static void cb_close_default(struct system_socket_s *sock)
+static void cb_close_default(struct osns_socket_s *sock)
 {
-    struct system_socket_backend_s *backend=&sock->backend;
 
 #ifdef __linux__
-    int fd=(* sock->sops.get_unix_fd)(sock);
+    int fd=(* sock->get_unix_fd)(sock);
 
     if (fd>=0) {
 
 	close(fd);
-	(* sock->sops.set_unix_fd)(sock, -1);
+	(* sock->set_unix_fd)(sock, -1);
+	(* sock->change)(sock, SOCKET_CHANGE_OP_CLOSE);
 
     }
 
 #endif
 
-    (* backend->cb_change)(sock, SOCKET_BACKEND_ACTION_CLOSE);
-
 }
 
-static int cb_get_unix_fd_default(struct system_socket_s *sock)
+static int cb_get_unix_fd_default(struct osns_socket_s *sock)
 {
 #ifdef __linux__
 
-    return sock->backend.fd;
+    return sock->fd;
 
 #else
 
@@ -100,32 +98,26 @@ static int cb_get_unix_fd_default(struct system_socket_s *sock)
 #endif
 }
 
-static void cb_set_unix_fd_default(struct system_socket_s *sock, int fd)
+static void cb_set_unix_fd_default(struct osns_socket_s *sock, int fd)
 {
 #ifdef __linux__
 
-    sock->backend.fd=fd;
+    int keep=sock->fd;
 
-    if (sock->flags & SYSTEM_SOCKET_FLAG_NOOPEN) {
-
-	if (sock->type & SYSTEM_SOCKET_TYPE_SYSTEM) {
-
-	    set_unix_fd_system(sock);
-
-	}
-
-	sock->flags &= ~SYSTEM_SOCKET_FLAG_NOOPEN;
-
-    }
+    sock->fd=fd;
+    if (keep != fd) (* sock->change)(sock, SOCKET_CHANGE_OP_SET);
 
 #endif
+}
+
+static void cb_change_default(struct osns_socket_s *sock, unsigned int what)
+{
+    
 }
 
 static unsigned char countbitsset(unsigned int value)
 {
     unsigned char count=0;
-
-    logoutput_debug("countbitsset: value %u", value);
 
     while (value) {
 
@@ -140,128 +132,145 @@ static unsigned char countbitsset(unsigned int value)
 
 /* initialization */
 
-void init_system_socket(struct system_socket_s *sock, unsigned int type, unsigned int flags, struct fs_location_path_s *path)
+void init_osns_socket(struct osns_socket_s *sock, unsigned int type, unsigned int flags)
 {
     unsigned int stype=0;
     unsigned int atype=0;
 
-    logoutput_debug("init_system_socket: type %u flags %u", type, flags);
-    memset(sock, 0, sizeof(struct system_socket_s));
+    logoutput_debug("init_osns_socket: type %u flags %u", type, flags);
+    memset(sock, 0, sizeof(struct osns_socket_s));
 
-    switch (type) {
+    if (countbitsset(flags & (OSNS_SOCKET_FLAG_RDWR | OSNS_SOCKET_FLAG_WRONLY))>1) {
 
-	case SYSTEM_SOCKET_TYPE_LOCAL:
-	case SYSTEM_SOCKET_TYPE_NET:
-
-	    type |= SYSTEM_SOCKET_TYPE_CONNECTION;
-	    break;
-
-	case SYSTEM_SOCKET_TYPE_CHAR_DEVICE:
-	case SYSTEM_SOCKET_TYPE_BLOCK_DEVICE:
-	case SYSTEM_SOCKET_TYPE_SYSTEM_DEVICE:
-	case SYSTEM_SOCKET_TYPE_SYSTEM_FILE:
-
-	    type |= SYSTEM_SOCKET_TYPE_SYSTEM;
-	    break;
-
-	case SYSTEM_SOCKET_TYPE_FILE:
-	case SYSTEM_SOCKET_TYPE_DIR:
-
-	    type |= SYSTEM_SOCKET_TYPE_FILESYSTEM;
-	    break;
+	logoutput_error("init_osns_socket: invalid flags ... RDWR and WRONLY cannot be set both");
 
     }
 
-    stype=(type & SYSTEM_SOCKET_TYPE_MASK);
-    atype=(type & ~SYSTEM_SOCKET_TYPE_MASK);
+    switch (type) {
 
-    logoutput_debug("init_system_socket: stype %u atype %u flags %u", stype, atype, flags);
-
-    switch (stype) {
-
-	case SYSTEM_SOCKET_TYPE_CONNECTION:
+	case OSNS_SOCKET_TYPE_CONNECTION:
 	{
-	    unsigned int tmp=(SYSTEM_SOCKET_TYPE_LOCAL | SYSTEM_SOCKET_TYPE_NET);
 
-	    /* a connection is possible:
-		- a connection created after accepted by a socket endpoint, so NETWORK and LOCAL/UNIX
-		- a system connection for example with char devices */
+	    if (flags & (OSNS_SOCKET_FLAG_NET | OSNS_SOCKET_FLAG_LOCAL)) {
+		unsigned int tmp=0;
+		unsigned char count=0;
 
-	    if (atype & ~tmp) {
+		tmp=(OSNS_SOCKET_FLAG_IPv4 | OSNS_SOCKET_FLAG_IPv6);
+		count=countbitsset(flags & tmp);
 
-		logoutput_error("init_system_socket: invalid type ... cannot continue");
-		return;
+		if (flags & OSNS_SOCKET_FLAG_NET) {
 
-	    } else {
-		unsigned char count=countbitsset((atype & tmp));
+		    if (count==0 || count>1) {
 
-		/* one of the bits has to be set, but not more than one */
+			/* at least one (and not more) has to be set */
 
-		if (count==0 || count>1) {
+			logoutput_error("init_osns_socket: invalid flags ... cannot continue");
+			return;
 
-		    logoutput_error("init_system_socket: invalid type ... cannot continue (count=%u)", count);
+		    }
+
+		} else if (flags & OSNS_SOCKET_FLAG_LOCAL) {
+
+		    /* local socket and ip flags are invalid */
+
+		    if (count>0) {
+
+			logoutput_error("init_osns_socket: invalid flags ... local socket and ip flags are incompatible");
+			return;
+
+		    }
+
+		}
+
+		tmp |= (OSNS_SOCKET_FLAG_NET | OSNS_SOCKET_FLAG_LOCAL | OSNS_SOCKET_FLAG_UDP | OSNS_SOCKET_FLAG_ENDPOINT | OSNS_SOCKET_FLAG_SERVER | OSNS_SOCKET_FLAG_RDWR | OSNS_SOCKET_FLAG_WRONLY);
+
+		if (flags & ~tmp) {
+
+		    /* flags set which do not fit with connection */
+		    logoutput_error("init_osns_socket: invalid flags ... %u are set which are invalid with a socket for connections", (flags & ~tmp));
 		    return;
 
 		}
 
+		if ((flags & OSNS_SOCKET_FLAG_ENDPOINT) && (flags & OSNS_SOCKET_FLAG_WRONLY)) {
+
+		    /* endpoint socket is always rdwr, never rdonly or wronly  */
+		    logoutput_error("init_osns_socket: invalid flags ... WRONLY flag is set and is incompatible with the ENDPOINT flag");
+		    return;
+
+		}
+
+	    } else {
+
+		/* one flag NET or LOCAL has to be set */
+		logoutput_error("init_osns_socket: invalid flags ... one flag NET or LOCAL has to be set");
+		return;
+
 	    }
 
-	    sock->type=(SYSTEM_SOCKET_TYPE_CONNECTION | (atype & tmp));
 	    break;
 
 	}
-	case SYSTEM_SOCKET_TYPE_SYSTEM:
+
+	case OSNS_SOCKET_TYPE_DEVICE:
 	{
-	    unsigned int tmp=(SYSTEM_SOCKET_TYPE_CHAR_DEVICE | SYSTEM_SOCKET_TYPE_BLOCK_DEVICE | SYSTEM_SOCKET_TYPE_SYSTEM_DEVICE | SYSTEM_SOCKET_TYPE_SYSTEM_FILE);
+	    unsigned int tmp=0;
+	    unsigned char count=0;
 
-	    if (atype & ~tmp) {
+	    tmp=(OSNS_SOCKET_FLAG_CHAR_DEVICE | OSNS_SOCKET_FLAG_BLOCK_DEVICE);
+	    count=countbitsset(flags & tmp);
 
-		logoutput_error("init_system_socket: invalid type ... cannot continue");
+	    if (count==0 || count>1) {
+
+		/* at least one (and not more) has to be set */
+
+		logoutput_error("init_osns_socket: invalid flags ... one of CHAR_DEVICE or BLOCK_DEVICE has to be set");
 		return;
-
-	    } else {
-		unsigned char count=countbitsset((atype & tmp));
-
-		/* one of the bits has to be set, but not both */
-
-		if (count==0 || count>1) {
-
-		    logoutput_error("init_system_socket: too much types set ... cannot continue");
-		    return;
-
-		}
 
 	    }
 
-	    sock->type=(SYSTEM_SOCKET_TYPE_SYSTEM | (atype & tmp));
+
+	    tmp |= (OSNS_SOCKET_FLAG_RDWR | OSNS_SOCKET_FLAG_WRONLY);
+
+	    if (flags & ~tmp) {
+
+		/* flags set which do not fit with system */
+		logoutput_error("init_osns_socket: invalid flags ... %u are set which are invalid with a system socket", (flags & ~tmp));
+		return;
+
+	    }
+
 	    break;
 
 	}
 
-	case SYSTEM_SOCKET_TYPE_FILESYSTEM:
+	case OSNS_SOCKET_TYPE_FILESYSTEM:
 	{
-	    unsigned int tmp=(SYSTEM_SOCKET_TYPE_FILE | SYSTEM_SOCKET_TYPE_DIR);
+	    unsigned int tmp=0;
+	    unsigned char count=0;
 
-	    if (atype & ~tmp) {
+	    tmp=(OSNS_SOCKET_FLAG_FILE | OSNS_SOCKET_FLAG_DIR);
+	    count=countbitsset(flags & tmp);
 
-		logoutput_error("init_system_socket: invalid type ... cannot continue");
+	    if (count==0 || count>1) {
+
+		/* at least one (and not more) has to be set */
+
+		logoutput_error("init_osns_socket: invalid flags ... one of FILE and DIR has to be set");
 		return;
-
-	    } else {
-		unsigned char count=countbitsset((atype & tmp));
-
-		/* one of the bits has to be set, but not more than one */
-
-		if (count==0 || count>1) {
-
-		    logoutput_error("init_system_socket: invalid flags ... cannot continue");
-		    return;
-
-		}
 
 	    }
 
-	    sock->type=(SYSTEM_SOCKET_TYPE_FILESYSTEM | (atype & tmp));
+	    tmp |= (OSNS_SOCKET_FLAG_RDWR | OSNS_SOCKET_FLAG_WRONLY);
+
+	    if (flags & ~tmp) {
+
+		/* flags set which do not fit with system */
+		logoutput_error("init_osns_socket: invalid flags ... %u are set which are invalid with a system socket", (flags & ~tmp));
+		return;
+
+	    }
+
 	    break;
 
 	}
@@ -269,75 +278,15 @@ void init_system_socket(struct system_socket_s *sock, unsigned int type, unsigne
 	default:
 
 	{
-	    logoutput_error("init_system_socket: tytpe not reckognized, must be one of LOCAL, NET or SYSTEM: invalid ... cannot continue");
+	    logoutput_error("init_osns_socket: type not reckognized, must be one of CONNECTION, SYSTEM or FILESYSTEM: invalid ... cannot continue");
 	    return;
 	}
-
-    }
-
-    logoutput_debug("init_system_socket: sock type %u", sock->type);
-
-    if (sock->type & SYSTEM_SOCKET_TYPE_LOCAL) {
-	unsigned int valid = (SYSTEM_SOCKET_FLAG_UDP | SYSTEM_SOCKET_FLAG_SERVER | SYSTEM_SOCKET_FLAG_ENDPOINT | SYSTEM_SOCKET_FLAG_NOOPEN);
-
-	if (flags & ~valid) {
-
-	    logoutput_error("init_system_socket: invalid flags ... cannot continue (A)");
-	    return;
-
-	}
-
-	sock->flags |= (flags & valid);
-
-    } else if (sock->type & SYSTEM_SOCKET_TYPE_NET) {
-	unsigned int valid=(SYSTEM_SOCKET_FLAG_UDP | SYSTEM_SOCKET_FLAG_IPv4 | SYSTEM_SOCKET_FLAG_IPv6 | SYSTEM_SOCKET_FLAG_SERVER | SYSTEM_SOCKET_FLAG_ENDPOINT | SYSTEM_SOCKET_FLAG_NOOPEN);
-	unsigned char count=countbitsset((flags & (SYSTEM_SOCKET_FLAG_IPv4 | SYSTEM_SOCKET_FLAG_IPv6)));
-
-	/* one of the bits has to be set, but not both */
-
-	if (count==0 || count>1) {
-
-	    logoutput_error("init_system_socket: invalid flags ... cannot continue (B)");
-	    return;
-
-	}
-
-	if (flags & ~valid) {
-
-	    logoutput_error("init_system_socket: invalid flags ... cannot continue (C)");
-	    return;
-
-	}
-
-	sock->flags |= (flags & valid);
-
-    } else if (sock->type & SYSTEM_SOCKET_TYPE_SYSTEM) {
-	unsigned int valid=(SYSTEM_SOCKET_FLAG_NOOPEN | SYSTEM_SOCKET_FLAG_RDWR | SYSTEM_SOCKET_FLAG_WRONLY);
-
-	if (flags & ~valid) {
-
-	    logoutput_error("init_system_socket: invalid flags ... cannot continue (D)");
-	    return;
-
-	}
-
-	sock->flags |= (flags & valid);
-
-    // } else if (sock->type & SYSTEM_SOCKET_TYPE_FILESYSTEM) {
-	//unsigned int valid=(SYSTEM_SOCKET_FLAG_RDWR | SYSTEM_SOCKET_FLAG_WRONLY);
-
-	//if (flags & ~valid) {
-
-	    //logoutput_error("init_system_socket: invalid flags ... cannot continue (E)");
-	    //return;
-
-	//}
-
-	//sock->flags |= (flags & valid);
 
     }
 
     sock->status=SOCKET_STATUS_INIT;
+    sock->type=type;
+    sock->flags=flags;
 
     /* context */
 
@@ -345,38 +294,51 @@ void init_system_socket(struct system_socket_s *sock, unsigned int type, unsigne
 
 #ifdef __linux__
 
-    sock->backend.fd=-1;
-    sock->backend.pid=0;
+    sock->fd=-1;
+    sock->pid=0;
 
 #endif
 
-    sock->backend.ptr=NULL;
-    sock->backend.cb_change=cb_change_backend_default;
-
     /* socket ops -  defaults */
 
-    sock->sops.getsockopt=cb_getsockopt_default;
-    sock->sops.setsockopt=cb_setsockopt_default;
-    sock->sops.close=cb_close_default;
-    sock->sops.get_unix_fd=cb_get_unix_fd_default;
-    sock->sops.set_unix_fd=cb_set_unix_fd_default;
+    sock->getsockopt=cb_getsockopt_default;
+    sock->setsockopt=cb_setsockopt_default;
+    sock->close=cb_close_default;
 
-    switch (stype) {
+#ifdef __linux__
 
-	case SYSTEM_SOCKET_TYPE_CONNECTION:
+    sock->get_unix_fd=cb_get_unix_fd_default;
+    sock->set_unix_fd=cb_set_unix_fd_default;
 
-	    init_system_socket_connection(sock);
+#endif
+    sock->change=cb_change_default;
+
+    switch (sock->type) {
+
+	case OSNS_SOCKET_TYPE_CONNECTION:
+
+	    init_osns_connection_socket(sock);
 	    break;
 
-	case SYSTEM_SOCKET_TYPE_SYSTEM:
+	case OSNS_SOCKET_TYPE_DEVICE:
 
-	    init_system_socket_system(sock, path);
+	    init_osns_device_socket(sock);
 	    break;
 
-//	case SYSTEM_SOCKET_TYPE_FILESYSTEM:
 
-//	    init_system_socket_filesystem(sock, flags, path);
-//	    break
+	case OSNS_SOCKET_TYPE_FILESYSTEM:
+
+	    if (sock->flags & OSNS_SOCKET_FLAG_FILE) {
+
+		init_osns_file_socket(sock);
+
+	    } else if (sock->flags & OSNS_SOCKET_FLAG_DIR) {
+
+		init_osns_directory_socket(sock);
+
+	    }
+
+	    break;
 
 	default:
 
@@ -384,154 +346,3 @@ void init_system_socket(struct system_socket_s *sock, unsigned int type, unsigne
     }
 
 }
-
-char *get_name_system_socket(struct system_socket_s *sock, const char *what)
-{
-    char *name="";
-
-    if (sock->type & SYSTEM_SOCKET_TYPE_CONNECTION) {
-
-	if (strcmp(what, "type")==0) {
-
-	    name="connection";
-
-	} else if (strcmp(what, "subtype")==0) {
-
-	    if (sock->type & SYSTEM_SOCKET_TYPE_LOCAL) {
-
-		name="local";
-
-	    } else if (sock->type & SYSTEM_SOCKET_TYPE_NET) {
-
-		name="net";
-
-	    }
-
-	}
-
-    } else if (sock->type & SYSTEM_SOCKET_TYPE_SYSTEM) {
-
-	if (strcmp(what, "type")==0) {
-
-	    name="system";
-
-	} else if (strcmp(what, "subtype")==0) {
-
-	    if (sock->type & SYSTEM_SOCKET_TYPE_CHAR_DEVICE) {
-
-		name="char-device";
-
-	    } else if (sock->type & SYSTEM_SOCKET_TYPE_BLOCK_DEVICE) {
-
-		name="block-device";
-
-	    } else if (sock->type & SYSTEM_SOCKET_TYPE_SYSTEM_DEVICE) {
-
-		name="system-device";
-
-	    } else if (sock->type & SYSTEM_SOCKET_TYPE_SYSTEM_FILE) {
-
-		name="system-file";
-
-	    }
-
-	}
-
-    } else if (sock->type & SYSTEM_SOCKET_TYPE_FILESYSTEM) {
-
-	if (strcmp(what, "type")==0) {
-
-	    name="filesystem";
-
-	} else if (strcmp(what, "subtype")==0) {
-
-	    if (sock->type & SYSTEM_SOCKET_TYPE_FILE) {
-
-		name="file";
-
-	    } else if (sock->type & SYSTEM_SOCKET_TYPE_DIR) {
-
-		name="dir";
-
-	    }
-
-	}
-
-    }
-
-    return name;
-}
-
-unsigned int get_type_system_socket(char *type, char *subtype)
-{
-    unsigned int stype=0;
-
-    if (strcmp(type, "connection")==0) {
-
-	stype = SYSTEM_SOCKET_TYPE_CONNECTION;
-
-	if (subtype) {
-
-	    if (strcmp(subtype, "unix")==0 || strcmp(subtype, "local")==0) {
-
-		stype |= SYSTEM_SOCKET_TYPE_LOCAL;
-
-	    } else if (strcmp(subtype, "net")==0) {
-
-		stype |= SYSTEM_SOCKET_TYPE_NET;
-
-	    }
-
-	}
-
-    } else if (strcmp(type, "system")==0) {
-
-	stype = SYSTEM_SOCKET_TYPE_SYSTEM;
-
-	if (subtype) {
-
-	    if (strcmp(subtype, "char-device")==0) {
-
-		stype |= SYSTEM_SOCKET_TYPE_CHAR_DEVICE;
-
-	    } else if (strcmp(subtype, "block-device")==0) {
-
-		stype |= SYSTEM_SOCKET_TYPE_BLOCK_DEVICE;
-
-	    } else if (strcmp(subtype, "system-device")==0) {
-
-		stype |= SYSTEM_SOCKET_TYPE_SYSTEM_DEVICE;
-
-	    } else if (strcmp(subtype, "system-file")==0) {
-
-		stype |= SYSTEM_SOCKET_TYPE_SYSTEM_FILE;
-
-	    }
-
-	}
-
-    } else if (strcmp(type, "filesystem")==0) {
-
-	stype = SYSTEM_SOCKET_TYPE_FILESYSTEM;
-
-	if (subtype) {
-
-	    if (strcmp(subtype, "dir")==0) {
-
-		stype |= SYSTEM_SOCKET_TYPE_DIR;
-
-	    } else if (strcmp(subtype, "file")==0) {
-
-		stype |= SYSTEM_SOCKET_TYPE_FILE;
-
-	    }
-
-	}
-
-    }
-
-    logoutput_debug("get_type_system_socket: name %s:%s type %u", type, subtype, stype);
-    return stype;
-
-}
-

@@ -20,7 +20,7 @@
 #ifndef LIB_SOCKET_SOCKET_H
 #define LIB_SOCKET_SOCKET_H
 
-#define _GNU_SOURCE
+#include "libosns-basic-system-headers.h"
 
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -30,60 +30,87 @@
 #include "libosns-network.h"
 #include "lib/system/path.h"
 #include "lib/system/stat.h"
-#include "lib/system/location.h"
 
-#define SYSTEM_SOCKET_TYPE_CONNECTION			1
-#define SYSTEM_SOCKET_TYPE_SYSTEM			2
-#define SYSTEM_SOCKET_TYPE_FILESYSTEM			3
+/*
 
-#define SYSTEM_SOCKET_TYPE_MASK				3
+    There are different types of sockets:
 
-/* additional type info for CONNECTION */
+    a. network sockets connected to an ip address and port. Clients can connect to it to get a connection via the accept/connect system calls.
+	Well known sockets like a webserver (HTTP and HTTPS), a SSH server (SSH), mailserver (SMTP) are of this type. These are called endpoints.
+	See man socket, man bind, man listen, man accept.
+	The endpoint is required to setup the connection, is not the connection itself.
+	The connection is socket/transport which will take care of the actual transport of data the server provides and the client wants.
+	See man connect.
 
-#define SYSTEM_SOCKET_TYPE_LOCAL			(1 << 7)
-#define SYSTEM_SOCKET_TYPE_UNIX				SYSTEM_SOCKET_TYPE_LOCAL
-#define SYSTEM_SOCKET_TYPE_NET				(1 << 8)
+    b. local (or unix) sockets. Simular to a. network sockets, bu then attached to an file (a socket) in the filesystem in stead of a ip address. Usefull
+	for local communication between processes.
 
-/*additional type info for system */
+    c. system sockets are sockets provided by the operating system like:
+	- timerfd, signalfd, pidfd and fsnotify (under Linux)
 
-#define SYSTEM_SOCKET_TYPE_CHAR_DEVICE			(1 << 15)
-#define SYSTEM_SOCKET_TYPE_BLOCK_DEVICE			(1 << 16)
-/* 20220408: flag for system devices like signalfd, timerfd and fsnotify */
-#define SYSTEM_SOCKET_TYPE_SYSTEM_DEVICE		(1 << 17)
-/* 20220315: flag for special files like under Linux /proc/self/mountinfo */
-#define SYSTEM_SOCKET_TYPE_SYSTEM_FILE			(1 << 18)
+    d. device sockets are character and block devices (mostly located in /dev under Linux)
+	- character devices like /dev/fuse (under Linux)
 
-/* additional type info for FILESYSTEM */
+    e. filesystem sockets used to read and/or write to files.
+	See man open, man read, man write
+	- special files like /proc/self/mountinfo (=> to monitor mounts) (under Linux)
+*/
 
-#define SYSTEM_SOCKET_TYPE_FILE				(1 << 26)
-#define SYSTEM_SOCKET_TYPE_DIR				(1 << 27)
+#define OSNS_SOCKET_TYPE_CONNECTION			1
+#define OSNS_SOCKET_TYPE_DEVICE				2
+#define OSNS_SOCKET_TYPE_FILESYSTEM			3
+#define OSNS_SOCKET_TYPE_SYSTEM				4
 
-/* flags */
+/* flags info for CONNECTION */
 
-#define SYSTEM_SOCKET_FLAG_IPv4				(1 << 0)
-#define SYSTEM_SOCKET_FLAG_IPv6				(1 << 1)
-#define SYSTEM_SOCKET_FLAG_UDP				(1 << 2)
+#define OSNS_SOCKET_FLAG_LOCAL				(1 << 0)
+#define OSNS_SOCKET_FLAG_UNIX				OSNS_SOCKET_TYPE_LOCAL
+#define OSNS_SOCKET_FLAG_NET				(1 << 1)
 
-#define SYSTEM_SOCKET_FLAG_ENDPOINT			(1 << 6)
-#define SYSTEM_SOCKET_FLAG_SERVER			(1 << 7)
+/*additional info for DEVICE */
 
-#define SYSTEM_SOCKET_FLAG_POLLABLE			(1 << 10)
-#define SYSTEM_SOCKET_FLAG_RDWR				(1 << 11)
-#define SYSTEM_SOCKET_FLAG_WRONLY			(1 << 12)
+#define OSNS_SOCKET_FLAG_CHAR_DEVICE			(1 << 2)
+#define OSNS_SOCKET_FLAG_BLOCK_DEVICE			(1 << 3)
 
-#define SYSTEM_SOCKET_FLAG_NOOPEN			(1 << 20)
+/* additional info for FILESYSTEM */
+
+#define OSNS_SOCKET_FLAG_FILE				(1 << 4)
+#define OSNS_SOCKET_FLAG_DIR				(1 << 5)
+
+/* additional flags for SYSTEM */
+
+#define OSNS_SOCKET_FLAG_FSNOTIFY			(1 << 6)
+#define OSNS_SOCKET_FLAG_TIMERFD			(1 << 7)
+#define OSNS_SOCKET_FLAG_SIGNALFD			(1 << 8)
+
+/* additional */
+
+#define OSNS_SOCKET_FLAG_IPv4				(1 << 20)
+#define OSNS_SOCKET_FLAG_IPv6				(1 << 21)
+#define OSNS_SOCKET_FLAG_UDP				(1 << 22)
+#define OSNS_SOCKET_FLAG_ENDPOINT			(1 << 23)
+#define OSNS_SOCKET_FLAG_SERVER				(1 << 24)
+#define OSNS_SOCKET_FLAG_RDWR				(1 << 25)
+#define OSNS_SOCKET_FLAG_WRONLY				(1 << 26)
+#define OSNS_SOCKET_FLAG_ALLOC				(1 << 27)
 
 #define SOCKET_STATUS_INIT				1
-
 #define SOCKET_STATUS_ACCEPT				2
 #define SOCKET_STATUS_OPEN				2
-
 #define SOCKET_STATUS_CONNECT				4
-
 #define SOCKET_STATUS_BIND				8
 #define SOCKET_STATUS_LISTEN				16
 
-union system_sockaddr_u {
+#define SOCKET_CHANGE_OP_OPEN				1
+#define SOCKET_CHANGE_OP_CLOSE				2
+#define SOCKET_CHANGE_OP_SET				3
+
+#define OSNS_SOCKET_FSYNC_FLAG_DATA			1
+
+#define OSNS_SOCKET_DIRECTORY_FLAG_EOD			1
+#define OSNS_SOCKET_DIRECTORY_FLAG_ERROR		2
+
+union osns_sockaddr_u {
 #ifdef __linux__
     struct sockaddr_un					local;
     struct sockaddr_in					net4;
@@ -92,13 +119,13 @@ union system_sockaddr_u {
     char						buffer[132];
 };
 
-struct system_sockaddr_s {
-    union system_sockaddr_u				data;
+struct osns_sockaddr_s {
+    union osns_sockaddr_u				data;
     struct sockaddr					*addr;
     socklen_t						len;
 };
 
-struct system_socket_s;
+struct osns_socket_s;
 
 struct local_peer_s {
     uid_t						uid;
@@ -111,67 +138,73 @@ struct network_peer_s {
     struct network_port_s				port;
 };
 
-union _generic_socket_sops_u {
-    struct _generic_connection_sops_s {
-	    int						(* connect)(struct system_socket_s *s);
-	    int						(* recv)(struct system_socket_s *s, char *buffer, unsigned int size, unsigned int flags);
-	    int						(* send)(struct system_socket_s *s, char *buffer, unsigned int size, unsigned int flags);
-	    int						(* writev)(struct system_socket_s *s, struct iovec *iov, unsigned int count);
-	    int						(* readv)(struct system_socket_s *s, struct iovec *iov, unsigned int count);
-	    int						(* sendmsg)(struct system_socket_s *s, const struct msghdr *msg);
-	    int						(* recvmsg)(struct system_socket_s *s, struct msghdr *msg);
-    } connection;
-    struct _generic_endpoint_sops_s {
-	    struct system_socket_s 			*(* accept)(struct system_socket_s *server, struct system_socket_s *client, int flags);
-	    int						(* bind)(struct system_socket_s *s);
-	    int						(* listen)(struct system_socket_s *s, int len);
-    } endpoint;
+struct _connection_sops_s {
+    int							(* open)(struct osns_socket_s *s);
+    int							(* connect)(struct osns_socket_s *s);
+    int							(* recv)(struct osns_socket_s *s, char *buffer, unsigned int size, unsigned int flags);
+    int							(* send)(struct osns_socket_s *s, char *buffer, unsigned int size, unsigned int flags);
+    int							(* writev)(struct osns_socket_s *s, struct iovec *iov, unsigned int count);
+    int							(* readv)(struct osns_socket_s *s, struct iovec *iov, unsigned int count);
+    int							(* sendmsg)(struct osns_socket_s *s, const struct msghdr *msg);
+    int							(* recvmsg)(struct osns_socket_s *s, struct msghdr *msg);
 };
 
-struct _generic_system_sops_s {
-    int							(* read)(struct system_socket_s *s, char *buffer, unsigned int size);
-    int							(* write)(struct system_socket_s *s, char *buffer, unsigned int size);
-    int							(* writev)(struct system_socket_s *s, struct iovec *iov, unsigned int count);
-    int							(* readv)(struct system_socket_s *s, struct iovec *iov, unsigned int count);
+struct _endpoint_sops_s {
+    int							(* open)(struct osns_socket_s *s);
+    struct osns_socket_s 				*(* accept)(struct osns_socket_s *server, struct osns_socket_s *client, int flags);
+    int							(* bind)(struct osns_socket_s *s);
+    int							(* listen)(struct osns_socket_s *s, int len);
 };
 
-// #define FS_DENTRY_FLAG_FILE				1
-// #define FS_DENTRY_FLAG_DIR				2
-// #define FS_DENTRY_FLAG_EOD				4
+struct _device_sops_s {
+    int							(* open)(struct osns_socket_s *s, struct fs_location_path_s *path);
+    int							(* read)(struct osns_socket_s *s, char *buffer, unsigned int size);
+    int							(* write)(struct osns_socket_s *s, char *buffer, unsigned int size);
+    int							(* writev)(struct osns_socket_s *s, struct iovec *iov, unsigned int count);
+    int							(* readv)(struct osns_socket_s *s, struct iovec *iov, unsigned int count);
+};
 
-// struct fs_dentry_s {
-//    uint16_t						flags;
-//    uint32_t						type;
-//    uint64_t						ino; /* ino on the server; some filesystems rely on this */
-//    uint16_t						len;
-//    char						*name;
-//};
+struct fs_init_s {
+#ifdef __linux__
+    mode_t						mode;
+#endif
+};
 
-//#define FS_DENTRY_INIT					{0, 0, 0, 0, NULL}
+#define FS_DENTRY_FLAG_FILE				1
+#define FS_DENTRY_FLAG_DIR				2
+#define FS_DENTRY_FLAG_EOD				4
 
-/*union _generic_filesystem_sops_u {
+struct fs_dentry_s {
+    uint16_t						flags;
+    uint32_t						type;
+    uint64_t						ino; /* ino on the server; some filesystems rely on this */
+    uint16_t						len;
+    char						*name;
+};
+
+#define FS_DENTRY_INIT					{0, 0, 0, 0, NULL}
+
+union _filesystem_sops_u {
     struct file_sops_s {
-	    int					(* open)(struct system_socket_s *s, struct fs_location_path_s *path, unsigned int flags);
-    	    int					(* create)(struct system_socket_s *s, struct fs_location_path_s *path, struct fs_init_s *init, unsigned int flags);
-	    int					(* pread)(struct system_socket_s *s, char *buffer, unsigned int size, off_t off);
-	    int					(* pwrite)(struct system_socket_s *s, char *buffer, unsigned int size, off_t off);
-	    int					(* fsync)(struct system_socket_s *s);
-	    int					(* fdatasync)(struct system_socket_s *s);
-	    int					(* flush)(struct system_socket_s *s, unsigned int flags);
-	    off_t				(* lseek)(struct system_socket_s *s, off_t off, int whence);
-	    int					(* fgetstat)(struct system_socket_s *s, unsigned int mask, struct system_stat_s *st);
-	    int					(* fsetstat)(struct system_socket_s *s, unsigned int mask, struct system_stat_s *st);
+	    int					(* open)(struct osns_socket_s *ref, struct fs_location_path_s *path, struct osns_socket_s *s, struct fs_init_s *init, unsigned int flags);
+	    int					(* pread)(struct osns_socket_s *s, char *buffer, unsigned int size, off_t off);
+	    int					(* pwrite)(struct osns_socket_s *s, char *buffer, unsigned int size, off_t off);
+	    int					(* fsync)(struct osns_socket_s *s, unsigned int flags);
+	    int					(* flush)(struct osns_socket_s *s, unsigned int flags);
+	    off_t				(* lseek)(struct osns_socket_s *s, off_t off, int whence);
+	    int					(* fgetstat)(struct osns_socket_s *s, unsigned int mask, struct system_stat_s *st);
+	    int					(* fsetstat)(struct osns_socket_s *s, unsigned int mask, struct system_stat_s *st);
     } file;
     struct dir_sops_s {
-	    int					(* open)(struct system_socket_s *s, struct fs_location_s *l, unsigned int flags);
-	    struct fs_dentry_s			*(* get_dentry)(struct system_socket_s *s, unsigned char next);
-	    int					(* fstatat)(struct system_socket_s *s, char *name, unsigned int mask, struct system_stat_s *st);
-	    int					(* unlinkat)(struct system_socket_s *s, const char *name);
-	    int					(* rmdirat)(struct system_socket_s *s, const char *name);
-	    int					(* fsyncdir)(struct system_socket_s *s, unsigned int flags);
-	    ssize_t				(* readlinkat)(struct system_socket_s *s, const char *name, struct fs_location_path_s *target);
+	    int					(* open)(struct osns_socket_s *ref, struct fs_location_path_s *l, struct osns_socket_s *s, struct fs_init_s *init, unsigned int flags);
+	    struct fs_dentry_s			*(* get_dentry)(struct osns_socket_s *s, unsigned char next);
+	    int					(* fstatat)(struct osns_socket_s *s, char *name, unsigned int mask, struct system_stat_s *st, unsigned int flags);
+	    int					(* unlinkat)(struct osns_socket_s *s, const char *name, unsigned int flags);
+	    int					(* rmdirat)(struct osns_socket_s *s, const char *name, unsigned int flags);
+	    int					(* fsyncdir)(struct osns_socket_s *s, unsigned int flags);
+	    int					(* readlinkat)(struct osns_socket_s *s, const char *name, struct fs_location_path_s *target);
     } dir;
-};*/
+};
 
 struct generic_socket_option_s {
     int						level;
@@ -180,47 +213,9 @@ struct generic_socket_option_s {
     unsigned int				len;
 };
 
-struct system_socket_sops_s {
-    int						(* getsockopt)(struct system_socket_s *sock, struct generic_socket_option_s *option);
-    int						(* setsockopt)(struct system_socket_s *sock, struct generic_socket_option_s *option);
-    void					(* close)(struct system_socket_s *sock);
-    int						(* get_unix_fd)(struct system_socket_s *sock);
-    void					(* set_unix_fd)(struct system_socket_s *sock, int fd);
-    union _sops_role_u {
-	struct _generic_system_sops_s		system;
-	union _generic_socket_sops_u		socket;
-//	union _generic_filesystem_sops_u	filesystem;
-    } type;
-};
-
-#define SOCKET_BACKEND_ACTION_OPEN		1
-#define SOCKET_BACKEND_ACTION_CLOSE		2
-
-struct system_socket_backend_s {
-#ifdef __linux__
-    int						fd;
-    pid_t					pid;
-#endif
-    void					(* cb_change)(struct system_socket_s *sock, unsigned char action);
-    void					*ptr;
-    /* union _socket_data_u {
-	struct dir_data_s {
-	    union _type_dir_data_u {
-		struct _getdents_s {
-		    char			*buffer;
-		    unsigned int		size;
-		    unsigned int		read;
-		    unsigned int		pos;
-		    struct fs_dentry_s		dentry;
-		} getdents;
-	    } data;
-	} dir;
-    } type; */
-};
-
 #define SOCKET_EVENT_TYPE_BEVENT		1
 
-struct system_socket_event_s {
+struct osns_socket_event_s {
     unsigned char				type;
     union _event_ctx_u {
 	struct bevent_s				*bevent;
@@ -248,20 +243,47 @@ struct socket_properties_s {
 
 #endif
 
-struct system_socket_s {
+struct osns_socket_s {
     unsigned int					type;
     unsigned int					flags;
     unsigned int					status;
-    struct system_sockaddr_s				sockaddr;
-    struct system_socket_event_s			event;
-    struct system_socket_backend_s			backend;
-    struct system_socket_sops_s				sops;
+#ifdef __linux__
+    int							fd;
+    unsigned int					pid;
+#endif
+    int							(* getsockopt)(struct osns_socket_s *sock, struct generic_socket_option_s *option);
+    int							(* setsockopt)(struct osns_socket_s *sock, struct generic_socket_option_s *option);
+    void						(* close)(struct osns_socket_s *sock);
+    void						(* change)(struct osns_socket_s *sock, unsigned int what);
+#ifdef __linux__
+    int							(* get_unix_fd)(struct osns_socket_s *sock);
+    void						(* set_unix_fd)(struct osns_socket_s *sock, int fd);
+#endif
+    union osns_socket_ops_u {
+	struct _connection_sops_s			connection;
+	struct _endpoint_sops_s				endpoint;
+	struct _device_sops_s				device;
+	union _filesystem_sops_u			filesystem;
+    } sops;
+    struct osns_socket_event_s 				event;
+    union osns_socket_data_u {
+	struct _socket_connection_data_s {
+	    struct osns_sockaddr_s			sockaddr;
+	} connection;
+	struct _socket_directory_data_s {
+	    unsigned int				flags;
+	    char					*buffer;
+	    unsigned int				size;
+	    unsigned int				read;
+	    unsigned int				pos;
+	    struct fs_dentry_s				dentry;
+	} directory;
+	char						buffer[256];
+    } data;
 };
 
 /* Prototypes */
 
-void init_system_socket(struct system_socket_s *sock, unsigned int type, unsigned int flags, struct fs_location_path_s *path);
-char *get_name_system_socket(struct system_socket_s *sock, const char *what);
-unsigned int get_type_system_socket(char *type, char *subtype);
+void init_osns_socket(struct osns_socket_s *sock, unsigned int type, unsigned int flags);
 
 #endif

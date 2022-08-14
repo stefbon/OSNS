@@ -27,7 +27,7 @@ int osns_reply_status(struct osns_receive_s *r, uint32_t id, unsigned int status
 int osns_reply_name(struct osns_receive_s *r, uint32_t id, struct name_string_s *name);
 int osns_reply_records(struct osns_receive_s *r, uint32_t id, unsigned int count, char *records, unsigned int len);
 
-int osns_reply_mounted(struct osns_receive_s *r, uint32_t id, struct system_socket_s *tosend);
+int osns_reply_mounted(struct osns_receive_s *r, uint32_t id, struct osns_socket_s *tosend);
 int osns_reply_umounted(struct osns_receive_s *r, uint32_t id);
 
 #endif

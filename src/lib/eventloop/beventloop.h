@@ -97,7 +97,7 @@ struct bevent_s {
     void 					(* cb_close)(struct bevent_s *bevent, unsigned int flag, struct bevent_argument_s *arg);
     void 					(* cb_error)(struct bevent_s *bevent, unsigned int flag, struct bevent_argument_s *arg);
     void 					(* cb_pri)(struct bevent_s *bevent, unsigned int flag, struct bevent_argument_s *arg);
-    struct system_socket_s			*sock;
+    struct osns_socket_s			*sock;
     void					*ptr;
 };
 

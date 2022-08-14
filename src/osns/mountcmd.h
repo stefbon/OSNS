@@ -22,6 +22,6 @@
 
 /* prototypes */
 
-int process_mountcmd(struct osns_connection_s *oc, unsigned char type, unsigned int maxread, struct system_socket_s *sock);
+int process_mountcmd(struct osns_connection_s *oc, unsigned char type, unsigned int maxread, struct osns_socket_s *sock);
 
 #endif

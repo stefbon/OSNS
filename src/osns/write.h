@@ -22,6 +22,6 @@
 
 /* prototypes */
 
-int write_osns_socket(struct system_socket_s *sock, char *data, unsigned int size, int (* send_cb)(struct system_socket_s *sock, char *data, unsigned int size, void *ptr), void *ptr);
+int write_osns_socket(struct osns_socket_s *sock, char *data, unsigned int size, int (* send_cb)(struct osns_socket_s *sock, char *data, unsigned int size, void *ptr), void *ptr);
 
 #endif

@@ -57,7 +57,7 @@ static void set_connection_cap(struct osns_receive_s *r, unsigned int version, u
 
 static void disconnect_osns_systemconnection(struct osns_systemconnection_s *sc)
 {
-    struct system_socket_s *sock=&sc->connection.sock;
+    struct osns_socket_s *sock=&sc->connection.sock;
 
     if (sock->event.type==SOCKET_EVENT_TYPE_BEVENT) {
 	struct bevent_s *bevent=sock->event.link.bevent;
@@ -287,7 +287,7 @@ static void osns_handle_dataavail(struct connection_s *c)
     osns_read_available_data(&sc->receive);
 }
 
-static int osns_send_data(struct osns_receive_s *r, char *data, unsigned int len, int (* send_cb)(struct system_socket_s *sock, char *data, unsigned int size, void *ptr), void *ptr)
+static int osns_send_data(struct osns_receive_s *r, char *data, unsigned int len, int (* send_cb)(struct osns_socket_s *sock, char *data, unsigned int size, void *ptr), void *ptr)
 {
     struct osns_systemconnection_s *sc=(struct osns_systemconnection_s *)((char *)r - offsetof(struct osns_systemconnection_s, receive));
     return write_osns_socket(&sc->connection.sock, data, len, send_cb, ptr);

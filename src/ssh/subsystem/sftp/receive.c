@@ -196,7 +196,7 @@ static void start_thread_read_ssh_subsystem_connection_buffer(struct sftp_subsys
     work_workerthread(NULL, 0, read_sftp_buffer, (void *) s, NULL);
 }
 
-void read_ssh_subsystem_connection_socket(struct ssh_subsystem_connection_s *connection, struct system_socket_s *sock)
+void read_ssh_subsystem_connection_socket(struct ssh_subsystem_connection_s *connection, struct osns_socket_s *sock)
 {
     struct sftp_subsystem_s *s=(struct sftp_subsystem_s *)((char *) connection - offsetof(struct sftp_subsystem_s, connection));
     struct sftp_receive_s *receive=&s->receive;

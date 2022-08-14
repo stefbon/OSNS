@@ -47,7 +47,7 @@ unsigned int create_greeter(char *pos)
 int send_ssh_greeter(struct ssh_connection_s *connection)
 {
     struct ssh_session_s *session=get_ssh_connection_session(connection);
-    struct system_socket_s *sock=&connection->connection.sock;
+    struct osns_socket_s *sock=&connection->connection.sock;
     struct ssh_string_s *greeter=&session->data.greeter_client;
     unsigned int len=create_greeter(NULL);
     char line[len+2];
@@ -61,7 +61,7 @@ int send_ssh_greeter(struct ssh_connection_s *connection)
     line[len]=(unsigned char) 13;
     line[len+1]=(unsigned char) 10;
 
-    if (socket_send(sock, line, len+2, 0)==-1) {
+    if ((* sock->sops.connection.send)(sock, line, len+2, 0)==-1) {
 
 	logoutput("send_greeter: error %i:%s", errno, strerror(errno));
 	return -1;

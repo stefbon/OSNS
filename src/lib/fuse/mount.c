@@ -30,7 +30,7 @@
 #include "lib/system/path.h"
 #include "libosns-socket.h"
 
-static int get_fuse_mountoptions(char *buffer, unsigned int size, struct system_socket_s *sock, mode_t mode, uid_t uid, gid_t gid, unsigned int maxread)
+static int get_fuse_mountoptions(char *buffer, unsigned int size, struct osns_socket_s *sock, mode_t mode, uid_t uid, gid_t gid, unsigned int maxread)
 {
 
 #ifdef __linux__
@@ -38,7 +38,7 @@ static int get_fuse_mountoptions(char *buffer, unsigned int size, struct system_
     /* get the mountoptions for a FUSE mount,
 	note that the default_permissions is not set, which means permissions checcking is done through the access call */
 
-    int fd=(* sock->sops.get_unix_fd)(sock);
+    int fd=(* sock->get_unix_fd)(sock);
     return snprintf(buffer, size, "fd=%i,rootmode=%o,user_id=%i,group_id=%i,max_read=%i", fd, mode, uid, gid, maxread);
 
 #else
@@ -65,15 +65,15 @@ static int set_system_fuse_device(struct fs_location_path_s *path)
 
 }
 
-int open_fusesocket(struct system_socket_s *sock)
+int open_fusesocket(struct osns_socket_s *sock)
 {
     struct fs_location_path_s fuse_device=FS_LOCATION_PATH_INIT;
     int result=-1;
 
     if (set_system_fuse_device(&fuse_device)>0) {
 
-	init_system_socket(sock, SYSTEM_SOCKET_TYPE_CHAR_DEVICE, SYSTEM_SOCKET_FLAG_RDWR, &fuse_device);
-	result=((sock->status & SOCKET_STATUS_OPEN) ? 0 : -1);
+	init_osns_socket(sock, OSNS_SOCKET_TYPE_DEVICE, (OSNS_SOCKET_FLAG_CHAR_DEVICE | OSNS_SOCKET_FLAG_RDWR));
+	result=(* sock->sops.device.open)(sock, &fuse_device);
 
     }
 
@@ -144,7 +144,7 @@ static int create_mountpoint(char *mountpoint)
 
 }
 
-int mount_fusesocket(struct fs_location_path_s *path, struct system_socket_s *sock, uid_t uid, gid_t gid, const char *source, const char *fstype, unsigned int maxread, int different_namespace)
+int mount_fusesocket(struct fs_location_path_s *path, struct osns_socket_s *sock, uid_t uid, gid_t gid, const char *source, const char *fstype, unsigned int maxread, int different_namespace)
 {
     mode_t rootmode=(S_IFDIR | S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
     char mountoptions[128];
@@ -206,7 +206,7 @@ void umount_path(struct fs_location_path_s *path)
 
 #else
 
-int mount_fusesocket(struct fs_location_path_s *path, struct system_socket_s *sock, uid_t uid, gid_t gid, char *source, char *fstype, unsigned int maxread, int different_namespace)
+int mount_fusesocket(struct fs_location_path_s *path, struct osns_socket_s *sock, uid_t uid, gid_t gid, char *source, char *fstype, unsigned int maxread, int different_namespace)
 {
     return -1;
 }

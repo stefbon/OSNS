@@ -61,7 +61,7 @@ struct ssh_connection_s *get_next_ssh_connection(struct ssh_connections_s *conne
 
 unsigned int get_status_ssh_connection(struct ssh_connection_s *connection)
 {
-    return get_status_system_socket(&connection->connection.sock);
+    return get_status_osns_socket(&connection->connection.sock);
 }
 
 void get_ssh_connection_expire_init(struct ssh_connection_s *c, struct system_timespec_s *expire)

@@ -22,8 +22,8 @@
 
 /* prototypes */
 
-int open_fusesocket(struct system_socket_s *sock);
-int mount_fusesocket(struct fs_location_path_s *path, struct system_socket_s *sock, uid_t uid, gid_t gid, char *source, char *fstype, unsigned int maxread, int different_namespace);
+int open_fusesocket(struct osns_socket_s *sock);
+int mount_fusesocket(struct fs_location_path_s *path, struct osns_socket_s *sock, uid_t uid, gid_t gid, char *source, char *fstype, unsigned int maxread, int different_namespace);
 
 void umount_path(struct fs_location_path_s *path);
 

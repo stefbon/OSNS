@@ -41,7 +41,7 @@ typedef void (* fuse_request_cb_t)(struct fuse_request_s *req, char *data);
 
 struct fuse_interface_s {
     struct beventloop_s 			*loop;
-    struct system_socket_s			socket;
+    struct osns_socket_s			socket;
     struct fuse_config_s			config;
     unsigned int				countcb;
     fuse_request_cb_t				cb[FUSE_REQUEST_CB_MAX+1];
@@ -128,9 +128,9 @@ static void osns_client_process_fuse_data(struct fuse_receive_s *r, struct fuse_
 
 static void osns_client_close_fuse_interface(struct fuse_interface_s *fuse, struct bevent_s *bevent)
 {
-    struct system_socket_s *sock=&fuse->socket;
+    struct osns_socket_s *sock=&fuse->socket;
 
-    (* sock->sops.close)(sock);
+    (* sock->close)(sock);
 
     if (bevent==NULL) {
 
@@ -251,7 +251,7 @@ static int _connect_interface_fuse(struct context_interface_s *interface, union 
 
     if (result==1) {
 
-	result=(* fuse->socket.sops.get_unix_fd)(&fuse->socket);
+	result=(* fuse->socket.get_unix_fd)(&fuse->socket);
 	logoutput_debug("_connect_interface_fuse: received fd %i", result);
 
     } else if (result==0) {
@@ -286,7 +286,7 @@ static int _start_interface_fuse(struct context_interface_s *interface)
     set_bevent_cb(bevent, BEVENT_FLAG_CB_DATAAVAIL, handle_fuse_data_event);
     set_bevent_cb(bevent, BEVENT_FLAG_CB_CLOSE, handle_fuse_close_event);
     set_bevent_cb(bevent, BEVENT_FLAG_CB_ERROR, handle_fuse_error_event);
-    set_bevent_system_socket(bevent, &fuse->socket);
+    set_bevent_osns_socket(bevent, &fuse->socket);
     add_bevent_watch(bevent);
 
     logoutput("_start_interface_fuse: added to eventloop");
@@ -315,7 +315,7 @@ static int iocmd_ctx2fuse(struct context_interface_s *i, const char *what, struc
 	    return 1;
 
 	} else if (strncmp(&what[pos], "free:", 5)==0) {
-	    struct system_socket_s *sock=&fuse->socket;
+	    struct osns_socket_s *sock=&fuse->socket;
 
 	    /* free additional data allocated */
 
@@ -358,7 +358,7 @@ static int iocmd_fuse2ctx(struct context_interface_s *i, const char *what, struc
 static int notify_VFS_client_cb(struct fuse_receive_s *r, unsigned int code, struct iovec *iov, unsigned int count)
 {
     struct fuse_interface_s *fuse=(struct fuse_interface_s *)((char *) r - offsetof(struct fuse_interface_s, receive));
-    struct system_socket_s *sock=&fuse->socket;
+    struct osns_socket_s *sock=&fuse->socket;
 
     return fuse_socket_notify(sock, code, iov, count);
 }
@@ -366,7 +366,7 @@ static int notify_VFS_client_cb(struct fuse_receive_s *r, unsigned int code, str
 static int reply_VFS_client_cb(struct fuse_receive_s *r, uint64_t unique, char *data, unsigned int size)
 {
     struct fuse_interface_s *fuse=(struct fuse_interface_s *)((char *) r - offsetof(struct fuse_interface_s, receive));
-    struct system_socket_s *sock=&fuse->socket;
+    struct osns_socket_s *sock=&fuse->socket;
 
     return fuse_socket_reply_data(sock, unique, data, size);
 }
@@ -374,7 +374,7 @@ static int reply_VFS_client_cb(struct fuse_receive_s *r, uint64_t unique, char *
 static int error_VFS_client_cb(struct fuse_receive_s *r, uint64_t unique, unsigned int code)
 {
     struct fuse_interface_s *fuse=(struct fuse_interface_s *)((char *) r - offsetof(struct fuse_interface_s, receive));
-    struct system_socket_s *sock=&fuse->socket;
+    struct osns_socket_s *sock=&fuse->socket;
 
     return fuse_socket_reply_error(sock, unique, code);
 }
@@ -438,6 +438,8 @@ static int _init_interface_buffer_fuse(struct context_interface_s *interface, st
 
     memset(fuse, 0, sizeof(struct fuse_interface_s));
     fuse->loop=NULL; /* to be set later */
+
+    init_osns_socket(&fuse->socket, OSNS_SOCKET_TYPE_DEVICE, (OSNS_SOCKET_FLAG_RDWR | OSNS_SOCKET_FLAG_CHAR_DEVICE));
 
     /* default configuration */
 
@@ -547,7 +549,7 @@ struct fuse_config_s *get_fuse_interface_config(struct context_interface_s *i)
 int fuse_notify_VFS_delete(struct context_interface_s *i, uint64_t pino, uint64_t ino, char *name, unsigned int len)
 {
     struct fuse_interface_s *fuse=(struct fuse_interface_s *) i->buffer;
-    struct system_socket_s *sock=&fuse->socket;
+    struct osns_socket_s *sock=&fuse->socket;
     struct iovec iov[3];
     struct fuse_notify_delete_out out;
 
@@ -571,7 +573,7 @@ int fuse_notify_VFS_delete(struct context_interface_s *i, uint64_t pino, uint64_
 int fuse_reply_VFS_data(struct context_interface_s *i, uint64_t unique, char *data, unsigned int len)
 {
     struct fuse_interface_s *fuse=(struct fuse_interface_s *) i->buffer;
-    struct system_socket_s *sock=&fuse->socket;
+    struct osns_socket_s *sock=&fuse->socket;
 
     return fuse_socket_reply_data(sock, unique, data, len);
 }
@@ -579,7 +581,7 @@ int fuse_reply_VFS_data(struct context_interface_s *i, uint64_t unique, char *da
 int fuse_reply_VFS_error(struct context_interface_s *i, uint64_t unique, unsigned int errcode)
 {
     struct fuse_interface_s *fuse=(struct fuse_interface_s *) i->buffer;
-    struct system_socket_s *sock=&fuse->socket;
+    struct osns_socket_s *sock=&fuse->socket;
 
     return fuse_socket_reply_error(sock, unique, errcode);
 }

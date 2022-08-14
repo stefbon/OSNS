@@ -50,7 +50,7 @@ static void _disconnect_ssh_connection(struct ssh_connection_s *sshc, unsigned c
 void read_ssh_connection_socket(struct connection_s *c)
 {
     struct ssh_connection_s *sshc=(struct ssh_connection_s *)((char *)c - offsetof(struct ssh_connection_s, connection));
-    struct system_socket_s *sock=&c->sock;
+    struct osns_socket_s *sock=&c->sock;
     struct ssh_receive_s *receive=&sshc->receive;
     unsigned int error=0;
     int bytesread=0;
@@ -61,7 +61,7 @@ void read_ssh_connection_socket(struct connection_s *c)
 
     readbuffer:
 
-    bytesread=socket_recv(sock, (void *) (receive->buffer + receive->read), (size_t) (receive->size - receive->read), 0);
+    bytesread=(* sock->sops.connection.recv)(sock, (void *) (receive->buffer + receive->read), (size_t) (receive->size - receive->read), 0);
     error=errno;
 
     if (bytesread<=0) {

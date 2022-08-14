@@ -136,15 +136,15 @@ int osns_reply_records(struct osns_receive_s *r, uint32_t id, unsigned int count
     return (* r->send)(r, data, pos, NULL, NULL);
 }
 
-static int send_data_cb_socket(struct system_socket_s *sock, char *data, unsigned int size, void *ptr)
+static int send_data_cb_socket(struct osns_socket_s *sock, char *data, unsigned int size, void *ptr)
 {
     struct iovec iov[1];
     struct msghdr msg;
-    struct system_socket_s *tosend=(struct system_socket_s *) ptr;
+    struct osns_socket_s *tosend=(struct osns_socket_s *) ptr;
 
 #ifdef __linux__
 
-    int fd=(* tosend->sops.get_unix_fd)(tosend);
+    int fd=(* tosend->get_unix_fd)(tosend);
     unsigned int tmp=sizeof(int);
     union {
 	char 			buffer[CMSG_SPACE(tmp)];
@@ -184,10 +184,10 @@ static int send_data_cb_socket(struct system_socket_s *sock, char *data, unsigne
 
 #endif
 
-    return socket_sendmsg(sock, &msg);
+    return (* sock->sops.connection.sendmsg)(sock, &msg);
 }
 
-static unsigned int get_size_info(struct system_socket_s *tosend, struct osns_control_info_s *info)
+static unsigned int get_size_info(struct osns_socket_s *tosend, struct osns_control_info_s *info)
 {
     info->code=OSNS_CONTROL_TYPE_OSNS_SOCKET;
     info->info.osns_socket.type=tosend->type;
@@ -196,7 +196,7 @@ static unsigned int get_size_info(struct system_socket_s *tosend, struct osns_co
     return write_osns_control_info(NULL, 0, info);
 }
 
-int osns_reply_mounted(struct osns_receive_s *r, uint32_t id, struct system_socket_s *tosend)
+int osns_reply_mounted(struct osns_receive_s *r, uint32_t id, struct osns_socket_s *tosend)
 {
     char data[14];
     unsigned int pos=4;

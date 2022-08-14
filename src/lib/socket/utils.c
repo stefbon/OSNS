@@ -35,15 +35,15 @@
 #include "socket.h"
 #include "utils.h"
 
-int translate_system_socket_flags(unsigned int flags)
+int translate_osns_socket_flags(unsigned int flags)
 {
     int openflags=0;
 
-    if (flags & SYSTEM_SOCKET_FLAG_RDWR) {
+    if (flags & OSNS_SOCKET_FLAG_RDWR) {
 
 	openflags = O_RDWR;
 
-    } else if (flags & SYSTEM_SOCKET_FLAG_WRONLY) {
+    } else if (flags & OSNS_SOCKET_FLAG_WRONLY) {
 
 	openflags = O_WRONLY;
 
@@ -64,7 +64,7 @@ int check_status_hlpr(unsigned int status, unsigned int set, unsigned int notset
     return 0;
 }
 
-unsigned int get_status_system_socket(struct system_socket_s *sock)
+unsigned int get_status_osns_socket(struct osns_socket_s *sock)
 {
     struct generic_socket_option_s option;
     int error=0;
@@ -76,14 +76,14 @@ unsigned int get_status_system_socket(struct system_socket_s *sock)
     option.value=(char *) &error;
     option.len=sizeof(int);
 
-    if ((* sock->sops.getsockopt)(sock, &option)==0) {
+    if ((* sock->getsockopt)(sock, &option)==0) {
 
-	logoutput("get_status_system_socket: got error %i (%s)", error, strerror(error));
+	logoutput("get_status_osns_socket: got error %i (%s)", error, strerror(error));
 
     } else {
 
 	error=errno;
-	logoutput("get_status_system_socket: error %i (%s)", errno, strerror(errno));
+	logoutput("get_status_osns_socket: error %i (%s)", errno, strerror(errno));
 
     }
 
@@ -91,10 +91,10 @@ unsigned int get_status_system_socket(struct system_socket_s *sock)
 
 }
 
-void set_system_socket_nonblocking(struct system_socket_s *sock)
+void set_osns_socket_nonblocking(struct osns_socket_s *sock)
 {
 #ifdef __linux__
-    int fd=(* sock->sops.get_unix_fd)(sock);
+    int fd=(* sock->get_unix_fd)(sock);
 
     if (fd>=0) {
 
@@ -106,10 +106,10 @@ void set_system_socket_nonblocking(struct system_socket_s *sock)
 #endif
 }
 
-void unset_system_socket_nonblocking(struct system_socket_s *sock)
+void unset_osns_socket_nonblocking(struct osns_socket_s *sock)
 {
 #ifdef __linux__
-    int fd=(* sock->sops.get_unix_fd)(sock);
+    int fd=(* sock->get_unix_fd)(sock);
 
     if (fd>=0) {
 
@@ -173,18 +173,18 @@ unsigned char socket_blocking_error(unsigned int error)
 
 #ifdef __linux__
 
-int set_socket_properties(struct system_socket_s *sock, struct socket_properties_s *prop)
+int set_socket_properties(struct osns_socket_s *sock, struct socket_properties_s *prop)
 {
     int result=-1;
 
-    if ((sock->type & SYSTEM_SOCKET_TYPE_CONNECTION) && (sock->type & SYSTEM_SOCKET_TYPE_LOCAL)) {
+    if ((sock->type == OSNS_SOCKET_TYPE_CONNECTION) && (sock->flags & OSNS_SOCKET_FLAG_LOCAL)) {
 
 	/* check anything is to be set */
 	if ((prop->valid & (SOCKET_PROPERTY_FLAG_OWNER | SOCKET_PROPERTY_FLAG_GROUP))==0) return 0;
 
 	struct fs_location_path_s path;
 
-	if (get_path_system_sockaddr(sock, &path)>0) {
+	if (get_path_osns_sockaddr(sock, &path)>0) {
 	    struct system_stat_s stat;
 	    unsigned int mask=0;
 
@@ -248,48 +248,20 @@ int set_socket_properties(struct system_socket_s *sock, struct socket_properties
 
 #else
 
-int set_socket_properties(struct system_socket_s *sock, struct socket_properties_s *prop)
+int set_socket_properties(struct osns_socket_s *sock, struct socket_properties_s *prop)
 {
     return -1;
 }
 
 #endif
 
-unsigned int get_client_flags_from_server(struct system_socket_s *server)
-{
-    unsigned int tmp=0;
-
-    if (server->type & SYSTEM_SOCKET_TYPE_CONNECTION) {
-
-	if (server->type & SYSTEM_SOCKET_TYPE_NET) {
-
-	    tmp |= (server->flags & (SYSTEM_SOCKET_FLAG_IPv4 | SYSTEM_SOCKET_FLAG_IPv6 | SYSTEM_SOCKET_FLAG_UDP));
-
-	} else if (server->type & SYSTEM_SOCKET_TYPE_LOCAL) {
-
-	    tmp |= (server->flags & SYSTEM_SOCKET_FLAG_UDP);
-
-	}
-
-    }
-
-    return (tmp | SYSTEM_SOCKET_FLAG_SERVER);
-
-}
-
-unsigned int get_client_type_from_server(struct system_socket_s *server)
-{
-    unsigned int atype=(server->type & ~SYSTEM_SOCKET_TYPE_MASK);
-    return (atype | SYSTEM_SOCKET_TYPE_CONNECTION);
-}
-
-int get_local_peer_properties(struct system_socket_s *sock, struct local_peer_s *peer)
+int get_local_peer_properties(struct osns_socket_s *sock, struct local_peer_s *peer)
 {
     struct ucred cred;
     struct generic_socket_option_s option;
     int result=-1;
 
-    if (((sock->type & SYSTEM_SOCKET_TYPE_CONNECTION)==0) || ((sock->type & SYSTEM_SOCKET_TYPE_LOCAL)==0)) return -1;
+    if ((sock->type != OSNS_SOCKET_TYPE_CONNECTION) || ((sock->flags & OSNS_SOCKET_FLAG_LOCAL)==0)) return -1;
 
     /* get credentials: peer uid/gid/pid */
 
@@ -300,7 +272,7 @@ int get_local_peer_properties(struct system_socket_s *sock, struct local_peer_s 
     option.value=(char *) &cred;
     option.len=sizeof(struct ucred);
 
-    if ((* sock->sops.getsockopt)(sock, &option)==0) {
+    if ((* sock->getsockopt)(sock, &option)==0) {
 
 	peer->uid=cred.uid;
 	peer->gid=cred.gid;
@@ -319,13 +291,13 @@ int get_local_peer_properties(struct system_socket_s *sock, struct local_peer_s 
 
 static unsigned int max_length_path_local_socket=(sizeof(struct sockaddr_un) - offsetof(struct sockaddr_un, sun_path));
 
-int set_path_system_sockaddr(struct system_socket_s *sock, struct fs_location_path_s *path)
+int set_path_osns_sockaddr(struct osns_socket_s *sock, struct fs_location_path_s *path)
 {
 
-    logoutput_debug("set_path_system_sockaddr: max %u path %.*s", max_length_path_local_socket, path->len, path->ptr);
+    logoutput_debug("set_path_osns_sockaddr: max %u path %.*s", max_length_path_local_socket, path->len, path->ptr);
 
-    if (sock->type & (SYSTEM_SOCKET_TYPE_CONNECTION | SYSTEM_SOCKET_TYPE_LOCAL)) {
-	struct sockaddr_un *sun=&sock->sockaddr.data.local;
+    if ((sock->type == OSNS_SOCKET_TYPE_CONNECTION) &&  (sock->flags & OSNS_SOCKET_FLAG_LOCAL)) {
+	struct sockaddr_un *sun=&sock->data.connection.sockaddr.data.local;
 
 	memset(sun->sun_path, 0, max_length_path_local_socket);
 
@@ -347,15 +319,15 @@ int set_path_system_sockaddr(struct system_socket_s *sock, struct fs_location_pa
     return -1;
 }
 
-unsigned int get_path_system_sockaddr(struct system_socket_s *sock, struct fs_location_path_s *path)
+unsigned int get_path_osns_sockaddr(struct osns_socket_s *sock, struct fs_location_path_s *path)
 {
 
     path->ptr=NULL;
     path->len=0;
 
-    if ((sock->type & SYSTEM_SOCKET_TYPE_CONNECTION) && (sock->type & SYSTEM_SOCKET_TYPE_LOCAL)) {
+    if ((sock->type == OSNS_SOCKET_TYPE_CONNECTION) && (sock->flags & OSNS_SOCKET_FLAG_LOCAL)) {
 	char *sep=NULL;
-	struct sockaddr_un *sun=&sock->sockaddr.data.local;
+	struct sockaddr_un *sun=&sock->data.connection.sockaddr.data.local;
 
 	path->ptr=sun->sun_path;
 	path->len=max_length_path_local_socket;
@@ -369,18 +341,18 @@ unsigned int get_path_system_sockaddr(struct system_socket_s *sock, struct fs_lo
 
 }
 
-int set_address_system_sockaddr(struct system_socket_s *sock, struct ip_address_s *address, unsigned int port)
+int set_address_osns_sockaddr(struct osns_socket_s *sock, struct ip_address_s *address, unsigned int port)
 {
     int result=-1;
 
-    if ((sock->type & SYSTEM_SOCKET_TYPE_CONNECTION) && (sock->type & SYSTEM_SOCKET_TYPE_NET)) {
+    if ((sock->type==OSNS_SOCKET_TYPE_CONNECTION) && (sock->flags & OSNS_SOCKET_FLAG_NET)) {
 
-	if (sock->flags & SYSTEM_SOCKET_FLAG_IPv6) {
+	if (sock->flags & OSNS_SOCKET_FLAG_IPv6) {
 	    struct sockaddr_in6 *sin6=NULL;
 
 	    if ((address->family!=IP_ADDRESS_FAMILY_IPv6) || check_family_ip_address(address->addr.v6, "ipv6")==0) goto out;
 
-	    sin6=&sock->sockaddr.data.net6;
+	    sin6=&sock->data.connection.sockaddr.data.net6;
 
 	    memset(sin6, 0, sizeof(struct sockaddr_in6));
 	    sin6->sin6_family=AF_INET6;
@@ -388,12 +360,12 @@ int set_address_system_sockaddr(struct system_socket_s *sock, struct ip_address_
 	    inet_pton(AF_INET6, address->addr.v6, &sin6->sin6_addr);
 	    result=0;
 
-	} else if (sock->flags & SYSTEM_SOCKET_FLAG_IPv4) {
+	} else if (sock->flags & OSNS_SOCKET_FLAG_IPv4) {
 	    struct sockaddr_in *sin=NULL;
 
 	    if ((address->family!=IP_ADDRESS_FAMILY_IPv4) || check_family_ip_address(address->addr.v4, "ipv4")==0) goto out;
 
-	    sin=&sock->sockaddr.data.net4;
+	    sin=&sock->data.connection.sockaddr.data.net4;
 
 	    memset(sin, 0, sizeof(struct sockaddr_in));
 	    sin->sin_family=AF_INET;
@@ -409,7 +381,7 @@ int set_address_system_sockaddr(struct system_socket_s *sock, struct ip_address_
     return result;
 }
 
-static int get_socket_addr_hostname(char *hostname, unsigned int size, struct system_sockaddr_s *sockaddr)
+static int get_socket_addr_hostname(char *hostname, unsigned int size, struct osns_sockaddr_s *sockaddr)
 {
     int result=0;
     unsigned int error=EIO;
@@ -463,17 +435,17 @@ static int get_socket_addr_hostname(char *hostname, unsigned int size, struct sy
 
 }
 
-int get_network_peer_properties(struct system_socket_s *sock, struct network_peer_s *peer, const char *what)
+int get_network_peer_properties(struct osns_socket_s *sock, struct network_peer_s *peer, const char *what)
 {
     int result=-1;
-    struct system_sockaddr_s sockaddr;
+    struct osns_sockaddr_s sockaddr;
     char *buffer=NULL;
     unsigned int size=0;
     int domain=0;
 
-    memset(&sockaddr, 0, sizeof(struct system_sockaddr_s));
+    memset(&sockaddr, 0, sizeof(struct osns_sockaddr_s));
 
-    if (sock->flags & SYSTEM_SOCKET_FLAG_IPv4) {
+    if (sock->flags & OSNS_SOCKET_FLAG_IPv4) {
 
 	sockaddr.addr=(struct sockaddr *) &sockaddr.data.net4;
 	sockaddr.len=sizeof(struct sockaddr_in);
@@ -481,7 +453,7 @@ int get_network_peer_properties(struct system_socket_s *sock, struct network_pee
 	size=INET_ADDRSTRLEN;
 	domain=AF_INET;
 
-    } else if (sock->flags & SYSTEM_SOCKET_FLAG_IPv6) {
+    } else if (sock->flags & OSNS_SOCKET_FLAG_IPv6) {
 
 	sockaddr.addr=(struct sockaddr *) &sockaddr.data.net6;
 	sockaddr.len=sizeof(struct sockaddr_in6);
@@ -494,7 +466,7 @@ int get_network_peer_properties(struct system_socket_s *sock, struct network_pee
     if (sockaddr.addr) {
 
 #ifdef __linux__
-	int fd=(* sock->sops.get_unix_fd)(sock);
+	int fd=(* sock->get_unix_fd)(sock);
 
 	if (strcmp(what, "remote")==0) {
 

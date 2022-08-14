@@ -46,7 +46,7 @@ struct osns_receive_s {
     void					*ptr;
     struct shared_signal_s			*signal;
     void					(* process_data)(struct osns_receive_s *receive, char *data, unsigned int len, struct osns_control_s *ctrl);
-    int						(* send)(struct osns_receive_s *receive, char *data, unsigned int len, int (* send_cb)(struct system_socket_s *sock, char *data, unsigned int size, void *ptr), void *ptr);
+    int						(* send)(struct osns_receive_s *receive, char *data, unsigned int len, int (* send_cb)(struct osns_socket_s *sock, char *data, unsigned int size, void *ptr), void *ptr);
     struct msghdr				msg;
     char					cmsg_buffer[OSNS_CMSG_BUFFERSIZE];
     unsigned int				read;

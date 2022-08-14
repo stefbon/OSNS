@@ -99,7 +99,7 @@ void process_msg_mountcmd(struct osns_receive_s *r, uint32_t id, char *data, uns
     set_bevent_cb(bevent, BEVENT_FLAG_CB_DATAAVAIL, handle_fuse_data_event);
     set_bevent_cb(bevent, BEVENT_FLAG_CB_CLOSE, handle_fuse_close_event);
     set_bevent_cb(bevent, BEVENT_FLAG_CB_ERROR, handle_fuse_close_event);
-    set_bevent_system_socket(bevent, &om->sock);
+    set_bevent_osns_socket(bevent, &om->sock);
     add_bevent_watch(bevent);
 
     /* wait for the init phase to complete ... INIT or ERROR ... */

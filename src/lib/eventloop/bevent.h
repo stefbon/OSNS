@@ -24,9 +24,9 @@
 
 /* Prototypes */
 
-void set_bevent_system_socket(struct bevent_s *bevent, struct system_socket_s *sock);
-void unset_bevent_system_socket(struct bevent_s *bevent, struct system_socket_s *sock);
-struct system_socket_s *get_bevent_system_socket(struct bevent_s *bevent);
+void set_bevent_osns_socket(struct bevent_s *bevent, struct osns_socket_s *sock);
+void unset_bevent_osns_socket(struct bevent_s *bevent, struct osns_socket_s *sock);
+struct osns_socket_s *get_bevent_osns_socket(struct bevent_s *bevent);
 
 struct bevent_s *create_fd_bevent(struct beventloop_s *eloop, void *ptr);
 struct beventloop_s *get_eventloop_bevent(struct bevent_s *bevent);

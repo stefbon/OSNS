@@ -22,7 +22,9 @@
 
 #include "socket/socket.h"
 #include "socket/connection.h"
-#include "socket/system.h"
+#include "socket/device.h"
+#include "socket/directory.h"
+#include "socket/file.h"
 #include "socket/utils.h"
 
 #endif

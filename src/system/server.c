@@ -119,7 +119,7 @@ void clear_local_connections()
 	while (list) {
 	    struct connection_s *c=(struct connection_s *)((char *) list - offsetof(struct connection_s, list)); /* list -> connection */
 	    struct osns_systemconnection_s *sc=(struct osns_systemconnection_s *)((char *) c - offsetof(struct osns_systemconnection_s, connection)); /* connection -> local connection*/
-	    struct system_socket_s *sock=&c->sock;
+	    struct osns_socket_s *sock=&c->sock;
 
 	    if (sock->event.type==SOCKET_EVENT_TYPE_BEVENT) {
 		struct bevent_s *bevent=sock->event.link.bevent;
@@ -149,7 +149,7 @@ void close_osns_server()
 
     if (osns_server) {
 
-	struct system_socket_s *sock=&osns_server->sock;
+	struct osns_socket_s *sock=&osns_server->sock;
 	(* sock->sops.close)(sock);
 
     }

@@ -301,7 +301,7 @@ static void _sftp_op_readdir(struct sftp_subsystem_s *sftp, struct commonhandle_
 
 		/* does it fit? */
 
-		if ( (pos + size) > SFTP_READDIR_NAMES_SIZE) {
+		if ((pos + size) > SFTP_READDIR_NAMES_SIZE) {
 
 		    (* dh->set_keep_dentry)(dh);
 		    /* 20211020: also keep the buffer with attributes just written? (where?) or */

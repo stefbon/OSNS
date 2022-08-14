@@ -40,7 +40,7 @@
 
 void disconnect_osns_connection(struct osns_connection_s *oc)
 {
-    struct system_socket_s *sock=&oc->connection.sock;
+    struct osns_socket_s *sock=&oc->connection.sock;
 
     if (sock->event.type==SOCKET_EVENT_TYPE_BEVENT) {
 	struct bevent_s *bevent=sock->event.link.bevent;
@@ -52,7 +52,7 @@ void disconnect_osns_connection(struct osns_connection_s *oc)
 
     }
 
-    (* sock->sops.close)(sock);
+    (* sock->close)(sock);
 }
 
 /*
@@ -146,7 +146,7 @@ void osns_client_handle_dataavail(struct connection_s *conn)
     osns_read_available_data(&client->receive);
 }
 
-int osns_client_send_data(struct osns_receive_s *r, char *data, unsigned int len, int (* send_cb)(struct system_socket_s *sock, char *data, unsigned int size, void *ptr), void *ptr)
+int osns_client_send_data(struct osns_receive_s *r, char *data, unsigned int len, int (* send_cb)(struct osns_socket_s *sock, char *data, unsigned int size, void *ptr), void *ptr)
 {
     struct osns_connection_s *client=(struct osns_connection_s *)((char *)r - offsetof(struct osns_connection_s, receive));
     return write_osns_socket(&client->connection.sock, data, len, send_cb, ptr);

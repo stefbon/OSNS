@@ -42,7 +42,7 @@ struct bevent_write_data_s {
 
 /* Prototypes */
 
-int write_socket_signalled(struct bevent_s *bevent, struct bevent_write_data_s *bdata, int (* write_cb)(struct system_socket_s *sock, char *data, unsigned int size, void *ptr));
+int write_socket_signalled(struct bevent_s *bevent, struct bevent_write_data_s *bdata, int (* write_cb)(struct osns_socket_s *sock, char *data, unsigned int size, void *ptr));
 void enable_bevent_write_watch(struct bevent_s *bevent);
 
 #endif

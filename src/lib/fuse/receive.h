@@ -64,8 +64,8 @@ void handle_fuse_data_event(struct bevent_s *bevent, unsigned int flag, struct b
 void handle_fuse_close_event(struct bevent_s *bevent, unsigned int flag, struct bevent_argument_s *arg);
 void handle_fuse_error_event(struct bevent_s *bevent, unsigned int flag, struct bevent_argument_s *arg);
 
-int fuse_socket_reply_error(struct system_socket_s *sock, uint64_t unique, unsigned int errcode);
-int fuse_socket_reply_data(struct system_socket_s *sock, uint64_t unique, char *data, unsigned int size);
-int fuse_socket_notify(struct system_socket_s *sock, unsigned int code, struct iovec *iov, unsigned int count);
+int fuse_socket_reply_error(struct osns_socket_s *sock, uint64_t unique, unsigned int errcode);
+int fuse_socket_reply_data(struct osns_socket_s *sock, uint64_t unique, char *data, unsigned int size);
+int fuse_socket_notify(struct osns_socket_s *sock, unsigned int code, struct iovec *iov, unsigned int count);
 
 #endif

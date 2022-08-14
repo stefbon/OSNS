@@ -505,7 +505,7 @@ int setup_ssh_session(struct ssh_session_s *session)
 static void analyze_ssh_connection_problem(void *ptr)
 {
     struct ssh_connection_s *connection=(struct ssh_connection_s *) ptr;
-    struct system_socket_s *sock=&connection->connection.sock;
+    struct osns_socket_s *sock=&connection->connection.sock;
     unsigned int error=0;
 
     if (connection->setup.flags & SSH_SETUP_FLAG_DISCONNECT) return; /* already disconnect(ing/ed)*/
@@ -538,7 +538,7 @@ static void analyze_ssh_connection_problem(void *ptr)
 	char tmp[size];
 	int bytesread=0;
 
-	bytesread=socket_recv(sock, (void *) tmp, size, MSG_PEEK);
+	bytesread=(* sock->sops.connection.recv)(sock, (void *) tmp, size, MSG_PEEK);
 	error=errno;
 
     }

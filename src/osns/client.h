@@ -29,6 +29,6 @@ void osns_client_handle_error(struct connection_s *c, struct generic_error_s *e)
 void osns_client_handle_dataavail(struct connection_s *conn);
 
 void osns_client_process_data(struct osns_receive_s *r, char *data, unsigned int len, struct osns_control_s *ctrl);
-int osns_client_send_data(struct osns_receive_s *r, char *data, unsigned int len, int (* send_cb)(struct system_socket_s *sock, char *data, unsigned int size, void *ptr), void *ptr);
+int osns_client_send_data(struct osns_receive_s *r, char *data, unsigned int len, int (* send_cb)(struct osns_socket_s *sock, char *data, unsigned int size, void *ptr), void *ptr);
 
 #endif

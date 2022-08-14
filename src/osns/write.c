@@ -30,7 +30,7 @@
 
 #include "osns-protocol.h"
 
-static int send_data_cb_default(struct system_socket_s *sock, char *data, unsigned int size, void *ptr)
+static int send_data_cb_default(struct osns_socket_s *sock, char *data, unsigned int size, void *ptr)
 {
     struct iovec iov[1];
     struct msghdr msg;
@@ -46,10 +46,10 @@ static int send_data_cb_default(struct system_socket_s *sock, char *data, unsign
     msg.msg_controllen=0;
     msg.msg_flags=0;
 
-    return socket_sendmsg(sock, &msg);
+    return (* sock->sops.connection.sendmsg)(sock, &msg);
 }
 
-int write_osns_socket(struct system_socket_s *sock, char *data, unsigned int size, int (* send_cb)(struct system_socket_s *sock, char *data, unsigned int size, void *ptr), void *ptr)
+int write_osns_socket(struct osns_socket_s *sock, char *data, unsigned int size, int (* send_cb)(struct osns_socket_s *sock, char *data, unsigned int size, void *ptr), void *ptr)
 {
     int byteswritten=-1;
 

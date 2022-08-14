@@ -22,21 +22,6 @@
 
 /* Prototypes */
 
-void init_system_socket_connection(struct system_socket_s *sock);
-
-int socket_bind(struct system_socket_s *sock);
-int socket_listen(struct system_socket_s *sock, int length);
-struct system_socket_s *socket_accept(struct system_socket_s *server, struct system_socket_s *client, int flags);
-
-int socket_connect(struct system_socket_s *sock);
-
-int socket_recv(struct system_socket_s *s, void *buffer, unsigned int size, unsigned int flags);
-int socket_send(struct system_socket_s *s, void *buffer, unsigned int size, unsigned int flags);
-
-int socket_writev(struct system_socket_s *s, struct iovec *iov, unsigned int count);
-int socket_readv(struct system_socket_s *s, struct iovec *iov, unsigned int count);
-
-int socket_sendmsg(struct system_socket_s *sock, const struct msghdr *msg);
-int socket_recvmsg(struct system_socket_s *sock, struct msghdr *msg);
+void init_osns_connection_socket(struct osns_socket_s *sock);
 
 #endif

@@ -56,11 +56,11 @@ int connect_ssh_connection(struct ssh_connection_s *connection, struct host_addr
     caddr.target.peer=&remote;
 
     if (create_connection(&connection->connection, &caddr, loop)>=0) {
-	struct system_socket_s *sock=&connection->connection.sock;
+	struct osns_socket_s *sock=&connection->connection.sock;
 
-	set_system_socket_nonblocking(sock);
+	set_osns_socket_nonblocking(sock);
 
-	return (* sock->sops.get_unix_fd)(sock);
+	return (* sock->get_unix_fd)(sock);
 
     }
 

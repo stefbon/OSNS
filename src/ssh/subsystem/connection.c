@@ -28,7 +28,7 @@
 #include "connection.h"
 #include "std.h"
 
-int init_ssh_subsystem_connection(struct ssh_subsystem_connection_s *connection, unsigned char type, struct shared_signal_s *signal, void (* read_cb)(struct ssh_subsystem_connection_s *c, struct system_socket_s *sock))
+int init_ssh_subsystem_connection(struct ssh_subsystem_connection_s *connection, unsigned char type, struct shared_signal_s *signal, void (* read_cb)(struct ssh_subsystem_connection_s *c, struct osns_socket_s *sock))
 {
     int result=-1;
 

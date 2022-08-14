@@ -25,8 +25,9 @@
 #include <sys/stat.h>
 
 #include "path.h"
-#include "open.h"
 #include "time.h"
+
+struct osns_socket_s;
 
 #define SYSTEM_STAT_FLAG_FOLLOW_SYMLINK		1
 
@@ -179,10 +180,10 @@ int system_getstat(struct fs_location_path_s *p, unsigned int mask, struct syste
 int system_getlstat(struct fs_location_path_s *p, unsigned int mask, struct system_stat_s *stat);
 int system_setstat(struct fs_location_path_s *p, unsigned int mask, struct system_stat_s *stat);
 
-int system_fgetstat(struct fs_socket_s *socket, unsigned int mask, struct system_stat_s *stat);
-int system_fsetstat(struct fs_socket_s *socket, unsigned int mask, struct system_stat_s *stat);
+int system_fgetstat(struct osns_socket_s *socket, unsigned int mask, struct system_stat_s *stat);
+int system_fsetstat(struct osns_socket_s *socket, unsigned int mask, struct system_stat_s *stat);
 
-int system_fgetstatat(struct fs_socket_s *socket, char *name, unsigned int mask, struct system_stat_s *stat);
+int system_fgetstatat(struct osns_socket_s *socket, char *name, unsigned int mask, struct system_stat_s *stat, unsigned int flags);
 
 /* get */
 

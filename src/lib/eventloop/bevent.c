@@ -28,10 +28,10 @@
 
 #include "beventloop.h"
 
-void set_bevent_system_socket(struct bevent_s *bevent, struct system_socket_s *sock)
+void set_bevent_osns_socket(struct bevent_s *bevent, struct osns_socket_s *sock)
 {
 
-    logoutput_debug("set_bevent_system_socket");
+    logoutput_debug("set_bevent_osns_socket");
 
     if (sock) {
 
@@ -43,7 +43,7 @@ void set_bevent_system_socket(struct bevent_s *bevent, struct system_socket_s *s
 
 #ifdef __linux__
 
-	int fd=(* sock->sops.get_unix_fd)(sock);
+	int fd=(* sock->get_unix_fd)(sock);
 	(* bevent->ops->set_unix_fd)(bevent, fd);
 
 #endif
@@ -62,7 +62,7 @@ void set_bevent_system_socket(struct bevent_s *bevent, struct system_socket_s *s
 
 }
 
-void unset_bevent_system_socket(struct bevent_s *bevent, struct system_socket_s *sock)
+void unset_bevent_osns_socket(struct bevent_s *bevent, struct osns_socket_s *sock)
 {
 
     bevent->sock=NULL;
@@ -80,7 +80,7 @@ void unset_bevent_system_socket(struct bevent_s *bevent, struct system_socket_s 
 
 }
 
-struct system_socket_s *get_bevent_system_socket(struct bevent_s *bevent)
+struct osns_socket_s *get_bevent_osns_socket(struct bevent_s *bevent)
 {
     return bevent->sock;
 }

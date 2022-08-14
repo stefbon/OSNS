@@ -203,7 +203,7 @@ void osns_system_process_fuse_close(struct fuse_receive_s *r, struct bevent_s *b
 
     if ((r->status & FUSE_RECEIVE_STATUS_DISCONNECT)==0) {
 	struct osns_mount_s *om=(struct osns_mount_s *) ((char *) r - offsetof(struct osns_mount_s, receive));
-	struct system_socket_s *sock=&om->sock;
+	struct osns_socket_s *sock=&om->sock;
 
 	/* function called when remote side closes the connection */
 
@@ -221,7 +221,7 @@ void osns_system_process_fuse_close(struct fuse_receive_s *r, struct bevent_s *b
 	if (bevent) {
 
 	    remove_bevent_watch(bevent, 0);
-	    unset_bevent_system_socket(bevent, &om->sock);
+	    unset_bevent_osns_socket(bevent, &om->sock);
 	    free_bevent(&bevent);
 
 	}

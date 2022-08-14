@@ -30,7 +30,7 @@
 
 int write_socket(struct ssh_connection_s *connection, struct ssh_packet_s *packet, unsigned int *error)
 {
-    struct system_socket_s *sock=&connection->connection.sock;
+    struct osns_socket_s *sock=&connection->connection.sock;
     ssize_t written=0;
     char *pos=packet->buffer;
     int left=(int) packet->size;
@@ -39,7 +39,7 @@ int write_socket(struct ssh_connection_s *connection, struct ssh_packet_s *packe
 
     logoutput("write_socket: seq %i len %i", packet->sequence, left);
 
-    written=socket_send(sock, pos, left, 0);
+    written=(* sock->sops.connection.send)(sock, pos, left, 0);
 
     if (written==-1) {
 

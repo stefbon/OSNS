@@ -39,7 +39,7 @@
 
 static int wait_connection_write_unblock(struct bevent_s *bevent, struct shared_signal_s *signal, struct system_timespec_s *overall_expire)
 {
-    struct system_socket_s *sock=bevent->sock;
+    struct osns_socket_s *sock=bevent->sock;
     struct system_timespec_s expire;
     int result=0;
 
@@ -87,7 +87,7 @@ static int test_write_op_expired(struct system_timespec_s *overall_expire)
     return ((system_time_test_earlier(&current, overall_expire)>0) ? 0 : 1);
 };
 
-int write_socket_signalled(struct bevent_s *bevent, struct bevent_write_data_s *bdata, int (* write_cb)(struct system_socket_s *sock, char *data, unsigned int size, void *ptr))
+int write_socket_signalled(struct bevent_s *bevent, struct bevent_write_data_s *bdata, int (* write_cb)(struct osns_socket_s *sock, char *data, unsigned int size, void *ptr))
 {
     struct beventloop_s *loop=get_eventloop_bevent(bevent);
     struct shared_signal_s *signal=((loop) ? loop->signal : get_default_shared_signal());

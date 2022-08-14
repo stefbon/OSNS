@@ -26,7 +26,6 @@
 #include "libosns-datatypes.h"
 
 #include "fshandle.h"
-#include "open.h"
 
 static int _open_error(struct filehandle_s *handle, struct fs_location_s *location, unsigned int flags, struct fs_init_s *init)
 {

@@ -25,54 +25,49 @@
 
 #include "socket.h"
 
-int socket_connect_dummy(struct system_socket_s *sock)
+int socket_connect_dummy(struct osns_socket_s *sock)
 {
     return -1;
 }
 
-int socket_recvsend_dummy(struct system_socket_s *sock, char *buffer, unsigned int size, unsigned int flags)
+int socket_recvsend_dummy(struct osns_socket_s *sock, char *buffer, unsigned int size, unsigned int flags)
 {
     return -1;
 }
 
-int socket_readwrite_dummy(struct system_socket_s *sock, char *buffer, unsigned int size)
+int socket_readwrite_dummy(struct osns_socket_s *sock, char *buffer, unsigned int size)
 {
     return -1;
 }
 
-int socket_writevreadv_dummy(struct system_socket_s *sock, struct iovec *iov, unsigned int count)
+int socket_writevreadv_dummy(struct osns_socket_s *sock, struct iovec *iov, unsigned int count)
 {
     return -1;
 }
 
-int socket_recvmsg_dummy(struct system_socket_s *sock, struct msghdr *msg)
+int socket_recvmsg_dummy(struct osns_socket_s *sock, struct msghdr *msg)
 {
     return -1;
 }
 
-int socket_sendmsg_dummy(struct system_socket_s *sock, const struct msghdr *msg)
+int socket_sendmsg_dummy(struct osns_socket_s *sock, const struct msghdr *msg)
 {
     return -1;
 }
 
-int socket_read_common(struct system_socket_s *sock, char *buffer, unsigned int size)
+int socket_read_common(struct osns_socket_s *sock, char *buffer, unsigned int size)
 {
     int result=-1;
 
 #ifdef __linux__
 
-    int fdc=(* sock->sops.get_unix_fd)(sock);
+    int fdc=(* sock->get_unix_fd)(sock);
 
-    result=(int) read(fdc, (void *) buffer, (size_t) size);
+    result=read(fdc, (void *) buffer, (size_t) size);
 
     if (result==-1) {
 
 	logoutput_debug("socket_read_common: error %u:%s", errno, strerror(errno));
-
-    } else {
-
-	logoutput_debug("socket_read_common: fd %i size %u", fdc, size);
-
 
     }
 
@@ -81,13 +76,13 @@ int socket_read_common(struct system_socket_s *sock, char *buffer, unsigned int 
     return result;
 }
 
-int socket_write_common(struct system_socket_s *sock, char *buffer, unsigned int size)
+int socket_write_common(struct osns_socket_s *sock, char *buffer, unsigned int size)
 {
     int result=-1;
 
 #ifdef __linux__
 
-    int fdc=(* sock->sops.get_unix_fd)(sock);
+    int fdc=(* sock->get_unix_fd)(sock);
 
     errno=0;
     result=write(fdc, buffer, size);
@@ -98,7 +93,7 @@ int socket_write_common(struct system_socket_s *sock, char *buffer, unsigned int
 }
 
 
-int socket_recv_common(struct system_socket_s *sock, char *buffer, unsigned int size, int flags)
+int socket_recv_common(struct osns_socket_s *sock, char *buffer, unsigned int size, int flags)
 {
     int result=-1;
 
@@ -106,8 +101,7 @@ int socket_recv_common(struct system_socket_s *sock, char *buffer, unsigned int 
 
     flags &= (MSG_DONTWAIT | MSG_PEEK | MSG_TRUNC | MSG_WAITALL);
 
-    int fdc=(* sock->sops.get_unix_fd)(sock);
-    logoutput_debug("socket_recv_common: fd %i size %u flags %i", fdc, size, flags);
+    int fdc=(* sock->get_unix_fd)(sock);
     result=recv(fdc, buffer, size, flags);
 
 #endif
@@ -115,7 +109,7 @@ int socket_recv_common(struct system_socket_s *sock, char *buffer, unsigned int 
     return result;
 }
 
-int socket_send_common(struct system_socket_s *sock, char *buffer, unsigned int size, int flags)
+int socket_send_common(struct osns_socket_s *sock, char *buffer, unsigned int size, int flags)
 {
     int result=-1;
 
@@ -123,7 +117,7 @@ int socket_send_common(struct system_socket_s *sock, char *buffer, unsigned int 
 
 #ifdef __linux__
 
-    int fdc=(* sock->sops.get_unix_fd)(sock);
+    int fdc=(* sock->get_unix_fd)(sock);
 
     errno=0;
     result=send(fdc, buffer, size, flags);
@@ -133,23 +127,19 @@ int socket_send_common(struct system_socket_s *sock, char *buffer, unsigned int 
     return result;
 }
 
-int socket_writev_common(struct system_socket_s *sock, struct iovec *iov, unsigned int count)
+int socket_writev_common(struct osns_socket_s *sock, struct iovec *iov, unsigned int count)
 {
     int result=-1;
 
 #ifdef __linux__
 
-    int fdc=(* sock->sops.get_unix_fd)(sock);
+    int fdc=(* sock->get_unix_fd)(sock);
     errno=0;
     result=writev(fdc, iov, count);
 
     if (result==-1) {
 
 	logoutput_debug("socket_writev_common: fd %i count %u error %u", fdc, count, errno);
-
-    } else {
-
-	logoutput_debug("socket_writev_common: fd %i count %u result %u", fdc, count, (unsigned int) result);
 
     }
 
@@ -158,13 +148,13 @@ int socket_writev_common(struct system_socket_s *sock, struct iovec *iov, unsign
     return result;
 }
 
-int socket_readv_common(struct system_socket_s *sock, struct iovec *iov, unsigned int count)
+int socket_readv_common(struct osns_socket_s *sock, struct iovec *iov, unsigned int count)
 {
     int result=-1;
 
 #ifdef __linux__
 
-    int fdc=(* sock->sops.get_unix_fd)(sock);
+    int fdc=(* sock->get_unix_fd)(sock);
 
     errno=0;
     result=readv(fdc, iov, count);
@@ -174,13 +164,13 @@ int socket_readv_common(struct system_socket_s *sock, struct iovec *iov, unsigne
     return result;
 }
 
-int socket_recvmsg_common(struct system_socket_s *sock, struct msghdr *msg)
+int socket_recvmsg_common(struct osns_socket_s *sock, struct msghdr *msg)
 {
     int result=-1;
 
 #ifdef __linux__
 
-    int fdc=(* sock->sops.get_unix_fd)(sock);
+    int fdc=(* sock->get_unix_fd)(sock);
 
     errno=0;
     result=recvmsg(fdc, msg, 0);
@@ -190,13 +180,13 @@ int socket_recvmsg_common(struct system_socket_s *sock, struct msghdr *msg)
     return result;
 }
 
-int socket_sendmsg_common(struct system_socket_s *sock, const struct msghdr *msg)
+int socket_sendmsg_common(struct osns_socket_s *sock, const struct msghdr *msg)
 {
     int result=-1;
 
 #ifdef __linux__
 
-    int fdc=(* sock->sops.get_unix_fd)(sock);
+    int fdc=(* sock->get_unix_fd)(sock);
 
     errno=0;
     result=sendmsg(fdc, msg, 0);

@@ -35,9 +35,9 @@
 #define SSH_SUBSYSTEM_CONNECTION_FLAG_TROUBLE			(1 << 28)
 
 struct subsystem_std_connection_s {
-    struct system_socket_s				stdin;
-    struct system_socket_s				stdout;
-    struct system_socket_s				stderr;
+    struct osns_socket_s				stdin;
+    struct osns_socket_s				stdout;
+    struct osns_socket_s				stderr;
 };
 
 #define SSH_SUBSYSTEM_CONNECTION_TYPE_STD		1
@@ -51,15 +51,15 @@ struct ssh_subsystem_connection_s {
 	struct subsystem_std_connection_s		std;
     } type;
     int							(* open)(struct ssh_subsystem_connection_s *c);
-    void						(* read)(struct ssh_subsystem_connection_s *c, struct system_socket_s *sock);
-    void						(* read_error)(struct ssh_subsystem_connection_s *c, struct system_socket_s *sock);
+    void						(* read)(struct ssh_subsystem_connection_s *c, struct osns_socket_s *sock);
+    void						(* read_error)(struct ssh_subsystem_connection_s *c, struct osns_socket_s *sock);
     int							(* write)(struct ssh_subsystem_connection_s *c, char *data, unsigned int size);
-    void						(* close)(struct ssh_subsystem_connection_s *c, struct system_socket_s *sock, unsigned char free);
+    void						(* close)(struct ssh_subsystem_connection_s *c, struct osns_socket_s *sock, unsigned char free);
 };
 
 /* prototypes */
 
-int init_ssh_subsystem_connection(struct ssh_subsystem_connection_s *connection, unsigned char type, struct shared_signal_s *signal, void (* read_cb)(struct ssh_subsystem_connection_s *connection, struct system_socket_s *sock));
+int init_ssh_subsystem_connection(struct ssh_subsystem_connection_s *connection, unsigned char type, struct shared_signal_s *signal, void (* read_cb)(struct ssh_subsystem_connection_s *connection, struct osns_socket_s *sock));
 int connect_ssh_subsystem_connection(struct ssh_subsystem_connection_s *c);
 void clear_ssh_subsystem_connection(struct ssh_subsystem_connection_s *connection);
 

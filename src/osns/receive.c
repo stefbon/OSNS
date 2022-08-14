@@ -240,7 +240,7 @@ static void start_read_receive_buffer(struct osns_receive_s *r)
 void osns_read_available_data(struct osns_receive_s *r)
 {
     struct connection_s *c=NULL;
-    struct system_socket_s *sock=NULL;
+    struct osns_socket_s *sock=NULL;
     struct shared_signal_s *signal=NULL;
     int bytesread=0;
     unsigned int error=0;
@@ -280,7 +280,7 @@ void osns_read_available_data(struct osns_receive_s *r)
 
     signal_lock_flag(signal, &r->status, OSNS_RECEIVE_STATUS_BUFFER);
 
-    bytesread=socket_recvmsg(sock, msg);
+    bytesread=(* sock->sops.connection.recvmsg)(sock, msg);
     error=errno;
 
     if (bytesread<=0) {

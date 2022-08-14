@@ -162,7 +162,7 @@ osns_client_SOURCES =  	osns_client.c \
 			lib/error/error-handling.c \
 			lib/log/logging.c \
 			lib/system/location.c lib/system/open.c lib/system/path.c lib/system/stat.c lib/system/time.c \
-			lib/socket/socket.c lib/socket/common.c lib/socket/connection.c lib/socket/system.c lib/socket/utils.c \
+			lib/socket/socket.c lib/socket/common.c lib/socket/connection.c lib/socket/device.c lib/socket/file.c lib/socket/directory.c lib/socket/utils.c \
 			lib/connection/connection.c lib/connection/compare.c \
 			lib/users/check.c lib/users/getent.c lib/users/local.c lib/users/lookup.c \
 			lib/users/mapcb.c lib/users/mapcb_p2l.c lib/users/mapcb_l2p.c lib/users/mapping.c \

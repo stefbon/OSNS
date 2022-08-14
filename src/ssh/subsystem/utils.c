@@ -27,7 +27,7 @@
 
 #include "connection.h"
 
-void free_bevent_hlpr(struct system_socket_s *sock)
+void free_bevent_hlpr(struct osns_socket_s *sock)
 {
     struct bevent_s *bevent=sock->event.link.bevent;
 
@@ -41,7 +41,7 @@ void free_bevent_hlpr(struct system_socket_s *sock)
 
 }
 
-void close_socket_hlpr(struct system_socket_s *sock, unsigned char free)
+void close_socket_hlpr(struct osns_socket_s *sock, unsigned char free)
 {
 
     logoutput_debug("close_socket_hlpr: fd %i", (* sock->sops.get_unix_fd)(sock));

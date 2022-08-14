@@ -43,13 +43,13 @@ static struct connection_s *accept_peer_cb_default(struct connection_s *c_conn, 
 
 void disconnect_cb_default(struct connection_s *conn, unsigned char remote)
 {
-    struct system_socket_s *sock=&conn->sock;
+    struct osns_socket_s *sock=&conn->sock;
 
     if (signal_set_flag(conn->signal, &conn->status, CONNECTION_STATUS_DISCONNECTING)) {
 
 	/* remove connection from server list */
 
-	if ((conn->sock.flags & SYSTEM_SOCKET_FLAG_ENDPOINT)==0 && (conn->sock.flags & SYSTEM_SOCKET_FLAG_SERVER)) {
+	if ((conn->sock.flags & OSNS_SOCKET_FLAG_ENDPOINT)==0 && (conn->sock.flags & OSNS_SOCKET_FLAG_SERVER)) {
 
 	    if (signal_unset_flag(conn->signal, &conn->status, CONNECTION_STATUS_SERVERLIST)) {
 
@@ -59,7 +59,7 @@ void disconnect_cb_default(struct connection_s *conn, unsigned char remote)
 
 	}
 
-	(* sock->sops.close)(sock);
+	(* sock->close)(sock);
 	signal_set_flag(conn->signal, &conn->status, CONNECTION_STATUS_DISCONNECTED);
 
     }
@@ -110,24 +110,26 @@ void init_connection(struct connection_s *c, unsigned char ctype, unsigned char 
 
 	case CONNECTION_TYPE_LOCAL:
 
-	    stype=SYSTEM_SOCKET_TYPE_LOCAL;
+	    stype=OSNS_SOCKET_TYPE_CONNECTION;
+	    sflags=OSNS_SOCKET_FLAG_LOCAL;
 	    break;
 
 	case CONNECTION_TYPE_NETWORK:
 
-	    stype=SYSTEM_SOCKET_TYPE_NET;
+	    stype=OSNS_SOCKET_TYPE_CONNECTION;
+	    sflags=OSNS_SOCKET_FLAG_NET;
 
 	    if (cflags & CONNECTION_FLAG_IPv4) {
 
-		sflags |= SYSTEM_SOCKET_FLAG_IPv4;
+		sflags |= OSNS_SOCKET_FLAG_IPv4;
 
 	    } else if (cflags & CONNECTION_FLAG_IPv6) {
 
-		sflags |= SYSTEM_SOCKET_FLAG_IPv6;
+		sflags |= OSNS_SOCKET_FLAG_IPv6;
 
 	    }
 
-	    if (cflags & CONNECTION_FLAG_UDP) sflags |= SYSTEM_SOCKET_FLAG_UDP;
+	    if (cflags & CONNECTION_FLAG_UDP) sflags |= OSNS_SOCKET_FLAG_UDP;
 	    break;
 
     }
@@ -143,12 +145,12 @@ void init_connection(struct connection_s *c, unsigned char ctype, unsigned char 
 
 	case CONNECTION_ROLE_SERVER:
 
-	    sflags |= SYSTEM_SOCKET_FLAG_SERVER;
+	    sflags |= OSNS_SOCKET_FLAG_SERVER;
 	    break;
 
 	case CONNECTION_ROLE_SOCKET:
 
-	    sflags |= SYSTEM_SOCKET_FLAG_ENDPOINT;
+	    sflags |= OSNS_SOCKET_FLAG_ENDPOINT;
 	    break;
 
 	case CONNECTION_ROLE_CLIENT:
@@ -170,7 +172,7 @@ void init_connection(struct connection_s *c, unsigned char ctype, unsigned char 
     c->signal=get_default_shared_signal();
 
     init_list_element(&c->list, NULL);
-    init_system_socket(&c->sock, stype, sflags, NULL);
+    init_osns_socket(&c->sock, stype, sflags);
 
     if (crole==CONNECTION_ROLE_SOCKET) {
 
@@ -210,8 +212,8 @@ void clear_connection(struct connection_s *c)
 
 void close_connection(struct connection_s *c)
 {
-    struct system_socket_s *sock=&c->sock;
-    (* sock->sops.close)(sock);
+    struct osns_socket_s *sock=&c->sock;
+    (* sock->close)(sock);
 }
 
 static void handle_connection_close_event(struct bevent_s *bevent, unsigned int flag, struct bevent_argument_s *arg)
@@ -262,25 +264,26 @@ static void accept_connection(struct bevent_s *bevent, unsigned int flag, struct
 
     logoutput("accept_connection");
 
-    if (server->sock.type & SYSTEM_SOCKET_TYPE_NET) {
+    if (server->sock.type==OSNS_SOCKET_TYPE_CONNECTION) {
 
-	stype=CONNECTION_TYPE_NETWORK;
+	if (server->sock.flags & OSNS_SOCKET_FLAG_NET) {
 
-    } else if (server->sock.type & SYSTEM_SOCKET_TYPE_LOCAL) {
+	    stype=CONNECTION_TYPE_NETWORK;
 
-	stype=CONNECTION_TYPE_LOCAL;
+	} else if (server->sock.flags & OSNS_SOCKET_FLAG_LOCAL) {
 
-    } else {
+	    stype=CONNECTION_TYPE_LOCAL;
 
-	goto disconnectLabel;
+	}
 
     }
 
+    if (stype==0) goto disconnectLabel;
     init_connection(&c_conn, stype, CONNECTION_ROLE_SERVER, 0);
 
-    if (socket_accept(&server->sock, &c_conn.sock, 0)) {
+    if ((* server->sock.sops.endpoint.accept)(&server->sock, &c_conn.sock, 0)) {
 
-	if (server->sock.type & SYSTEM_SOCKET_TYPE_LOCAL) {
+	if ((server->sock.type == OSNS_SOCKET_TYPE_CONNECTION) && (server->sock.flags & OSNS_SOCKET_FLAG_LOCAL)) {
 	    struct local_peer_s *peer=&c_conn.ops.client.peer.local;
 
 	    if (get_local_peer_properties(&c_conn.sock, peer)==0) {
@@ -294,7 +297,7 @@ static void accept_connection(struct bevent_s *bevent, unsigned int flag, struct
 
 	    }
 
-	} else if (server->sock.type & SYSTEM_SOCKET_TYPE_NET) {
+	} else if ((server->sock.type == OSNS_SOCKET_TYPE_CONNECTION) && (server->sock.flags & OSNS_SOCKET_FLAG_NET)) {
 	    struct network_peer_s *peer=&c_conn.ops.client.peer.network;
 
 	    peer->host.flags |= (HOST_ADDRESS_FLAG_IP | HOST_ADDRESS_FLAG_HOSTNAME);
@@ -332,7 +335,7 @@ static void accept_connection(struct bevent_s *bevent, unsigned int flag, struct
 		set_bevent_cb(c_bevent, BEVENT_FLAG_CB_DATAAVAIL, handle_connection_data_event);
 		set_bevent_cb(c_bevent, BEVENT_FLAG_CB_CLOSE, handle_connection_close_event);
 		set_bevent_cb(c_bevent, BEVENT_FLAG_CB_ERROR, handle_connection_error_event);
-		set_bevent_system_socket(c_bevent, &client->sock);
+		set_bevent_osns_socket(c_bevent, &client->sock);
 		add_bevent_watch(c_bevent);
 
 		signal_set_flag(client->signal, &client->status, CONNECTION_STATUS_EVENTLOOP);
@@ -394,7 +397,7 @@ int create_serversocket(struct connection_s *server, struct beventloop_s *loop, 
 	set_generic_error_system(error, EINVAL, __PRETTY_FUNCTION__);
 	goto out;
 
-    } else if ((server->sock.flags & SYSTEM_SOCKET_FLAG_ENDPOINT)==0 ) {
+    } else if ((server->sock.flags & OSNS_SOCKET_FLAG_ENDPOINT)==0 ) {
 
 	logoutput("create_serversocket: connection is not a server");
 	set_generic_error_system(error, EINVAL, __PRETTY_FUNCTION__);
@@ -402,7 +405,7 @@ int create_serversocket(struct connection_s *server, struct beventloop_s *loop, 
 
     }
 
-    if (server->sock.type & SYSTEM_SOCKET_TYPE_LOCAL) {
+    if (server->sock.flags & OSNS_SOCKET_FLAG_LOCAL) {
 
 	/* bind to local socket in filesystem */
 
@@ -415,14 +418,14 @@ int create_serversocket(struct connection_s *server, struct beventloop_s *loop, 
 
 	logoutput("create_serversocket: set path");
 
-	if (set_path_system_sockaddr(&server->sock, address->target.path)<=0) {
+	if (set_path_osns_sockaddr(&server->sock, address->target.path)<=0) {
 
 	    logoutput("create_serversocket: not able to set path");
 	    goto out;
 
 	}
 
-    } else if (server->sock.type & SYSTEM_SOCKET_TYPE_NET) {
+    } else if (server->sock.flags & OSNS_SOCKET_FLAG_NET) {
 	struct network_peer_s *peer=address->target.peer;
 
 	/* bind to (local) network address and port
@@ -433,8 +436,8 @@ int create_serversocket(struct connection_s *server, struct beventloop_s *loop, 
 	    set_generic_error_system(error, EINVAL, __PRETTY_FUNCTION__);
 	    goto out;
 
-	} else if (((server->sock.flags & SYSTEM_SOCKET_FLAG_IPv4) && (peer->host.ip.family != AF_INET)) ||
-		    ((server->sock.flags & SYSTEM_SOCKET_FLAG_IPv6) && (peer->host.ip.family != AF_INET6))) {
+	} else if (((server->sock.flags & OSNS_SOCKET_FLAG_IPv4) && (peer->host.ip.family != AF_INET)) ||
+		    ((server->sock.flags & OSNS_SOCKET_FLAG_IPv6) && (peer->host.ip.family != AF_INET6))) {
 
 	    set_generic_error_system(error, EINVAL, __PRETTY_FUNCTION__);
 	    goto out;
@@ -443,7 +446,7 @@ int create_serversocket(struct connection_s *server, struct beventloop_s *loop, 
 
 	/* if there are more familys coming (ipv8 ???) this does not work anymore (this handles tow situations: ipv4 of ipv6, not more) */
 
-	set_address_system_sockaddr(&server->sock, &peer->host.ip, peer->port.nr);
+	set_address_osns_sockaddr(&server->sock, &peer->host.ip, peer->port.nr);
 
     } else {
 
@@ -452,7 +455,15 @@ int create_serversocket(struct connection_s *server, struct beventloop_s *loop, 
 
     }
 
-    if (socket_bind(&server->sock)==-1) {
+    if ((* server->sock.sops.endpoint.open)(&server->sock)==-1) {
+
+    	set_generic_error_system(error, errno, __PRETTY_FUNCTION__);
+    	logoutput_debug("create_serversocket: unable to open socket");
+    	goto out;
+
+    }
+
+    if ((* server->sock.sops.endpoint.bind)(&server->sock)==-1) {
 
     	set_generic_error_system(error, errno, __PRETTY_FUNCTION__);
     	logoutput_debug("create_serversocket: unable to bind socket");
@@ -462,7 +473,7 @@ int create_serversocket(struct connection_s *server, struct beventloop_s *loop, 
 
     /* listen */
 
-    if (socket_listen(&server->sock, LISTEN_BACKLOG)==-1 ) {
+    if ((* server->sock.sops.endpoint.listen)(&server->sock, LISTEN_BACKLOG)==-1 ) {
 
         set_generic_error_system(error, errno, __PRETTY_FUNCTION__);
         logoutput_debug("create_serversocket: unable to listen socket");
@@ -474,7 +485,7 @@ int create_serversocket(struct connection_s *server, struct beventloop_s *loop, 
     bevent=create_fd_bevent(loop, (void *) server);
     if (bevent==NULL) goto out;
     set_bevent_cb(bevent, BEVENT_FLAG_CB_DATAAVAIL | BEVENT_FLAG_CB_CLOSE | BEVENT_FLAG_CB_ERROR, accept_connection);
-    set_bevent_system_socket(bevent, &server->sock);
+    set_bevent_osns_socket(bevent, &server->sock);
 
     if (add_bevent_watch(bevent)==0) {
 
@@ -487,7 +498,7 @@ int create_serversocket(struct connection_s *server, struct beventloop_s *loop, 
 
     	logoutput("create_serversocket: error adding socket to eventloop.");
 	set_generic_error_system(error, EIO, __PRETTY_FUNCTION__);
-	unset_bevent_system_socket(bevent, &server->sock);
+	unset_bevent_osns_socket(bevent, &server->sock);
 	free_bevent(&bevent);
 
     }
@@ -501,18 +512,18 @@ struct connection_s *get_next_connection(struct connection_s *s_conn, struct con
 {
     struct list_element_s *list=NULL;
 
-    if (s_conn==NULL || (s_conn->sock.flags & SYSTEM_SOCKET_FLAG_ENDPOINT)==0) return NULL;
+    if (s_conn==NULL || (s_conn->sock.flags & OSNS_SOCKET_FLAG_ENDPOINT)==0) return NULL;
     list=(c_conn) ? get_next_element(&c_conn->list) : get_list_head(&s_conn->ops.server.header, 0);
     return ((list) ? ((struct connection_s *) ((char *) list - offsetof(struct connection_s, list))) : NULL);
 }
 
 void disconnect_connection(struct connection_s *client)
 {
-    struct system_socket_s *sock=&client->sock;
+    struct osns_socket_s *sock=&client->sock;
 
     logoutput_debug("disconnect_connection");
 
-    if ((sock->flags & SYSTEM_SOCKET_FLAG_ENDPOINT)==0) {
+    if ((sock->flags & OSNS_SOCKET_FLAG_ENDPOINT)==0) {
 
 	(* client->ops.client.disconnect)(client, 0);
 
@@ -526,16 +537,23 @@ void disconnect_connection(struct connection_s *client)
 
 int create_connection(struct connection_s *client, struct connection_address_s *address, struct beventloop_s *loop)
 {
-    struct system_socket_s *sock=&client->sock;
+    struct osns_socket_s *sock=&client->sock;
 
-    if ((sock->flags & (SYSTEM_SOCKET_FLAG_ENDPOINT | SYSTEM_SOCKET_FLAG_SERVER))) {
+    if ((sock->flags & (OSNS_SOCKET_FLAG_ENDPOINT | OSNS_SOCKET_FLAG_SERVER))) {
 
 	logoutput_warning("create_connection: invalid socket");
 	return -1;
 
     }
 
-    if (sock->type & SYSTEM_SOCKET_TYPE_LOCAL) {
+    if ((* sock->sops.connection.open)(sock)==-1) {
+
+	logoutput_debug("create_connection: unable to open");
+	return -1;
+
+    }
+
+    if (sock->flags & OSNS_SOCKET_FLAG_LOCAL) {
 
 	if (address->target.path==NULL) {
 
@@ -544,14 +562,14 @@ int create_connection(struct connection_s *client, struct connection_address_s *
 
 	}
 
-	if (set_path_system_sockaddr(sock, address->target.path)<=0) {
+	if (set_path_osns_sockaddr(sock, address->target.path)<=0) {
 
 	    logoutput_warning("create_connection: not able to set path");
 	    goto erroroutLabel;
 
 	}
 
-    } else if (sock->type & SYSTEM_SOCKET_TYPE_NET) {
+    } else if (sock->flags & OSNS_SOCKET_FLAG_NET) {
 	struct network_peer_s *peer=address->target.peer;
 
 	if (peer==NULL) {
@@ -559,8 +577,8 @@ int create_connection(struct connection_s *client, struct connection_address_s *
 	    logoutput_warning("create_connection: peer sot set");
 	    goto erroroutLabel;
 
-	} else if (((client->sock.flags & SYSTEM_SOCKET_FLAG_IPv4) && (peer->host.ip.family != AF_INET)) ||
-		    ((client->sock.flags & SYSTEM_SOCKET_FLAG_IPv6) && (peer->host.ip.family != AF_INET6))) {
+	} else if (((client->sock.flags & OSNS_SOCKET_FLAG_IPv4) && (peer->host.ip.family != AF_INET)) ||
+		    ((client->sock.flags & OSNS_SOCKET_FLAG_IPv6) && (peer->host.ip.family != AF_INET6))) {
 
 	    logoutput_warning("create_connection: wrong address");
 	    goto erroroutLabel;
@@ -569,7 +587,7 @@ int create_connection(struct connection_s *client, struct connection_address_s *
 
 	/* if there are more familys coming (ipv8 ???) this does not work anymore (this handles tow situations: ipv4 of ipv6, not more) */
 
-	set_address_system_sockaddr(&client->sock, &peer->host.ip, peer->port.nr);
+	set_address_osns_sockaddr(&client->sock, &peer->host.ip, peer->port.nr);
 
     } else {
 
@@ -578,7 +596,7 @@ int create_connection(struct connection_s *client, struct connection_address_s *
 
     }
 
-    if (socket_connect(sock)==0) {
+    if ((* sock->sops.connection.connect)(sock)==0) {
 	struct bevent_s *bevent=NULL;
 
 	logoutput("create_osns_connection: connected");
@@ -590,7 +608,7 @@ int create_connection(struct connection_s *client, struct connection_address_s *
 	set_bevent_cb(bevent, BEVENT_FLAG_CB_CLOSE, handle_connection_close_event);
 	set_bevent_cb(bevent, BEVENT_FLAG_CB_DATAAVAIL, handle_connection_data_event);
 
-	set_bevent_system_socket(bevent, sock);
+	set_bevent_osns_socket(bevent, sock);
 	// enable_bevent_write_watch(bevent);
 
 	add_bevent_watch(bevent);
@@ -616,7 +634,7 @@ int create_local_connection(struct connection_s *client, char *runpath, struct b
     struct fs_location_path_s rundir=FS_LOCATION_PATH_INIT;
     unsigned int size=0;
 
-    if ((client->sock.type & SYSTEM_SOCKET_TYPE_LOCAL)==0) {
+    if ((client->sock.flags & OSNS_SOCKET_FLAG_LOCAL)==0) {
 
 	logoutput_warning("create_local_connection: invalid socket");
 	return -1;
@@ -629,7 +647,7 @@ int create_local_connection(struct connection_s *client, char *runpath, struct b
     if (size>0) {
 	char buffer[size];
 	struct fs_location_path_s socketpath=FS_LOCATION_PATH_INIT;
-	struct system_socket_s *sock=&client->sock;
+	struct osns_socket_s *sock=&client->sock;
 	struct connection_address_s address;
 
 	assign_buffer_location_path(&socketpath, buffer, size);

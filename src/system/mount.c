@@ -174,7 +174,7 @@ unsigned char test_mountpoint_is_osns_filesystem(struct fs_location_path_s *path
 static int notify_VFS_system_cb(struct fuse_receive_s *r, unsigned int code, struct iovec *iov, unsigned int count)
 {
     struct osns_mount_s *om=(struct osns_mount_s *)((char *) r - offsetof(struct osns_mount_s, receive));
-    struct system_socket_s *sock=&om->sock;
+    struct osns_socket_s *sock=&om->sock;
 
     return fuse_socket_notify(sock, code, iov, count);
 }
@@ -182,7 +182,7 @@ static int notify_VFS_system_cb(struct fuse_receive_s *r, unsigned int code, str
 static int reply_VFS_system_cb(struct fuse_receive_s *r, uint64_t unique, char *data, unsigned int size)
 {
     struct osns_mount_s *om=(struct osns_mount_s *)((char *) r - offsetof(struct osns_mount_s, receive));
-    struct system_socket_s *sock=&om->sock;
+    struct osns_socket_s *sock=&om->sock;
 
     return fuse_socket_reply_data(sock, unique, data, size);
 }
@@ -190,7 +190,7 @@ static int reply_VFS_system_cb(struct fuse_receive_s *r, uint64_t unique, char *
 static int error_VFS_system_cb(struct fuse_receive_s *r, uint64_t unique, unsigned int code)
 {
     struct osns_mount_s *om=(struct osns_mount_s *)((char *) r - offsetof(struct osns_mount_s, receive));
-    struct system_socket_s *sock=&om->sock;
+    struct osns_socket_s *sock=&om->sock;
 
     return fuse_socket_reply_error(sock, unique, code);
 }
@@ -338,7 +338,7 @@ struct osns_mount_s *mount_fuse_filesystem(struct osns_systemconnection_s *sc, s
 void umount_one_fuse_fs(struct osns_systemconnection_s *sc, struct osns_mount_s *om)
 {
     struct fs_location_path_s path=FS_LOCATION_PATH_INIT;
-    struct system_socket_s *sock=&om->sock;
+    struct osns_socket_s *sock=&om->sock;
     unsigned int size=0;
 
     if ((om->status & OSNS_MOUNT_STATUS_MOUNTED)==0) return;

@@ -23,8 +23,6 @@
 
 void init_sftp_client_interface();
 
-struct ssh_channel_s *get_ssh_channel_sftp_client(struct sftp_client_s *sftp);
-
 int sftp_compare_path(struct context_interface_s *i, char *path, unsigned int len, unsigned int type);
 unsigned int sftp_get_complete_pathlen(struct context_interface_s *i, struct fuse_path_s *fpath);
 

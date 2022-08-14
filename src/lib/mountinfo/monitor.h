@@ -66,7 +66,7 @@ struct mount_monitor_s {
     struct shared_signal_s			*signal;
     int 					(*update) (unsigned char what, struct mountentry_s *me);
     unsigned char 				(*ignore) (char *source, char *fs, char *path, void *data);
-    struct system_socket_s			sock;
+    struct osns_socket_s			sock;
     void					*data;
     struct list_header_s			mountentries;
     struct list_header_s			removedentries;

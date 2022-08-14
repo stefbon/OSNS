@@ -26,7 +26,6 @@
 #include "libosns-datatypes.h"
 
 #include "path.h"
-#include "open.h"
 #include "location.h"
 
 static unsigned int get_fieldsize_uint(unsigned int value)

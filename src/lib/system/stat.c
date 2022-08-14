@@ -28,8 +28,8 @@
 #include "libosns-log.h"
 #include "libosns-misc.h"
 #include "libosns-datatypes.h"
+#include "libosns-socket.h"
 
-#include "open.h"
 #include "path.h"
 #include "location.h"
 #include "stat.h"
@@ -207,10 +207,10 @@ int system_setstat(struct fs_location_path_s *path, unsigned int mask, struct sy
 
 }
 
-int system_fgetstat(struct fs_socket_s *socket, unsigned int mask, struct system_stat_s *stat)
+int system_fgetstat(struct osns_socket_s *socket, unsigned int mask, struct system_stat_s *stat)
 {
     struct statx *stx=&stat->stx;
-    int fd=get_unix_fd_fs_socket(socket);
+    int fd=(* socket->get_unix_fd)(socket);
 
     if (mask==0) mask=SYSTEM_STAT_ALL;
 
@@ -225,10 +225,10 @@ int system_fgetstat(struct fs_socket_s *socket, unsigned int mask, struct system
     return 0;
 }
 
-int system_fsetstat(struct fs_socket_s *socket, unsigned int mask, struct system_stat_s *stat)
+int system_fsetstat(struct osns_socket_s *socket, unsigned int mask, struct system_stat_s *stat)
 {
     struct statx *stx=&stat->stx;
-    int fd=get_unix_fd_fs_socket(socket);
+    int fd=(* socket->get_unix_fd)(socket);
     unsigned int error=0;
 
     stat->mask=0;
@@ -365,11 +365,10 @@ int system_fsetstat(struct fs_socket_s *socket, unsigned int mask, struct system
 
 }
 
-int system_fgetstatat(struct fs_socket_s *socket, char *name, unsigned int mask, struct system_stat_s *stat)
+int system_fgetstatat(struct osns_socket_s *socket, char *name, unsigned int mask, struct system_stat_s *stat, unsigned int flags)
 {
     struct statx *stx=&stat->stx;
-    int flags=(name) ? 0 : AT_EMPTY_PATH;
-    int fd=get_unix_fd_fs_socket(socket);
+    int fd=(* socket->get_unix_fd)(socket);
 
     if (mask==0) mask=SYSTEM_STAT_ALL;
     flags |= ((stat->flags & SYSTEM_STAT_FLAG_FOLLOW_SYMLINK) ? 0 : AT_SYMLINK_NOFOLLOW);
@@ -1020,10 +1019,9 @@ int system_fsetstat(struct fs_socket_s *socket, unsigned int mask, struct system
 
 }
 
-int system_fgetstatat(struct fs_socket_s *socket, char *name, unsigned int mask, struct system_stat_s *sst)
+int system_fgetstatat(struct fs_socket_s *socket, char *name, unsigned int mask, struct system_stat_s *sst, unsigned int flags)
 {
     struct stat *st=&sst->st;
-    int flags=(name) ? 0 : AT_EMPTY_PATH;
     int fd=get_unix_fd_fs_socket(socket);
 
     if (mask==0) mask=SYSTEM_STAT_ALL;

@@ -34,6 +34,8 @@
 #include "sftp/request-hash.h"
 #include "sftp.h"
 
+extern struct ssh_channel_s *get_ssh_channel_sftp_client(struct sftp_client_s *sftp);
+
 /*	wait for a response on a request
 	here are more signal which lead to a finish of the request:
 	- response from the remote sftp server: SFTP_REQUEST_STATUS_RESPONSE and SFTP_REQUEST_STATUS_FINISH

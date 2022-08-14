@@ -196,14 +196,14 @@ static void start_thread_read_receive_buffer(struct fuse_receive_s *r)
 void handle_fuse_data_event(struct bevent_s *bevent, unsigned int flag, struct bevent_argument_s *arg)
 {
     struct fuse_receive_s *r=(struct fuse_receive_s *) bevent->ptr;
-    struct system_socket_s *sock=bevent->sock;
+    struct osns_socket_s *sock=bevent->sock;
     struct shared_signal_s *signal=r->loop->signal;
     int bytesread=0;
     unsigned int errcode=0;
 
     signal_lock(signal);
 
-    bytesread=(* sock->sops.type.system.read)(sock, (char *)(r->buffer + r->read), (unsigned int)(r->size - r->read));
+    bytesread=(* sock->sops.device.read)(sock, (char *)(r->buffer + r->read), (unsigned int)(r->size - r->read));
     errcode=errno;
 
     if (bytesread>0) {
@@ -268,7 +268,7 @@ void handle_fuse_error_event(struct bevent_s *bevent, unsigned int flag, struct 
     (* r->error_cb)(r, bevent);
 }
 
-int fuse_socket_reply_error(struct system_socket_s *sock, uint64_t unique, unsigned int errcode)
+int fuse_socket_reply_error(struct osns_socket_s *sock, uint64_t unique, unsigned int errcode)
 {
     struct iovec iov[1];
     struct fuse_out_header out;
@@ -280,10 +280,10 @@ int fuse_socket_reply_error(struct system_socket_s *sock, uint64_t unique, unsig
     iov[0].iov_base=&out;
     iov[0].iov_len=out.len;
 
-    return (* sock->sops.type.system.writev)(sock, iov, 1);
+    return (* sock->sops.device.writev)(sock, iov, 1);
 }
 
-int fuse_socket_reply_data(struct system_socket_s *sock, uint64_t unique, char *data, unsigned int size)
+int fuse_socket_reply_data(struct osns_socket_s *sock, uint64_t unique, char *data, unsigned int size)
 {
     struct iovec iov[2];
     struct fuse_out_header out;
@@ -297,10 +297,10 @@ int fuse_socket_reply_data(struct system_socket_s *sock, uint64_t unique, char *
     iov[1].iov_base=data;
     iov[1].iov_len=size;
 
-    return (* sock->sops.type.system.writev)(sock, iov, 2);
+    return (* sock->sops.device.writev)(sock, iov, 2);
 }
 
-int fuse_socket_notify(struct system_socket_s *sock, unsigned int code, struct iovec *iov, unsigned int count)
+int fuse_socket_notify(struct osns_socket_s *sock, unsigned int code, struct iovec *iov, unsigned int count)
 {
     struct fuse_out_header out;
 
@@ -311,5 +311,5 @@ int fuse_socket_notify(struct system_socket_s *sock, unsigned int code, struct i
     iov[0].iov_base=&out;
     iov[0].iov_len=sizeof(struct fuse_out_header);
 
-    return (* sock->sops.type.system.writev)(sock, iov, count);
+    return (* sock->sops.device.writev)(sock, iov, count);
 }
