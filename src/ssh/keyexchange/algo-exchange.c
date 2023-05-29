@@ -22,7 +22,7 @@
 #include "libosns-log.h"
 #include "libosns-misc.h"
 
-#include "datatypes/ssh-string.h"
+#include "lib/ssh/ssh-string.h"
 
 #include "ssh-common.h"
 #include "ssh-common-protocol.h"
@@ -79,15 +79,15 @@ void free_kexinit_client(struct ssh_keyexchange_s *kex)
     clear_ssh_string(kexinit);
 }
 
-static int setup_cb_receive_kexinit(struct ssh_connection_s *connection, void *data)
+static int setup_cb_receive_kexinit(struct ssh_connection_s *sshc, void *data)
 {
-    set_ssh_receive_behaviour(connection, "kexinit");
+    set_ssh_receive_behaviour(sshc, "kexinit");
     return 0;
 }
 
-static int handle_kexinit_reply(struct ssh_connection_s *connection, struct ssh_payload_s *payload, void *ptr)
+static int handle_kexinit_reply(struct ssh_payload_s *payload, void *ptr)
 {
-    return (payload->type==SSH_MSG_KEXINIT) ? 0 : -1;
+    return (payload->type==SSH_MSG_KEXINIT) ? 1 : 0;
 }
 
 /* get the SSH_MSG_KEXINIT message from server */
@@ -113,7 +113,7 @@ int start_algo_exchange(struct ssh_connection_s *connection)
 
     }
 
-    payload=receive_message_common(connection, handle_kexinit_reply, NULL, &error);
+    payload=receive_message_common(connection, handle_kexinit_reply, NULL);
 
     if (payload) {
 	struct ssh_session_s *session=get_ssh_connection_session(connection);

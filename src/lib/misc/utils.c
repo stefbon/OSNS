@@ -19,6 +19,9 @@
 */
 
 #include "libosns-basic-system-headers.h"
+#include "libosns-log.h"
+
+#include <sys/syscall.h>
 
 #include <fcntl.h>
 #include <dirent.h>
@@ -238,9 +241,58 @@ void strdup_target_path(char *target, char **p_path, unsigned int *error)
 
 }
 
-int compare_starting_substring(char *name, unsigned int len, const char *start)
+int compare_starting_substring(char *name, unsigned int len, const char *start, unsigned int *p_pos)
 {
     unsigned int lens=strlen(start);
 
-    return ((len>=lens && strncmp(name, start, lens)==0) ? 0 : -1);
+    if ((len>=lens) && (strncmp(name, start, lens)==0)) {
+
+        if (p_pos) *p_pos+=lens;
+        return 0;
+
+    }
+
+    return -1;
+}
+
+int compare_unsigned(unsigned int a, unsigned int b)
+{
+    return ((a>b) ? 1 : ((a<b) ? -1 : 0));
+}
+
+int compare_name_what(const char *what, unsigned int len, const char *name, unsigned int *p_pos)
+{
+    unsigned int tmp=strlen(name);
+
+    if ((len > tmp) && (strncmp(what, name, tmp)==0)) {
+
+	if (p_pos) *p_pos+=tmp;
+	return 0;
+
+    }
+
+    return -1;
+}
+
+int dup_fd_another_process(pid_t pid, unsigned int fd)
+{
+    int pidfd=syscall(SYS_pidfd_open, pid, 0);
+    int result=-1;
+
+    logoutput_debug("dup_fd_another_process: pid %u fd %u", pid, fd);
+
+    if (pidfd>=0) {
+
+        result=syscall(SYS_pidfd_getfd, pidfd, fd, 0);
+        if (result==-1) logoutput_debug("dup_fd_another_process: unable to get fd (errcode=%u)", errno);
+        close(pidfd);
+
+    } else {
+
+        logoutput_debug("dup_fd_another_process: unable to open pid (errcode=%u)", errno);
+
+    }
+
+    return result;
+
 }

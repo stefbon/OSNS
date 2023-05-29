@@ -31,56 +31,61 @@
 #include "fs-virtual.h"
 #include "fs-service-path.h"
 #include "path.h"
+#include "handle.h"
 #include "fs-create.h"
+#include "openfile.h"
+#include "opendir.h"
 
 static struct fuse_fs_s service_dir_fs;
 static struct fuse_fs_s service_nondir_fs;
 
-static void construct_path_root_context(struct fuse_path_s *fpath, struct directory_s *directory)
-{
-
-    if (get_path_root_context(directory, fpath)>=0) {
-
-	logoutput_debug("construct_path_root_context: path %s", fpath->pathstart);
-
-    }
-
-}
-
-static void _fs_service_forget(struct service_context_s *context, struct inode_s *inode)
+static void _fs_service_forget(struct service_context_s *ctx, struct inode_s *inode)
 {
 }
 
 /* LOOKUP */
 
-static void _fs_service_lookup(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *pinode, const char *name, unsigned int len)
+static void _fs_service_lookup(struct service_context_s *ctx, struct fuse_request_s *request, struct inode_s *pinode, const char *name, unsigned int len)
 {
-    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
     struct name_s xname={(char *)name, len, 0};
-    struct entry_s *entry=NULL;
-    struct directory_s *directory=get_directory(workspace, pinode, 0);
-    unsigned int pathlen=get_pathmax(workspace) + 1 + len;
-    char buffer[sizeof(struct fuse_path_s) + pathlen + 1];
-    struct fuse_path_s *fpath=(struct fuse_path_s *) buffer;
-    unsigned int error=0;
-
-    init_fuse_path(fpath, pathlen + 1);
-    append_name_fpath(fpath, &xname);
-    construct_path_root_context(fpath, directory);
-    context=fpath->context;
-
-    logoutput("LOOKUP %s (thread %i)", context->name, (int) gettid());
+    struct fuse_handle_s *handle=NULL;
+    struct path_service_fs_s *fs=NULL;
 
     calculate_nameindex(&xname);
-    entry=find_entry(directory, &xname, &error);
 
-    if (entry) {
+    /* here try first the fstatat call if available 
+	a handle can help to have a shortcut to stat of a name relative to the handle
+	note that this construction only looks at the parent, not for example the handle
+	of the root of the shared directory (TODO)
 
-	(* context->service.filesystem.fs->lookup_existing)(context, request, entry, fpath);
+	20220910: no sftp server supports fstatat yet so this will fail
+	            (it's not a standard sftp call, so it has to be an extension) */
+
+    handle=get_fuse_handle(ctx, request->ino, FUSE_HANDLE_FLAG_FSTATAT);
+
+    if (handle) {
+	unsigned int pathlen=len;
+	char buffer[sizeof(struct fuse_path_s) + pathlen + 1];
+	struct fuse_path_s *fpath=(struct fuse_path_s *) buffer;
+
+	init_fuse_path(fpath, pathlen + 1);
+	append_name_fpath(fpath, &xname);
+        fs=handle->ctx->service.filesystem.fs;
+	(* fs->fstatat)(handle, request, pinode, &xname, fpath);
 
     } else {
+	struct directory_s *directory=get_directory(ctx, pinode, 0);
+	unsigned int pathlen=get_pathmax(ctx) + 1 + len;
+	char buffer[sizeof(struct fuse_path_s) + pathlen + 1];
+	struct fuse_path_s *fpath=(struct fuse_path_s *) buffer;
 
-	(* context->service.filesystem.fs->lookup_new)(context, request, pinode, &xname, fpath);
+	init_fuse_path(fpath, pathlen + 1);
+	append_name_fpath(fpath, &xname);
+	get_path_root_context(directory, fpath);
+	ctx=fpath->context;                             /* take the context found as root */
+	fs=ctx->service.filesystem.fs;                  /* take the path based fs which is used with the root context (sftp,...) */
+	logoutput_debug("LOOKUP %s:%s (thread %i)", ctx->name, fpath->pathstart, (int) gettid());
+	(* fs->lookup)(ctx, request, pinode, &xname, fpath);
 
     }
 
@@ -88,20 +93,20 @@ static void _fs_service_lookup(struct service_context_s *context, struct fuse_re
 
 /* GETATTR */
 
-static void _fs_service_getattr(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode)
+static void _fs_service_getattr(struct service_context_s *ctx, struct fuse_request_s *request, struct inode_s *inode)
 {
-    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
     struct entry_s *entry=inode->alias;
-    unsigned int pathlen=get_pathmax(workspace);
+    unsigned int pathlen=get_pathmax(ctx);
     char buffer[sizeof(struct fuse_path_s) + pathlen + 1];
     struct fuse_path_s *fpath=(struct fuse_path_s *) buffer;
     struct directory_s *directory=NULL;
+    struct path_service_fs_s *fs=NULL;
 
     init_fuse_path(fpath, pathlen + 1);
 
     if (system_stat_test_ISDIR(&inode->stat)) {
 
-	directory=get_directory(workspace, inode, 0);
+	directory=get_directory(ctx, inode, 0);
 	start_directory_fpath(fpath);
 
     } else {
@@ -111,50 +116,61 @@ static void _fs_service_getattr(struct service_context_s *context, struct fuse_r
 
     }
 
-    construct_path_root_context(fpath, directory);
-    context=fpath->context;
-
-    logoutput("GETATTR %s (thread %i)", context->name, (int) gettid());
-    (* context->service.filesystem.fs->getattr)(context, request, inode, fpath);
+    get_path_root_context(directory, fpath);
+    ctx=fpath->context;
+    logoutput_debug("GETATTR %s:%s (thread %i)", ctx->name, fpath->pathstart, (int) gettid());
+    fs=ctx->service.filesystem.fs;
+    (* fs->getattr)(ctx, request, inode, fpath);
 
 }
 
-static void _fs_service_access(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, unsigned int mask)
+static void _fs_service_access(struct service_context_s *ctx, struct fuse_request_s *request, struct inode_s *inode, unsigned int mask)
 {
-    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
     struct entry_s *entry=inode->alias;
-    unsigned int pathlen=get_pathmax(workspace);
+    unsigned int pathlen=get_pathmax(ctx);
     char buffer[sizeof(struct fuse_path_s) + pathlen + 1];
     struct fuse_path_s *fpath=(struct fuse_path_s *) buffer;
     struct directory_s *directory=NULL;
+    struct path_service_fs_s *fs=NULL;
 
     init_fuse_path(fpath, pathlen + 1);
-    directory=get_upper_directory_entry(entry);
-    append_name_fpath(fpath, &entry->name);
-    construct_path_root_context(fpath, directory);
-    context=fpath->context;
 
-    logoutput("ACCESS %s (thread %i)", context->name, (int) gettid());
-    (* context->service.filesystem.fs->access)(context, request, inode, fpath, mask);
+    if (system_stat_test_ISDIR(&inode->stat)) {
+
+	directory=get_directory(ctx, inode, 0);
+	start_directory_fpath(fpath);
+
+    } else {
+
+	directory=get_upper_directory_entry(entry);
+	append_name_fpath(fpath, &entry->name);
+
+    }
+
+    get_path_root_context(directory, fpath);
+    ctx=fpath->context;
+    logoutput_debug("ACCESS %s:%s (thread %i)", ctx->name, fpath->pathstart, (int) gettid());
+    fs=ctx->service.filesystem.fs;
+    (* fs->access)(ctx, request, inode, fpath, mask);
 
 }
 
 /* SETATTR */
 
-static void _fs_service_setattr(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, struct system_stat_s *stat)
+static void _fs_service_setattr(struct service_context_s *ctx, struct fuse_request_s *request, struct inode_s *inode, struct system_stat_s *stat)
 {
-    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
     struct entry_s *entry=inode->alias;
-    unsigned int pathlen=get_pathmax(workspace);
+    unsigned int pathlen=get_pathmax(ctx);
     char buffer[sizeof(struct fuse_path_s) + pathlen + 1];
     struct fuse_path_s *fpath=(struct fuse_path_s *) buffer;
     struct directory_s *directory=NULL;
+    struct path_service_fs_s *fs=NULL;
 
     init_fuse_path(fpath, pathlen + 1);
 
     if (system_stat_test_ISDIR(&inode->stat)) {
 
-	directory=get_directory(workspace, inode, 0);
+	directory=get_directory(ctx, inode, 0);
 	start_directory_fpath(fpath);
 
     } else {
@@ -164,11 +180,11 @@ static void _fs_service_setattr(struct service_context_s *context, struct fuse_r
 
     }
 
-    construct_path_root_context(fpath, directory);
-    context=fpath->context;
-
-    logoutput("SETATTR %s (thread %i)", context->name, (int) gettid());
-    (* context->service.filesystem.fs->setattr)(context, request, inode, fpath, stat);
+    get_path_root_context(directory, fpath);
+    ctx=fpath->context;
+    logoutput("SETATTR %s:%s (thread %i)", ctx->name, fpath->pathstart, (int) gettid());
+    fs=ctx->service.filesystem.fs;
+    (* fs->setattr)(ctx, request, inode, fpath, stat);
 }
 
 struct _fs_mk_s {
@@ -225,24 +241,24 @@ static mode_t get_masked_permissions(mode_t perm, mode_t mask)
 
 /* MK DIR, MK NOD and MK SYMLINK */
 
-static void _fs_service_mk_common(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *pinode, const char *name, unsigned int len, struct _fs_mk_s *mk)
+static void _fs_service_mk_common(struct service_context_s *ctx, struct fuse_request_s *request, struct inode_s *pinode, const char *name, unsigned int len, struct _fs_mk_s *mk)
 {
-    struct workspace_mount_s *w=get_workspace_mount_ctx(context);
     struct name_s xname={(char *)name, len, 0};
     mode_t type=0;
     mode_t perm=0;
     struct entry_s *entry=NULL;
     struct system_stat_s stat;
-    struct directory_s *directory=get_directory(w, pinode, 0);
-    unsigned int pathlen=get_pathmax(w) + 1 + len;
+    struct directory_s *directory=get_directory(ctx, pinode, 0);
+    unsigned int pathlen=get_pathmax(ctx) + 1 + len;
     char buffer[sizeof(struct fuse_path_s) + pathlen + 1];
     struct fuse_path_s *fpath=(struct fuse_path_s *) buffer;
+    struct path_service_fs_s *fs=NULL;
     unsigned int error=0;
 
     init_fuse_path(fpath, pathlen + 1);
     append_name_fpath(fpath, &xname);
-    construct_path_root_context(fpath, directory);
-    context=fpath->context;
+    get_path_root_context(directory, fpath);
+    ctx=fpath->context;
 
     switch (mk->op) {
 
@@ -294,7 +310,7 @@ static void _fs_service_mk_common(struct service_context_s *context, struct fuse
 
     } else {
 
-	entry=_fs_common_create_entry_unlocked(w, directory, &xname, &stat, 0, 0, &error);
+	entry=_fs_common_create_entry_unlocked(ctx, directory, &xname, &stat, 0, 0, &error);
 
     }
 
@@ -302,13 +318,15 @@ static void _fs_service_mk_common(struct service_context_s *context, struct fuse
 
     if (entry && error==0) {
 
+        fs=ctx->service.filesystem.fs;
+
 	if (mk->op==SERVICE_OP_TYPE_MKNOD) {
 
-	    (* context->service.filesystem.fs->mknod)(context, request, entry, fpath, &stat);
+	    (* fs->mknod)(ctx, request, entry, fpath, &stat);
 
 	} else if (mk->op==SERVICE_OP_TYPE_MKDIR) {
 
-	    (* context->service.filesystem.fs->mkdir)(context, request, entry, fpath, &stat);
+	    (* fs->mkdir)(ctx, request, entry, fpath, &stat);
 
 	} else if (mk->op==SERVICE_OP_TYPE_SYMLINK) {
 	    struct fs_location_path_s sub=FS_LOCATION_PATH_INIT;
@@ -317,30 +335,30 @@ static void _fs_service_mk_common(struct service_context_s *context, struct fuse
 	    memcpy(tmp, mk->mk.symlink.target, mk->mk.symlink.len);
 	    tmp[mk->mk.symlink.len]='\0';
 
-	    if ((* context->service.filesystem.fs->symlink_validate)(context, fpath, tmp, &sub)==0) {
+	    if ((* fs->symlink_validate)(ctx, fpath, tmp, &sub)==0) {
 
-		(* context->service.filesystem.fs->symlink)(context, request, entry, fpath, &sub);
+		(* fs->symlink)(ctx, request, entry, fpath, &sub);
 
 	    } else {
 
 		reply_VFS_error(request, EINVAL);
-		queue_inode_2forget(w, get_ino_system_stat(&entry->inode->stat), 0, 0);
+		queue_inode_2forget(ctx, get_ino_system_stat(&entry->inode->stat), 0, 0);
 
 	    }
 
 	} else if (mk->op==SERVICE_OP_TYPE_CREATE) {
 	    struct fuse_openfile_s *openfile=mk->mk.create.openfile;
 
-	    openfile->context=context;
-	    openfile->inode=entry->inode; /* now it's pointing to the right inode */
+	    openfile->header.ctx=ctx;
+	    openfile->header.inode=entry->inode; /* now it's pointing to the right inode */
 
-	    (* context->service.filesystem.fs->create)(openfile, request, fpath, &stat, mk->mk.create.flags);
+	    (* fs->open)(openfile, request, fpath, &stat, (mk->mk.create.flags | O_CREAT));
 
 	    if (openfile->error>0) {
-		struct inode_s *inode=openfile->inode;
+		struct inode_s *inode=openfile->header.inode;
 
-		queue_inode_2forget(w, get_ino_system_stat(&inode->stat), 0, 0);
-		openfile->inode=NULL;
+		queue_inode_2forget(ctx, get_ino_system_stat(&inode->stat), 0, 0);
+		openfile->header.inode=NULL;
 
 	    }
 
@@ -350,7 +368,7 @@ static void _fs_service_mk_common(struct service_context_s *context, struct fuse
 
 	if (error==0) error=EIO;
 	reply_VFS_error(request, error);
-	if (entry) queue_inode_2forget(w, get_ino_system_stat(&entry->inode->stat), 0, 0);
+	if (entry) queue_inode_2forget(ctx, get_ino_system_stat(&entry->inode->stat), 0, 0);
 
     }
 
@@ -358,7 +376,7 @@ static void _fs_service_mk_common(struct service_context_s *context, struct fuse
 
 /* MKDIR */
 
-void _fs_service_mkdir(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *pinode, const char *name, unsigned int len, mode_t mode, mode_t mask)
+void _fs_service_mkdir(struct service_context_s *ctx, struct fuse_request_s *request, struct inode_s *pinode, const char *name, unsigned int len, mode_t mode, mode_t mask)
 {
     struct _fs_mk_s mk;
 
@@ -366,12 +384,12 @@ void _fs_service_mkdir(struct service_context_s *context, struct fuse_request_s 
     mk.op=SERVICE_OP_TYPE_MKDIR;
     mk.mk.mkdir.mode=mode;
     mk.mk.mkdir.mask=mask;
-    _fs_service_mk_common(context, request, pinode, name, len, &mk);
+    _fs_service_mk_common(ctx, request, pinode, name, len, &mk);
 }
 
 /* MKNOD */
 
-void _fs_service_mknod(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *pinode, const char *name, unsigned int len, mode_t mode, dev_t rdev, mode_t mask)
+void _fs_service_mknod(struct service_context_s *ctx, struct fuse_request_s *request, struct inode_s *pinode, const char *name, unsigned int len, mode_t mode, dev_t rdev, mode_t mask)
 {
     struct _fs_mk_s mk;
 
@@ -380,12 +398,12 @@ void _fs_service_mknod(struct service_context_s *context, struct fuse_request_s 
     mk.mk.mknod.mode=mode;
     mk.mk.mknod.mask=mask;
     mk.mk.mknod.rdev=rdev;
-    _fs_service_mk_common(context, request, pinode, name, len, &mk);
+    _fs_service_mk_common(ctx, request, pinode, name, len, &mk);
 }
 
 /* SYMLINK */
 
-void _fs_service_symlink(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *pinode, const char *name, unsigned int len, const char *target, unsigned int size)
+void _fs_service_symlink(struct service_context_s *ctx, struct fuse_request_s *request, struct inode_s *pinode, const char *name, unsigned int len, const char *target, unsigned int size)
 {
     struct _fs_mk_s mk;
 
@@ -393,39 +411,41 @@ void _fs_service_symlink(struct service_context_s *context, struct fuse_request_
     mk.op=SERVICE_OP_TYPE_SYMLINK;
     mk.mk.symlink.target=target;
     mk.mk.symlink.len=size;
-    _fs_service_mk_common(context, request, pinode, name, len, &mk);
+    _fs_service_mk_common(ctx, request, pinode, name, len, &mk);
 }
 
 /* REMOVE/UNLINK */
 
-static void _fs_service_rm_common(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *pinode, const char *name, unsigned int len, unsigned char op)
+static void _fs_service_rm_common(struct service_context_s *ctx, struct fuse_request_s *request, struct inode_s *pinode, const char *name, unsigned int len, unsigned char op)
 {
-    struct workspace_mount_s *w=get_workspace_mount_ctx(context);
     struct name_s xname={(char *)name, len, 0};
     struct entry_s *entry=NULL;
-    struct directory_s *directory=get_directory(w, pinode, 0);
-    unsigned int pathlen=get_pathmax(w) + 1 + len;
+    struct directory_s *directory=get_directory(ctx, pinode, 0);
+    unsigned int pathlen=get_pathmax(ctx) + 1 + len;
     char buffer[sizeof(struct fuse_path_s) + pathlen + 1];
     struct fuse_path_s *fpath=(struct fuse_path_s *) buffer;
+    struct path_service_fs_s *fs=NULL;
     unsigned int error=0;
 
-    logoutput("_fs_service_rm_common: context %s (thread %i) %.*s op %i", context->name, (int) gettid(), len, name, op);
+    logoutput_debug("_fs_service_rm_common: context %s (thread %i) %.*s op %i", ctx->name, (int) gettid(), len, name, op);
 
     init_fuse_path(fpath, pathlen + 1);
     append_name_fpath(fpath, &xname);
-    construct_path_root_context(fpath, directory);
-    context=fpath->context;
+    get_path_root_context(directory, fpath);
+    ctx=fpath->context;
 
     calculate_nameindex(&xname);
     entry=find_entry(directory, &xname, &error);
 
     if (entry) {
 
+        fs=ctx->service.filesystem.fs;
+
 	if (op==SERVICE_OP_TYPE_RMDIR) {
 	    struct inode_s *inode=entry->inode;
 
 	    if (inode) {
-		struct directory_s *subd=get_directory(w, inode, GET_DIRECTORY_FLAG_NOCREATE);
+		struct directory_s *subd=get_directory(ctx, inode, GET_DIRECTORY_FLAG_NOCREATE);
 
 		if (subd && get_directory_count(subd)>0) {
 
@@ -436,18 +456,11 @@ static void _fs_service_rm_common(struct service_context_s *context, struct fuse
 
 	    }
 
-	    (* context->service.filesystem.fs->rmdir)(context, request, &entry, fpath);
-
-	    if (entry==NULL && inode) {
-		struct directory_s *subd=get_directory(w, inode, GET_DIRECTORY_FLAG_NOCREATE);
-
-		if (subd) free_directory(subd);
-
-	    }
+	    (* fs->rmdir)(ctx, request, &entry, fpath);
 
 	} else if (op==SERVICE_OP_TYPE_UNLINK) {
 
-	    (* context->service.filesystem.fs->unlink)(context, request, &entry, fpath);
+	    (* fs->unlink)(ctx, request, &entry, fpath);
 
 	}
 
@@ -461,111 +474,77 @@ static void _fs_service_rm_common(struct service_context_s *context, struct fuse
 
 /* RMDIR */
 
-static void _fs_service_rmdir(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *pinode, const char *name, unsigned int len)
+static void _fs_service_rmdir(struct service_context_s *ctx, struct fuse_request_s *request, struct inode_s *pinode, const char *name, unsigned int len)
 {
-    _fs_service_rm_common(context, request, pinode, name, len, SERVICE_OP_TYPE_RMDIR);
+    _fs_service_rm_common(ctx, request, pinode, name, len, SERVICE_OP_TYPE_RMDIR);
 }
 
 /* UNLINK */
 
-static void _fs_service_unlink(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *pinode, const char *name, unsigned int len)
+static void _fs_service_unlink(struct service_context_s *ctx, struct fuse_request_s *request, struct inode_s *pinode, const char *name, unsigned int len)
 {
-    _fs_service_rm_common(context, request, pinode, name, len, SERVICE_OP_TYPE_UNLINK);
+    _fs_service_rm_common(ctx, request, pinode, name, len, SERVICE_OP_TYPE_UNLINK);
 }
 
 /* READLINK */
 
-static void _fs_service_readlink(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode)
+static void _fs_service_readlink(struct service_context_s *ctx, struct fuse_request_s *request, struct inode_s *inode)
 {
-    struct workspace_mount_s *w=get_workspace_mount_ctx(context);
     struct entry_s *entry=inode->alias;
-    unsigned int pathlen=get_pathmax(w) + 1;
+    unsigned int pathlen=get_pathmax(ctx) + 1;
     char buffer[sizeof(struct fuse_path_s) + pathlen + 1];
     struct fuse_path_s *fpath=(struct fuse_path_s *) buffer;
     struct directory_s *directory=get_upper_directory_entry(entry);
-
-    logoutput("READLINK %s (thread %i) %li", context->name, (int) gettid(), get_ino_system_stat(&inode->stat));
+    struct path_service_fs_s *fs=NULL;
 
     init_fuse_path(fpath, pathlen + 1);
     append_name_fpath(fpath, &entry->name);
-    construct_path_root_context(fpath, directory);
-    context=fpath->context;
-    (* context->service.filesystem.fs->readlink)(context, request, inode, fpath);
+    get_path_root_context(directory, fpath);
+    ctx=fpath->context;
+    logoutput_debug("READLINK %s:%s (thread %i) %li", ctx->name, fpath->pathstart, (int) gettid(), get_ino_system_stat(&inode->stat));
+    fs=ctx->service.filesystem.fs;
+    (* fs->readlink)(ctx, request, inode, fpath);
 
 }
 
 /* OPEN and OPENDIR and ... */
 
-struct _fs_open_common_s {
-    unsigned char			op;
-    struct service_context_s		*ctx;
-    union {
-	struct fuse_openfile_s 		*openfile;
-	struct fuse_opendir_s 		*opendir;
-    } type;
-};
-
-static struct inode_s *get_opencommon_inode(struct _fs_open_common_s *oc)
+static void _fs_service_open_common(struct fuse_open_header_s *header, struct fuse_request_s *request, unsigned int flags)
 {
-    struct inode_s *inode=NULL;
-
-    switch (oc->op) {
-	case SERVICE_OP_TYPE_OPEN:
-	    {
-	    struct fuse_openfile_s *openfile=oc->type.openfile;
-	    inode=openfile->inode;
-	    break;
-	    }
-
-	case SERVICE_OP_TYPE_OPENDIR:
-	    {
-	    struct fuse_opendir_s *opendir=oc->type.opendir;
-	    inode=opendir->inode;
-	    break;
-	    }
-
-    }
-
-    return inode;
-}
-
-static void _fs_service_open_common(struct _fs_open_common_s *opencommon, struct fuse_request_s *request, unsigned int flags)
-{
-    struct service_context_s *context=opencommon->ctx;
-    struct workspace_mount_s *w=get_workspace_mount_ctx(context);
-    struct inode_s *inode=get_opencommon_inode(opencommon);
+    struct service_context_s *ctx=header->ctx;
+    struct inode_s *inode=header->inode;
     struct entry_s *entry=inode->alias;
-    unsigned int pathlen=get_pathmax(w) + 1;
+    unsigned int pathlen=get_pathmax(ctx) + 1;
     char buffer[sizeof(struct fuse_path_s) + pathlen + 1];
     struct fuse_path_s *fpath=(struct fuse_path_s *) buffer;
+    struct path_service_fs_s *fs=NULL;
 
     logoutput("_fs_service_open_common: pathlen %i entry %.*s", pathlen, entry->name.len, entry->name.name);
-
     init_fuse_path(fpath, pathlen + 1);
 
-    if (opencommon->op==SERVICE_OP_TYPE_OPEN) {
-	struct fuse_openfile_s *openfile=opencommon->type.openfile;
+    if (header->type==FUSE_OPEN_TYPE_FILE) {
+	struct fuse_openfile_s *openfile=(struct fuse_openfile_s *) header;
 	struct directory_s *directory=get_upper_directory_entry(entry);
 
 	append_name_fpath(fpath, &entry->name);
-	construct_path_root_context(fpath, directory);
-	context=fpath->context;
-	openfile->context=context;
-	logoutput("OPEN %s (thread %i)", context->name, (int) gettid());
+	get_path_root_context(directory, fpath);
+	ctx=fpath->context;
+	openfile->header.ctx=ctx;
+	logoutput_debug("OPEN %s:%s (thread %i)", ctx->name, fpath->pathstart, (int) gettid());
+	fs=ctx->service.filesystem.fs;
+	(* fs->open)(openfile, request, fpath, NULL, flags);
 
-	(* context->service.filesystem.fs->open)(openfile, request, fpath, flags);
+    } else if (header->type==FUSE_OPEN_TYPE_DIR) {
+	struct fuse_opendir_s *opendir=(struct fuse_opendir_s *) header;
+	struct directory_s *directory=get_directory(ctx, inode, 0);
 
-    } else if (opencommon->op==SERVICE_OP_TYPE_OPENDIR) {
-	struct fuse_opendir_s *opendir=opencommon->type.opendir;
-	struct directory_s *directory=get_directory(w, inode, 0);
-
-	construct_path_root_context(fpath, directory);
 	start_directory_fpath(fpath);
-	context=fpath->context;
-	opendir->context=context;
-	logoutput("OPENDIR %s (thread %i)", context->name, (int) gettid());
-
-	(* context->service.filesystem.fs->opendir)(opendir, request, fpath, flags);
+	get_path_root_context(directory, fpath);
+	ctx=fpath->context;
+	opendir->header.ctx=ctx;
+	logoutput_debug("OPENDIR %s:%s (thread %i)", ctx->name, fpath->pathstart, (int) gettid());
+	fs=ctx->service.filesystem.fs;
+	(* fs->opendir)(opendir, request, fpath, flags);
 
     }
 
@@ -573,12 +552,7 @@ static void _fs_service_open_common(struct _fs_open_common_s *opencommon, struct
 
 static void _fs_service_open(struct fuse_openfile_s *openfile, struct fuse_request_s *request, unsigned int flags)
 {
-    struct _fs_open_common_s opencommon;
-
-    opencommon.op=SERVICE_OP_TYPE_OPEN;
-    opencommon.ctx=openfile->context;
-    opencommon.type.openfile=openfile;
-    _fs_service_open_common(&opencommon, request, flags);
+    _fs_service_open_common(&openfile->header, request, flags);
 }
 
 /* CREATE */
@@ -593,14 +567,14 @@ static void _fs_service_create(struct fuse_openfile_s *openfile, struct fuse_req
     mk.mk.create.mode=mode;
     mk.mk.create.mask=mask;
     mk.mk.create.openfile=openfile;
-    _fs_service_mk_common(openfile->context, request, openfile->inode, name, len, &mk);
+    _fs_service_mk_common(openfile->header.ctx, request, openfile->header.inode, name, len, &mk);
 }
 
 /* RENAME
     - 20210527: make this work
 */
 
-static void _fs_service_rename(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, const char *name, struct inode_s *n_inode, const char *n_name, unsigned int flags)
+static void _fs_service_rename(struct service_context_s *ctx, struct fuse_request_s *request, struct inode_s *inode, const char *name, struct inode_s *n_inode, const char *n_name, unsigned int flags)
 {
     reply_VFS_error(request, ENOSYS);
 }
@@ -609,12 +583,7 @@ static void _fs_service_rename(struct service_context_s *context, struct fuse_re
 
 static void _fs_service_opendir(struct fuse_opendir_s *opendir, struct fuse_request_s *request, unsigned int flags)
 {
-    struct _fs_open_common_s opencommon;
-
-    opencommon.op=SERVICE_OP_TYPE_OPENDIR;
-    opencommon.ctx=opendir->context;
-    opencommon.type.opendir=opendir;
-    _fs_service_open_common(&opencommon, request, flags);
+    _fs_service_open_common(&opendir->header, request, flags);
 }
 
 struct _fs_xattr_s {
@@ -640,20 +609,20 @@ struct _fs_xattr_s {
     } type;
 };
 
-static void _fs_service_xattr_common(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, struct _fs_xattr_s *xattr)
+static void _fs_service_xattr_common(struct service_context_s *ctx, struct fuse_request_s *request, struct inode_s *inode, struct _fs_xattr_s *xattr)
 {
-    struct workspace_mount_s *w=get_workspace_mount_ctx(context);
     struct entry_s *entry=inode->alias;
-    unsigned int pathlen=get_pathmax(w) + 1;
+    unsigned int pathlen=get_pathmax(ctx) + 1;
     char buffer[sizeof(struct fuse_path_s) + pathlen + 1];
     struct fuse_path_s *fpath=(struct fuse_path_s *) buffer;
     struct directory_s *directory=NULL;
+    struct path_service_fs_s *fs=NULL;
 
     init_fuse_path(fpath, pathlen + 1);
 
     if (system_stat_test_ISDIR(&inode->stat)) {
 
-	directory=get_directory(w, inode, 0);
+	directory=get_directory(ctx, inode, 0);
 	start_directory_fpath(fpath);
 
     } else {
@@ -663,40 +632,41 @@ static void _fs_service_xattr_common(struct service_context_s *context, struct f
 
     }
 
-    construct_path_root_context(fpath, directory);
-    context=fpath->context;
+    get_path_root_context(directory, fpath);
+    ctx=fpath->context;
+    fs=ctx->service.filesystem.fs;
 
     switch (xattr->op) {
 
 	case SERVICE_OP_TYPE_SETXATTR:
 
-	    logoutput("setxattr %s (thread %i): %s", context->name, (int) gettid(), xattr->type.setxattr.name);
-	    (* context->service.filesystem.fs->setxattr)(context, request, fpath, inode, xattr->type.setxattr.name, xattr->type.setxattr.value, xattr->type.setxattr.size, xattr->type.setxattr.flags);
+	    logoutput_debug("setxattr %s (thread %i): %s", ctx->name, (int) gettid(), xattr->type.setxattr.name);
+	    (* fs->setxattr)(ctx, request, fpath, inode, xattr->type.setxattr.name, xattr->type.setxattr.value, xattr->type.setxattr.size, xattr->type.setxattr.flags);
 	    break;
 
 	case SERVICE_OP_TYPE_GETXATTR:
 
-	    logoutput("getxattr %s (thread %i): %s", context->name, (int) gettid(), xattr->type.getxattr.name);
-	    (* context->service.filesystem.fs->getxattr)(context, request, fpath, inode, xattr->type.getxattr.name, xattr->type.getxattr.size);
+	    logoutput_debug("getxattr %s (thread %i): %s", ctx->name, (int) gettid(), xattr->type.getxattr.name);
+	    (* fs->getxattr)(ctx, request, fpath, inode, xattr->type.getxattr.name, xattr->type.getxattr.size);
 	    break;
 
 	case SERVICE_OP_TYPE_LISTXATTR:
 
-	    logoutput("listxattr %s (thread %i)", context->name, (int) gettid());
-	    (* context->service.filesystem.fs->listxattr)(context, request, fpath, inode, xattr->type.listxattr.size);
+	    logoutput_debug("listxattr %s (thread %i)", ctx->name, (int) gettid());
+	    (* fs->listxattr)(ctx, request, fpath, inode, xattr->type.listxattr.size);
 	    break;
 
 	case SERVICE_OP_TYPE_REMOVEXATTR:
 
-	    logoutput("removexattr %s (thread %i)", context->name, (int) gettid());
-	    (* context->service.filesystem.fs->removexattr)(context, request, fpath, inode, xattr->type.rmxattr.name);
+	    logoutput_debug("removexattr %s (thread %i)", ctx->name, (int) gettid());
+	    (* fs->removexattr)(ctx, request, fpath, inode, xattr->type.rmxattr.name);
 	    break;
 
     }
 
 }
 
-static void _fs_service_setxattr(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, const char *name, const char *value, size_t size, int flags)
+static void _fs_service_setxattr(struct service_context_s *ctx, struct fuse_request_s *request, struct inode_s *inode, const char *name, const char *value, size_t size, int flags)
 {
     struct _fs_xattr_s xattr;
 
@@ -705,53 +675,53 @@ static void _fs_service_setxattr(struct service_context_s *context, struct fuse_
     xattr.type.setxattr.value=value;
     xattr.type.setxattr.size=size;
     xattr.type.setxattr.flags=flags;
-    _fs_service_xattr_common(context, request, inode, &xattr);
+    _fs_service_xattr_common(ctx, request, inode, &xattr);
 }
 
-static void _fs_service_getxattr(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, const char *name, size_t size)
+static void _fs_service_getxattr(struct service_context_s *ctx, struct fuse_request_s *request, struct inode_s *inode, const char *name, size_t size)
 {
     struct _fs_xattr_s xattr;
 
     xattr.op=SERVICE_OP_TYPE_GETXATTR;
     xattr.type.getxattr.name=name;
     xattr.type.getxattr.size=size;
-    _fs_service_xattr_common(context, request, inode, &xattr);
+    _fs_service_xattr_common(ctx, request, inode, &xattr);
 }
 
-static void _fs_service_listxattr(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, size_t size)
+static void _fs_service_listxattr(struct service_context_s *ctx, struct fuse_request_s *request, struct inode_s *inode, size_t size)
 {
     struct _fs_xattr_s xattr;
 
     xattr.op=SERVICE_OP_TYPE_LISTXATTR;
     xattr.type.listxattr.size=size;
-    _fs_service_xattr_common(context, request, inode, &xattr);
+    _fs_service_xattr_common(ctx, request, inode, &xattr);
 }
 
-static void _fs_service_removexattr(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, const char *name)
+static void _fs_service_removexattr(struct service_context_s *ctx, struct fuse_request_s *request, struct inode_s *inode, const char *name)
 {
     struct _fs_xattr_s xattr;
 
     xattr.op=SERVICE_OP_TYPE_REMOVEXATTR;
     xattr.type.rmxattr.name=name;
-    _fs_service_xattr_common(context, request, inode, &xattr);
+    _fs_service_xattr_common(ctx, request, inode, &xattr);
 }
 
 /* STATFS */
 
-static void _fs_service_statfs(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode)
+static void _fs_service_statfs(struct service_context_s *ctx, struct fuse_request_s *request, struct inode_s *inode)
 {
-    struct workspace_mount_s *w=get_workspace_mount_ctx(context);
     struct entry_s *entry=inode->alias;
-    unsigned int pathlen=get_pathmax(w) + 1;
+    unsigned int pathlen=get_pathmax(ctx) + 1;
     char buffer[sizeof(struct fuse_path_s) + pathlen + 1];
     struct fuse_path_s *fpath=(struct fuse_path_s *) buffer;
     struct directory_s *directory=NULL;
+    struct path_service_fs_s *fs=NULL;
 
     init_fuse_path(fpath, pathlen + 1);
 
     if (system_stat_test_ISDIR(&inode->stat)) {
 
-	directory=get_directory(w, inode, GET_DIRECTORY_FLAG_NOCREATE);
+	directory=get_directory(ctx, inode, GET_DIRECTORY_FLAG_NOCREATE);
 	start_directory_fpath(fpath);
 
     } else {
@@ -761,10 +731,11 @@ static void _fs_service_statfs(struct service_context_s *context, struct fuse_re
 
     }
 
-    construct_path_root_context(fpath, directory);
-    context=fpath->context;
-    logoutput("STATFS %s (thread %i)", context->name, (int) gettid());
-    (* context->service.filesystem.fs->statfs)(context, request, inode, fpath);
+    get_path_root_context(directory, fpath);
+    ctx=fpath->context;
+    logoutput("STATFS %s (thread %i)", ctx->name, (int) gettid());
+    fs=ctx->service.filesystem.fs;
+    (* fs->statfs)(ctx, request, inode, fpath);
 
 }
 

@@ -28,28 +28,44 @@
 
 #include "path.h"
 
+void init_fusepath(struct fuse_path_s *fusepath, unsigned int len)
+{
+    fusepath->len=len; 					/* size of buffer, not the path */
+    fusepath->context=NULL;
+    memset(&fusepath->buffer, 0, len);
+    fs_path_assign_buffer(&fusepath->path, fusepath->buffer, len);
+}
+
+void prepend_name_fusepath(struct fuse_path_s *fusepath, struct name_s *xname)
+{
+    /* entry */
+    unsigned int tmp=fs_path_prepend_raw(&fusepath->path, xname->name, xname->len);
+
+    /* slash */
+    tmp+=fs_path_prepend_raw(&fusepath->path, "/", 1);
+}
+
+void start_directory_fusepath(struct fuse_path_s *fusepath)
+{
+    unsigned int tmp=fs_path_prepend_raw(&fusepath->path, "/.", 2);
+}
+
 /* get the path to the root (mountpoint) of this fuse fs */
 
-int get_path_root_workspace(struct directory_s *directory, struct fuse_path_s *fpath)
+int get_path_root_workspace(struct directory_s *directory, struct fuse_path_s *fusepath)
 {
-    unsigned int pathlen=(unsigned int) (fpath->path + fpath->len - fpath->pathstart);
     struct entry_s *entry=directory->inode->alias;
     struct name_s *xname=NULL;
 
     appendname:
 
     xname=&entry->name;
-    fpath->pathstart-=xname->len;
-    memcpy(fpath->pathstart, xname->name, xname->len);
-    fpath->pathstart--;
-    *(fpath->pathstart)='/';
-    pathlen+=xname->len+1;
+    prepend_name_fusepath(fusepath, xname);
 
     /* go one entry higher */
-
     entry=get_parent_entry(entry);
     if (get_ino_system_stat(&entry->inode->stat) > FUSE_ROOT_ID) goto appendname;
-    return pathlen;
+    return fusepath->path.len;
 
 }
 
@@ -64,44 +80,30 @@ int get_path_root_workspace(struct directory_s *directory, struct fuse_path_s *f
     this is different for every set of fs-calls
 */
 
-int get_path_root_context(struct directory_s *directory, struct fuse_path_s *fpath)
+void get_path_root_context(struct directory_s *directory, struct fuse_path_s *fusepath)
 {
     struct inode_s *inode=directory->inode;
     struct entry_s *entry=inode->alias;
-    unsigned int pathlen=0;
     struct name_s *xname=NULL;
-    struct data_link_s *link=NULL;
-
-    logoutput_debug("get_service_path_default");
-
-    link=directory->ptr;
+    struct data_link_s *link=directory->ptr;
 
     /* walk back to the root of the context or
 	the first entry which inode points to a context (via a directory ...) : whatever comes first */
 
-    while ((get_ino_system_stat(&inode->stat) > FUSE_ROOT_ID) && (fpath->context==NULL)) {
+    while ((get_ino_system_stat(&inode->stat) > FUSE_ROOT_ID) && (fusepath->context==NULL)) {
 
 	if (link) {
 
 	    if (link->type==DATA_LINK_TYPE_CONTEXT) {
 
-		fpath->context=(struct service_context_s *)((char *) link - offsetof(struct service_context_s, link));
+		fusepath->context=(struct service_context_s *)((char *) link - offsetof(struct service_context_s, link));
 		break;
 
 	    } else if (link->type==DATA_LINK_TYPE_PATH) {
-
 		struct cached_path_s *cp=(struct cached_path_s *)((char *) link - offsetof(struct cached_path_s, link));
 
-		if (cp->list.h) {
-		    struct list_header_s *h=cp->list.h;
-
-		    fpath->context=(struct service_context_s *)((char *) h - offsetof(struct service_context_s, service.filesystem.pathcaches));
-
-		}
-
-		fpath->pathstart-=cp->len;
-		memcpy(fpath->pathstart, cp->path, cp->len);
-		pathlen+=cp->len;
+		if (cp->list.h) fusepath->context=(struct service_context_s *)((char *) cp->list.h - offsetof(struct service_context_s, service.filesystem.pathcaches));
+		unsigned int tmp=fs_path_prepend_raw(&fusepath->path, cp->path, cp->len);
 		break;
 
 	    }
@@ -109,12 +111,7 @@ int get_path_root_context(struct directory_s *directory, struct fuse_path_s *fpa
 	}
 
 	xname=&entry->name;
-
-	fpath->pathstart-=xname->len;
-	memcpy(fpath->pathstart, xname->name, xname->len);
-	fpath->pathstart--;
-	*(fpath->pathstart)='/';
-	pathlen+=xname->len+1;
+	prepend_name_fusepath(fusepath, xname);
 
 	/* go one entry higher */
 
@@ -125,41 +122,9 @@ int get_path_root_context(struct directory_s *directory, struct fuse_path_s *fpa
 
     }
 
-    return pathlen;
-
 }
 
-void init_fuse_path(struct fuse_path_s *fpath, unsigned int len)
-{
 
-    /* init */
-    fpath->len=len; 					/* size of buffer, not the path*/
-    fpath->pathstart=&fpath->path[len - 1]; 		/* start at the end and append backwards */
-
-    /* trailing zero */
-    *fpath->pathstart='\0';
-    fpath->context=NULL;
-
-}
-
-void append_name_fpath(struct fuse_path_s *fpath, struct name_s *xname)
-{
-
-    /* entry */
-    fpath->pathstart-=xname->len;
-    memcpy(fpath->pathstart, xname->name, xname->len);
-
-    /* slash */
-    fpath->pathstart--;
-    *fpath->pathstart='/';
-
-}
-
-void start_directory_fpath(struct fuse_path_s *fpath)
-{
-    fpath->pathstart-=2;
-    memcpy(fpath->pathstart, "/.", 2);
-}
 
 void cache_fuse_path(struct directory_s *directory, struct fuse_path_s *fpath)
 {

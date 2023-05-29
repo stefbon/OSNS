@@ -40,11 +40,24 @@
     SFTP_PREFIX_FLAG_IGNORE_SYMLINK_XDEV				: do not allow symlinks pointing outside prefix
     SFTP_PREFIX_FLAG_IGNORE_SPECIAL_FILES				: ignore special files like socket and character devices (only dir, file and symlink)
 
+    reply:
+
+    SSH_FXP_EXTENDED_REPLY:
+
+    - ssh string			handle
+    - uint32				flags set
+
+    SSH_FXP_STATUS
+
+    - path does not exist
+    - not enough permissions
+    - is not a directory
+    - invalid flags
+
 */
 
-void cb_ext_setprefix(struct sftp_payload_s *payload, unsigned int pos)
+void cb_ext_setprefix(struct sftp_subsystem_s *sftp, struct sftp_in_header_s *inh, char *data, unsigned int pos)
 {
-    struct sftp_subsystem_s *sftp=payload->sftp;
     unsigned int status=SSH_FX_BAD_MESSAGE;
 
     if (sftp->prefix.path.len>0) {
@@ -58,8 +71,7 @@ void cb_ext_setprefix(struct sftp_payload_s *payload, unsigned int pos)
 	and 4 for the flags
 	note an empty path is possible */
 
-    if (payload->len >= pos + 8) {
-	char *data=payload->data;
+    if (inh->len >= pos + 8) {
 	struct sftp_identity_s *user=&sftp->identity;
 	struct ssh_string_s path=SSH_STRING_INIT;
 
@@ -68,20 +80,20 @@ void cb_ext_setprefix(struct sftp_payload_s *payload, unsigned int pos)
 	path.ptr=&data[pos];
 	pos+=path.len;
 
-	if (pos + path.len + 8 <= payload->len) {
+	if (pos + path.len + 8 <= inh->len) {
 	    struct system_stat_s stat;
-	    struct fs_location_path_s location=FS_LOCATION_PATH_INIT;
+	    struct fs_path_s location=FS_PATH_INIT;
 	    struct convert_sftp_path_s convert;
 	    unsigned int size=(* sftp->prefix.get_length_fullpath)(sftp, &path, &convert);
 	    char tmp[size +1];
 	    int result=0;
 	    unsigned int flags=get_uint32(&data[pos]);
 
-	    assign_buffer_location_path(&location, tmp, size+1);
+	    fs_path_assign_buffer(&location, tmp, size+1);
 	    (* convert.complete)(sftp, &path, &location);
 	    result=system_getstat(&location, SYSTEM_STAT_TYPE | SYSTEM_STAT_MODE, &stat);
 
-	    logoutput("sftp extension setprefix: %.*s result %i", location.len, location.ptr, result);
+	    logoutput("sftp extension setprefix: %.*s result %i", fs_path_get_length(&location), fs_path_get_start(&location), result);
 
 	    if (result==0) {
 
@@ -92,7 +104,7 @@ void cb_ext_setprefix(struct sftp_payload_s *payload, unsigned int pos)
 
 		    /* set prefix for sftp subsystem */
 
-		    if (create_ssh_string(&prefix, location.len, location.ptr, SSH_STRING_FLAG_ALLOC)) {
+		    if (create_ssh_string(&prefix, fs_path_get_length(&location), fs_path_get_start(&location), SSH_STRING_FLAG_ALLOC)) {
 
 			if (flags) {
 			    unsigned int allflags=(SFTP_PREFIX_FLAG_IGNORE_XDEV_SYMLINKS | SFTP_PREFIX_FLAG_IGNORE_SPECIAL_FILES);
@@ -115,7 +127,7 @@ void cb_ext_setprefix(struct sftp_payload_s *payload, unsigned int pos)
 
 			}
 
-			reply_sftp_status_simple(sftp, payload->id, SSH_FX_OK);
+			reply_sftp_status_simple(sftp, inh->id, SSH_FX_OK);
 			return;
 
 		    }
@@ -158,7 +170,7 @@ void cb_ext_setprefix(struct sftp_payload_s *payload, unsigned int pos)
     out:
 
     logoutput("sftp extension setprefix: status %i", status);
-    reply_sftp_status_simple(sftp, payload->id, status);
+    reply_sftp_status_simple(sftp, inh->id, status);
 
 }
 
@@ -173,8 +185,8 @@ void cb_ext_setprefix(struct sftp_payload_s *payload, unsigned int pos)
 
 */
 
-void sftp_op_setprefix(struct sftp_payload_s *payload)
+void sftp_op_setprefix(struct sftp_subsystem_s *sftp, struct sftp_in_header_s *inh, char *data)
 {
-    cb_ext_setprefix(payload, 0);
+    cb_ext_setprefix(sftp, inh, data, 0);
 }
 

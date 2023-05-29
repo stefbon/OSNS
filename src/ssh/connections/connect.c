@@ -34,61 +34,21 @@
 #include "ssh-utils.h"
 #include "ssh-receive.h"
 
-#define _SSH_BEVENTLOOP_NAME			"SSH"
-
-int create_ssh_networksocket(struct ssh_connection_s *connection, char *address, unsigned int port)
+int connect_ssh_connection(struct ssh_connection_s *sshc, struct ip_address_s *ip, struct network_port_s *port, struct beventloop_s *loop)
 {
-    int fd=-1;
 
-    out:
-    return fd;
-}
+    if (set_address_osns_connection(&sshc->connection, ip, port)==0) {
 
-int connect_ssh_connection(struct ssh_connection_s *connection, struct host_address_s *address, struct network_port_s *port, struct beventloop_s *loop)
-{
-    struct connection_address_s caddr;
-    struct network_peer_s remote;
+        if (create_connection(&sshc->connection, loop, (void *) sshc)>=0) {
+	    struct osns_socket_s *sock=&sshc->connection.sock;
 
-    memset(&caddr, 0, sizeof(struct connection_address_s));
-    memcpy(&remote.host, address, sizeof(struct host_address_s));
-    remote.port.nr=port->nr;
-    remote.port.type=port->type;
-    caddr.target.peer=&remote;
+	    set_osns_socket_nonblocking(sock);
+	    set_ssh_socket_behaviour(sock, "init");
+	    return (* sock->get_unix_fd)(sock);
 
-    if (create_connection(&connection->connection, &caddr, loop)>=0) {
-	struct osns_socket_s *sock=&connection->connection.sock;
-
-	set_osns_socket_nonblocking(sock);
-
-	return (* sock->get_unix_fd)(sock);
+        }
 
     }
 
     return -1;
-}
-
-void disconnect_ssh_connection(struct ssh_connection_s *connection)
-{
-    struct connection_s *c=&connection->connection;
-
-    if (c->status & CONNECTION_STATUS_CONNECTED) {
-
-	(* c->ops.client.disconnect)(c, 0);
-	c->status&=~CONNECTION_STATUS_CONNECTED;
-
-    }
-
-}
-
-int add_ssh_connection_eventloop(struct ssh_connection_s *connection, unsigned int fd, unsigned int *error)
-{
-    return -1;
-}
-
-void remove_ssh_connection_eventloop(struct ssh_connection_s *connection)
-{
-    struct connection_s *c=&connection->connection;
-
-    (* c->ops.client.disconnect)(c, 0);
-
 }

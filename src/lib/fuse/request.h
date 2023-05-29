@@ -21,13 +21,11 @@
 #define LIB_FUSE_REQUEST_H
 
 #include "libosns-interface.h"
+#include "libosns-fspath.h"
 
 #include "dentry.h"
 #include "config.h"
-#include "opendir.h"
-#include "openfile.h"
-#include "utils-public.h"
-#include "handle.h"
+// #include "handle.h"
 
 #define FUSE_REQUEST_CB_MAX					50
 
@@ -38,6 +36,9 @@
 
 struct service_context_s;
 struct fuse_request_s;
+struct fuse_openfile_s;
+struct fuse_opendir_s;
+struct fuse_handle_s;
 
 struct fuse_direntry_s {
     struct list_element_s					list;
@@ -48,9 +49,9 @@ struct fuse_direntry_s {
 
 struct fuse_path_s {
     struct service_context_s 					*context;
-    char							*pathstart;
+    struct fs_path_s                                            path;
     unsigned int						len;
-    char							path[];
+    char							buffer[];
 };
 
 /* union of fs calls. types:
@@ -119,16 +120,40 @@ struct fuse_request_s {
     uint64_t					unique;
     struct list_element_s			list;
     unsigned int				flags;
-    void					(* set_flags)(struct fuse_request_s *r);
     unsigned int				size;
+};
+
+#define FUSE_OPEN_TYPE_DIR			1
+#define FUSE_OPEN_TYPE_FILE			2
+
+#define FUSE_OPEN_LOCK_FLAG_FLOCK		1
+#define FUSE_OPEN_LOCK_FLAG_WAIT		2
+
+struct fuse_open_header_s {
+    struct service_context_s			*ctx;
+    struct inode_s				*inode;
+    unsigned char				type;
+    void					(* fgetattr) (struct fuse_open_header_s *h, struct fuse_request_s *r);
+    void					(* fsetattr) (struct fuse_open_header_s *h, struct fuse_request_s *r, struct system_stat_s *stat);
+    void					(* flush) (struct fuse_open_header_s *h, struct fuse_request_s *request, uint64_t lo);
+    void					(* fsync) (struct fuse_open_header_s *h, struct fuse_request_s *request, unsigned int flags);
+    void					(* release) (struct fuse_open_header_s *h, struct fuse_request_s *request, unsigned int flags, uint64_t lo);
+    void					(* getlock) (struct fuse_open_header_s *h, struct fuse_request_s *r, struct flock *flock);
+    void					(* setlock) (struct fuse_open_header_s *h, struct fuse_request_s *r, struct flock *flock, uint64_t owner, unsigned int flags);
+    void					(* flock) (struct fuse_open_header_s *h, struct fuse_request_s *r, uint64_t owner, unsigned char type);
+    struct list_element_s			list;
+    struct fuse_handle_s			*handle;
 };
 
 /* prototypes */
 
 void register_fuse_functions(struct context_interface_s *interface, void (* add)(struct context_interface_s *interface, unsigned int ctr, unsigned int code, void (* cb)(struct fuse_request_s *request, char *data)));
+void init_fuse_open_hashtable();
 
 int reply_VFS_data(struct fuse_request_s *request, char *data, unsigned int size);
 int reply_VFS_error(struct fuse_request_s *request, unsigned int errcode);
 int notify_VFS_delete(struct context_interface_s *interface, uint64_t pino, uint64_t ino, char *name, unsigned int len);
+
+void init_fuse_open_header(struct fuse_open_header_s *oh, struct service_context_s *ctx, struct inode_s *inode);
 
 #endif

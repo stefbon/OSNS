@@ -25,6 +25,7 @@
 
 #define _NETWORK_PORT_TCP			SOCK_STREAM
 #define _NETWORK_PORT_UDP			SOCK_DGRAM
+#define _NETWORK_PORT_ALL                       ( _NETWORK_PORT_TCP | _NETWORK_PORT_UDP )
 
 struct network_port_s {
     unsigned int				nr;
@@ -43,12 +44,14 @@ struct network_service_s {
 #define IP_ADDRESS_FAMILY_IPv4			AF_INET
 #define IP_ADDRESS_FAMILY_IPv6			AF_INET6
 
+union ip_address_u {
+    char					v4[INET_ADDRSTRLEN + 1];
+    char					v6[INET6_ADDRSTRLEN + 1];
+};
+
 struct ip_address_s {
     unsigned int				family;
-    union {
-	char					v4[INET_ADDRSTRLEN + 1];
-	char					v6[INET6_ADDRSTRLEN + 1];
-    } addr;
+    union ip_address_u                          addr;
 };
 
 #define HOST_ADDRESS_FLAG_HOSTNAME		1
@@ -65,6 +68,9 @@ struct host_address_s {
 /* prototypes */
 
 unsigned char check_family_ip_address(char *address, const char *what);
+
+int compare_ip_addresses(struct ip_address_s *a, struct ip_address_s *b);
+int compare_ip_address(struct ip_address_s *a, const unsigned char type, void *ptr);
 
 int compare_host_address(struct host_address_s *a, struct host_address_s *b);
 int set_host_address(struct host_address_s *a, char *hostname, char *ipv4, char *ipv6);

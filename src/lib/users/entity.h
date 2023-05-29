@@ -22,17 +22,20 @@
 
 /* prototypes */
 
-int compare_ent2local(struct list_element_s *list, void *b);
-struct list_element_s *get_list_element_ent2local(void *b, struct sl_skiplist_s *sl);
 char *get_logname_ent2local(struct list_element_s *l);
+struct net_ent2local_s *create_ent2local(struct net_entity_s *entity);
+void free_ent2local(struct net_ent2local_s **p_ent2local);
+void find_ent2local_batch_shared(struct sl_skiplist_s *sl, void *ptr, struct net_entity_s *ent, unsigned int *error);
 
 struct net_ent2local_s *get_next_ent2local(struct net_ent2local_s *ent2local);
 struct net_ent2local_s *get_prev_ent2local(struct net_ent2local_s *ent2local);
 
-struct net_ent2local_s *find_ent2local_batch(struct sl_skiplist_s *sl, struct name_s *lookupname, unsigned int *error);
-struct net_ent2local_s *insert_ent2local_batch(struct sl_skiplist_s *sl , struct net_ent2local_s *ent2local, unsigned int *error);
+int compare_ent2local_byname(struct list_element_s *list, void *b);
+struct list_element_s *get_list_element_ent2local_byname(void *b, struct sl_skiplist_s *sl);
+struct net_ent2local_s *insert_ent2local_batch_byname(struct sl_skiplist_s *sl , struct net_ent2local_s *ent2local, unsigned int *error);
 
-struct net_ent2local_s *create_ent2local(struct net_entity_s *entity);
-void free_ent2local(struct net_ent2local_s **p_ent2local);
+int compare_ent2local_byid(struct list_element_s *list, void *b);
+struct list_element_s *get_list_element_ent2local_byid(void *b, struct sl_skiplist_s *sl);
+struct net_ent2local_s *insert_ent2local_batch_byid(struct sl_skiplist_s *sl , struct net_ent2local_s *ent2local, unsigned int *error);
 
 #endif

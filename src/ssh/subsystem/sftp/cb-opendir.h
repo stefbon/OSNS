@@ -22,7 +22,7 @@
 
 /* prototypes */
 
-void sftp_op_opendir(struct sftp_payload_s *payload);
-void sftp_op_readdir(struct sftp_payload_s *payload);
+void sftp_op_opendir(struct sftp_subsystem_s *sftp, struct sftp_in_header_s *inh, char *data);
+void sftp_op_readdir(struct sftp_subsystem_s *sftp, struct sftp_in_header_s *inh, char *data);
 
 #endif

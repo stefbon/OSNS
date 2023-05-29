@@ -27,12 +27,12 @@
 #include "libosns-network.h"
 
 #include "osns-protocol.h"
+#include "osns/osns.h"
 #include "osnsctl.h"
+
 #include "osns/utils.h"
 
-#include "receive.h"
-
-void print_record_netcache(struct query_netcache_attr_s *attr)
+void print_record_netcache(struct query_netcache_attr_s *attr, unsigned int flags)
 {
     unsigned int valid=attr->valid;
     struct name_string_s *host=NULL;

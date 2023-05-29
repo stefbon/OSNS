@@ -37,7 +37,7 @@ unsigned char add_interface_ops(struct interface_ops_s *ops)
 
     write_lock_list_header(&header);
 
-    list=get_list_head(&header, 0);
+    list=get_list_head(&header);
     while (list) {
 
 	if (list==&ops->list) break;
@@ -63,7 +63,7 @@ unsigned char add_interface_ops(struct interface_ops_s *ops)
 
 struct interface_ops_s *get_next_interface_ops(struct interface_ops_s *iops)
 {
-    struct list_element_s *next=((iops) ? get_next_element(&iops->list) : get_list_head(&header, 0));
+    struct list_element_s *next=((iops) ? get_next_element(&iops->list) : get_list_head(&header));
     return ((next) ? (struct interface_ops_s *)((char *) next - offsetof(struct interface_ops_s, list)) : NULL);
 }
 

@@ -54,7 +54,7 @@ static int socket_bind_common(struct osns_socket_s *sock)
 
 	int fd=(* sock->get_unix_fd)(sock);
 
-	if (bind(fd, sock->data.connection.sockaddr.addr, sock->data.connection.sockaddr.len)==0) {
+	if (bind(fd, sock->sockaddr.addr, sock->sockaddr.len)==0) {
 
 	    result=0;
 	    sock->status |= SOCKET_STATUS_BIND;
@@ -123,7 +123,7 @@ static int socket_connect_common(struct osns_socket_s *sock)
 
 	int fdc=(* sock->get_unix_fd)(sock);
 
-	if (connect(fdc, sock->data.connection.sockaddr.addr, sock->data.connection.sockaddr.len)==0) {
+	if (connect(fdc, sock->sockaddr.addr, sock->sockaddr.len)==0) {
 
 	    result=0;
 	    sock->status |= SOCKET_STATUS_CONNECT;
@@ -245,7 +245,7 @@ static struct osns_socket_s *socket_accept_common(struct osns_socket_s *server, 
 
 	    }
 
-	    fdc=accept4(fds, client->data.connection.sockaddr.addr, &client->data.connection.sockaddr.len, flags);
+	    fdc=accept4(fds, client->sockaddr.addr, &client->sockaddr.len, flags);
 
 	    if (fdc>=0) {
 
@@ -283,46 +283,58 @@ static struct osns_socket_s *socket_accept_common(struct osns_socket_s *server, 
 
 static int socket_open(struct osns_socket_s *sock)
 {
-    int domain=0;
-    int type=0;
-    int fd=0;
     int result=-1;
 
-    if (sock->flags & OSNS_SOCKET_FLAG_LOCAL) {
+    result=(* sock->get_unix_fd)(sock);
 
-	domain=AF_UNIX;
+    if (result==-1) {
+        int domain=0;
+        int type=0;
+        int fd=0;
 
-    } else if (sock->flags & OSNS_SOCKET_FLAG_NET) {
+        if (sock->flags & OSNS_SOCKET_FLAG_LOCAL) {
 
-	if (sock->flags & OSNS_SOCKET_FLAG_IPv4) {
+	    domain=AF_UNIX;
 
-	    domain=AF_INET;
+        } else if (sock->flags & OSNS_SOCKET_FLAG_NET) {
 
-	} else if (sock->flags & OSNS_SOCKET_FLAG_IPv6) {
+	    if (sock->flags & OSNS_SOCKET_FLAG_IPv4) {
 
-	    domain=AF_INET6;
+	        domain=AF_INET;
 
-	}
+	    } else if (sock->flags & OSNS_SOCKET_FLAG_IPv6) {
 
-    }
+	        domain=AF_INET6;
 
-    type=((sock->flags & sock->flags & OSNS_SOCKET_FLAG_UDP) ? SOCK_DGRAM : SOCK_STREAM);
+	    }
+
+        }
+
+        type=((sock->flags & sock->flags & OSNS_SOCKET_FLAG_UDP) ? SOCK_DGRAM : SOCK_STREAM);
 
 #ifdef __linux__
 
-    fd=socket(domain, type, 0);
+        fd=socket(domain, type, 0);
 
-    if (fd>=0) {
+        if (fd>=0) {
 
-	sock->fd=fd;
-	sock->pid=getpid();
-	set_connection_cb(sock, 1);
-	sock->status |= SOCKET_STATUS_OPEN;
-	result=0;
+	    sock->fd=fd;
+	    sock->pid=getpid();
+	    set_connection_cb(sock, 1);
+	    sock->status |= SOCKET_STATUS_OPEN;
+	    result=0;
 
-    }
+        }
 
 #endif
+
+    } else {
+
+        set_connection_cb(sock, 1);
+        sock->status |= SOCKET_STATUS_OPEN;
+        result=0;
+
+    }
 
     return result;
 
@@ -337,14 +349,14 @@ void init_osns_connection_socket(struct osns_socket_s *sock)
     set_connection_cb(sock, 0);
 
     if (sock->flags & OSNS_SOCKET_FLAG_LOCAL) {
-	struct osns_sockaddr_s *sockaddr=&sock->data.connection.sockaddr;
+	struct osns_sockaddr_s *sockaddr=&sock->sockaddr;
 
 	sockaddr->data.local.sun_family=AF_UNIX;
 	sockaddr->len=sizeof(struct sockaddr_un);
 	sockaddr->addr=(struct sockaddr *) &sockaddr->data.local;
 
     } else if (sock->flags & OSNS_SOCKET_FLAG_NET) {
-	struct osns_sockaddr_s *sockaddr=&sock->data.connection.sockaddr;
+	struct osns_sockaddr_s *sockaddr=&sock->sockaddr;
 
 	if (sock->flags & OSNS_SOCKET_FLAG_IPv4) {
 

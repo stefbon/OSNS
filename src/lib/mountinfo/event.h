@@ -23,6 +23,6 @@
 /* prototypes */
 
 void handle_change_mounttable(struct mount_monitor_s *monitor);
-void process_mountinfo_event(struct bevent_s *bevent, unsigned int flag, struct bevent_argument_s *arg);
+void process_mountinfo_event(struct osns_socket_s *sock, unsigned int level, unsigned int errcode, void *ptr);
 
 #endif

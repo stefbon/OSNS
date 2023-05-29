@@ -26,47 +26,11 @@
 #include "libosns-datatypes.h"
 #include "libosns-threads.h"
 #include "libosns-eventloop.h"
-
-#include "lib/system/fshandle.h"
-#include "lib/system/hash.h"
-#include "lib/system/file.h"
-#include "lib/system/directory.h"
+#include "libosns-system.h"
 
 #include "protocol.h"
-
 #include "osns_sftp_subsystem.h"
-#include "handle.h"
-
-/*
-    every handle has the form:
-    dev || inode || pid || fd || type
-
-    - 4 bytes				dev
-    - 8 bytes				inode
-    - 4 bytes				pid
-    - 4 bytes				fd
-    - 1 byte				type
-
-    ---------
-    21 bytes
-
-    - encrypt and decrypt? or hash with some key?
-
-    better:
-
-    - 1 byte				length excluding this byte self
-    - 1 byte				version
-    - 1 byte				padding [n]
-    - 4 bytes				dev
-    - 8 bytes				ino
-    - 4 bytes				pid
-    - 4 bytes				fd
-    - 1 byte				type
-    - n bytes				random 
-
-*/
-
-#define BUFFER_HANDLE_SIZE				21
+#include "send.h"
 
 #ifndef SSH_FXF_BLOCK_READ
 
@@ -79,22 +43,15 @@
 #endif
 
 #define SFTP_DIRHANDLE_FLAG_NEGOTIATED				1
+#define SFTP_DIRHANDLE_FLAG_KEEP_DENTRY				2
 
-struct sftp_handle_s {
-    struct sftp_subsystem_s					*sftp;
-    union _sftp_type_u {
-	struct sftp_filehandle_s {
-	    int							access;
-	    int							flags;
-	} filehandle;
-	struct sftp_dirhandle_s {
-	    unsigned int					flags;
-	    struct sftp_valid_s					valid;
-	} dirhandle;
-    } type;
+struct sftp_handle_data_s {
+    int							access;
+    unsigned int					flags;
+    struct sftp_valid_s					valid;
 };
 
-static unsigned int translate_sftp_flags_2_commonshared(unsigned int sftpflags)
+static unsigned int translate_sftp_flags_2_fs_handle(unsigned int sftpflags)
 {
     unsigned int result=0;
 
@@ -109,347 +66,114 @@ static unsigned int translate_sftp_flags_2_commonshared(unsigned int sftpflags)
 
     if (sftpflags & SSH_FXF_BLOCK_READ) {
 
-	result |= FILEHANDLE_BLOCK_READ;
+	result |= FS_HANDLE_BLOCK_READ;
 
     }
 
     if (sftpflags & SSH_FXF_BLOCK_WRITE) {
 
-	result |= FILEHANDLE_BLOCK_WRITE;
+	result |= FS_HANDLE_BLOCK_WRITE;
 
     }
 
     if (sftpflags & (SSH_FXF_BLOCK_DELETE | SSH_FXF_DELETE_ON_CLOSE)) {
 
-	result |= FILEHANDLE_BLOCK_DELETE;
+	result |= FS_HANDLE_BLOCK_DELETE;
 
     }
 
     return result;
 }
 
-static unsigned int translate_sftp_access_2_commonshared(unsigned int sftpaccess)
+static unsigned int translate_sftp_access_2_fs_handle(unsigned int sftpaccess)
 {
     return sftpaccess; /* same for protocol 6 at least (see: ... )*/
 }
 
 /* FIND */
 
-struct sftp_subsystem_s *get_sftp_subsystem_commonhandle(struct commonhandle_s *handle)
+struct fs_handle_s *sftp_find_fs_handle(struct sftp_subsystem_s *sftp, char *buffer, unsigned int size, unsigned int *p_count)
 {
-
-    if (handle->flags & COMMONHANDLE_FLAG_SFTP) {
-	struct sftp_handle_s *sftp_handle=(struct sftp_handle_s *) handle->buffer;
-
-	return sftp_handle->sftp;
-
-    }
-
-    return NULL;
+    return get_fs_handle(sftp->connection.unique, buffer, size, p_count);
 }
 
-static int compare_subsystem_sftp(struct commonhandle_s *handle, void *ptr)
+
+
+/* functions to get and set the flags when opening a file
+    these flags indicate the file is created or not, the kind of locking, append or not */
+
+
+void set_sftp_handle_flags(struct fs_handle_s *handle, unsigned int flags)
 {
-    struct sftp_subsystem_s *sftp=(struct sftp_subsystem_s *) ptr;
-    return (get_sftp_subsystem_commonhandle(handle)==sftp) ? 0 : -1;
+    struct sftp_handle_data_s *data=(struct sftp_handle_data_s *) handle->buffer;
+    data->flags=flags;
 }
 
-struct commonhandle_s *find_sftp_commonhandle(struct sftp_subsystem_s *sftp, char *buffer, unsigned int size, unsigned int *p_count)
+unsigned int get_sftp_handle_flags(struct fs_handle_s *handle)
 {
-    unsigned char pos=0; /* unsigned char is enough for buffer size */
-    dev_t dev=0;
-    uint64_t ino=0;
-    unsigned int pid=0;
-    unsigned int fd=0;
-    unsigned char type=0;
-
-    if (size < BUFFER_HANDLE_SIZE) {
-
-	logoutput_debug("find_commonhandle_buffer: size %u too small (at least %u)", size, BUFFER_HANDLE_SIZE);
-	return NULL;
-
-    }
-
-    /* read the buffer, assume it's big enough */
-
-    dev=get_uint32(&buffer[pos]);
-    pos+=4;
-    ino=get_uint64(&buffer[pos]);
-    pos+=8;
-    pid=get_uint32(&buffer[pos]);
-    pos+=4;
-    fd=get_uint32(&buffer[pos]);
-    pos+=4;
-    type=(unsigned char) buffer[pos];
-    pos++;
-
-    if (p_count) *p_count+=pos;
-    if (pid != getpid()) logoutput_warning("find_commonhandle_buffer: handle has unknown pid %i", pid);
-    return find_commonhandle(dev, ino, pid, fd, type, compare_subsystem_sftp, (void *) sftp);
-
+    struct sftp_handle_data_s *data=(struct sftp_handle_data_s *) handle->buffer;
+    return data->flags;
 }
 
-unsigned char write_sftp_commonhandle(struct commonhandle_s *handle, char *buffer, unsigned int size)
-{
-    unsigned char pos=0;
-    pid_t pid=get_pid_commonhandle(handle);
-    int fd=get_fd_commonhandle(handle);
-
-    if (size < BUFFER_HANDLE_SIZE) return 0;
-
-    store_uint32(&buffer[pos], handle->location.type.devino.dev);
-    pos+=4;
-    store_uint64(&buffer[pos], handle->location.type.devino.ino);
-    pos+=8;
-    store_uint32(&buffer[pos], pid);
-    pos+=4;
-    store_uint32(&buffer[pos], fd);
-    pos+=4;
-
-    if (handle->flags & COMMONHANDLE_FLAG_DIR) {
-
-	buffer[pos]=COMMONHANDLE_TYPE_DIR;
-
-    } else if (handle->flags & COMMONHANDLE_FLAG_FILE) {
-
-	buffer[pos]=COMMONHANDLE_TYPE_FILE;
-
-    } else {
-
-	buffer[pos]=0;
-
-    }
-
-    pos++;
-    return pos;
-}
-
-unsigned char get_sftp_handle_size()
-{
-    return (unsigned char) BUFFER_HANDLE_SIZE;
-}
-
-/* CREATE a filehandle for open/create a file */
-
-/* */
-
-void set_sftp_handle_flags(struct commonhandle_s *handle, unsigned int flags)
-{
-
-    if ((handle->flags & COMMONHANDLE_FLAG_FILE) && (handle->flags & COMMONHANDLE_FLAG_SFTP)) {
-	struct sftp_handle_s *sftp_handle=(struct sftp_handle_s *) handle->buffer;
-
-	sftp_handle->type.filehandle.flags=flags;
-
-    }
-
-}
-
-unsigned int get_sftp_handle_flags(struct commonhandle_s *handle)
-{
-
-    if ((handle->flags & COMMONHANDLE_FLAG_FILE) && (handle->flags & COMMONHANDLE_FLAG_SFTP)) {
-	struct sftp_handle_s *sftp_handle=(struct sftp_handle_s *) handle->buffer;
-
-	return sftp_handle->type.filehandle.flags;
-
-    }
-
-    return 0;
-
-}
-
-static unsigned int _get_flags_sftp(struct commonhandle_s *handle)
+static unsigned int _get_flags_sftp(struct fs_handle_s *handle)
 {
     unsigned int flags=get_sftp_handle_flags(handle);
-    return translate_sftp_flags_2_commonshared(flags);
+    return translate_sftp_flags_2_fs_handle(flags);
 }
 
-void set_sftp_handle_access(struct commonhandle_s *handle, unsigned int access)
+/*
+    functions to get/set the access bits when opening a file
+    these bits indicate what has to be opened/accessed like:
+
+    - read/write contents of the file
+    - append to file
+    - attributes
+    - named attributes
+    - acl
+
+*/
+
+void set_sftp_handle_access(struct fs_handle_s *handle, unsigned int access)
 {
-
-    if ((handle->flags & COMMONHANDLE_FLAG_FILE) && (handle->flags & COMMONHANDLE_FLAG_SFTP)) {
-	struct sftp_handle_s *sftp_handle=(struct sftp_handle_s *) handle->buffer;
-
-	sftp_handle->type.filehandle.access=access;
-
-    }
-
+    struct sftp_handle_data_s *data=(struct sftp_handle_data_s *) handle->buffer;
+    data->access=access;
 }
 
-int get_sftp_handle_access(struct commonhandle_s *handle)
+int get_sftp_handle_access(struct fs_handle_s *handle)
 {
-
-    if (handle->flags & COMMONHANDLE_FLAG_FILE) {
-	struct sftp_handle_s *sftp_handle=(struct sftp_handle_s *) handle->buffer;
-
-	return sftp_handle->type.filehandle.access;
-
-    }
-
-    return 0;
+    struct sftp_handle_data_s *data=(struct sftp_handle_data_s *) handle->buffer;
+    return data->access;
 }
 
-static unsigned int _get_access_sftp(struct commonhandle_s *handle)
+static unsigned int _get_access_sftp(struct fs_handle_s *handle)
 {
     unsigned int access=get_sftp_handle_access(handle);
-    return translate_sftp_access_2_commonshared(access);
+    return translate_sftp_access_2_fs_handle(access);
 }
 
-static struct commonhandle_s *find_sftp_handle_common(struct sftp_subsystem_s *sftp, unsigned int flag, char *buffer, unsigned int size, unsigned int *p_count)
+/* CREATE HANDLE */
+
+struct fs_handle_s *sftp_create_fs_handle(struct sftp_subsystem_s *sftp, dev_t dev, uint64_t ino, unsigned int flags, unsigned int access, const char *what)
 {
-    struct commonhandle_s *handle=find_sftp_commonhandle(sftp, buffer, size, p_count);
+    unsigned int type=(strcmp(what, "dir")==0) ? FS_HANDLE_TYPE_DIR : FS_HANDLE_TYPE_FILE;
+    struct fs_handle_s *handle=create_fs_handle(type, sizeof(struct sftp_handle_data_s));
 
     if (handle) {
+	struct sftp_handle_data_s *data=(struct sftp_handle_data_s *) handle->buffer;
 
-	if (flag>0 && (handle->flags & flag)==0) {
-
-	    logoutput_warning("find_sftp_handle_common: handle found of wrong type");
-	    return NULL;
-
-	} else if (get_pid_commonhandle(handle) != getpid()) {
-
-	    logoutput_warning("find_sftp_handle_common: handle found is of different process");
-	    return NULL;
-
-	} else {
-	    struct sftp_subsystem_s *tmp=get_sftp_subsystem_commonhandle(handle);
-
-	    if (tmp==NULL) {
-
-		logoutput_warning("find_sftp_handle_common: handle found is not a sftp handle");
-		return NULL;
-
-	    } else if ( tmp != sftp) {
-
-		logoutput_warning("find_sftp_handle_common: handle found does not belong to this sftp process");
-		return NULL;
-
-	    }
-
-	}
-
-    }
-
-    return handle;
-
-}
-
-
-/* FILEHANDLE */
-
-struct commonhandle_s *create_sftp_filehandle(struct sftp_subsystem_s *sftp, unsigned int inserttype, dev_t dev, uint64_t ino, char *name, unsigned int flags, unsigned int access)
-{
-    struct fs_location_s location;
-    struct commonhandle_s *handle=NULL;
-
-    memset(&location, 0, sizeof(struct fs_location_s));
-
-    location.flags=FS_LOCATION_FLAG_DEVINO;
-    location.type.devino.dev=dev;
-    location.type.devino.ino=ino;
-
-    if (inserttype==INSERTHANDLE_TYPE_CREATE) {
-
-	if (name==NULL) {
-
-	    logoutput_warning("create_sftp_filehandle: filehandle for create requires a name (is not defined)");
-	    return NULL;
-
-	}
-
-	location.name=name;
-	location.flags|=FS_LOCATION_FLAG_NAME;
-
-    }
-
-    handle=create_commonhandle(COMMONHANDLE_TYPE_FILE, &location, sizeof(struct sftp_handle_s));
-
-    if (handle) {
-	struct sftp_handle_s *sftp_handle=NULL;
-	struct insert_filehandle_s insert;
-
-	handle->flags |= COMMONHANDLE_FLAG_SFTP;
+	handle->subsystem=HANDLE_SUBSYSTEM_TYPE_SFTP;
 	handle->get_access=_get_access_sftp;
 	handle->get_flags=_get_flags_sftp;
 
-	sftp_handle=(struct sftp_handle_s *) handle->buffer;
+	data->flags=flags;
+	data->access=access;
 
-	sftp_handle->sftp=sftp;
-	sftp_handle->type.filehandle.flags=flags;
-	sftp_handle->type.filehandle.access=access;
+	/* insert
+	    TODO: check for conflicts
+	    - lock conflicts -> access flags do not allow each other */
 
-	/* insert to check for conflicts */
+        insert_fs_handle(handle, sftp->connection.unique, dev, ino);
 
-	memset(&insert, 0, sizeof(struct insert_filehandle_s));
-	insert.type=inserttype;
-
-	if (start_insert_filehandle(handle, &insert)==0) {
-
-	    logoutput("create_sftp_filehandle: created file handle");
-
-	} else {
-
-	    logoutput("create_sftp_filehandle: failed to insert the file handle (..)");
-	    goto failed;
-
-	}
-
-    }
-
-    return handle;
-
-    failed:
-
-    if (handle) free_commonhandle(&handle);
-    return NULL;
-
-}
-
-/* DIRHANDLE */
-
-struct commonhandle_s *create_sftp_dirhandle(struct sftp_subsystem_s *sftp, struct fs_location_devino_s *devino)
-{
-    struct fs_location_s location;
-    struct commonhandle_s *handle=NULL;
-    struct attr_context_s *actx=&sftp->attrctx;
-
-    memset(&location, 0, sizeof(struct fs_location_s));
-
-    location.flags=FS_LOCATION_FLAG_DEVINO;
-    location.type.devino.dev=devino->dev;
-    location.type.devino.ino=devino->ino;
-
-    handle=create_commonhandle(COMMONHANDLE_TYPE_DIR, &location, sizeof(struct sftp_handle_s));
-
-    if (handle) {
-	struct sftp_handle_s *sftp_handle=(struct sftp_handle_s *) handle->buffer;
-
-	handle->flags |= COMMONHANDLE_FLAG_SFTP;
-
-	/* set the properties of the dirhandle:
-	- one of the properties is which attributes send by the readdir. Now with the latest versions (20211101: versions 3 to 6) this is determined
-	somehowe by the server, no negotiation at all */
-
-	sftp_handle->sftp=sftp;
-
-	/* take a default for the sftp attributes the server sends to the client per dentry next to the name and the type (which are always send)
-	    TODO:
-	    - make this configurable
-	    - use a "new" opendir where the client can ask for the set of attributes: an extension or a new protocol version */
-
-	sftp_handle->type.dirhandle.valid.mask=0;
-	sftp_handle->type.dirhandle.valid.flags=0;
-
-	//if ((* actx->ops.enable_attr)(actx, &sftp_handle->type.dirhandle.valid, "size")==1) logoutput("create_sftp_dirhandle: enabled sending of attr/readdir size");
-	//if ((* actx->ops.enable_attr)(actx, &sftp_handle->type.dirhandle.valid, "permissions")==1) logoutput("create_sftp_dirhandle: enabled sending of attr/readdir permissions");
-	//if ((* actx->ops.enable_attr)(actx, &sftp_handle->type.dirhandle.valid, "mtime")==1) logoutput("create_sftp_dirhandle: enabled sending of attr/readdir modifytime");
-	//if ((* actx->ops.enable_attr)(actx, &sftp_handle->type.dirhandle.valid, "user")==1) logoutput("create_sftp_dirhandle: enabled sending of attr/readdir user");
-	//if ((* actx->ops.enable_attr)(actx, &sftp_handle->type.dirhandle.valid, "subseconds")==1) logoutput("create_sftp_dirhandle: enabled sending of attr/readdir subsecond times");
-
-	sftp_handle->type.dirhandle.flags=0;
-
-	insert_dirhandle(handle);
 
     }
 
@@ -457,46 +181,20 @@ struct commonhandle_s *create_sftp_dirhandle(struct sftp_subsystem_s *sftp, stru
 
 }
 
-struct commonhandle_s *find_sftp_handle(struct sftp_subsystem_s *sftp, char *buffer, unsigned int size, unsigned int *p_count)
+/* SFTP valid */
+
+struct sftp_valid_s *sftp_get_valid_fs_handle(struct fs_handle_s *handle)
 {
-    return find_sftp_handle_common(sftp, 0, buffer, size, p_count);
+    struct sftp_handle_data_s *data=(struct sftp_handle_data_s *) handle->buffer;
+    return &data->valid;
 }
 
-void release_sftp_handle(struct commonhandle_s **p_handle)
+int send_sftp_handle(struct sftp_subsystem_s *sftp, struct sftp_in_header_s *inh, struct fs_handle_s *handle)
 {
-    struct commonhandle_s *handle=*p_handle;
+    unsigned int size=(unsigned int) get_fs_handle_buffer_size();
+    char buffer[size];
 
-    if (handle) {
+    size=(* handle->write_handle)(handle, buffer, size);
 
-	if (handle->flags & COMMONHANDLE_FLAG_DIR) {
-	    struct dirhandle_s *dh=&handle->type.dir;
-
-	    (* dh->close)(dh);
-
-	} else if (handle->flags & COMMONHANDLE_FLAG_FILE) {
-	    struct filehandle_s *fh=&handle->type.file;
-
-	    (* fh->close)(fh);
-
-	}
-
-	free_commonhandle(p_handle);
-
-    }
-
-}
-
-struct sftp_valid_s *get_valid_sftp_dirhandle(struct commonhandle_s *handle)
-{
-    struct sftp_handle_s *sftp_handle=(struct sftp_handle_s *) handle->buffer;
-    return &sftp_handle->type.dirhandle.valid;
-}
-
-int send_sftp_handle(struct sftp_subsystem_s *sftp, struct sftp_payload_s *payload, struct commonhandle_s *handle)
-{
-    unsigned int size=(unsigned int) get_sftp_handle_size();
-    char bytes[size];
-
-    write_sftp_commonhandle(handle, bytes, size);
-    return reply_sftp_handle(sftp, payload->id, bytes, size);
+    return reply_sftp_handle(sftp, inh->id, buffer, size);
 }

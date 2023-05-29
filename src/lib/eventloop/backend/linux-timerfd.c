@@ -179,8 +179,6 @@ unsigned int add_timer_timerfd(struct bevent_subsystem_s *subsys, struct system_
     if (backend->current) {
 	struct list_element_s *list=backend->current;
 
-	logoutput_debug("add_timer_timerfd: id %i while", timer->id);
-
 	while (list) {
 	    struct btimer_s *tmp=(struct btimer_s *)((char *) list - offsetof(struct btimer_s, list));
 
@@ -191,8 +189,6 @@ unsigned int add_timer_timerfd(struct bevent_subsystem_s *subsys, struct system_
 
 	if (list) {
 
-	    logoutput_debug("add_timer_timerfd: id %i list", timer->id);
-
 	    add_list_element_before(&backend->timers, list, &timer->list);
 
 	    if (list==backend->current) {
@@ -202,11 +198,7 @@ unsigned int add_timer_timerfd(struct bevent_subsystem_s *subsys, struct system_
 
 	    }
 
-	    logoutput_debug("add_timer_timerfd: id %i list-post", timer->id);
-
 	} else {
-
-	    logoutput_debug("add_timer_timerfd: id %i last", timer->id);
 
 	    add_list_element_last(&backend->timers, &timer->list);
 
@@ -220,11 +212,7 @@ unsigned int add_timer_timerfd(struct bevent_subsystem_s *subsys, struct system_
 
     }
 
-    logoutput_debug("add_timer_timerfd: id %i unset", timer->id);
-
     signal_unlock_flag(signal, &backend->flags, BTIMER_BACKEND_FLAG_LOCK_TIMERS);
-
-    logoutput_debug("add_timer_timerfd: id %i out", timer->id);
     return timer->id;
 }
 
@@ -400,13 +388,11 @@ static unsigned char modify_timer_timerfd_id(struct bevent_subsystem_s *subsys, 
     unsigned char found=0;
     int compareresult=0;
 
-    logoutput_debug("modify_timer_timerfd_id: id %i", id);
-
     signal_lock_flag(signal, &backend->flags, BTIMER_BACKEND_FLAG_LOCK_TIMERS);
 
     /* first find the timer ... this maybe slow, a hashtable is better than */
 
-    list=get_list_head(&backend->timers, 0);
+    list=get_list_head(&backend->timers);
 
     while (list) {
 	struct btimer_s *timer=(struct btimer_s *)((char *) list - offsetof(struct btimer_s, list));
@@ -478,7 +464,6 @@ unsigned char remove_timer_timerfd(struct bevent_subsystem_s *subsys, unsigned i
 static void launch_btimer_cb(void *ptr)
 {
     struct btimer_s *timer=(struct btimer_s *) ptr;
-    logoutput_debug("launch_btimer_cb: id %i", timer->id);
     (* timer->cb)(timer->id, timer->ptr, BTIMER_FLAG_EXPIRED);
 }
 
@@ -505,7 +490,7 @@ static void thread2handle_expirations(void *ptr)
 
 	get_current_time_system_time(&current);
 	if (system_time_test_earlier(&timer->expire, &current)<0) break;
-	work_workerthread(NULL, -1, launch_btimer_cb, (void *) timer, NULL);
+	work_workerthread(NULL, -1, launch_btimer_cb, (void *) timer);
 	list=get_next_element(list);
 
     }
@@ -532,6 +517,8 @@ static void thread2handle_expirations(void *ptr)
 static void timer_bevent_cb(struct bevent_s *bevent, unsigned int flag, struct bevent_argument_s *arg)
 {
 
+    clear_io_event(bevent, flag, arg);
+
     if (signal_is_data(arg)) {
 
 #ifdef __linux__
@@ -546,7 +533,7 @@ static void timer_bevent_cb(struct bevent_s *bevent, unsigned int flag, struct b
 
 	    if (expirations>0) {
 
-		work_workerthread(NULL, -1, thread2handle_expirations, (void *) bevent, NULL);
+		work_workerthread(NULL, -1, thread2handle_expirations, (void *) bevent);
 
 	    }
 
@@ -642,13 +629,13 @@ static void clear_btimer_backend(struct bevent_subsystem_s *subsys)
 
     signal_lock_flag(signal, &backend->flags, BTIMER_BACKEND_FLAG_LOCK_TIMERS);
 
-    list=get_list_head(&backend->timers, SIMPLE_LIST_FLAG_REMOVE);
+    list=remove_list_head(&backend->timers);
     while (list) {
 	struct btimer_s *timer=(struct btimer_s *)((char *) list - offsetof(struct btimer_s, list));
 
 	(* timer->cb)(timer->id, timer->ptr, BTIMER_FLAG_REMOVED);
 	free(timer);
-	list=get_list_head(&backend->timers, SIMPLE_LIST_FLAG_REMOVE);
+	list=remove_list_head(&backend->timers);
 
     }
 
@@ -695,7 +682,7 @@ int init_timerfd_backend(struct beventloop_s *loop, struct bevent_subsystem_s *s
 
     }
 
-    set_bevent_cb(bevent, (BEVENT_FLAG_CB_DATAAVAIL | BEVENT_FLAG_CB_ERROR | BEVENT_FLAG_CB_CLOSE), timer_bevent_cb);
+    set_bevent_cb(bevent, (BEVENT_FLAG_CB_DATA | BEVENT_FLAG_CB_ERROR | BEVENT_FLAG_CB_CLOSE), timer_bevent_cb);
     backend->bevent=bevent;
 
     /* dummy timer as first in list

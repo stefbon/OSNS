@@ -42,24 +42,22 @@
     NOTE: handle can be a handle used to open a file, but also a directory
 */
 
-void sftp_op_close(struct sftp_payload_s *payload)
+void sftp_op_close(struct sftp_subsystem_s *sftp, struct sftp_in_header_s *inh, char *data)
 {
-    struct sftp_subsystem_s *sftp=payload->sftp; 
     unsigned int status=SSH_FX_BAD_MESSAGE;
 
     logoutput("sftp_op_close (%i)", (int) gettid());
 
-    if (payload->len >= 4 + get_sftp_handle_size()) {
-	char *data=payload->data;
+    if (inh->len >= 4 + get_fs_handle_buffer_size()) {
 	unsigned int len=0;
 
 	len=get_uint32(&data[0]);
 
-	if (len==get_sftp_handle_size()) {
+	if (len==get_fs_handle_buffer_size()) {
 	    unsigned int error=0;
-	    unsigned int count=0;
-	    struct commonhandle_s *handle=find_sftp_commonhandle(sftp, &data[4], len, NULL);
-	    struct sftp_subsystem_s *tmp=NULL;
+	    struct fs_handle_s *handle=NULL;
+
+            handle=get_fs_handle(sftp->connection.unique, &data[4], len, NULL);
 
 	    if (handle==NULL) {
 
@@ -69,28 +67,9 @@ void sftp_op_close(struct sftp_payload_s *payload)
 
 	    }
 
-	    tmp=get_sftp_subsystem_commonhandle(handle);
-
-	    if (tmp==NULL) {
-
-		status=SSH_FX_INVALID_HANDLE;
-		logoutput_warning("sftp_op_close: handle is not a sftp handle");
-		goto error;
-
-	    } else if (tmp != sftp) {
-
-		status=SSH_FX_INVALID_HANDLE;
-		logoutput_warning("sftp_op_close: handle does belong by other sftp server");
-		goto error;
-
-
-	    } else {
-
-		release_sftp_handle(&handle);
-		reply_sftp_status_simple(sftp, payload->id, SSH_FX_OK);
-		return;
-
-	    }
+	    free_fs_handle(&handle);
+	    reply_sftp_status_simple(sftp, inh->id, SSH_FX_OK);
+	    return;
 
 	} else {
 
@@ -104,7 +83,7 @@ void sftp_op_close(struct sftp_payload_s *payload)
     error:
 
     logoutput("sftp_op_close: status %i", status);
-    reply_sftp_status_simple(sftp, payload->id, status);
+    reply_sftp_status_simple(sftp, inh->id, status);
     return;
 
     disconnect:

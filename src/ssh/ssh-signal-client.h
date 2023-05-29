@@ -22,6 +22,7 @@
 
 /* prototypes */
 
+unsigned int get_ssh2remote_command(char *command, unsigned int size, const char *what, struct io_option_s *o);
 void init_ssh_session_signals_client(struct ssh_session_ctx_s *context);
 
 #endif

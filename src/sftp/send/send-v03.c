@@ -26,7 +26,6 @@
 #include "libosns-workspace.h"
 #include "libosns-context.h"
 #include "libosns-fuse-public.h"
-#include "libosns-resources.h"
 
 #include <linux/fs.h>
 
@@ -122,13 +121,17 @@ int send_sftp_init_v03(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r
     - uint32 	len path (n)
     - byte[n]	path
     - uint32	pflags
-    - attrs (5) ignored when opening a file
+    - attrs (size) ignored when opening a file
+
+    ------ +
+
+    1 + 4 + 4 + len + 4 + size = 13 + len + size
 
 */
 
 int send_sftp_open_v03(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r)
 {
-    char data[22 + sftp_r->call.open.len];
+    char data[17 + sftp_r->call.open.len + sftp_r->call.open.size + 5];
     unsigned int pos=0;
     struct sftp_openmode_s openmode;
 
@@ -141,8 +144,9 @@ int send_sftp_open_v03(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r
 
     logoutput_debug("send_sftp_open: flags %i", openmode.flags);
 
-    store_uint32(&data[pos], 18 + sftp_r->call.open.len);
+    store_uint32(&data[pos], 0);
     pos+=4;
+
     data[pos]=(unsigned char) SSH_FXP_OPEN;
     pos++;
     store_uint32(&data[pos], sftp_r->id);
@@ -155,54 +159,21 @@ int send_sftp_open_v03(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r
     store_uint32(&data[pos], openmode.flags);
     pos+=4;
 
-    store_uint32(&data[pos], 0); /* valid attributes: no attributes */
-    pos+=4;
-    data[pos]=(unsigned char) SSH_FILEXFER_TYPE_REGULAR;
-    pos++;
+    if (sftp_r->call.open.size>0) {
 
-    return (* sftp_r->send)(sftp_r, data, pos, &sftp_r->reply.sequence, &sftp_r->slist);
+	memcpy((char *) &data[pos], sftp_r->call.open.buff, sftp_r->call.open.size);
+	pos+=sftp_r->call.open.size;
 
-}
+    } else {
 
-/*
-    CREATE a file
-    - byte 1 	SSH_FXP_OPEN
-    - uint32 	request id
-    - uint32 	len path (n)
-    - byte[n]	path
-    - uint32	pflags
-    - attrs (x) 
+	store_uint32(&data[pos], 0); /* valid attributes: no attributes */
+	pos+=4;
+	data[pos]=(unsigned char) SSH_FILEXFER_TYPE_REGULAR;
+	pos++;
 
-*/
+    }
 
-int send_sftp_create_v03(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r)
-{
-    char data[17 + sftp_r->call.create.len + sftp_r->call.create.size];
-    unsigned int pos=0;
-    struct sftp_openmode_s openmode;
-
-    openmode.access=0;
-    openmode.flags=0;
-
-    get_sftp_openmode_v03(sftp_r->call.open.posix_flags, &openmode);
-    sftp_r->id=get_sftp_request_id(sftp);
-
-    logoutput_debug("send_sftp_create: flags %i", openmode.flags);
-
-    store_uint32(&data[pos], 13 + sftp_r->call.create.len + sftp_r->call.create.size);
-    pos+=4;
-    data[pos]=(unsigned char) SSH_FXP_OPEN;
-    pos++;
-    store_uint32(&data[pos], sftp_r->id);
-    pos+=4;
-    store_uint32(&data[pos], sftp_r->call.create.len);
-    pos+=4;
-    memcpy((char *) &data[pos], sftp_r->call.create.path, sftp_r->call.create.len);
-    pos+=sftp_r->call.create.len;
-    store_uint32(&data[pos], openmode.flags);
-    pos+=4;
-    memcpy((char *) &data[pos], sftp_r->call.create.buff, sftp_r->call.create.size);
-    pos+=sftp_r->call.create.size;
+    store_uint32(&data[0], pos - 4); /* set length in first 4 bytes */
 
     return (* sftp_r->send)(sftp_r, data, pos, &sftp_r->reply.sequence, &sftp_r->slist);
 
@@ -576,21 +547,21 @@ int send_sftp_lstat_v03(struct sftp_client_s *sftp, struct sftp_request_s *sftp_
 
 int send_sftp_fstat_v03(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r)
 {
-    char data[13 + sftp_r->call.fstat.len];
+    char data[13 + sftp_r->call.fgetstat.len];
     unsigned int pos=0;
 
     sftp_r->id=get_sftp_request_id(sftp);
 
-    store_uint32(&data[pos], 9 + sftp_r->call.fstat.len);
+    store_uint32(&data[pos], 9 + sftp_r->call.fgetstat.len);
     pos+=4;
     data[pos]=(unsigned char) SSH_FXP_FSTAT;
     pos++;
     store_uint32(&data[pos], sftp_r->id);
     pos+=4;
-    store_uint32(&data[pos], sftp_r->call.fstat.len);
+    store_uint32(&data[pos], sftp_r->call.fgetstat.len);
     pos+=4;
-    memcpy((char *) &data[pos], sftp_r->call.fstat.handle, sftp_r->call.fstat.len);
-    pos+=sftp_r->call.fstat.len;
+    memcpy((char *) &data[pos], sftp_r->call.fgetstat.handle, sftp_r->call.fgetstat.len);
+    pos+=sftp_r->call.fgetstat.len;
 
     return (* sftp_r->send)(sftp_r, data, pos, &sftp_r->reply.sequence, &sftp_r->slist);
 
@@ -847,9 +818,9 @@ int send_sftp_custom_v03(struct sftp_client_s *sftp, struct sftp_request_s *sftp
     char data[9 + size];
     unsigned int pos=0;
 
-    logoutput_debug("send_sftp_custom_v03: nr %i", sftp_r->call.extension.id.nr);
-
     sftp_r->id=get_sftp_request_id(sftp);
+
+    logoutput_debug("send_sftp_custom_v03: id %u nr %i", sftp_r->id, sftp_r->call.extension.id.nr);
 
     store_uint32(&data[pos], 9 + size);
     pos+=4;
@@ -871,7 +842,6 @@ static struct sftp_send_ops_s send_ops_v03 = {
     .version				= 3,
     .init				= send_sftp_init_v03,
     .open				= send_sftp_open_v03,
-    .create				= send_sftp_create_v03,
     .read				= send_sftp_read_v03,
     .write				= send_sftp_write_v03,
     .close				= send_sftp_close_v03,

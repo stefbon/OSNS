@@ -20,14 +20,8 @@
 #ifndef _FUSE_SFTP_LOCK_H
 #define _FUSE_SFTP_LOCK_H
 
-void _fs_sftp_flock(struct fuse_openfile_s *openfile, struct fuse_request_s *r, unsigned char type);
-void _fs_sftp_getlock(struct fuse_openfile_s *openfile, struct fuse_request_s *f_request, struct flock *flock);
-void _fs_sftp_setlock(struct fuse_openfile_s *openfile, struct fuse_request_s *f_request, struct flock *flock, unsigned int flags);
-void _fs_sftp_setlockw(struct fuse_openfile_s *openfile, struct fuse_request_s *f_request, struct flock *flock);
-
-void _fs_sftp_flock_disconnected(struct fuse_openfile_s *openfile, struct fuse_request_s *f_request, unsigned char type);
-void _fs_sftp_getlock_disconnected(struct fuse_openfile_s *openfile, struct fuse_request_s *f_request, struct flock *flock);
-void _fs_sftp_setlock_disconnected(struct fuse_openfile_s *openfile, struct fuse_request_s *f_request, struct flock *flock, unsigned int flags);
-void _fs_sftp_setlockw_disconnected(struct fuse_openfile_s *openfile, struct fuse_request_s *f_request, struct flock *flock);
+void _fs_sftp_flock(struct fuse_open_header_s *oh, struct fuse_request_s *r, uint64_t lo, unsigned char type);
+void _fs_sftp_getlock(struct fuse_open_header_s *oh, struct fuse_request_s *f_request, struct flock *flock);
+void _fs_sftp_setlock(struct fuse_open_header_s *oh, struct fuse_request_s *f_request, struct flock *flock, uint64_t lo, unsigned int flags);
 
 #endif

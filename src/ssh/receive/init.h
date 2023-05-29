@@ -24,7 +24,7 @@ void msg_not_supported(struct ssh_connection_s *c, struct ssh_payload_s *payload
 void register_msg_cb(struct ssh_connection_s *c, unsigned char type, receive_msg_cb_t cb);
 void process_cb_ssh_payload(struct ssh_connection_s *c, struct ssh_payload_s *payload);
 
-int init_ssh_connection_receive(struct ssh_connection_s *c, unsigned int *error);
+int init_ssh_connection_receive(struct ssh_session_s *session, struct ssh_connection_s *connection, unsigned int *error);
 void free_ssh_connection_receive(struct ssh_connection_s *c);
 
 void init_ssh_receive_once();

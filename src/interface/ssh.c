@@ -25,6 +25,7 @@
 #include "libosns-interface.h"
 #include "libosns-context.h"
 #include "libosns-socket.h"
+#include "libosns-ssh.h"
 
 #include "ssh/ssh-common.h"
 #include "ssh/ssh-common-client.h"
@@ -32,30 +33,6 @@
 #include "ssh/send/msg-channel.h"
 
 #include "fuse.h"
-
-static struct beventloop_s *get_workspace_beventloop(struct context_interface_s *i)
-{
-    struct service_context_s *ctx=get_service_context(i);
-    struct workspace_mount_s *w=get_workspace_mount_ctx(ctx);
-    struct beventloop_s *loop=NULL;
-
-    if (w) {
-	struct service_context_s *root_ctx=get_root_context_workspace(w);
-
-	if (root_ctx) loop=get_fuse_interface_eventloop(&root_ctx->interface);
-
-    }
-
-    return loop;
-
-}
-
-static struct shared_signal_s *get_workspace_signal(struct context_interface_s *i)
-{
-    struct service_context_s *ctx=get_service_context(i);
-    struct service_context_s *root=get_root_context(ctx);
-    return root->service.workspace.signal;
-}
 
 /* SSH SESSION callbacks */
 
@@ -78,7 +55,7 @@ static int _connect_interface_ssh_session(struct context_interface_s *interface,
 
     }
 
-    fd=connect_ssh_session_client(session, target->host, param->port, loop);
+    fd=connect_ssh_session_client(session, target->ip, param->port, loop);
     if (fd>=0) interface->flags |= _INTERFACE_FLAG_CONNECT;
 
     out:
@@ -150,6 +127,43 @@ static int _signal_ssh2ctx(struct ssh_session_s *session, const char *what, stru
     return signal_selected_ctx(i, 1, what, option, type, select_ssh2ctx_cb, (void *) &hlpr);
 }
 
+static struct list_header_s *get_header_connections(struct context_interface_s *i)
+{
+    char *buffer=(* i->get_interface_buffer)(i);
+    struct ssh_session_s *s=(struct ssh_session_s *) buffer;
+    return &s->connections.header;
+}
+
+static unsigned int get_interface_status(struct context_interface_s *i, struct interface_status_s *status)
+{
+    char *buffer=(* i->get_interface_buffer)(i);
+    struct ssh_session_s *s=(struct ssh_session_s *) buffer;
+
+    status->flags=INTERFACE_STATUS_FLAG_NONE;
+
+    if (s->connections.main) {
+        struct connection_s *c=&s->connections.main->connection;
+        struct osns_socket_s *sock=&c->sock;
+
+        if (sock->status & (SOCKET_STATUS_CLOSING | SOCKET_STATUS_CLOSED)) {
+
+            status->flags=INTERFACE_STATUS_FLAG_DISCONNECTED;
+
+        } else if (sock->status & SOCKET_STATUS_ERROR) {
+
+            status->flags=INTERFACE_STATUS_FLAG_ERROR;
+
+        } else if (sock->status & SOCKET_STATUS_OPEN) {
+
+            status->flags=INTERFACE_STATUS_FLAG_CONNECTED;
+
+        }
+
+    }
+
+    return status->flags;
+}
+
 /*
 	INTERFACE OPS
 			*/
@@ -169,17 +183,9 @@ static unsigned int _populate_interface_ssh_session(struct context_interface_s *
     return start;
 }
 
-static unsigned int _get_interface_buffer_size_ssh_session(struct interface_list_s *ilist)
+static unsigned int _get_interface_buffer_size_ssh_session(struct interface_list_s *ilist, struct context_interface_s *p)
 {
-    unsigned int size=0;
-
-    if (ilist->type==_INTERFACE_TYPE_SSH_SESSION) {
-
-	size=get_ssh_session_buffer_size();
-
-    }
-
-    return size;
+    return ((ilist->type==_INTERFACE_TYPE_SSH_SESSION) ? get_ssh_session_buffer_size() : 0);
 }
 
 static int _init_interface_buffer_ssh_session(struct context_interface_s *interface, struct interface_list_s *ilist, struct context_interface_s *primary)
@@ -201,18 +207,20 @@ static int _init_interface_buffer_ssh_session(struct context_interface_s *interf
 	interface->link.primary=primary;
 	primary->link.secondary.refcount++;
 
+	interface->get_header_connections=get_header_connections;
 	interface->get_interface_buffer=get_primary_interface_buffer;
 	interface->connect=_connect_interface_ssh_session_secondary;
 	interface->start=_start_interface_ssh_session_secondary;
+	interface->get_interface_status=get_interface_status;
 
 	interface->flags |= _INTERFACE_FLAG_BUFFER_INIT;
 	return 0;
 
     }
 
-    if (interface->size < (* ops->get_buffer_size)(ilist)) {
+    if (interface->size < (* ops->get_buffer_size)(ilist, NULL)) {
 
-	logoutput_warning("_init_interface_buffer_ssh_session: buffer size too small (%i, required %i) cannot continue", interface->size, (* ops->get_buffer_size)(ilist));
+	logoutput_warning("_init_interface_buffer_ssh_session: buffer size too small (%i, required %i) cannot continue", interface->size, (* ops->get_buffer_size)(ilist, NULL));
 	return -1;
 
     }
@@ -234,6 +242,8 @@ static int _init_interface_buffer_ssh_session(struct context_interface_s *interf
 	interface->connect=_connect_interface_ssh_session;
 	interface->start=_start_interface_ssh_session;
 	interface->get_interface_buffer=get_interface_buffer_default;
+	interface->get_header_connections=get_header_connections;
+	interface->get_interface_status=get_interface_status;
 
 	interface->iocmd.in=_signal_ctx2ssh;
 	session->context.signal_ssh2ctx=_signal_ssh2ctx;
@@ -263,4 +273,23 @@ static struct interface_ops_s ssh_interface_ops = {
 void init_ssh_session_interface()
 {
     add_interface_ops(&ssh_interface_ops);
+}
+
+unsigned int get_ssh_channel_max_packet_length(struct context_interface_s *i)
+{
+    struct ssh_session_s *session=NULL;
+
+    if (i->type==_INTERFACE_TYPE_SSH_CHANNEL) {
+        struct ssh_channel_s *channel=(struct ssh_channel_s *) i->buffer;
+
+        session=channel->session;
+
+    } else if (i->type==_INTERFACE_TYPE_SSH_SESSION) {
+
+        session=(struct ssh_session_s *) i->buffer;
+
+    }
+
+    return session ? get_max_packet_size(session) : 0;
+
 }

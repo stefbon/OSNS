@@ -20,6 +20,11 @@
 #ifndef _SSH_RECEIVE_GREETER_H
 #define _SSH_RECEIVE_GREETER_H
 
-int read_server_greeter(struct ssh_connection_s *c);
+int read_ssh_protocol_version(struct ssh_session_s *session);
+
+unsigned int get_ssh_protocol_version(struct ssh_session_s *session);
+unsigned int get_ssh_protocol_minor(struct ssh_session_s *session);
+
+void cb_read_socket_ssh_greeter(struct osns_socket_s *sock, uint64_t ctr, void *ptr);
 
 #endif

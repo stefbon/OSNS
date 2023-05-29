@@ -63,5 +63,6 @@ void set_system_time(struct system_timespec_s *time, system_time_sec_t sec, syst
 
 system_time_sec_t get_system_time_sec(struct system_timespec_s *time);
 system_time_nsec_t get_system_time_nsec(struct system_timespec_s *time);
+void system_nanosleep(unsigned int sec);
 
 #endif

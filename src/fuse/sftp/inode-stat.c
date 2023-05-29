@@ -28,6 +28,7 @@
 
 #include "sftp/common-protocol.h"
 #include "sftp/attr-context.h"
+#include "sftp/rw-attr-generic.h"
 #include "interface/sftp-attr.h"
 
 #include "inode-stat.h"
@@ -35,44 +36,19 @@
 /* TODO: use in stead of setting this and copy it to the inode->stat, use the inode->stat from the first moment, and use some custom "set" functions
     same as the mapping of users: use a parse_time_net2local and vice versa */
 
-void set_local_attributes(struct context_interface_s *i, struct inode_s *inode, struct system_stat_s *stat)
+void set_local_attributes(struct context_interface_s *i, struct system_stat_s *stat, struct system_stat_s *stat2set)
 {
 
-    if (stat->mask & SYSTEM_STAT_TYPE) set_type_system_stat(&inode->stat, get_type_system_stat(stat));
-    if (stat->mask & SYSTEM_STAT_MODE) set_mode_system_stat(&inode->stat, get_mode_system_stat(stat));
-    if (stat->mask & SYSTEM_STAT_SIZE) set_size_system_stat(&inode->stat, get_size_system_stat(stat));
-    if (stat->mask & SYSTEM_STAT_UID) set_uid_system_stat(&inode->stat, get_uid_system_stat(stat));
-    if (stat->mask & SYSTEM_STAT_GID) set_gid_system_stat(&inode->stat, get_gid_system_stat(stat));
+    if (stat2set->mask & SYSTEM_STAT_TYPE) set_type_system_stat(stat, get_type_system_stat(stat2set));
+    if (stat2set->mask & SYSTEM_STAT_MODE) set_mode_system_stat(stat, get_mode_system_stat(stat2set));
+    if (stat2set->mask & SYSTEM_STAT_SIZE) set_size_system_stat(stat, get_size_system_stat(stat2set));
+    if (stat2set->mask & SYSTEM_STAT_UID) set_uid_system_stat(stat, get_uid_system_stat(stat2set));
+    if (stat2set->mask & SYSTEM_STAT_GID) set_gid_system_stat(stat, get_gid_system_stat(stat2set));
 
-    if (stat->mask & SYSTEM_STAT_ATIME) {
-
-	// correct_time_s2c_ctx(interface, &stat->atime);
-
-	copy_atime_system_stat(&inode->stat, stat);
-
-    }
-
-    if (stat->mask & SYSTEM_STAT_MTIME) {
-
-
-	// correct_time_s2c_ctx(interface, &stat->mtime);
-	copy_mtime_system_stat(&inode->stat, stat);
-
-    }
-
-    if (stat->mask & SYSTEM_STAT_CTIME) {
-
-	// correct_time_s2c_ctx(interface, &stat->ctime);
-	copy_ctime_system_stat(&inode->stat, stat);
-
-    }
-
-    if (stat->mask & SYSTEM_STAT_BTIME) {
-
-	// correct_time_s2c_ctx(interface, &stat->atime);
-	copy_btime_system_stat(&inode->stat, stat);
-
-    }
+    if (stat2set->mask & SYSTEM_STAT_ATIME) copy_atime_system_stat(stat, stat2set);
+    if (stat2set->mask & SYSTEM_STAT_MTIME) copy_mtime_system_stat(stat, stat2set);
+    if (stat2set->mask & SYSTEM_STAT_CTIME) copy_ctime_system_stat(stat, stat2set);
+    if (stat2set->mask & SYSTEM_STAT_BTIME) copy_btime_system_stat(stat, stat2set);
 
 }
 
@@ -103,9 +79,21 @@ unsigned int get_attr_buffer_size(struct context_interface_s *i, struct rw_attr_
 
 }
 
-void set_sftp_inode_stat_defaults(struct context_interface_s *i, struct inode_s *inode)
+int compare_cache_sftp(struct ssh_string_s *data, unsigned int size, char *buffer, void *ptr)
 {
-    struct system_stat_s *stat=&inode->stat;
+    return (size>=data->len && memcmp(buffer, data->ptr, data->len)==0) ? 0 : 1;
+}
+
+int test_remote_file_modified(struct system_stat_s *stat, struct system_timespec_s *mtime_before)
+{
+    struct system_timespec_s mtime=SYSTEM_TIME_INIT;
+
+    get_mtime_system_stat(stat, &mtime);
+    return system_time_test_earlier(mtime_before, &mtime);
+}
+
+void set_sftp_stat_defaults(struct context_interface_s *i, struct system_stat_s *stat)
+{
     struct system_timespec_s time=SYSTEM_TIME_INIT;
 
     stat->sst_uid=get_sftp_unknown_userid_ctx(i);
@@ -121,15 +109,9 @@ void set_sftp_inode_stat_defaults(struct context_interface_s *i, struct inode_s 
 
 }
 
-int compare_cache_sftp(struct ssh_string_s *data, unsigned int size, char *buffer, void *ptr)
+void read_sftp_attributes(struct attr_context_s *attrctx, struct attr_buffer_s *abuff, struct system_stat_s *stat)
 {
-    return (size>=data->len && memcmp(buffer, data->ptr, data->len)==0) ? 0 : 1;
-}
-
-int test_remote_file_changed(struct system_stat_s *stat, struct system_timespec_s *mtime_before)
-{
-    struct system_timespec_s mtime=SYSTEM_TIME_INIT;
-
-    get_mtime_system_stat(stat, &mtime);
-    return system_time_test_earlier(mtime_before, &mtime);
+    unsigned int valid=(* abuff->ops->rw.read.read_uint32)(abuff);
+    struct rw_attr_result_s r=RW_ATTR_RESULT_INIT;
+    read_attributes_generic(attrctx, abuff, &r, stat, valid);
 }

@@ -22,7 +22,7 @@
 #include <systemd/sd-login.h>
 
 #include "libosns-log.h"
-#include "datatypes/ssh-string.h"
+#include "lib/ssh/ssh-string.h"
 #include "monitor.h"
 
 #define _MONITOR_FLAG_CHANGED				1

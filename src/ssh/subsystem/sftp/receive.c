@@ -31,301 +31,76 @@
 #include "receive.h"
 #include "init.h"
 
-static void read_sftp_buffer(void *ptr)
+static unsigned int get_sftp_msg_header_size(struct osns_socket_s *s, void *ptr)
 {
-    struct sftp_subsystem_s *s=(struct sftp_subsystem_s *) ptr;
-    struct ssh_subsystem_connection_s *connection=&s->connection;
-    struct sftp_receive_s *receive=&s->receive;
-    unsigned int error=0;
-    unsigned char headersize=9;
-    uint32_t length=0;
+    return sizeof(struct sftp_in_header_s);
+}
 
-    logoutput_debug("read_sftp_buffer: tid %i read %i", gettid(), receive->read);
+static unsigned int get_sftp_msg_size(struct osns_socket_s *s, char *buffer, unsigned int size, void *ptr)
+{
+    struct sftp_in_header_s *inh=(struct sftp_in_header_s *) buffer;
 
-    pthread_mutex_lock(&receive->mutex);
+    /* return the length of the full message ...
+    with sftp the length field in the header is
+    the full length excluding the length field itself */
 
-    start:
-
-    if (receive->read==0 || (receive->flags & SFTP_RECEIVE_STATUS_WAIT) || receive->threads>1) {
-
-	pthread_mutex_unlock(&receive->mutex);
-	goto out;
-
-    }
-
-    /* for sftp 9 bytes is the bare minmum to read the header:
-	- uint32		length
-	- byte			type
-	- uint32		id
-    */
-
-    receive->flags|=((receive->read < headersize) ? SFTP_RECEIVE_STATUS_WAITING1 : 0);
-    receive->threads++;
-
-    /* enough data in buffer and is the buffer free to process a packet ? */
-
-    while (receive->flags & (SFTP_RECEIVE_STATUS_WAITING1 | SFTP_RECEIVE_STATUS_PACKET)) {
-
-	int result=pthread_cond_wait(&receive->cond, &receive->mutex);
-
-	if (receive->read >= headersize && (receive->flags & SFTP_RECEIVE_STATUS_WAITING1)) {
-
-	    receive->flags &= ~SFTP_RECEIVE_STATUS_WAITING1;
-
-	} else if (receive->read==0) {
-
-	    receive->flags &= ~SFTP_RECEIVE_STATUS_WAITING1;
-	    receive->threads--;
-	    pthread_mutex_unlock(&receive->mutex);
-	    goto out;
-
-	} else if (result>0 || (receive->flags & SFTP_RECEIVE_STATUS_DISCONNECT)) {
-
-	    pthread_mutex_unlock(&receive->mutex);
-	    goto disconnect;
-
-	}
-
-    }
-
-    /* there is no other thread creating and reading a packet from the buffer */
-
-    receive->flags |= SFTP_RECEIVE_STATUS_PACKET;
-    pthread_mutex_unlock(&receive->mutex);
-
-    readpayload:
-
-    length=get_uint32(receive->buffer);
-
-    if (length + 4 > receive->size) {
-
-	logoutput_warning("read_sftp_buffer: tid %i packet size %i too big (max %i)", gettid(), length + 4, receive->size);
-	pthread_mutex_lock(&receive->mutex);
-	receive->flags &= ~SFTP_RECEIVE_STATUS_PACKET;
-	receive->threads--;
-	goto disconnect;
-
-    } else {
-	struct sftp_payload_s *payload=NULL;
-
-	pthread_mutex_lock(&receive->mutex);
-
-	/* wait for data to arrive */
-
-	logoutput_debug("read_sftp_buffer: tid %i read %i length %i", gettid(), receive->read, length);
-
-	while (receive->read < length + 4) {
-
-	    receive->flags |= SFTP_RECEIVE_STATUS_WAITING2;
-	    int result=pthread_cond_wait(&receive->cond, &receive->mutex);
-
-	    if (receive->read >= length + 4) {
-
-		receive->flags &= ~SFTP_RECEIVE_STATUS_WAITING2;
-		break;
-
-	    } else if (result>0 || (receive->flags & SFTP_RECEIVE_STATUS_DISCONNECT)) {
-
-		receive->flags &= ~ (SFTP_RECEIVE_STATUS_PACKET | SFTP_RECEIVE_STATUS_WAITING2);
-		receive->threads--;
-		pthread_mutex_unlock(&receive->mutex);
-		goto disconnect;
-
-	    }
-
-	}
-
-	/* enough data available */
-
-	payload=malloc(sizeof(struct sftp_payload_s) + length - 1);
-
-	if (payload) {
-	    unsigned char pos=4;
-	    char *buffer=receive->buffer;
-
-	    memset(payload, 0, sizeof(struct sftp_payload_s) + length - 1);
-	    payload->sftp=s;
-	    payload->len=length - 1; /* minus the first type byte */
-	    init_list_element(&payload->list, NULL);
-	    payload->type=(unsigned char) buffer[pos];
-	    pos++;
-
-	    memcpy(payload->data, &buffer[pos], length - 1);
-	    logoutput_debug("read_sftp_buffer: process payload len %i id %i", payload->len, payload->id);
-
-	    (* receive->process_sftp_payload)(payload);
-
-	} else {
-
-	    logoutput_warning("read_sftp_buffer: tid %i unable to allocate payload %i bytes", gettid(), length);
-	    pthread_mutex_unlock(&receive->mutex);
-	    goto disconnect;
-
-	}
-
-	receive->read -= (length + 4);
-	receive->flags &= ~SFTP_RECEIVE_STATUS_PACKET;
-	receive->threads--;
-
-	if (receive->read>0) {
-
-	    logoutput_debug("read_sftp_buffer: %i bytes still in buffer", receive->read);
-	    memmove(receive->buffer, (char *)(receive->buffer + length + 4), receive->read);
-	    if (receive->threads==0) goto start; /* notice receive mutex is still locked here */
-
-	}
-
-	pthread_cond_broadcast(&receive->cond);
-	pthread_mutex_unlock(&receive->mutex);
-
-    }
-
-    out:
-
-    return;
-
-    disconnect:
-
-    logoutput_warning("read_ssh_buffer_packet: ignoring received data");
-    clear_ssh_subsystem_connection(connection);
+    return (inh->len + 4);
 
 }
 
-static void start_thread_read_ssh_subsystem_connection_buffer(struct sftp_subsystem_s *s)
+static void set_sftp_msg_size(struct osns_socket_s *s, char *buffer, unsigned int size, void *ptr)
 {
-    work_workerthread(NULL, 0, read_sftp_buffer, (void *) s, NULL);
+    struct sftp_in_header_s *inh=(struct sftp_in_header_s *) buffer;
+    inh->len=size;
 }
 
-void read_ssh_subsystem_connection_socket(struct ssh_subsystem_connection_s *connection, struct osns_socket_s *sock)
+static void process_sftp_data(struct osns_socket_s *sock, char *header, char *data, struct socket_control_data_s *ctrl, void *ptr)
 {
-    struct sftp_subsystem_s *s=(struct sftp_subsystem_s *)((char *) connection - offsetof(struct sftp_subsystem_s, connection));
-    struct sftp_receive_s *receive=&s->receive;
-    unsigned int error=0;
-    int bytesread=0;
+    struct sftp_subsystem_s *sftp=(struct sftp_subsystem_s *) ptr;
+    struct sftp_in_header_s *inh=(struct sftp_in_header_s *) header;
 
-    pthread_mutex_lock(&receive->mutex);
+    (* sftp->cb[inh->type])(sftp, inh, data);
+}
 
-    /* read the first data coming from the remote server */
+static void process_sftp_close(struct osns_socket_s *sock, unsigned int level, void *ptr)
+{
+    struct sftp_subsystem_s *sftp=(struct sftp_subsystem_s *) ptr;
 
-    readbuffer:
+    process_socket_close_default(sock, level, NULL);
+    (* sftp->close)(sftp, level);
+}
 
-    bytesread=socket_read(sock, (void *) (receive->buffer + receive->read), (size_t) (receive->size - receive->read));
-    error=errno;
+static void process_sftp_error(struct osns_socket_s *sock, unsigned int level, unsigned int errcode, void *ptr)
+{
+    struct sftp_subsystem_s *sftp=(struct sftp_subsystem_s *) ptr;
 
-    if (bytesread<=0) {
+    process_socket_error_default(sock, level, errcode, NULL);
+    (* sftp->error)(sftp, level, errcode);
+}
 
-	pthread_mutex_unlock(&receive->mutex);
+static void process_sftp_custom_data(struct osns_socket_s *sock, char *header, char *data, struct socket_control_data_s *ctrl, void *ptr)
+{
+    /* TODO */
+    logoutput_debug("process_sftp_custom_data");
+}
 
-	logoutput_info("read_ssh_subsystem_connection_socket: bytesread %i error %i", bytesread, error);
+void init_sftp_socket_ops(struct osns_socket_s *sock, char *buffer, unsigned int size, unsigned char custom)
+{
 
-	/* handle error */
+    sock->ctx.get_msg_header_size=get_sftp_msg_header_size;
+    sock->ctx.get_msg_size=get_sftp_msg_size;
+    sock->ctx.set_msg_size=set_sftp_msg_size;
 
-	if (bytesread==0) {
+    if (custom) {
 
-	    /* peer has performed an orderly shutdown */
-
-	    connection->flags |= (SSH_SUBSYSTEM_CONNECTION_FLAG_TROUBLE);
-
-	    if (error>0) {
-
-		connection->error=error;
-		connection->flags |= SSH_SUBSYSTEM_CONNECTION_FLAG_RECV_ERROR;
-
-	    }
-
-	    //start_thread_ssh_subsystem_connection_problem(c);
-	    return;
-
-	} else if (error==EAGAIN || error==EWOULDBLOCK) {
-
-	    return 0;
-
-	} else if (socket_connection_error(error)) {
-
-	    logoutput_warning("read_ssh_subsystem_connection_socket: socket is not connected? error %i:%s", error, strerror(error));
-	    connection->error=error;
-	    connection->flags |= (SSH_SUBSYSTEM_CONNECTION_FLAG_TROUBLE | SSH_SUBSYSTEM_CONNECTION_FLAG_RECV_ERROR);
-	    // start_thread_ssh_subsystem_connection_problem(c);
-
-	} else {
-
-	    logoutput_warning("read_ssh_subsystem_connection_socket: error %i:%s", error, strerror(error));
-
-	}
+        sock->ctx.process_data=process_sftp_custom_data;
 
     } else {
 
-	/* no error */
-
-	receive->read+=bytesread;
-
-	logoutput_debug("read_ssh_subsystem_connection_socket: read %i", receive->read);
-
-	if (receive->flags & SFTP_RECEIVE_STATUS_WAIT) {
-
-	    /* there is a thread waiting for more data to arrive: signal it */
-
-	    pthread_cond_broadcast(&receive->cond);
-
-	} else if (receive->threads<2) {
-
-	    /* start a thread (but max number of threads may not exceed 2)*/
-
-	    start_thread_read_ssh_subsystem_connection_buffer(s);
-
-	}
-
-	pthread_mutex_unlock(&receive->mutex);
+        sock->ctx.process_data=process_sftp_data;
 
     }
 
-}
-
-static void process_sftp_payload_dummy(struct sftp_payload_s *p)
-{
-    logoutput("process_sftp_payload_dummy");
-    free(p);
-}
-
-int init_sftp_receive(struct sftp_receive_s *receive)
-{
-    memset(receive, 0, sizeof(struct sftp_receive_s));
-
-    receive->flags=SFTP_RECEIVE_STATUS_INIT;
-    pthread_mutex_init(&receive->mutex, NULL);
-    pthread_cond_init(&receive->cond, NULL);
-
-    receive->process_sftp_payload=process_sftp_payload_dummy;
-
-    receive->read=0;
-    receive->size=SFTP_RECEIVE_BUFFER_SIZE_DEFAULT;
-    receive->threads=0;
-
-    receive->buffer=malloc(receive->size);
-
-    if (receive->buffer) {
-
-	memset(receive->buffer, 0, receive->size);
-
-    } else {
-
-	logoutput_warning("init_sftp_receive: unable to allocate %i bytes", receive->buffer);
-	return -1;
-
-    }
-
-    return 0;
-}
-
-void free_sftp_receive(struct sftp_receive_s *receive)
-{
-
-    pthread_mutex_destroy(&receive->mutex);
-    pthread_cond_destroy(&receive->cond);
-
-    if (receive->buffer) {
-	free(receive->buffer);
-	receive->buffer=NULL;
-    }
-
+    sock->ctx.process_close=process_sftp_close;
+    sock->ctx.process_error=process_sftp_error;
 }

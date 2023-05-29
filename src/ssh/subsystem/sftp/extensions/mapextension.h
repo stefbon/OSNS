@@ -22,7 +22,7 @@
 
 /* prototypes */
 
-void cb_ext_mapextension(struct sftp_payload_s *payload, unsigned int pos);
-void sftp_op_mapextension(struct sftp_payload_s *payload);
+void cb_ext_mapextension(struct sftp_subsystem_s *sftp, struct sftp_in_header_s *inh, char *data, unsigned int pos);
+void sftp_op_mapextension(struct sftp_subsystem_s *sftp, struct sftp_in_header_s *inh, char *data);
 
 #endif

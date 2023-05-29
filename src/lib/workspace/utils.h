@@ -25,7 +25,7 @@
 
 char *get_path_from_template(char *template, struct passwd *pwd, char *buff, size_t len0);
 
-int create_directory(char *p, mode_t mode, unsigned int *error);
+int system_create_directory(char *p, mode_t mode, unsigned int *error);
 unsigned char ismounted(char *path);
 
 #endif

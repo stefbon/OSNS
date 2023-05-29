@@ -20,11 +20,16 @@
 #ifndef _LIB_USERS_H
 #define _LIB_USERS_H
 
+#include "users/mapping.h"
 #include "users/getent.h"
+#include "users/cache.h"
 #include "users/check.h"
+#include "users/domain.h"
+#include "users/entity.h"
 #include "users/local.h"
 #include "users/monitor.h"
-#include "users/mapping.h"
+#include "users/lookup.h"
+
 #include "users/mapcb.h"
 
 #endif

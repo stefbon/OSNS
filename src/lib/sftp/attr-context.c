@@ -60,7 +60,7 @@ static unsigned char get_sftp_protocol_version(struct attr_context_s *ctx)
     return 0;
 }
 
-static unsigned int get_sftp_flags(struct attr_context_s *ctx, const char *what)
+static unsigned int get_flags(struct attr_context_s *ctx, const char *what)
 {
     return 0;
 }
@@ -110,7 +110,7 @@ void init_attr_context(struct attr_context_s *actx, unsigned int flags, void *pt
     actx->maxlength_groupname=get_maxlength_groupname;
     actx->maxlength_domainname=get_maxlength_domainname;
     actx->get_sftp_protocol_version=get_sftp_protocol_version;
-    actx->get_sftp_flags=get_sftp_flags;
+    actx->get_sftp_flags=get_flags;
 
 }
 
@@ -161,6 +161,7 @@ void set_sftp_attr_context(struct attr_context_s *actx)
 	ops->write_name_name_response		= write_name_name_response_v03;
 	ops->parse_attributes			= parse_attributes_v03;
 	ops->enable_attr			= enable_attr_v03;
+	ops->get_property			= get_property_v03;
 	init_attr_context_v03(actx);
 
     } else if (version==4) {
@@ -169,6 +170,7 @@ void set_sftp_attr_context(struct attr_context_s *actx)
 	ops->write_name_name_response		= write_name_name_response_v04;
 	ops->parse_attributes			= parse_attributes_v04;
 	ops->enable_attr			= enable_attr_v04;
+	ops->get_property			= get_property_v04;
 	init_attr_context_v04(actx);
 
     } else if (version==5) {
@@ -177,6 +179,7 @@ void set_sftp_attr_context(struct attr_context_s *actx)
 	ops->write_name_name_response		= write_name_name_response_v04;
 	ops->parse_attributes			= parse_attributes_v05;
 	ops->enable_attr			= enable_attr_v05;
+	ops->get_property			= get_property_v05;
 	init_attr_context_v05(actx);
 
     } else if (version==6) {
@@ -185,6 +188,7 @@ void set_sftp_attr_context(struct attr_context_s *actx)
 	ops->write_name_name_response		= write_name_name_response_v04;
 	ops->parse_attributes			= parse_attributes_v06;
 	ops->enable_attr			= enable_attr_v06;
+	ops->get_property			= get_property_v06;
 	init_attr_context_v06(actx);
 
     } else {

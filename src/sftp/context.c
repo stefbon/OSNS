@@ -26,7 +26,6 @@
 #include "libosns-workspace.h"
 #include "libosns-context.h"
 #include "libosns-fuse-public.h"
-#include "libosns-resources.h"
 
 #include "sftp/common-protocol.h"
 #include "common.h"
@@ -169,12 +168,18 @@ static int _convert_path_l2p(struct sftp_client_s *s, char *buffer, unsigned int
     return (int) len;
 }
 
+static unsigned char break_request_default(struct sftp_client_s *s, unsigned int *p_status)
+{
+    return 0;
+}
+
 void init_sftp_default_context(struct sftp_client_s *sftp)
 {
     struct sftp_context_s *context=&sftp->context;
 
     context->signal_ctx2sftp=_signal_ctx2sftp;
     context->signal_sftp2ctx=_signal_sftp2ctx_default;
+    context->break_request=break_request_default;
     context->send_data=_send_data_default;
     context->recv_data=receive_sftp_data;
     context->get_required_path_size_p2l=_get_required_path_size_p2l;

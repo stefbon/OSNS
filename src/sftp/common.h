@@ -32,9 +32,6 @@
 
 #define SFTP_SENDHASH_TABLE_SIZE_DEFAULT		64
 
-#define SFTP_CLIENT_FLAG_READDIRPLUS			1
-#define SFTP_CLIENT_FLAG_NEWREADDIR			2
-
 #define SFTP_RECEIVE_FLAG_ALLOC				1
 #define SFTP_RECEIVE_FLAG_ERROR				2
 
@@ -59,7 +56,6 @@ struct sftp_send_ops_s {
     unsigned int					version;
     int							(* init)(struct sftp_client_s *sftp, struct sftp_request_s *r);
     int							(* open)(struct sftp_client_s *sftp, struct sftp_request_s *r);
-    int							(* create)(struct sftp_client_s *sftp, struct sftp_request_s *r);
     int							(* read)(struct sftp_client_s *sftp, struct sftp_request_s *r);
     int							(* write)(struct sftp_client_s *sftp, struct sftp_request_s *r);
     int							(* close)(struct sftp_client_s *sftp, struct sftp_request_s *r);
@@ -131,6 +127,7 @@ struct sftp_protocol_extension_server_s {
 
 struct sftp_protocol_extension_s {
     unsigned int					flags;
+    struct list_element_s				list;
     struct sftp_protocol_extension_server_s		*esbs;
     struct sftp_protocol_extension_client_s		*esbc;
     unsigned char					code;
@@ -140,8 +137,9 @@ struct sftp_protocol_extension_s {
 };
 
 struct sftp_extensions_s {
-    struct sftp_protocol_extension_s			*aextensions;
+    struct sftp_protocol_extension_s			**aextensions;
     unsigned int					size;
+    struct list_header_s				supported;
     struct list_header_s				supported_server;
     struct list_header_s				supported_client;
 };
@@ -181,14 +179,16 @@ struct sftp_sendhash_s {
 #define SFTP_CLIENT_FLAG_ALLOC				(1 << 1)
 #define SFTP_CLIENT_FLAG_SENDDATA			(1 << 2)
 #define SFTP_CLIENT_FLAG_SESSION			(1 << 3)
+#define SFTP_CLIENT_FLAG_MAPEXTENSIONS			(1 << 4)
 
 struct sftp_context_s {
     unsigned int					unique;
     void 						*ctx;
     int							(* signal_ctx2sftp)(struct sftp_client_s **s, const char *what, struct io_option_s *o, unsigned int type);
     int							(* signal_sftp2ctx)(struct sftp_client_s *s, const char *what, struct io_option_s *o, unsigned int type);
+    unsigned char					(* break_request)(struct sftp_client_s *s, unsigned int *status);
     int							(* send_data)(struct sftp_client_s *s, char *buffer, unsigned int size, uint32_t *seq, struct list_element_s *list);
-    void						(* recv_data)(struct sftp_client_s *s, char **buffer, unsigned int size, uint32_t seq, unsigned int flags);
+    void						(* recv_data)(struct sftp_client_s *s, char *buffer, unsigned int size, uint32_t seq, unsigned int flags);
     unsigned int					(* get_required_path_size_p2l)(struct sftp_client_s *s, unsigned int len);
     unsigned int					(* get_required_path_size_l2p)(struct sftp_client_s *s, unsigned int len);
     int							(* convert_path_p2l)(struct sftp_client_s *s, char *buffer, unsigned int size, char *data, unsigned int len);
@@ -216,7 +216,7 @@ struct sftp_signal_s {
 };
 
 struct sftp_receive_s {
-    void						(* receive_data)(struct sftp_client_s *sftp, char **p_buffer, unsigned int size, uint32_t seq, unsigned int flags);
+    void						(* receive_data)(struct sftp_client_s *sftp, char *buffer, unsigned int size, uint32_t seq, unsigned int flags);
 };
 
 struct sftp_protocol_s {

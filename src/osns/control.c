@@ -29,8 +29,7 @@
 #include "libosns-connection.h"
 
 #include "osns-protocol.h"
-#include "receive.h"
-#include "send.h"
+#include "osns.h"
 
 unsigned int write_osns_control_info(char *data, unsigned int len, struct osns_control_info_s *info)
 {

@@ -20,6 +20,8 @@
 #ifndef _SFTP_RECV_V05_H
 #define _SFTP_RECV_V05_H
 
+void _receive_sftp_status_v05(struct sftp_client_s *sftp, struct sftp_header_s *header, unsigned int (* map_error)(unsigned int status));
+
 struct sftp_recv_ops_s *get_sftp_recv_ops_v05();
 
 #endif

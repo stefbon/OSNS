@@ -19,40 +19,46 @@
 
 #include "libosns-basic-system-headers.h"
 
+#include "libosns-log.h"
 #include "ssh-uint.h"
 
 void store_uint16(char *buff, uint16_t value)
 {
-    unsigned char *tmp=(unsigned char *) buff;
+    unsigned char two[2];
 
-    tmp[0] = (value >> 8) & 0xFF;
-    tmp[1] = value & 0xFF;
+    two[0] = (value >> 8) & 0xFF;
+    two[1] = value & 0xFF;
+    memcpy(buff, (char *) two, 2);
 
 }
 
 void store_uint32(char *buff, uint32_t value)
 {
-    unsigned char *tmp=(unsigned char *) buff;
+    unsigned char four[4];
 
-    tmp[0] = (value >> 24) & 0xFF;
-    tmp[1] = (value >> 16) & 0xFF;
-    tmp[2] = (value >> 8) & 0xFF;
-    tmp[3] = value & 0xFF;
+    four[0] = (value >> 24) & 0xFF;
+    four[1] = (value >> 16) & 0xFF;
+    four[2] = (value >> 8) & 0xFF;
+    four[3] = value & 0xFF;
+    memcpy(buff, (char *) four, 4);
+
+    // logoutput_debug("store_uint32: array %.*s buffer %.*s value %u", 4, four, 4, buff, value);
 
 }
 
 void store_uint64(char *buff, uint64_t value)
 {
-    unsigned char *tmp=(unsigned char *) buff;
+    unsigned char eight[8];
 
-    tmp[0] = (value >> 56) & 0xFF;
-    tmp[1] = (value >> 48) & 0xFF;
-    tmp[2] = (value >> 40) & 0xFF;
-    tmp[3] = (value >> 32) & 0xFF;
-    tmp[4] = (value >> 24) & 0xFF;
-    tmp[5] = (value >> 16) & 0xFF;
-    tmp[6] = (value >> 8) & 0xFF;
-    tmp[7] = value & 0xFF;
+    eight[0] = (value >> 56) & 0xFF;
+    eight[1] = (value >> 48) & 0xFF;
+    eight[2] = (value >> 40) & 0xFF;
+    eight[3] = (value >> 32) & 0xFF;
+    eight[4] = (value >> 24) & 0xFF;
+    eight[5] = (value >> 16) & 0xFF;
+    eight[6] = (value >> 8) & 0xFF;
+    eight[7] = value & 0xFF;
+    memcpy(buff, (char *) eight, 8);
 
 }
 

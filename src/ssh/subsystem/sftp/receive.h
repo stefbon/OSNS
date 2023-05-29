@@ -24,8 +24,6 @@
 
 /* prototypes */
 
-void read_ssh_subsystem_connection_socket(struct ssh_subsystem_connection_s *connection, struct system_socket_s *sock);
-int init_sftp_receive(struct sftp_receive_s *receive);
-void free_sftp_receive(struct sftp_receive_s *receive);
+void init_sftp_socket_ops(struct osns_socket_s *sock, char *buffer, unsigned int size, unsigned char custom);
 
 #endif

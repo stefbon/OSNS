@@ -40,6 +40,7 @@
 #define SHARED_SIGNAL_FLAG_DEFAULT			2
 #define SHARED_SIGNAL_FLAG_ALLOC_MUTEX			4
 #define SHARED_SIGNAL_FLAG_ALLOC_COND			8
+#define SHARED_SIGNAL_FLAG_NONE			        16
 
 struct shared_signal_s {
     unsigned int					flags;
@@ -55,17 +56,29 @@ struct shared_signal_s {
 
 /* prototypes */
 
+int _signal_default_lock(struct shared_signal_s *s);
+int _signal_default_unlock(struct shared_signal_s *s);
+int _signal_default_broadcast(struct shared_signal_s *s);
+int _signal_default_condwait(struct shared_signal_s *s);
+int _signal_default_condtimedwait(struct shared_signal_s *s, struct system_timespec_s *t);
+
 struct shared_signal_s *create_custom_shared_signal();
+
 struct shared_signal_s *get_default_shared_signal();
+struct shared_signal_s *get_none_shared_signal();
+
 struct shared_signal_s *get_custom_shared_signal(pthread_mutex_t *mutex, pthread_cond_t *cond);
+void set_custom_shared_signal(struct shared_signal_s *signal, pthread_mutex_t *mutex, pthread_cond_t *cond);
+void set_custom_shared_signal_default(struct shared_signal_s *signal, pthread_mutex_t *mutex, pthread_cond_t *cond);
+void set_custom_shared_signal_none(struct shared_signal_s *signal);
 
 int signal_lock(struct shared_signal_s *s);
 int signal_unlock(struct shared_signal_s *s);
-
 int signal_broadcast(struct shared_signal_s *s);
 int signal_condwait(struct shared_signal_s *s);
 int signal_condtimedwait(struct shared_signal_s *s, struct system_timespec_s *t);
 
 void clear_shared_signal(struct shared_signal_s **p_s);
+void signal_broadcast_locked(struct shared_signal_s *s);
 
 #endif

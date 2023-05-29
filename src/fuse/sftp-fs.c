@@ -25,9 +25,8 @@
 #include "libosns-workspace.h"
 #include "libosns-context.h"
 #include "libosns-fuse-public.h"
-#include "libosns-resources.h"
 
-#include "sftp/access.h"
+#include "sftp/fstatat.h"
 #include "sftp/getattr.h"
 #include "sftp/lookup.h"
 #include "sftp/lock.h"
@@ -38,39 +37,24 @@
 #include "sftp/setattr.h"
 #include "sftp/symlink.h"
 #include "sftp/statfs.h"
-#include "sftp/xattr.h"
 
-static unsigned int _fs_sftp_get_name(struct service_context_s *ctx, char *buffer, unsigned int len)
-{
-    char *name=NULL;
-    unsigned int size=0;
-
-    name=ctx->service.filesystem.name;
-    size=strlen(name);
-
-    if (buffer) {
-
-	if (size<len) len=size;
-	memcpy(buffer, name, len);
-
-    }
-
-    return size;
-
-}
+#include "shared/access.h"
+#include "shared/xattr.h"
+#include "shared/name.h"
 
 /* generic sftp fs */
 
 static struct path_service_fs_s sftp_fs = {
 
-    .lookup_existing		= _fs_sftp_lookup_existing,
-    .lookup_new			= _fs_sftp_lookup_new,
+    .get_name			= _fs_shared_get_name,
+
+    .lookup			= _fs_sftp_lookup,
+    .fstatat			= _fs_sftp_fstatat,
 
     .getattr			= _fs_sftp_getattr,
     .setattr			= _fs_sftp_setattr,
 
-    .access			= _fs_sftp_access,
-    .get_name			= _fs_sftp_get_name,
+    .access			= _fs_shared_access,
 
     .mkdir			= _fs_sftp_mkdir,
     .mknod			= _fs_sftp_mknod,
@@ -81,55 +65,21 @@ static struct path_service_fs_s sftp_fs = {
     .unlink			= _fs_sftp_unlink,
     .rmdir			= _fs_sftp_rmdir,
 
-    .create			= _fs_sftp_create,
     .open			= _fs_sftp_open,
-
     .opendir			= _fs_sftp_opendir,
 
-    .getxattr			= _fs_sftp_getxattr,
-    .setxattr			= _fs_sftp_setxattr,
-    .listxattr			= _fs_sftp_listxattr,
-    .removexattr		= _fs_sftp_removexattr,
+    .getxattr			= _fs_shared_getxattr,
+    .setxattr			= _fs_shared_setxattr,
+    .listxattr			= _fs_shared_listxattr,
+    .removexattr		= _fs_shared_removexattr,
 
     .statfs			= _fs_sftp_statfs,
 
 };
 
-static struct path_service_fs_s sftp_fs_disconnected = {
-
-    .lookup_existing		= _fs_sftp_lookup_existing_disconnected,
-    .lookup_new			= _fs_sftp_lookup_new_disconnected,
-
-    .getattr			= _fs_sftp_getattr_disconnected,
-    .setattr			= _fs_sftp_setattr_disconnected,
-
-    .access			= _fs_sftp_access,
-    .mkdir			= _fs_sftp_mkdir_disconnected,
-    .mknod			= _fs_sftp_mknod_disconnected,
-    .symlink			= _fs_sftp_symlink_disconnected,
-    .symlink_validate		= _fs_sftp_symlink_validate_disconnected,
-    .readlink			= _fs_sftp_readlink_disconnected,
-
-    .unlink			= _fs_sftp_unlink_disconnected,
-    .rmdir			= _fs_sftp_rmdir_disconnected,
-
-    .create			= _fs_sftp_create_disconnected,
-    .open			= _fs_sftp_open_disconnected,
-
-    .opendir			= _fs_sftp_opendir_disconnected,
-
-    .getxattr			= _fs_sftp_getxattr,
-    .setxattr			= _fs_sftp_setxattr,
-    .listxattr			= _fs_sftp_listxattr,
-    .removexattr		= _fs_sftp_removexattr,
-
-    .statfs			= _fs_sftp_statfs_disconnected,
-
-};
-
 /* initialize a sftp subsystem interface using sftp fs */
 
-void set_context_filesystem_sftp(struct service_context_s *context, unsigned char disconnect)
+void set_context_filesystem_sftp(struct service_context_s *context)
 {
-    context->service.filesystem.fs=(disconnect) ? &sftp_fs_disconnected : &sftp_fs;
+    context->service.filesystem.fs=&sftp_fs;
 }

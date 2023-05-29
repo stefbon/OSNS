@@ -269,3 +269,8 @@ unsigned char enable_attr_v05(struct attr_context_s *actx, struct sftp_valid_s *
 {
     return enable_attr_v04(actx, p, name);
 }
+
+unsigned int get_property_v05(struct attr_context_s *actx, unsigned int flag)
+{
+    return get_property_v04(actx, flag);
+}

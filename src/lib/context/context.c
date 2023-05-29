@@ -29,3 +29,14 @@ struct service_context_s *get_service_context(struct context_interface_s *interf
     return (struct service_context_s *) ( ((char *) interface) - offsetof(struct service_context_s, interface));
 }
 
+void adjust_pathmax(struct service_context_s *ctx, unsigned int len)
+{
+    signal_set_flag(ctx->service.workspace.signal, &ctx->service.workspace.status, SERVICE_WORKSPACE_FLAG_PATH);
+    if (len>ctx->service.workspace.pathmax) ctx->service.workspace.pathmax=len;
+    signal_unset_flag(ctx->service.workspace.signal, &ctx->service.workspace.status, SERVICE_WORKSPACE_FLAG_PATH);
+}
+
+unsigned int get_pathmax(struct service_context_s *ctx)
+{
+    return ctx->service.workspace.pathmax;
+}

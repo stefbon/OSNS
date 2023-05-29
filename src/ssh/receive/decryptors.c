@@ -26,173 +26,147 @@
 #include "ssh-common.h"
 #include "ssh-utils.h"
 #include "ssh-receive.h"
+#include "ssh-common-crypto.h"
 
 static char fallback_buffer[sizeof(struct ssh_decryptor_s)];
 static struct ssh_decryptor_s *fallback=(struct ssh_decryptor_s *) fallback_buffer;
 
-struct ssh_decryptor_s *get_decryptor_container(struct list_element_s *list)
+static int verify_hmac_error(struct ssh_decryptor_s *d, struct ssh_packet_s *p)
 {
-    return (struct ssh_decryptor_s *) (((char *) list) - offsetof(struct ssh_decryptor_s, list));
-}
-
-static int verify_hmac_error(struct ssh_decryptor_s *d, struct ssh_packet_s *packet)
-{
-    packet->error=EIO;
+    p->error=EIO;
     return -1;
 }
 
-static int decrypt_length_error(struct ssh_decryptor_s *d, struct ssh_packet_s *packet, char *b, unsigned int l)
+static int decrypt_length_error(struct ssh_decryptor_s *d, struct ssh_packet_s *p, char *b, unsigned int l)
 {
-    packet->error=EIO;
+    p->error=EIO;
     return -1;
 }
 
-static int decrypt_packet_error(struct ssh_decryptor_s *d, struct ssh_packet_s *packet)
+static int decrypt_packet_error(struct ssh_decryptor_s *d, struct ssh_packet_s *p)
 {
-    packet->error=EIO;
+    p->error=EIO;
     return -1;
 }
 
-static void dummy_decryptor(struct ssh_decryptor_s *d)
+static void clear_decryptor(struct ssh_decryptor_s *d)
 {
 }
 
-static void init_decryptor(struct ssh_decryptor_s *decryptor, struct ssh_decrypt_s *decrypt, unsigned int size)
+static void queue_ssh_decryptor(struct ssh_cryptoactor_s *ca)
+{
+    struct ssh_decryptor_s *decryptor=(struct ssh_decryptor_s *)((char *) ca - offsetof(struct ssh_decryptor_s, common));
+    struct ssh_decrypt_s *decrypt=decryptor->decrypt;
+    struct ssh_receive_s *receive=(struct ssh_receive_s *) (((char *) decrypt) - offsetof(struct ssh_receive_s, decrypt));
+
+    if (ca->kexctr==receive->kexctr) {
+
+	add_ssh_cryptoactor_list(&decrypt->header, ca);
+
+    } else {
+
+	/* dealing with an "old" decryptor */
+
+	(* decryptor->clear)(decryptor);
+	free(decryptor);
+	change_count_cryptors(&receive->signal, &decrypt->count, -1);
+
+    }
+
+}
+
+static void free_ssh_decryptor(struct list_element_s *list)
+{
+    struct ssh_decryptor_s *decryptor=(struct ssh_decryptor_s *) (((char *) list) - offsetof(struct ssh_decryptor_s, common.list));
+    struct ssh_decrypt_s *decrypt=decryptor->decrypt;
+    struct ssh_receive_s *receive=(struct ssh_receive_s *) (((char *) decrypt) - offsetof(struct ssh_receive_s, decrypt));
+
+    change_count_cryptors(&receive->signal, &decrypt->count, -1);
+    (* decryptor->clear)(decryptor);
+    free(decryptor);
+}
+
+static void init_ssh_decryptor(struct ssh_decryptor_s *decryptor, struct ssh_decrypt_s *decrypt, unsigned int size, unsigned int kexctr)
 {
     memset(decryptor, 0, sizeof(struct ssh_decryptor_s) + size);
+    init_ssh_cryptoactor(&decryptor->common, kexctr, ((decrypt) ? decrypt->count : 0));
     decryptor->decrypt=decrypt;
-    get_current_time_system_time(&decryptor->created);
-    decryptor->nr=(decrypt) ? decrypt->count : 0;
-    init_list_element(&decryptor->list, NULL);
     decryptor->size=size;
-
     decryptor->verify_hmac_pre=verify_hmac_error;
     decryptor->decrypt_length=decrypt_length_error;
     decryptor->decrypt_packet=decrypt_packet_error;
     decryptor->verify_hmac_post=verify_hmac_error;
-    decryptor->clear=dummy_decryptor;
-    decryptor->queue=dummy_decryptor;
+    decryptor->clear=clear_decryptor;
+
+    if (decrypt) {
+
+        decryptor->common.queue=queue_ssh_decryptor;
+        decryptor->common.free=free_ssh_decryptor;
+
+    }
+
 }
 
-static struct ssh_decryptor_s *create_decryptor(struct ssh_decrypt_s *decrypt)
+static struct ssh_decryptor_s *create_ssh_decryptor(struct ssh_decrypt_s *decrypt, unsigned int kexctr)
 {
     struct decrypt_ops_s *ops=decrypt->ops;
     unsigned int size=(* ops->get_handle_size)(decrypt);
-    struct ssh_decryptor_s *decryptor=malloc(sizeof(struct ssh_decryptor_s) + size);
+    struct ssh_decryptor_s *decryptor=NULL;
 
-    if (decryptor==NULL) goto fallback;
-    init_decryptor(decryptor, decrypt, size);
-    decryptor->queue=queue_decryptor;
-    if ((* ops->init_decryptor)(decryptor)==0) return decryptor;
+    decryptor=malloc(sizeof(struct ssh_decryptor_s) + size);
+    if (decryptor==NULL) return fallback;
+    init_ssh_decryptor(decryptor, decrypt, size, kexctr);
+
+    if ((* ops->init)(decryptor)==0) {
+        struct ssh_receive_s *receive=(struct ssh_receive_s *) (((char *) decrypt) - offsetof(struct ssh_receive_s, decrypt));
+
+        change_count_cryptors(&receive->signal, &decrypt->count, 1);
+        return decryptor;
+
+    }
+
     free(decryptor);
-
-    fallback:
-
+    outfallback:
     return fallback;
 
 }
 
-/* get a decryptor from the decryptors list
-    this is the function for the common case: not during kexinit-newkeys
-    */
+static struct ssh_cryptoactor_s *create_ssh_cryptoactor(unsigned int kexctr, void *ptr)
+{
+    struct ssh_decrypt_s *decrypt=(struct ssh_decrypt_s *) ptr;
+    struct ssh_decryptor_s *decryptor=create_ssh_decryptor(decrypt, kexctr);
+    return &decryptor->common;
+}
 
-struct ssh_decryptor_s *get_decryptor_unlock(struct ssh_receive_s *receive, unsigned int *error)
+static unsigned int interrupt_get_cryptoactor(void *ptr)
+{
+    struct ssh_decrypt_s *decrypt=(struct ssh_decrypt_s *) ptr;
+    struct ssh_receive_s *receive=(struct ssh_receive_s *) (((char *) decrypt) - offsetof(struct ssh_receive_s, decrypt));
+    return ((receive->status & SSH_RECEIVE_STATUS_DISCONNECT) ? ENOTCONN : 0);
+}
+
+static void error_get_cryptoactor(unsigned int errcode, void *ptr)
+{
+    /* 20221119: log for now */
+
+    logoutput_warning("error_get_cryptoactor: error %u - %s", errcode, strerror(errcode));
+}
+
+struct ssh_decryptor_s *get_decryptor(struct ssh_receive_s *receive, unsigned int *error)
 {
     struct ssh_decrypt_s *decrypt=&receive->decrypt;
-    struct ssh_decryptor_s *decryptor=fallback;
-    struct list_header_s *header=&decrypt->header;
-    struct list_element_s *list=NULL;
-
-    /* wait for a decryptor to become available */
-
-    while (header->count==0 && decrypt->count == decrypt->max_count && decrypt->max_count>0) {
-
-	int result=pthread_cond_wait(&receive->cond, &receive->mutex);
-
-	if (header->count>0 || decrypt->count < decrypt->max_count) {
-
-	    break;
-
-	} else if (result>0 || (receive->status & (SSH_RECEIVE_STATUS_DISCONNECT | SSH_RECEIVE_STATUS_ERROR))) {
-
-	    *error=(result>0) ? result : EIO;
-	    goto finish;
-
-	}
-
-    }
-
-    while ((list=get_list_head(header, SIMPLE_LIST_FLAG_REMOVE))) {
-
-	decryptor=get_decryptor_container(list);
-
-	if (system_time_test_earlier(&decryptor->created, &receive->newkeys) <=0) goto finish;
-	(* decryptor->clear)(decryptor);
-	free(decryptor);
-	decrypt->count--;
-	decryptor=NULL;
-
-    }
-
-    if (decrypt->count < decrypt->max_count || decrypt->max_count==0) {
-
-	decryptor=create_decryptor(decrypt);
-	decrypt->count+=(decryptor->decrypt) ? 1 : 0;
-
-    }
-
-    finish:
-    return decryptor;
-
+    struct ssh_cryptoactor_s *ca=get_cryptoactor(&decrypt->header, &receive->signal, receive->kexctr, &decrypt->max_count, &decrypt->count,
+                                                    create_ssh_cryptoactor, interrupt_get_cryptoactor, error_get_cryptoactor, &fallback->common, (void *) decrypt);
+    return (struct ssh_decryptor_s *) ((char *) ca - offsetof(struct ssh_decryptor_s, common));
 }
 
-void queue_decryptor(struct ssh_decryptor_s *decryptor)
-{
-    struct ssh_decrypt_s *decrypt=decryptor->decrypt;
-    struct ssh_receive_s *receive=(struct ssh_receive_s *) (((char *) decrypt) - offsetof(struct ssh_receive_s, decrypt));
-    struct list_header_s *header=&decrypt->header;
-
-    pthread_mutex_lock(&receive->mutex);
-
-    /* everything is ok when created is later then then when newkeys are in use */
-
-    if (system_time_test_earlier(&decryptor->created, &receive->newkeys) <=0) {
-
-	add_list_element_last(header, &decryptor->list);
-	pthread_cond_broadcast(&receive->cond);
-
-    } else {
-
-	/* dealing with an "old" decryptor from before newkeys:
-	    do not queue it but clear and free it  */
-
-	(* decryptor->clear)(decryptor);
-	free(decryptor);
-	decrypt->count--;
-
-    }
-
-    pthread_mutex_unlock(&receive->mutex);
-
-}
 
 void remove_decryptors(struct ssh_decrypt_s *decrypt)
 {
-    struct list_element_s *list=NULL;
-    struct list_header_s *header=&decrypt->header;
-
-    while ((list=get_list_head(header, SIMPLE_LIST_FLAG_REMOVE))) {
-	struct ssh_decryptor_s *decryptor=get_decryptor_container(list);
-
-	(* decryptor->clear)(decryptor);
-	free(decryptor);
-	decrypt->count--;
-
-    }
-
+    remove_ssh_cryptoactor_list(&decrypt->header);
 }
 
 void init_decryptors_once()
 {
-    init_decryptor(fallback, NULL, 0);
+    init_ssh_decryptor(fallback, NULL, 0, 0);
 }

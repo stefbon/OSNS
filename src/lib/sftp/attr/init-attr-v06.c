@@ -382,3 +382,8 @@ unsigned char enable_attr_v06(struct attr_context_s *actx, struct sftp_valid_s *
 
     return result;
 }
+
+unsigned int get_property_v06(struct attr_context_s *actx, unsigned int flag)
+{
+    return get_property_v05(actx, flag);
+}

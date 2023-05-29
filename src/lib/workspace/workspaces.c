@@ -31,60 +31,6 @@
 #include "lib/system/path.h"
 #include "lib/system/stat.h"
 
-
-void adjust_pathmax(struct workspace_mount_s *w, unsigned int len)
-{
-    signal_set_flag(w->signal, &w->status, WORKSPACE_STATUS_LOCK_PATHMAX);
-    if (len>w->pathmax) w->pathmax=len;
-    signal_unset_flag(w->signal, &w->status, WORKSPACE_STATUS_LOCK_PATHMAX);
-}
-
-unsigned int get_pathmax(struct workspace_mount_s *w)
-{
-    return w->pathmax;
-}
-
-static void init_workspace_inodes(struct workspace_mount_s *workspace)
-{
-    struct workspace_inodes_s *inodes=&workspace->inodes;
-    struct inode_s *inode=&inodes->rootinode;
-    struct entry_s *entry=&inodes->rootentry;
-    struct system_stat_s *stat=&inode->stat;
-    struct system_timespec_s tmp=SYSTEM_TIME_INIT;
-    struct directory_s *directory=&inodes->dummy_directory;
-
-    init_inode(inode);
-    inode->nlookup=1;
-    inode->fs=NULL;
-    inode->alias=entry;
-
-    /* root inode stat */
-
-    set_rootstat(&inode->stat);
-
-    /* root entry */
-
-    init_entry(entry, 0);
-    entry->inode=inode;
-    entry->flags=_ENTRY_FLAG_ROOT;
-
-    /* inodes hashtable */
-
-    for (unsigned int i=0; i<WORKSPACE_INODE_HASHTABLE_SIZE; i++) init_list_header(&inodes->hashtable[i], SIMPLE_LIST_TYPE_EMPTY, NULL);
-    inodes->nrinodes=1;
-    inodes->inoctr=FUSE_ROOT_ID;
-    init_list_header(&inodes->forget, SIMPLE_LIST_TYPE_EMPTY, NULL);
-    init_list_header(&inodes->directories, SIMPLE_LIST_TYPE_EMPTY, NULL);
-    init_list_header(&inodes->symlinks, SIMPLE_LIST_TYPE_EMPTY, NULL);
-
-    /* dummy directory */
-
-    init_dummy_directory(directory);
-    inode->ptr=&directory->link;
-    directory->link.refcount++;
-
-}
-
 struct workspace_mount_s *create_workspace_mount(unsigned char type)
 {
     struct workspace_mount_s *workspace=NULL;
@@ -99,8 +45,6 @@ struct workspace_mount_s *create_workspace_mount(unsigned char type)
     init_list_header(&workspace->contexes, SIMPLE_LIST_TYPE_EMPTY, NULL);
     init_list_header(&workspace->shared_contexes, SIMPLE_LIST_TYPE_EMPTY, NULL);
     init_list_element(&workspace->list, NULL);
-    workspace->pathmax=512;
 
-    init_workspace_inodes(workspace);
     return workspace;
 }

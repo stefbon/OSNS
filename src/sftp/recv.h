@@ -25,7 +25,7 @@
 #include "recv/recv-v05.h"
 #include "recv/recv-v06.h"
 
-void receive_sftp_data(struct sftp_client_s *sftp, char **p_buffer, unsigned int size, uint32_t seq, unsigned int flags);
+void receive_sftp_data(struct sftp_client_s *sftp, char *buffer, unsigned int size, uint32_t seq, unsigned int flags);
 void init_sftp_receive(struct sftp_client_s *sftp);
 void switch_sftp_receive(struct sftp_client_s *sftp, const char *what);
 

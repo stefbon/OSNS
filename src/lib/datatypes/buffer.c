@@ -117,6 +117,14 @@ static int64_t convert_2c_int64(uint64_t value)
     return result;
 }
 
+static void copy_buffer_data(struct attr_buffer_s *ab, unsigned char *data, unsigned int len)
+{
+    unsigned char *buffer=ab->buffer;
+    memcpy((char *) &buffer[ab->pos], (char *) data, len);
+    ab->pos+=len;
+    ab->left-=len;
+}
+
 static void nowrite_uchar(struct attr_buffer_s *ab, unsigned char b)
 {
     ab->pos++;
@@ -124,11 +132,10 @@ static void nowrite_uchar(struct attr_buffer_s *ab, unsigned char b)
 
 static void write_uchar(struct attr_buffer_s *ab, unsigned char b)
 {
-    unsigned char *buffer=ab->buffer;
+    unsigned char one[1];
 
-    buffer[ab->pos]=b;
-    ab->pos++;
-    ab->left--;
+    one[0] = b;
+    copy_buffer_data(ab, one, 1);
 }
 
 static void nowrite_uchars(struct attr_buffer_s *ab, unsigned char *bytes, unsigned int len)
@@ -138,11 +145,7 @@ static void nowrite_uchars(struct attr_buffer_s *ab, unsigned char *bytes, unsig
 
 static void write_uchars(struct attr_buffer_s *ab, unsigned char *bytes, unsigned int len)
 {
-    unsigned char *buffer=ab->buffer;
-
-    memcpy(&buffer[ab->pos], bytes, len);
-    ab->pos+=len;
-    ab->left-=len;
+    copy_buffer_data(ab, bytes, len);
 }
 
 static void nowrite_uint32(struct attr_buffer_s *ab, uint32_t value)
@@ -152,15 +155,13 @@ static void nowrite_uint32(struct attr_buffer_s *ab, uint32_t value)
 
 static void write_uint32(struct attr_buffer_s *ab, uint32_t value)
 {
-    unsigned char *buffer=ab->buffer;
-    unsigned char *four=&buffer[ab->pos];
+    unsigned char four[4];
 
     four[0] = (value >> 24) & 0xFF;
     four[1] = (value >> 16) & 0xFF;
     four[2] = (value >> 8) & 0xFF;
     four[3] = value & 0xFF;
-    ab->pos += 4;
-    ab->left -= 4;
+    copy_buffer_data(ab, four, 4);
 }
 
 static void nowrite_uint64(struct attr_buffer_s *ab, uint64_t value)
@@ -170,8 +171,7 @@ static void nowrite_uint64(struct attr_buffer_s *ab, uint64_t value)
 
 static void write_uint64(struct attr_buffer_s *ab, uint64_t value)
 {
-    unsigned char *buffer=ab->buffer;
-    unsigned char *eight=&buffer[ab->pos];
+    unsigned char eight[8];
 
     eight[0] = (value >> 56) & 0xFF;
     eight[1] = (value >> 48) & 0xFF;
@@ -181,8 +181,7 @@ static void write_uint64(struct attr_buffer_s *ab, uint64_t value)
     eight[5] = (value >> 16) & 0xFF;
     eight[6] = (value >> 8) & 0xFF;
     eight[7] = value & 0xFF;
-    ab->pos += 8;
-    ab->left -= 8;
+    copy_buffer_data(ab, eight, 8);
 }
 
 static void nowrite_int64(struct attr_buffer_s *ab, int64_t value)
@@ -192,9 +191,8 @@ static void nowrite_int64(struct attr_buffer_s *ab, int64_t value)
 
 static void write_int64(struct attr_buffer_s *ab, int64_t value)
 {
-    unsigned char *buffer=ab->buffer;
     uint64_t tc_value=convert_int64_2c(value);
-    unsigned char *eight=&buffer[ab->pos];
+    unsigned char eight[8];
 
     eight[0] = (tc_value >> 56) & 0xFF;
     eight[1] = (tc_value >> 48) & 0xFF;
@@ -204,8 +202,7 @@ static void write_int64(struct attr_buffer_s *ab, int64_t value)
     eight[5] = (tc_value >> 16) & 0xFF;
     eight[6] = (tc_value >> 8) & 0xFF;
     eight[7] = (tc_value & 0xFF);
-    ab->pos += 8;
-    ab->left -= 8;
+    copy_buffer_data(ab, eight, 8);
 }
 
 static void nowrite_uint16(struct attr_buffer_s *ab, uint16_t value)
@@ -215,13 +212,11 @@ static void nowrite_uint16(struct attr_buffer_s *ab, uint16_t value)
 
 static void write_uint16(struct attr_buffer_s *ab, uint16_t value)
 {
-    unsigned char *buffer=ab->buffer;
-    unsigned char *two=&buffer[ab->pos];
+    unsigned char two[2];
 
     two[0] = (unsigned char) (value >> 8);
     two[1] = value & 0xFF;
-    ab->pos += 2;
-    ab->left -= 2;
+    copy_buffer_data(ab, two, 2);
 }
 
 static void write_string(struct attr_buffer_s *ab, struct ssh_string_s *s)

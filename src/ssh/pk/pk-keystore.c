@@ -76,14 +76,13 @@ struct pk_identity_s *create_pk_identity(struct pk_list_s *pkeys, unsigned char 
 
 static void free_list_pk_identities(struct list_header_s *header)
 {
-    struct list_element_s *list = get_list_head(header, SIMPLE_LIST_FLAG_REMOVE);
-    struct pk_identity_s *identity = NULL;
+    struct list_element_s *list = remove_list_head(header);
 
     while (list) {
 
-	identity = get_container_pk_identity(list);
+	struct pk_identity_s *identity = get_container_pk_identity(list);
 	free(identity);
-	list = get_list_head(header, SIMPLE_LIST_FLAG_REMOVE);
+	list = remove_list_head(header);
 
     }
 
@@ -148,7 +147,7 @@ int populate_list_public_keys(struct pk_list_s *pkeys, unsigned char source, con
 struct pk_identity_s *get_next_pk_identity(struct pk_list_s *pkeys, const char *what)
 {
     struct list_header_s *header=(strcmp(what, "host")==0) ? &pkeys->host_list_header : &pkeys->user_list_header;
-    struct list_element_s *list=get_list_head(header, SIMPLE_LIST_FLAG_REMOVE);
+    struct list_element_s *list=remove_list_head(header);
     return (list) ? get_container_pk_identity(list) : NULL;
 }
 

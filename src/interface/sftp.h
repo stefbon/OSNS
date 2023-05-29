@@ -19,6 +19,8 @@
 #ifndef INTERFACE_SFTP_H
 #define INTERFACE_SFTP_H
 
+struct sftp_request_s;
+
 #define SFTP_COMPARE_PATH_PREFIX_SUBDIR				1
 
 void init_sftp_client_interface();
@@ -31,9 +33,16 @@ unsigned int sftp_get_required_buffer_size_l2p(struct context_interface_s *i, un
 int sftp_convert_path_p2l(struct context_interface_s *i, char *buffer, unsigned int size, char *data, unsigned int len);
 int sftp_convert_path_l2p(struct context_interface_s *i, char *buffer, unsigned int size, char *data, unsigned int len);
 
-int send_sftp_statvfs_ctx(struct context_interface_s *i, struct sftp_request_s *sftp_r, unsigned int *error);
-int send_sftp_fsync_ctx(struct context_interface_s *i, struct sftp_request_s *sftp_r, unsigned int *error);
+int send_sftp_statvfs_ctx(struct context_interface_s *i, struct sftp_request_s *sftp_r);
+int send_sftp_fsync_ctx(struct context_interface_s *i, struct sftp_request_s *sftp_r);
+int send_sftp_fstatat_ctx(struct context_interface_s *i, struct sftp_request_s *sftp_r);
+
 unsigned int get_index_sftp_extension_statvfs(struct context_interface_s *i);
 unsigned int get_index_sftp_extension_fsync(struct context_interface_s *i);
+unsigned int get_index_sftp_extension_fstatat(struct context_interface_s *i);
+
+void set_primary_sftp_client(struct context_interface_s *i, struct context_interface_s *primary);
+int set_prefix_sftp_browse_client(struct context_interface_s *i, char *prefix, char *home);
+char *get_ssh_session_remote_home(struct context_interface_s *i);
 
 #endif

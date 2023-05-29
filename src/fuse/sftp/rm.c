@@ -34,173 +34,65 @@
 #include "interface/sftp-send.h"
 #include "interface/sftp-wait-response.h"
 
-static void _remove_entry_common(struct entry_s **pentry)
+#include "path.h"
+#include "handle.h"
+
+/* REMOVE a file */
+
+struct _cb_rm_hlpr_s {
+    struct fuse_request_s 		*request;
+    struct service_context_s 		*ctx;
+    struct entry_s 			**p_entry;
+};
+
+static void _cb_success_rm(struct service_context_s *ctx, struct sftp_reply_s *reply, void *ptr)
 {
-    struct entry_s *entry=*pentry;
-    struct directory_s *directory=get_upper_directory_entry(entry);
+    struct _cb_rm_hlpr_s *hlpr=(struct _cb_rm_hlpr_s *) ptr;
+    struct entry_s **p_entry=hlpr->p_entry;
 
-    if (directory) {
-	unsigned int error=0;
-        struct osns_lock_s wlock;
+    reply_VFS_error(hlpr->request, 0);
 
-        /* remove entry from directory */
+    if (p_entry) {
+	struct entry_s *entry=*p_entry;
+	struct inode_s *inode=entry->inode;
 
-        if (wlock_directory(directory, &wlock)==0) {
-
-    	    remove_entry_batch(directory, entry, &error);
-    	    unlock_directory(directory, &wlock);
-
-	}
+	if (inode) queue_inode_2forget(ctx, get_ino_system_stat(&inode->stat), FORGET_INODE_FLAG_RM, 0);
 
     }
 
-    entry->inode->alias=NULL;
-    entry->inode=NULL;
-    destroy_entry(entry);
-    *pentry=NULL;
 }
 
-/* REMOVE a file and a directory */
-
-void _fs_sftp_unlink(struct service_context_s *ctx, struct fuse_request_s *f_request, struct entry_s **pentry, struct fuse_path_s *fpath)
+static void _cb_error_rm(struct service_context_s *ctx, unsigned int errcode, void *ptr)
 {
-    struct workspace_mount_s *w=get_workspace_mount_ctx(ctx);
-    struct context_interface_s *i=&ctx->interface;
-    struct sftp_request_s sftp_r;
-    unsigned int error=EIO;
-    unsigned int pathlen=sftp_get_complete_pathlen(i, fpath);
-    unsigned int size=sftp_get_required_buffer_size_l2p(i, pathlen);
-    char buffer[size];
-    int result=0;
-
-    memset(buffer, 0, size);
-    result=sftp_convert_path_l2p(i, buffer, size, fpath->pathstart, pathlen);
-
-    if (result==-1) {
-
-	logoutput_debug("_fs_sftp_unlink: error converting local path");
-	goto out;
-
-    }
-
-    logoutput("_fs_sftp_unlink: remove %s", fpath->pathstart);
-
-    init_sftp_request(&sftp_r, i, f_request);
-    sftp_r.call.remove.path=(unsigned char *) buffer;
-    sftp_r.call.remove.len=(unsigned int) result;
-
-    if (send_sftp_remove_ctx(i, &sftp_r)>0) {
-	struct system_timespec_s timeout=SYSTEM_TIME_INIT;
-
-	get_sftp_request_timeout_ctx(i, &timeout);
-
-	if (wait_sftp_response_ctx(i, &sftp_r, &timeout)==1) {
-	    struct sftp_reply_s *reply=&sftp_r.reply;
-
-	    if (reply->type==SSH_FXP_STATUS) {
-
-		logoutput("_fs_sftp_remove: status code %i", reply->response.status.code);
-
-		if (reply->response.status.code==0) {
-
-		    _remove_entry_common(pentry);
-		    reply_VFS_error(f_request, 0);
-		    unset_fuse_request_flags_cb(f_request);
-		    return;
-
-		} else {
-
-		    error=reply->response.status.linux_error;
-
-		}
-
-	    } else {
-
-		error=EPROTO;
-
-	    }
-
-	}
-
-    }
-
-    out:
-    reply_VFS_error(f_request, error);
-    unset_fuse_request_flags_cb(f_request);
-
+    struct _cb_rm_hlpr_s *hlpr=(struct _cb_rm_hlpr_s *) ptr;
+    reply_VFS_error(hlpr->request, errcode);
 }
 
-void _fs_sftp_rmdir(struct service_context_s *ctx, struct fuse_request_s *f_request, struct entry_s **pentry, struct fuse_path_s *fpath)
+static unsigned char _cb_interrupted_rm(void *ptr)
 {
-    struct workspace_mount_s *w=get_workspace_mount_ctx(ctx);
-    struct context_interface_s *i=&ctx->interface;
-    struct sftp_request_s sftp_r;
-    unsigned int error=EIO;
-    unsigned int pathlen=sftp_get_complete_pathlen(i, fpath);
-    unsigned int size=sftp_get_required_buffer_size_l2p(i, pathlen);
-    char buffer[size];
-    int result=0;
-
-    memset(buffer, 0, size);
-    result=sftp_convert_path_l2p(i, buffer, size, fpath->pathstart, pathlen);
-
-    if (result==-1) {
-
-	logoutput_debug("_fs_sftp_rmdir: error converting local path");
-	goto out;
-
-    }
-
-    init_sftp_request(&sftp_r, i, f_request);
-    sftp_r.call.rmdir.path=(unsigned char *) buffer;
-    sftp_r.call.rmdir.len=(unsigned int) result;
-
-    if (send_sftp_rmdir_ctx(i, &sftp_r)>0) {
-	struct system_timespec_s timeout=SYSTEM_TIME_INIT;
-
-	get_sftp_request_timeout_ctx(i, &timeout);
-
-	if (wait_sftp_response_ctx(i, &sftp_r, &timeout)==1) {
-	    struct sftp_reply_s *reply=&sftp_r.reply;
-
-	    if (reply->type==SSH_FXP_STATUS) {
-
-		if (reply->response.status.code==0) {
-
-		    _remove_entry_common(pentry);
-		    reply_VFS_error(f_request, 0);
-		    unset_fuse_request_flags_cb(f_request);
-		    return;
-
-		} else {
-
-		    error=reply->response.status.linux_error;
-		    logoutput("_fs_sftp_rmdir: status code %i", reply->response.status.code);
-
-		}
-
-	    } else {
-
-		error=EPROTO;
-
-	    }
-
-	}
-
-    }
-
-    out:
-    reply_VFS_error(f_request, error);
-    unset_fuse_request_flags_cb(f_request);
-
+    struct _cb_rm_hlpr_s *hlpr=(struct _cb_rm_hlpr_s *) ptr;
+    return ((hlpr->request->flags & FUSE_REQUEST_FLAG_INTERRUPTED) ? 1 : 0);
 }
 
-void _fs_sftp_unlink_disconnected(struct service_context_s *context, struct fuse_request_s *f_request, struct entry_s **pentry, struct fuse_path_s *fpath)
+void _fs_sftp_unlink(struct service_context_s *ctx, struct fuse_request_s *request, struct entry_s **p_entry, struct fuse_path_s *fpath)
 {
-    reply_VFS_error(f_request, ENOTCONN);
+    struct _cb_rm_hlpr_s hlpr;
+
+    hlpr.request=request;
+    hlpr.ctx=ctx;
+    hlpr.p_entry=p_entry;
+
+    _sftp_path_rm(ctx, fpath, "unlink", _cb_success_rm, _cb_error_rm, _cb_interrupted_rm, (void *) &hlpr);
 }
 
-void _fs_sftp_rmdir_disconnected(struct service_context_s *context, struct fuse_request_s *f_request, struct entry_s **pentry, struct fuse_path_s *fpath)
+void _fs_sftp_rmdir(struct service_context_s *ctx, struct fuse_request_s *request, struct entry_s **p_entry, struct fuse_path_s *fpath)
 {
-    reply_VFS_error(f_request, ENOTCONN);
+    struct _cb_rm_hlpr_s hlpr;
+
+    hlpr.request=request;
+    hlpr.ctx=ctx;
+    hlpr.p_entry=p_entry;
+
+    _sftp_path_rm(ctx, fpath, "rmdir", _cb_success_rm, _cb_error_rm, _cb_interrupted_rm, (void *) &hlpr);
 }
+

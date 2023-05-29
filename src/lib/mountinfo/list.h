@@ -31,4 +31,6 @@ struct mountentry_s *find_mountentry(struct mount_monitor_s *monitor, unsigned i
 void process_mountentries(struct mount_monitor_s *monitor);
 void clear_mountentry_lists(struct mount_monitor_s *monitor);
 
+void browse_mountentries(struct mount_monitor_s *monitor, void (* cb)(struct mountentry_s *me, void *ptr), void *ptr);
+
 #endif

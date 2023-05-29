@@ -38,7 +38,7 @@ void get_user_p2l_shared_byid(struct net_idmapping_s *mapping, struct net_entity
 {
     unsigned int error=0;
 
-    user->local.uid=mapping->unknown_uid;
+    user->localid=mapping->unknown_uid;
     (* mapping->lookup.lookup_user)(mapping, user, &error);
 }
 
@@ -46,7 +46,7 @@ void get_group_p2l_shared_byid(struct net_idmapping_s *mapping, struct net_entit
 {
     unsigned int error=0;
 
-    group->local.gid=mapping->unknown_gid;
+    group->localid=mapping->unknown_gid;
     (* mapping->lookup.lookup_group)(mapping, group, &error);
 }
 
@@ -57,7 +57,7 @@ void get_user_p2l_shared_byname(struct net_idmapping_s *mapping, struct net_enti
     char *sep=NULL;
     unsigned int error=0;
 
-    user->local.uid=mapping->unknown_uid;
+    user->localid=mapping->unknown_uid;
 
     /* test there is a domain part */
 
@@ -81,7 +81,7 @@ void get_group_p2l_shared_byname(struct net_idmapping_s *mapping, struct net_ent
     char *sep=NULL;
     unsigned int error=0;
 
-    group->local.gid=mapping->unknown_gid;
+    group->localid=mapping->unknown_gid;
 
     /* test there is a domain part */
 
@@ -106,15 +106,15 @@ void get_group_p2l_shared_byname(struct net_idmapping_s *mapping, struct net_ent
 void get_user_p2l_nonshared_byid(struct net_idmapping_s *mapping, struct net_entity_s *user)
 {
 
-    user->local.uid=mapping->unknown_uid;
+    user->localid=mapping->unknown_uid;
 
     if (user->net.id==mapping->su.type.user.uid) {
 
-	user->local.uid=mapping->pwd->pw_uid;
+	user->localid=mapping->pwd->pw_uid;
 
     } else if (user->net.id==0) {
 
-	user->local.uid=0;
+	user->localid=0;
 
     } else {
 	unsigned int error=0;
@@ -128,15 +128,15 @@ void get_user_p2l_nonshared_byid(struct net_idmapping_s *mapping, struct net_ent
 void get_group_p2l_nonshared_byid(struct net_idmapping_s *mapping, struct net_entity_s *group)
 {
 
-    group->local.gid=mapping->unknown_gid;
+    group->localid=mapping->unknown_gid;
 
     if (group->net.id==mapping->sg.type.group.gid) {
 
-	group->local.gid=mapping->pwd->pw_gid;
+	group->localid=mapping->pwd->pw_gid;
 
     } else if (group->net.id==0) {
 
-	group->local.gid=0;
+	group->localid=0;
 
     } else {
 	unsigned int error=0;
@@ -154,7 +154,7 @@ void get_user_p2l_nonshared_byname(struct net_idmapping_s *mapping, struct net_e
     char *sep=NULL;
     unsigned int error=0;
 
-    user->local.uid=mapping->unknown_uid;
+    user->localid=mapping->unknown_uid;
     sep=memchr(user->net.name.ptr, user->net.name.len, '@');
 
     if (sep) {
@@ -174,11 +174,11 @@ void get_user_p2l_nonshared_byname(struct net_idmapping_s *mapping, struct net_e
 
 	if (user->net.name.len==mapping->su.len && memcmp(user->net.name.ptr, mapping->su.name, mapping->su.len)==0) {
 
-	    user->local.uid=mapping->pwd->pw_uid;
+	    user->localid=mapping->pwd->pw_uid;
 
 	} else if (user->net.name.len==4 && memcmp(user->net.name.ptr, "root", 4)==0) {
 
-	    user->local.uid=0;
+	    user->localid=0;
 
 	} else {
 
@@ -197,7 +197,7 @@ void get_group_p2l_nonshared_byname(struct net_idmapping_s *mapping, struct net_
 
     logoutput_debug("get_group_p2l_nonshared_byname: %.*s", group->net.name.len, group->net.name.ptr);
 
-    group->local.gid=mapping->unknown_gid;
+    group->localid=mapping->unknown_gid;
     sep=memchr(group->net.name.ptr, group->net.name.len, '@');
 
     if (sep) {
@@ -216,11 +216,11 @@ void get_group_p2l_nonshared_byname(struct net_idmapping_s *mapping, struct net_
 
 	if (group->net.name.len==mapping->sg.len && memcmp(group->net.name.ptr, mapping->sg.name, mapping->sg.len)==0) {
 
-	    group->local.gid=mapping->pwd->pw_gid;
+	    group->localid=mapping->pwd->pw_gid;
 
 	} else if (group->net.name.len==4 && memcmp(group->net.name.ptr, "root", 4)==0) {
 
-	    group->local.gid=0;
+	    group->localid=0;
 
 	} else {
 

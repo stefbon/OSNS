@@ -30,55 +30,31 @@
 #include "osns_sftp_subsystem.h"
 #include "path.h"
 
-void path_append_home(struct sftp_subsystem_s *sftp, struct ssh_string_s *path, struct fs_location_path_s *localpath)
+static void path_append_shared(struct sftp_subsystem_s *sftp, struct ssh_string_s *path, struct fs_path_s *localpath)
 {
-    char *ptr=localpath->ptr;
+    fs_path_append_raw(localpath, "/", 1);
 
-    memcpy(ptr, sftp->identity.home.ptr, sftp->identity.home.len);
-    ptr+=sftp->identity.home.len;
-    *ptr='/';
-    ptr++;
+    /* TODO: add convert path from UTF-8 to local encoding */
 
-    /* TODO: add convert from UTF-8 to local encoding */
-
-    memcpy(ptr, path->ptr, path->len);
-    ptr+=path->len;
-    *ptr='\0';
-    localpath->len+=path->len + sftp->identity.home.len + 1;
-
-    logoutput("path_append_home: %.*s", localpath->len, ptr);
+    fs_path_append_raw(localpath, path->ptr, path->len);
 
 }
 
-void path_append_prefix(struct sftp_subsystem_s *sftp, struct ssh_string_s *path, struct fs_location_path_s *localpath)
+void path_append_home(struct sftp_subsystem_s *sftp, struct ssh_string_s *path, struct fs_path_s *localpath)
 {
-    char *ptr=localpath->ptr;
-
-    memcpy(ptr, sftp->prefix.path.ptr, sftp->prefix.path.len);
-    ptr+=sftp->prefix.path.len;
-    *ptr='/';
-    ptr++;
-
-    /* TODO: add convert from UTF-8 to local encoding */
-
-    memcpy(ptr, path->ptr, path->len);
-    ptr+=path->len;
-    *ptr='\0';
-    localpath->len+=path->len + sftp->prefix.path.len + 1;
-
-    logoutput("path_append_prefix: %.*s", localpath->len, ptr);
-
+    fs_path_append_raw(localpath, sftp->identity.home.ptr, sftp->identity.home.len);
+    path_append_shared(sftp, path, localpath);
 }
 
-void path_append_none(struct sftp_subsystem_s *sftp, struct ssh_string_s *path, struct fs_location_path_s *localpath)
+void path_append_prefix(struct sftp_subsystem_s *sftp, struct ssh_string_s *path, struct fs_path_s *localpath)
 {
-    char *ptr=localpath->ptr;
+    fs_path_append_raw(localpath, sftp->prefix.path.ptr, sftp->prefix.path.len);
+    path_append_shared(sftp, path, localpath);
+}
 
-    memcpy(ptr, path->ptr, path->len);
-    ptr+=path->len;
-    *ptr='\0';
-    localpath->len+=path->len;
-
+void path_append_none(struct sftp_subsystem_s *sftp, struct ssh_string_s *path, struct fs_path_s *localpath)
+{
+    fs_path_append(localpath, 's', path);
 }
 
 /* get length of buffer when no prefix is used .. two cases:

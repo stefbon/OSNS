@@ -25,18 +25,53 @@
 #include "libosns-workspace.h"
 #include "libosns-context.h"
 #include "libosns-fuse-public.h"
-#include "libosns-resources.h"
 
-#include "browse/access.h"
 #include "browse/getattr.h"
 #include "browse/lookup.h"
 #include "browse/opendir.h"
-#include "browse/xattr.h"
-#include "browse/statfs.h"
+
+#include "shared/access.h"
+#include "shared/xattr.h"
+#include "shared/statfs.h"
 
 #include "client/workspaces.h"
 #include "client/network.h"
+#include "client/resources.h"
 #include "osns_client.h"
+
+static unsigned int copy_name2buffer_hlpr(char *buffer, unsigned int size, char *name, unsigned int len)
+{
+
+    if (buffer) {
+
+        if (size < len) len=size;
+        memcpy(buffer, name, len);
+
+    }
+
+    return len;
+}
+
+struct read_network_resource_name_hlpr_s {
+    char *buffer;
+    unsigned int size;
+};
+
+static void read_network_resource_name_hlpr(struct network_resource_s *r, void *ptr)
+{
+    struct read_network_resource_name_hlpr_s *hlpr=(struct read_network_resource_name_hlpr_s *) ptr;
+
+    if ((r->type==NETWORK_RESOURCE_TYPE_GROUP) || (r->type==NETWORK_RESOURCE_TYPE_HOST)) {
+
+        hlpr->size=copy_name2buffer_hlpr(hlpr->buffer, hlpr->size, r->data.name, strlen(r->data.name));
+
+    } else {
+
+        hlpr->size=0;
+
+    }
+
+}
 
 static unsigned int _fs_browse_get_name(struct service_context_s *ctx, char *buffer, unsigned int size)
 {
@@ -50,115 +85,29 @@ static unsigned int _fs_browse_get_name(struct service_context_s *ctx, char *buf
 	    struct workspace_mount_s *w=get_workspace_mount_ctx(ctx);
 	    struct client_session_s *session=get_client_session_workspace(w);
 
-	    if (ctx->service.browse.service==NETWORK_SERVICE_TYPE_SFTP) {
+	    if (ctx->service.browse.service==NETWORK_SERVICE_TYPE_SSH) {
 
-		len=strlen(session->options.network.name);
-
-		if (buffer && size) {
-
-		    if (size < len) len=size;
-		    memcpy(buffer, session->options.network.name, len);
-
-		} else {
-
-		    size=len;
-
-		}
+                len=copy_name2buffer_hlpr(buffer, size, session->options.network.name, strlen(session->options.network.name));
 
 	    }
 
-	} else if (ctx->service.browse.type==SERVICE_BROWSE_TYPE_NETGROUP) {
-	    uint32_t unique=ctx->service.browse.unique;
-	    struct network_resource_s nr;
-	    int result=0;
+	} else if ((ctx->service.browse.type==SERVICE_BROWSE_TYPE_NETGROUP) || (ctx->service.browse.type==SERVICE_BROWSE_TYPE_NETHOST)) {
+	    struct read_network_resource_name_hlpr_s hlpr;
+	    struct db_query_result_s result=DB_QUERY_RESULT_INIT;
 
-	    memset(&nr, 0, sizeof(struct network_resource_s));
-	    nr.type=NETWORK_RESOURCE_TYPE_NETWORK_GROUP;
-	    result=get_network_resource(unique, &nr);
+            hlpr.buffer=buffer;
+            hlpr.size=size;
 
-	    if (result==1) {
+            if (get_client_network_data(ctx->service.browse.unique, read_network_resource_name_hlpr, &result, (void *) &hlpr)==0) {
 
-		len=strlen(nr.data.domain);
+                if (buffer) logoutput_debug("_fs_browse_get_name: found name %s for unique %u", buffer, ctx->service.browse.unique);
+                len=hlpr.size;
 
-		if (buffer && size) {
+            } else {
 
-		    if (size < len) len=size;
-		    memcpy(buffer, nr.data.domain, len);
+                logoutput_debug("_fs_browse_get_name: unable to get name for unique %u", ctx->service.browse.unique);
 
-		} else {
-
-		    size=len;
-
-		}
-
-	    } else {
-
-		logoutput_debug("_fs_browse_get_name: get resource data %i", result);
-
-	    }
-
-	} else if (ctx->service.browse.type==SERVICE_BROWSE_TYPE_NETHOST) {
-	    uint32_t unique=ctx->service.browse.unique;
-	    struct network_resource_s nr;
-	    int result=0;
-
-	    /* network host service ctx is pointing to network socket resource ... */
-
-	    memset(&nr, 0, sizeof(struct network_resource_s));
-	    nr.type=NETWORK_RESOURCE_TYPE_NETWORK_SOCKET;
-	    result=get_network_resource(unique, &nr);
-
-	    if (result==1) {
-
-		unique=nr.parent_unique;
-
-		memset(&nr, 0, sizeof(struct network_resource_s));
-		nr.type=NETWORK_RESOURCE_TYPE_NETWORK_HOST;
-		result=get_network_resource(unique, &nr);
-
-		if (result==1) {
-
-		    if (nr.data.address.flags & HOST_ADDRESS_FLAG_HOSTNAME) {
-			char *sep=NULL;
-
-			len=strlen(nr.data.address.hostname);
-			sep=memchr(nr.data.address.hostname, '.', len);
-			if (sep) len=(unsigned int)(sep - nr.data.address.hostname);
-
-			if (buffer && size) {
-
-			    if (size < len) len=size;
-			    memcpy(buffer, nr.data.address.hostname, len);
-
-			} else {
-
-			    size=len;
-
-			}
-
-		    }
-
-		}
-
-	    } else {
-
-		logoutput_debug("_fs_browse_get_name: get resource data %i", result);
-
-	    }
-
-	}
-
-	if (buffer) {
-
-	    if (len>0) {
-
-		logoutput_debug("_fs_browse_get_name: found %s", buffer);
-
-	    } else {
-
-		logoutput_debug("_fs_browse_get_name: no name found");
-
-	    }
+            }
 
 	}
 
@@ -168,8 +117,28 @@ static unsigned int _fs_browse_get_name(struct service_context_s *ctx, char *buf
 
     }
 
-    return size;
+    return len;
 
+}
+
+static void _fs_browse_setxattr(struct service_context_s *context, struct fuse_request_s *freq, struct inode_s *inode, const char *name, const char *value, size_t size, int flags)
+{
+    reply_VFS_error(freq, ENODATA);
+}
+
+static void _fs_browse_getxattr(struct service_context_s *context, struct fuse_request_s *freq, struct inode_s *inode, const char *name, size_t size)
+{
+    reply_VFS_error(freq, ENODATA);
+}
+
+static void _fs_browse_listxattr(struct service_context_s *context, struct fuse_request_s *freq, struct inode_s *inode, size_t size)
+{
+    reply_VFS_error(freq, ENODATA);
+}
+
+static void _fs_browse_removexattr(struct service_context_s *context, struct fuse_request_s *freq, struct inode_s *inode, const char *name)
+{
+    reply_VFS_error(freq, ENODATA);
 }
 
 /* this fs is attached to the rootinode of the network fuse mountpoint */
@@ -178,12 +147,11 @@ static struct browse_service_fs_s browse_fs = {
 
     .get_name			= _fs_browse_get_name,
 
-    .lookup_existing		= _fs_browse_lookup_existing,
-    .lookup_new			= _fs_browse_lookup_new,
-
+    .lookup			= _fs_browse_lookup,
     .getattr			= _fs_browse_getattr,
     .setattr			= _fs_browse_setattr,
-    .access			= _fs_browse_access,
+
+    .access			= _fs_common_access,
 
     .opendir			= _fs_browse_opendir,
 
@@ -192,7 +160,7 @@ static struct browse_service_fs_s browse_fs = {
     .listxattr			= _fs_browse_listxattr,
     .removexattr		= _fs_browse_removexattr,
 
-    .statfs			= _fs_browse_statfs,
+    .statfs			= _fs_common_statfs,
 
 };
 

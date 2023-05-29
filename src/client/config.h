@@ -22,6 +22,10 @@
 
 #include "arguments.h"
 
+/* MAIN */
+
+#define OSNS_OPTIONS_MAIN_MAXTHREADS					20
+
 /* FUSE */
 
 #define OSNS_OPTIONS_FUSE_ATTR_TIMEOUT					1.0
@@ -88,6 +92,9 @@ struct sftp_client_options_s {
 
 struct client_options_s {
     char				*runpath;
+    char				*etcpath;
+    char				*group;
+    unsigned char			maxthreads;
     struct fuse_client_options_s	fuse;
     struct network_client_options_s	network;
     struct ssh_client_options_s		ssh;
@@ -98,5 +105,6 @@ struct client_options_s {
 
 void set_default_options(struct client_options_s *options);
 int read_configfile(struct client_options_s *options, struct client_arguments_s *arg);
+void free_options(struct client_options_s *options);
 
 #endif

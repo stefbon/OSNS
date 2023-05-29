@@ -32,6 +32,8 @@ struct net_domain_s *get_prev_domain(struct net_domain_s *d);
 struct net_domain_s *find_domain_batch(struct sl_skiplist_s *sl, struct name_s *lookupname, unsigned int *error);
 struct net_domain_s *insert_domain_batch(struct sl_skiplist_s *sl , struct net_domain_s *domain, unsigned int *error);
 
+int init_net_domain(struct net_domain_s *domain, unsigned int u_size, unsigned int g_size, struct ssh_string_s *tmpname, unsigned int flags);
+unsigned int get_size_net_domain(uint64_t u_count, uint64_t g_count, unsigned int *p_u_size, unsigned int *p_g_size);
 struct net_domain_s *create_net_domain(struct ssh_string_s *name, unsigned int flags, uint64_t u_count, uint64_t g_count);
 void free_net_domain(struct net_domain_s **domain);
 

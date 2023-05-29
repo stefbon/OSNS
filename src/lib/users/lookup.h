@@ -31,10 +31,8 @@ void lookup_group_byid_system(struct net_idmapping_s *mapping, struct net_entity
 void lookup_user_byname_system(struct net_idmapping_s *mapping, struct net_entity_s *user, unsigned int *error);
 void lookup_group_byname_system(struct net_idmapping_s *mapping, struct net_entity_s *group, unsigned int *error);
 
-/*
-void lookup_user_byname_cache(struct net_idmapping_s *mapping, struct net_entity_s *entity, unsigned int *error);
-void lookup_group_byname_cache(struct net_idmapping_s *mapping, struct net_entity_s *entity, unsigned int *error);
-*/
+void lookup_user_cache(struct net_idmapping_s *mapping, struct net_entity_s *entity, unsigned int *error);
+void lookup_group_cache(struct net_idmapping_s *mapping, struct net_entity_s *entity, unsigned int *error);
 
 void lookup_dummy(struct net_idmapping_s *m, struct net_entity_s *e, unsigned int *error);
 

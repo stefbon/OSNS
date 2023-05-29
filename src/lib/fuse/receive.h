@@ -30,9 +30,7 @@
 
 #define FUSE_RECEIVE_STATUS_BUFFER			1
 #define FUSE_RECEIVE_STATUS_PACKET			2
-#define FUSE_RECEIVE_STATUS_WAITING1			4
-#define FUSE_RECEIVE_STATUS_WAITING2			8
-#define FUSE_RECEIVE_STATUS_WAIT			( FUSE_RECEIVE_STATUS_WAITING1 | FUSE_RECEIVE_STATUS_WAITING2 )
+#define FUSE_RECEIVE_STATUS_THREAD			4
 #define FUSE_RECEIVE_STATUS_DISCONNECT			16
 #define FUSE_RECEIVE_STATUS_ERROR			32
 
@@ -45,24 +43,20 @@ struct fuse_receive_s {
     unsigned int				flags;
     void					*ptr;
     struct beventloop_s				*loop;
+    struct shared_signal_s                      *signal;
     void					(* process_data)(struct fuse_receive_s *r, struct fuse_in_header *inh, char *data);
-    void					(* close_cb)(struct fuse_receive_s *r, struct bevent_s *bevent);
-    void					(* error_cb)(struct fuse_receive_s *r, struct bevent_s *bevent);
+    void                                        (* close)(struct fuse_receive_s *r, unsigned int level);
+    void                                        (* error)(struct fuse_receive_s *r, unsigned int level, unsigned int errcode);
     void					(* set_interrupted)(struct fuse_receive_s *r, uint64_t unique);
     int						(* notify_VFS)(struct fuse_receive_s *r, unsigned int code, struct iovec *iov, unsigned int count);
     int						(* reply_VFS)(struct fuse_receive_s *r, uint64_t unique, char *data, unsigned int size);
     int						(* error_VFS)(struct fuse_receive_s *r, uint64_t unique, unsigned int code);
-    unsigned int				read;
-    unsigned int				size;
-    unsigned char				threads;
-    char					*buffer;
+    struct osns_socket_s                        *sock;
 };
 
 /* prototypes */
 
-void handle_fuse_data_event(struct bevent_s *bevent, unsigned int flag, struct bevent_argument_s *arg);
-void handle_fuse_close_event(struct bevent_s *bevent, unsigned int flag, struct bevent_argument_s *arg);
-void handle_fuse_error_event(struct bevent_s *bevent, unsigned int flag, struct bevent_argument_s *arg);
+void init_fuse_socket_ops(struct osns_socket_s *sock, char *buffer, unsigned int size);
 
 int fuse_socket_reply_error(struct osns_socket_s *sock, uint64_t unique, unsigned int errcode);
 int fuse_socket_reply_data(struct osns_socket_s *sock, uint64_t unique, char *data, unsigned int size);

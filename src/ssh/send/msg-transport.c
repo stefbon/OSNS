@@ -33,13 +33,12 @@
 int send_disconnect_message(struct ssh_connection_s *connection, unsigned int reason)
 {
     const char *description=get_disconnect_reason(reason);
-    unsigned int len=(description) ? strlen(description) : 0;
-    char buffer[sizeof(struct ssh_payload_s) + 13 + len];
+    unsigned int size=(description) ? strlen(description) : 0;
+    char buffer[sizeof(struct ssh_payload_s) + 13 + size];
     struct ssh_payload_s *payload=(struct ssh_payload_s *) buffer;
-    unsigned int seq=0;
     char *pos=payload->buffer;
 
-    init_ssh_payload(payload, 13 + len);
+    init_ssh_payload(payload, 13 + size);
     payload->type=SSH_MSG_DISCONNECT;
 
     *pos=SSH_MSG_DISCONNECT;
@@ -48,13 +47,13 @@ int send_disconnect_message(struct ssh_connection_s *connection, unsigned int re
     store_uint32(pos, reason);
     pos+=4;
 
-    store_uint32(pos, len);
+    store_uint32(pos, size);
     pos+=4;
 
-    if (description) {
+    if (size>0) {
 
-	memcpy(pos, description, len);
-	pos+=len;
+	memcpy(pos, description, size);
+	pos+=size;
 
     }
 
@@ -62,48 +61,46 @@ int send_disconnect_message(struct ssh_connection_s *connection, unsigned int re
     pos+=4;
     payload->len=(unsigned int)(pos - payload->buffer);
 
-    return write_ssh_packet(connection, payload, &seq);
+    return write_ssh_packet(connection, payload);
 
 }
 
 int send_ignore_message(struct ssh_connection_s *connection, struct ssh_string_s *data)
 {
-    unsigned int len=(data) ? data->len : 0;
-    char buffer[sizeof(struct ssh_payload_s) + 1 + 4 + len];
+    unsigned int size=(data) ? data->len : 0;
+    char buffer[sizeof(struct ssh_payload_s) + 1 + 4 + size];
     struct ssh_payload_s *payload=(struct ssh_payload_s *) buffer;
-    unsigned int seq=0;
     char *pos=payload->buffer;
 
-    init_ssh_payload(payload, 5 + len);
+    init_ssh_payload(payload, 5 + size);
     payload->type=SSH_MSG_IGNORE;
 
     *pos=SSH_MSG_IGNORE;
     pos++;
 
-    store_uint32(pos, len);
+    store_uint32(pos, size);
     pos+=4;
 
-    if (len>0) {
+    if (size>0) {
 
-	memcpy(pos, data->ptr, len);
-	pos+=len;
+	memcpy(pos, data->ptr, size);
+	pos+=size;
 
     }
 
     payload->len=(unsigned int)(pos - payload->buffer);
-    return write_ssh_packet(connection, payload, &seq);
+    return write_ssh_packet(connection, payload);
 
 }
 
 int send_debug_message(struct ssh_connection_s *connection, struct ssh_string_s *debug)
 {
-    unsigned int len=(debug) ? debug->len : 0;
-    char buffer[sizeof(struct ssh_payload_s) + 1 + 1 + 4 + len + 4];
+    unsigned int size=(debug) ? debug->len : 0;
+    char buffer[sizeof(struct ssh_payload_s) + 1 + 1 + 4 + size + 4];
     struct ssh_payload_s *payload=(struct ssh_payload_s *) buffer;
-    unsigned int seq=0;
     char *pos=payload->buffer;
 
-    init_ssh_payload(payload, 10 + len);
+    init_ssh_payload(payload, 10 + size);
     payload->type=SSH_MSG_DEBUG;
 
     *pos=SSH_MSG_DEBUG;
@@ -112,13 +109,13 @@ int send_debug_message(struct ssh_connection_s *connection, struct ssh_string_s 
     *pos=1; /* always display */
     pos++;
 
-    store_uint32(pos, len);
+    store_uint32(pos, size);
     pos+=4;
 
-    if (len>0) {
+    if (size>0) {
 
-	memcpy(pos, debug->ptr, len);
-	pos+=len;
+	memcpy(pos, debug->ptr, size);
+	pos+=size;
 
     }
 
@@ -126,7 +123,7 @@ int send_debug_message(struct ssh_connection_s *connection, struct ssh_string_s 
     pos+=4;
 
     payload->len=(unsigned int)(pos - payload->buffer);
-    return write_ssh_packet(connection, payload, &seq);
+    return write_ssh_packet(connection, payload);
 
 }
 
@@ -134,7 +131,6 @@ int send_unimplemented_message(struct ssh_connection_s *connection, unsigned int
 {
     char buffer[sizeof(struct ssh_payload_s) + 5];
     struct ssh_payload_s *payload=(struct ssh_payload_s *) buffer;
-    unsigned int seq=0;
     char *pos=payload->buffer;
 
     init_ssh_payload(payload, 5);
@@ -147,7 +143,7 @@ int send_unimplemented_message(struct ssh_connection_s *connection, unsigned int
     pos+=4;
     payload->len=(unsigned int)(pos - payload->buffer);
 
-    return write_ssh_packet(connection, payload, &seq);
+    return write_ssh_packet(connection, payload);
 
 }
 
@@ -273,7 +269,6 @@ static int _send_kexinit(struct msg_buffer_s *mb, struct ssh_connection_s *conne
 
     msg_write_byte(mb, 0); /* first kexinit packet follows */
     msg_store_uint32(mb, 0); /* future use */
-
     return mb->pos;
 
 }
@@ -281,20 +276,20 @@ static int _send_kexinit(struct msg_buffer_s *mb, struct ssh_connection_s *conne
 int send_kexinit_message(struct ssh_connection_s *connection)
 {
     struct msg_buffer_s mb=INIT_SSH_MSG_BUFFER;
-    int len=_send_kexinit(&mb, connection);
-    char buffer[sizeof(struct ssh_payload_s) + len];
+    int size=_send_kexinit(&mb, connection);
+    char buffer[sizeof(struct ssh_payload_s) + size];
     struct ssh_payload_s *payload=(struct ssh_payload_s *) buffer;
     struct ssh_keyexchange_s *kex=&connection->setup.phase.transport.type.kex;
     struct generic_error_s error=GENERIC_ERROR_INIT;
 
-    init_ssh_payload(payload, len);
+    init_ssh_payload(payload, size);
     set_msg_buffer_payload(&mb, payload);
     payload->len=_send_kexinit(&mb, connection);
+    payload->type=SSH_MSG_KEXINIT;
 
     if (store_local_kexinit(kex, payload, (kex->flags & SSH_KEYEX_FLAG_SERVER), &error)==0) {
-	uint32_t seq=0;
 
-	return write_ssh_packet_kexinit(connection, payload, &seq);
+	return write_ssh_packet_kexinit(connection, payload);
 
     }
 
@@ -306,48 +301,48 @@ int send_newkeys_message(struct ssh_connection_s *connection)
 {
     char buffer[sizeof(struct ssh_payload_s) + 1];
     struct ssh_payload_s *payload=(struct ssh_payload_s *) buffer;
-    uint32_t seq=0;
 
     init_ssh_payload(payload, 1);
     payload->type=SSH_MSG_NEWKEYS;
+    payload->len=1;
     payload->buffer[0]=SSH_MSG_NEWKEYS;
 
-    return write_ssh_packet_newkeys(connection, payload, &seq);
+    return write_ssh_packet(connection, payload);
 
 }
 
-static int _send_service_common_message(struct ssh_connection_s *connection, unsigned char code, const char *service, uint32_t *seq)
+static int _send_service_common_message(struct ssh_connection_s *connection, unsigned char code, const char *service)
 {
-    unsigned int len=strlen(service);
-    char buffer[sizeof(struct ssh_payload_s) + 5 + len];
+    unsigned int size=strlen(service);
+    char buffer[sizeof(struct ssh_payload_s) + 5 + size];
     struct ssh_payload_s *payload=(struct ssh_payload_s *) buffer;
     char *pos=payload->buffer;
 
-    init_ssh_payload(payload, 5 + len);
+    init_ssh_payload(payload, 5 + size);
     payload->type=code;
 
     *pos=code;
     pos++;
 
-    store_uint32(pos, len);
+    store_uint32(pos, size);
     pos+=4;
 
-    memcpy(pos, service, len);
-    pos+=len;
+    memcpy(pos, service, size);
+    pos+=size;
     payload->len=(unsigned int)(pos - payload->buffer);
 
-    return write_ssh_packet(connection, payload, seq);
+    return write_ssh_packet(connection, payload);
 
 }
 
-int send_service_request_message(struct ssh_connection_s *connection, const char *service, uint32_t *seq)
+int send_service_request_message(struct ssh_connection_s *connection, const char *service)
 {
-    return _send_service_common_message(connection, SSH_MSG_SERVICE_REQUEST, service, seq);
+    return _send_service_common_message(connection, SSH_MSG_SERVICE_REQUEST, service);
 }
 
-int send_service_accept_message(struct ssh_connection_s *connection, const char *service, uint32_t *seq)
+int send_service_accept_message(struct ssh_connection_s *connection, const char *service)
 {
-    return _send_service_common_message(connection, SSH_MSG_SERVICE_ACCEPT, service, seq);
+    return _send_service_common_message(connection, SSH_MSG_SERVICE_ACCEPT, service);
 }
 
 /* functions to send a global request
@@ -369,10 +364,10 @@ int send_service_accept_message(struct ssh_connection_s *connection, const char 
     - uint32			port number to bind
     */
 
-int send_global_request_message(struct ssh_connection_s *connection, const char *service, char *data, unsigned int size, unsigned int *seq)
+int send_global_request_message(struct ssh_connection_s *connection, const char *service, char *data, unsigned int len)
 {
     struct ssh_connections_s *connections=get_ssh_connection_connections(connection);
-    unsigned int len=strlen(service);
+    unsigned int size=strlen(service);
     char buffer[sizeof(struct ssh_payload_s) + 5 + len + 1 + size];
     struct ssh_payload_s *payload=(struct ssh_payload_s *) buffer;
     char *pos=payload->buffer;
@@ -383,10 +378,10 @@ int send_global_request_message(struct ssh_connection_s *connection, const char 
     *pos=SSH_MSG_GLOBAL_REQUEST;
     pos++;
 
-    store_uint32(pos, len);
+    store_uint32(pos, size);
     pos+=4;
 
-    memcpy(pos, service, len);
+    memcpy(pos, service, size);
     pos+=len;
 
     *pos=1;
@@ -394,8 +389,8 @@ int send_global_request_message(struct ssh_connection_s *connection, const char 
 
     if (data) {
 
-	memcpy(pos, data, size);
-	pos+=size;
+	memcpy(pos, data, len);
+	pos+=len;
 
     }
 
@@ -425,10 +420,10 @@ int send_global_request_message(struct ssh_connection_s *connection, const char 
     connection->flags |= SSH_CONNECTION_FLAG_GLOBAL_REQUEST;
     signal_unlock(connections->signal);
 
-    return write_ssh_packet(connection, payload, seq);
+    return write_ssh_packet(connection, payload);
 }
 
-int send_request_success_message(struct ssh_connection_s *connection, char *data, unsigned int size, unsigned int *seq)
+int send_request_success_message(struct ssh_connection_s *connection, char *data, unsigned int size)
 {
     char buffer[sizeof(struct ssh_payload_s) + 5 + size];
     struct ssh_payload_s *payload=(struct ssh_payload_s *) buffer;
@@ -447,10 +442,10 @@ int send_request_success_message(struct ssh_connection_s *connection, char *data
     pos+=size;
     payload->len=(unsigned int)(pos - payload->buffer);
 
-    return write_ssh_packet(connection, payload, seq);
+    return write_ssh_packet(connection, payload);
 }
 
-int send_request_failure_message(struct ssh_connection_s *connection, unsigned int *seq)
+int send_request_failure_message(struct ssh_connection_s *connection)
 {
     char buffer[sizeof(struct ssh_payload_s) + 1];
     struct ssh_payload_s *payload=(struct ssh_payload_s *) buffer;
@@ -462,7 +457,7 @@ int send_request_failure_message(struct ssh_connection_s *connection, unsigned i
     *pos=SSH_MSG_REQUEST_FAILURE;
     pos++;
     payload->len=(unsigned int)(pos - payload->buffer);
-    return write_ssh_packet(connection, payload, seq);
+    return write_ssh_packet(connection, payload);
 }
 
 static unsigned int _send_ext_info_message(struct msg_buffer_s *mb, unsigned int requested)
@@ -519,7 +514,7 @@ static unsigned int _send_ext_info_message(struct msg_buffer_s *mb, unsigned int
     return mb->pos;
 }
 
-int send_ext_info_message(struct ssh_connection_s *connection, unsigned int requested, unsigned int *seq)
+int send_ext_info_message(struct ssh_connection_s *connection, unsigned int requested)
 {
     return -1;
 }

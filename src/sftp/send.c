@@ -26,7 +26,6 @@
 #include "libosns-workspace.h"
 #include "libosns-context.h"
 #include "libosns-fuse-public.h"
-#include "libosns-resources.h"
 
 #include "sftp/common-protocol.h"
 #include "common.h"

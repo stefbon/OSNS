@@ -24,8 +24,6 @@
 
 /* prototypes */
 
-int init_ssh_subsystem_std(struct ssh_subsystem_connection_s *connection);
-void close_ssh_subsystem_std(struct ssh_subsystem_connection_s *connection, struct osns_socket_s *sock, unsigned char free);
-void clear_ssh_subsystem_std(struct ssh_subsystem_connection_s *connection);
+int init_ssh_subsystem_std(struct ssh_subsystem_connection_s *connection, void (* init_socket)(struct ssh_subsystem_connection_s *connection, struct osns_socket_s *sock, unsigned int type, unsigned int flags));
 
 #endif

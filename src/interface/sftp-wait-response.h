@@ -21,10 +21,10 @@
 
 /* prototypes */
 
-unsigned char wait_sftp_response_ctx(struct context_interface_s *i, struct sftp_request_s *sftp_r, struct system_timespec_s *timeout);
+unsigned char wait_sftp_response_ctx(struct context_interface_s *i, struct sftp_request_s *sftp_r, struct system_timespec_s *timeout, unsigned char (* cb_interrupted)(void *ptr), void *ptr);
 
-void init_sftp_request(struct sftp_request_s *r, struct context_interface_s *i, struct fuse_request_s *f_request);
-void init_sftp_request_minimal(struct sftp_request_s *r, struct context_interface_s *i);
+void free_sftp_reply(struct sftp_reply_s *reply);
+void init_sftp_request(struct sftp_request_s *r, struct context_interface_s *i);
 
 void get_sftp_request_timeout_ctx(struct context_interface_s *i, struct system_timespec_s *timeout);
 

@@ -19,28 +19,19 @@
 
 #include "libosns-basic-system-headers.h"
 
-#include <pthread.h>
-
 #include "libosns-log.h"
-
-#include "simple-list.h"
-
-static pthread_mutex_t mutex=PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t cond=PTHREAD_COND_INITIALIZER;
-
-static void init_list_lock(struct list_lock_s *l)
-{
-    l->value=0;
-    l->threadidw=0;
-    l->threadidpw=0;
-}
+#include "signal.h"
+#include "lock.h"
 
 void write_lock_list(struct list_lock_s *lock)
 {
+    struct shared_signal_s *signal=lock->signal;
     unsigned char block=(SIMPLE_LOCK_WRITE | SIMPLE_LOCK_PREWRITE);
     unsigned char tmp=0;
 
-    pthread_mutex_lock(&mutex);
+    // logoutput_debug("write_lock_list: A1 tid %u", gettid());
+
+    signal_lock(signal);
 
     if ((lock->value & SIMPLE_LOCK_PREWRITE)==0 || lock->threadidpw==pthread_self()) {
 
@@ -53,7 +44,7 @@ void write_lock_list(struct list_lock_s *lock)
 
     while ((lock->value & block) || (lock->value > (SIMPLE_LOCK_WRITE | SIMPLE_LOCK_PREWRITE))) {
 
-	pthread_cond_wait(&cond, &mutex);
+	signal_condwait(signal);
 
 	if ((lock->value & block)==0 && (lock->value <= (SIMPLE_LOCK_WRITE | SIMPLE_LOCK_PREWRITE))) {
 
@@ -74,34 +65,42 @@ void write_lock_list(struct list_lock_s *lock)
     lock->value &= ~tmp; /* remove the pre lock if any */
     lock->threadidw=pthread_self();
     lock->threadidpw=0;
-    pthread_cond_broadcast(&cond);
-    pthread_mutex_unlock(&mutex);
+
+    signal_broadcast(signal);
+    signal_unlock(signal);
+
+    // logoutput_debug("write_lock_list: A2 tid %u", gettid());
 
 }
 
 void write_unlock_list(struct list_lock_s *lock)
 {
-    pthread_mutex_lock(&mutex);
+    struct shared_signal_s *signal=lock->signal;
+
+    signal_lock(signal);
     lock->value &= ~SIMPLE_LOCK_WRITE;
     lock->threadidw=0;
-    pthread_cond_broadcast(&cond);
-    pthread_mutex_unlock(&mutex);
+    signal_broadcast(signal);
+    signal_unlock(signal);
 }
 
 void read_lock_list(struct list_lock_s *lock)
 {
+    struct shared_signal_s *signal=lock->signal;
     unsigned char block=(SIMPLE_LOCK_WRITE | SIMPLE_LOCK_PREWRITE);
 
-    pthread_mutex_lock(&mutex);
-    while (lock->value & block) pthread_cond_wait(&cond, &mutex);
+    signal_lock(signal);
+    while (lock->value & block) signal_condwait(signal);
     lock->value+=SIMPLE_LOCK_READ;
-    pthread_mutex_unlock(&mutex);
+    signal_unlock(signal);
 }
 
 void read_unlock_list(struct list_lock_s *lock)
 {
-    pthread_mutex_lock(&mutex);
+    struct shared_signal_s *signal=lock->signal;
+
+    signal_lock(signal);
     if (lock->value>=SIMPLE_LOCK_READ) lock->value-=SIMPLE_LOCK_READ;
-    pthread_cond_broadcast(&cond);
-    pthread_mutex_unlock(&mutex);
+    signal_broadcast(signal);
+    signal_unlock(signal);
 }

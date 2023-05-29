@@ -28,19 +28,19 @@
 #include "domain.h"
 #include "entity.h"
 
-int add_net2local_map(struct net_userscache_s *cache, struct net_entity_s *entity)
+#include "cache.h"
+
+static int add_net2local_map_byname(struct net_userscache_s *cache, struct net_entity_s *entity)
 {
     struct net_domain_s *domain=NULL;
     struct sl_skiplist_s *sl=(struct sl_skiplist_s *) cache->buffer;
     unsigned int error=EIO;
     struct net_ent2local_s *ent2local=NULL;
     unsigned int flags=0;
-    struct name_s name=INIT_NAME;
 
-    if (entity->remote.domain.ptr==NULL || entity->remote.domain.len==0) {
+    if (entity->net.domain.ptr==NULL || entity->net.domain.len==0) {
 
 	/* no domain: are users from the server localhost */
-
 	flags=NET_DOMAIN_FLAG_LOCALHOST;
 	if (cache->localhost) domain=cache->localhost;
 
@@ -49,48 +49,38 @@ int add_net2local_map(struct net_userscache_s *cache, struct net_entity_s *entit
     if (domain==NULL) {
 	struct name_s lookupname=INIT_NAME;
 
-	if ((flags & NET_DOMAIN_FLAG_LOCALHOST)==0) set_name_from(&lookupname, 's', &entity->remote.domain);
+	if ((flags & NET_DOMAIN_FLAG_LOCALHOST)==0) set_name_from(&lookupname, 's', &entity->net.domain);
 	domain=find_domain_batch(sl, &lookupname, &error);
-
-	if (domain) {
-
-	    logoutput("add_net2local_map: domain %.*s found", entity->remote.domain.len, entity->remote.domain.ptr);
-
-	}
+	if (domain) logoutput_debug("add_net2local_map_byname: domain %.*s found", entity->net.domain.len, entity->net.domain.ptr);
 
     }
 
     if (domain==NULL) {
 
-	domain=create_net_domain(&entity->remote.domain, flags, NET_NUMBER_REMOTE_USERS_DEFAULT, NET_NUMBER_REMOTE_GROUPS_DEFAULT);
+	domain=create_net_domain(&entity->net.domain, flags, NET_NUMBER_REMOTE_USERS_DEFAULT, NET_NUMBER_REMOTE_GROUPS_DEFAULT);
 
 	if (domain) {
 
 	    if (insert_domain_batch(sl, domain, &error)==domain) {
 
-		logoutput("add_net2local_map: added domain %.*s", entity->remote.domain.len, entity->remote.domain.ptr);
+		logoutput_debug("add_net2local_map_byname: added domain %.*s", entity->net.domain.len, entity->net.domain.ptr);
 
 	    } else {
 
-		logoutput("add_net2local_map: failed to add localhost domain, error %i (%s)", error, strerror(error));
+		logoutput_debug("add_net2local_map_byname: unable to add localhost domain, error %i (%s)", error, strerror(error));
 		free_net_domain(&domain);
-		goto error;
+		return -1;
 
 	    }
 
 	} else {
 
-	    error=ENOMEM;
-	    logoutput("add_net2local_map: failed to create localhost domain, error %i (%s)", error, strerror(error));
-	    goto error;
+	    logoutput_debug("add_net2local_map_byname: unable to create localhost domain, error %i (%s)", error, strerror(error));
+	    return -1;
 
 	}
 
-	if (flags & NET_DOMAIN_FLAG_LOCALHOST) {
-
-	    cache->localhost=domain;
-
-	}
+	if (flags & NET_DOMAIN_FLAG_LOCALHOST) cache->localhost=domain;
 
     }
 
@@ -104,58 +94,37 @@ int add_net2local_map(struct net_userscache_s *cache, struct net_entity_s *entit
 
     } else {
 
-	error=EINVAL;
-	goto error;
+	return -1;
 
     }
 
-    set_name_from(&name, 's', &entity->remote.name);
-    ent2local=find_ent2local_batch(sl, &name, &error);
+    ent2local=create_ent2local(entity);
 
-    if (ent2local==NULL) {
+    if (ent2local) {
 
-	ent2local=create_ent2local(entity);
+	if (ent2local==insert_ent2local_batch_byname(sl, ent2local, &error)) {
 
-	if (ent2local) {
-
-	    if (ent2local==insert_ent2local_batch(sl, ent2local, &error)) {
-
-		logoutput("add_net2local_map: added entity %.*s to domain %.*s", entity->remote.name.len, entity->remote.name.ptr, entity->remote.domain.len, entity->remote.domain.ptr);
-
-	    } else {
-
-		if (error==EEXIST) {
-
-		    logoutput("add_net2local_map: entity %.*s domain %.*s already added", entity->remote.name.len, entity->remote.name.ptr, entity->remote.domain.len, entity->remote.domain.ptr);
-
-		} else {
-
-		    logoutput("add_net2local_map: error %i adding entity %.*s (%s)", error, entity->remote.name.len, entity->remote.name.ptr, strerror(error));
-
-		}
-
-		free_ent2local(&ent2local);
-
-	    }
+	    logoutput_debug("add_net2local_map_byname: added entity %.*s to domain %.*s", entity->net.name.len, entity->net.name.ptr, entity->net.domain.len, entity->net.domain.ptr);
 
 	} else {
 
-	    error=ENOMEM;
-	    logoutput("add_net2local_map: error %i adding entity %.*s (%s)", error, entity->remote.name.len, entity->remote.name.ptr, strerror(error));
+	    logoutput_debug("add_net2local_map_byname: error %i adding entity %.*s (%s)", error, entity->net.name.len, entity->net.name.ptr, strerror(error));
+	    free_ent2local(&ent2local);
+	    return -1;
 
 	}
+
+    } else {
+
+	logoutput_debug("add_net2local_map_byname: error %i adding entity %.*s (%s)", error, entity->net.name.len, entity->net.name.ptr, strerror(error));
+	return -1;
 
     }
 
     return 0;
-
-    error:
-
-    return -1;
-
 }
 
-static struct net_ent2local_s *find_ent2local(struct net_userscache_s *cache, struct net_entity_s *entity, size_t offset, unsigned int *error)
+static void find_ent2local_byname(struct net_userscache_s *cache, struct net_entity_s *entity, size_t offset, unsigned int *error)
 {
     struct net_domain_s *domain=NULL;
     struct net_ent2local_s *ent2local=NULL;
@@ -164,7 +133,7 @@ static struct net_ent2local_s *find_ent2local(struct net_userscache_s *cache, st
 
     *error=ENOENT;
 
-    if (entity->remote.domain.ptr==NULL || entity->remote.domain.len==0) {
+    if (entity->net.domain.ptr==NULL || entity->net.domain.len==0) {
 
 	/* no domain: are users from the server localhost */
 
@@ -177,7 +146,7 @@ static struct net_ent2local_s *find_ent2local(struct net_userscache_s *cache, st
 
 	/* only here when there is a valid domain (not empty) */
 
-	set_name_from(&lookupname, 's', &entity->remote.domain);
+	set_name_from(&lookupname, 's', &entity->net.domain);
 	domain=find_domain_batch(sl, &lookupname, error);
 
     }
@@ -185,12 +154,12 @@ static struct net_ent2local_s *find_ent2local(struct net_userscache_s *cache, st
     if (domain) {
 	struct name_s lookupname=INIT_NAME;
 
-	logoutput("find_ent2local: domain %.*s found", entity->remote.domain.len, entity->remote.domain.ptr);
+	logoutput_debug("find_ent2local_byname: domain %.*s found", entity->net.domain.len, entity->net.domain.ptr);
 
 	sl=(struct sl_skiplist_s *)((char *) domain + offset);
-	set_name_from(&lookupname, 's', &entity->remote.name);
-
-	return find_ent2local_batch(sl, &lookupname, error);
+	set_name_from(&lookupname, 's', &entity->net.name);
+	find_ent2local_batch_shared(sl, (void *) &lookupname, entity, error);
+	return;
 
     }
 
@@ -198,11 +167,11 @@ static struct net_ent2local_s *find_ent2local(struct net_userscache_s *cache, st
 
     if (flags & NET_DOMAIN_FLAG_LOCALHOST) {
 
-	logoutput_warning("find_ent2local: %s %.*s not found", ((entity->flags & NET_ENTITY_FLAG_USER) ? "user" : "group"), entity->remote.name.ptr, entity->remote.name.len);
+	logoutput_warning("find_ent2local_byname: %s %.*s not found", ((entity->flags & NET_ENTITY_FLAG_USER) ? "user" : "group"), entity->net.name.ptr, entity->net.name.len);
 
     } else {
 
-	logoutput_warning("find_ent2local: %s %.*s@%.*s not found", ((entity->flags & NET_ENTITY_FLAG_USER) ? "user" : "group"), entity->remote.name.ptr, entity->remote.name.len, entity->remote.domain.len, entity->remote.domain.ptr);
+	logoutput_warning("find_ent2local_byname: %s %.*s@%.*s not found", ((entity->flags & NET_ENTITY_FLAG_USER) ? "user" : "group"), entity->net.name.ptr, entity->net.name.len, entity->net.domain.len, entity->net.domain.ptr);
 
     }
 
@@ -210,17 +179,17 @@ static struct net_ent2local_s *find_ent2local(struct net_userscache_s *cache, st
 
 }
 
-struct net_ent2local_s *find_user_ent2local(struct net_userscache_s *cache, struct net_entity_s *entity, unsigned int *error)
+static void find_user_ent2local_byname(struct net_userscache_s *cache, struct net_entity_s *entity, unsigned int *error)
 {
-    return find_ent2local(cache, entity, offsetof(struct net_domain_s, u_sl), error);
+    find_ent2local_byname(cache, entity, offsetof(struct net_domain_s, u_sl), error);
 }
 
-struct net_ent2local_s *find_group_ent2local(struct net_userscache_s *cache, struct net_entity_s *entity, unsigned int *error)
+static void find_group_ent2local_byname(struct net_userscache_s *cache, struct net_entity_s *entity, unsigned int *error)
 {
-    return find_ent2local(cache, entity, offsetof(struct net_domain_s, g_sl), error);
+    find_ent2local_byname(cache, entity, offsetof(struct net_domain_s, g_sl), error);
 }
 
-void clear_net_userscache(struct net_userscache_s *cache)
+static void clear_net_userscache_byname(struct net_userscache_s *cache)
 {
     struct sl_skiplist_s *sl=(struct sl_skiplist_s *) cache->buffer;
     struct list_header_s *h=&sl->header;
@@ -230,13 +199,13 @@ void clear_net_userscache(struct net_userscache_s *cache)
 
     /* walk every domain*/
 
-    list=get_list_head(h, SIMPLE_LIST_FLAG_REMOVE);
+    list=remove_list_head(h);
 
     while (list) {
 	struct net_domain_s *domain=(struct net_domain_s *) ((char *) list - offsetof(struct net_domain_s, list));
 
 	free_net_domain(&domain);
-	list=get_list_head(h, SIMPLE_LIST_FLAG_REMOVE);
+	list=remove_list_head(h);
 
     }
 
@@ -244,25 +213,32 @@ void clear_net_userscache(struct net_userscache_s *cache)
 
 }
 
-struct net_userscache_s *create_net_userscache(unsigned int nrdomains)
+/*
+    with name resolution domains are part of the full name
+    like joe@example.org
+    first step is to lookup the example.org domain and then the user joe (which is user of the example.org domain)
+
+    the lookup method like first looking up the directory, and in that directory the file
+*/
+
+static struct net_userscache_s *create_net_userscache_name(unsigned int guessed_count)
 {
-    unsigned int size=0;
+    struct net_userscache_s *cache=NULL;
     unsigned char nrlanes=0;
     unsigned short prob=get_default_sl_prob();
-    struct net_userscache_s *cache=NULL;
-    struct sl_skiplist_s *sl=NULL;
+    unsigned int size=0;
 
-    if (nrdomains==0) nrdomains=10; /* make this configurable */
-    nrlanes=estimate_sl_lanes(nrdomains, prob);
+    nrlanes=estimate_sl_lanes(guessed_count, prob);
     size = get_size_sl_skiplist(&nrlanes);
 
     cache=malloc(sizeof(struct net_userscache_s) + size);
 
     if (cache) {
+	struct sl_skiplist_s *sl=NULL;
 
 	memset(cache, 0, sizeof(struct net_userscache_s) + size);
 
-	cache->flags = (NET_USERSCACHE_FLAG_ALLOC | NET_USERSCACHE_FLAG_INIT);
+	cache->flags=(NET_USERSCACHE_FLAG_ALLOC | NET_USERSCACHE_FLAG_INIT);
 	cache->localhost=NULL;
 	cache->size=size;
 
@@ -270,23 +246,13 @@ struct net_userscache_s *create_net_userscache(unsigned int nrdomains)
 
 	if (create_sl_skiplist(sl, prob, size, nrlanes)) {
 
-	    logoutput("create_net_userscache: sl skiplist created (%i lanes)", nrlanes);
+	    logoutput_debug("create_net_userscache_common: sl skiplist created (%u lanes %u count)", nrlanes, guessed_count);
 
 	} else {
 
-	    logoutput("create_net_userscache: unable to create sl skiplist (%i lanes)", nrlanes);
-	    goto error;
-
-	}
-
-	if (init_sl_skiplist(sl, compare_domains, NULL, NULL, get_list_element_domain, get_logname_domain)==0) {
-
-	    logoutput("create_net_userscache: sl skiplist initialized");
-
-	} else {
-
-	    logoutput("create_net_userscache: unable to initialize");
-	    goto error;
+	    logoutput_debug("create_net_userscache_common: unable to create sl skiplist (%i lanes %u count)", nrlanes, guessed_count);
+	    free(cache);
+	    cache=NULL;
 
 	}
 
@@ -294,10 +260,148 @@ struct net_userscache_s *create_net_userscache(unsigned int nrdomains)
 
     return cache;
 
-    error:
+}
 
-    if (sl) free_sl_skiplist(sl);
-    if (cache) free(cache);
-    return NULL;
+/* search through cache using ids */
+
+static int add_net2local_map_byid(struct net_userscache_s *cache, struct net_entity_s *entity)
+{
+    struct net_domain_s *domain=(struct net_domain_s *) cache->buffer;
+    unsigned int errcode=0;
+    struct sl_skiplist_s *sl=NULL;
+    struct net_ent2local_s *ent2local=NULL;
+
+    if (entity->flags & NET_ENTITY_FLAG_USER) {
+
+	sl=domain->u_sl;
+
+    } else if (entity->flags & NET_ENTITY_FLAG_GROUP) {
+
+	sl=domain->g_sl;
+
+    } else {
+
+	return -1;
+
+    }
+
+    ent2local=create_ent2local(entity);
+
+    if (ent2local) {
+
+	if (ent2local==insert_ent2local_batch_byid(sl, ent2local, &errcode)) {
+
+	    logoutput_debug("add_net2local_map_byname: added entity %.*s to domain %.*s", entity->net.name.len, entity->net.name.ptr, entity->net.domain.len, entity->net.domain.ptr);
+
+	} else {
+
+	    logoutput_debug("add_net2local_map_byname: error %i adding entity %.*s (%s)", errcode, entity->net.name.len, entity->net.name.ptr, strerror(errcode));
+	    free_ent2local(&ent2local);
+	    return -1;
+
+	}
+
+    } else {
+
+	errcode=ENOMEM;
+	logoutput_debug("add_net2local_map_byname: error %i adding entity %.*s (%s)", errcode, entity->net.name.len, entity->net.name.ptr, strerror(errcode));
+	return -1;
+
+    }
+
+    return 0;
+
+}
+
+static void find_user_ent2local_byid(struct net_userscache_s *cache, struct net_entity_s *entity, unsigned int *err)
+{
+    struct net_domain_s *domain=(struct net_domain_s *) cache->buffer;
+    struct sl_skiplist_s *sl=domain->u_sl;
+    find_ent2local_batch_shared(sl, &entity->net.id, entity, err);
+}
+
+static void find_group_ent2local_byid(struct net_userscache_s *cache, struct net_entity_s *entity, unsigned int *err)
+{
+    struct net_domain_s *domain=(struct net_domain_s *) cache->buffer;
+    struct sl_skiplist_s *sl=domain->g_sl;
+    find_ent2local_batch_shared(sl, &entity->net.id, entity, err);
+}
+
+static struct net_userscache_s *create_net_userscache_byid()
+{
+    struct net_userscache_s *cache=NULL;
+    unsigned int size=0;
+    unsigned int u_size=0;
+    unsigned int g_size=0;
+
+    size=get_size_net_domain(NET_NUMBER_REMOTE_USERS_DEFAULT, NET_NUMBER_REMOTE_GROUPS_DEFAULT, &u_size, &g_size);
+    cache=malloc(sizeof(struct net_userscache_s) + size);
+
+    if (cache) {
+	struct net_domain_s *domain=NULL;
+
+	memset(cache, 0, sizeof(struct net_userscache_s) + size);
+
+	cache->flags=(NET_USERSCACHE_FLAG_ALLOC | NET_USERSCACHE_FLAG_INIT);
+	cache->localhost=NULL;
+	cache->size=size;
+
+	domain=(struct net_domain_s *) cache->buffer;
+	domain->flags = NET_DOMAIN_FLAG_ALLOC;
+	domain->size=u_size + g_size;
+
+	if (init_net_domain(domain, u_size, g_size, NULL, NET_IDMAPPING_FLAG_MAPBYID)==-1) {
+
+	    free(cache);
+	    return NULL;
+
+	}
+
+	cache->localhost=domain;
+
+    }
+
+    return cache;
+}
+
+static void clear_net_userscache_byid(struct net_userscache_s *cache)
+{
+    struct net_domain_s *domain=(struct net_domain_s *) cache->buffer;
+    free_net_domain(&domain);
+}
+
+struct net_userscache_s *create_net_userscache(unsigned int flags)
+{
+    struct net_userscache_s *cache=NULL;
+
+    if (flags & NET_IDMAPPING_FLAG_MAPBYNAME) {
+
+	cache=create_net_userscache_name(10);
+
+	if (cache) {
+
+	    cache->add_net2local_map=add_net2local_map_byname;
+	    cache->clear=clear_net_userscache_byname;
+	    cache->find_user_ent2local=find_user_ent2local_byname;
+	    cache->find_group_ent2local=find_group_ent2local_byname;
+
+	}
+
+    } else if (flags & NET_IDMAPPING_FLAG_MAPBYID) {
+
+	cache=create_net_userscache_byid();
+
+	if (cache) {
+
+	    cache->add_net2local_map=add_net2local_map_byid;
+	    cache->clear=clear_net_userscache_byid;
+	    cache->find_user_ent2local=find_user_ent2local_byid;
+	    cache->find_group_ent2local=find_group_ent2local_byid;
+
+	}
+
+    }
+
+    return cache;
 
 }

@@ -110,8 +110,6 @@ static int create_mountpoint(char *mountpoint)
 
     }
 
-    logoutput_debug("create_mountpoint: check %s", mountpoint);
-
     result=access(mountpoint, F_OK | R_OK | W_OK | X_OK);
 
     if (result==-1) {

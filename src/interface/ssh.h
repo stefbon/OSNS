@@ -20,5 +20,6 @@
 #define INTERFACE_SSH_H
 
 void init_ssh_session_interface();
+unsigned int get_ssh_channel_max_packet_length(struct context_interface_s *i);
 
 #endif

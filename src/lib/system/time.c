@@ -273,3 +273,13 @@ system_time_nsec_t get_system_time_nsec(struct system_timespec_s *time)
 {
     return time->st_nsec;
 }
+
+void system_nanosleep(unsigned int sec)
+{
+#ifdef __linux
+
+    struct timespec tmp={.tv_sec=sec, .tv_nsec=0};
+
+    if (nanosleep(&tmp, NULL)==-1) logoutput_debug("system_nanosleep: error %u (%s)", errno, strerror(errno));
+#endif
+}

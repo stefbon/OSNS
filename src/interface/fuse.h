@@ -29,6 +29,7 @@ struct beventloop_s *get_fuse_interface_eventloop(struct context_interface_s *i)
 void signal_fuse_request_interrupted(struct context_interface_s *interface, uint64_t unique);
 
 struct fuse_config_s *get_fuse_interface_config(struct context_interface_s *i);
+struct system_dev_s *get_fuse_interface_system_dev(struct context_interface_s *i);
 
 int fuse_notify_VFS_delete(struct context_interface_s *interface, uint64_t pino, uint64_t ino, char *name, unsigned int len);
 int fuse_reply_VFS_data(struct context_interface_s *i, uint64_t unique, char *data, unsigned int len);

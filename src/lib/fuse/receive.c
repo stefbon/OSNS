@@ -28,244 +28,57 @@
 
 #include "receive.h"
 
-static void start_thread_read_receive_buffer(struct fuse_receive_s *r);
+static unsigned int get_fuse_msg_header_size(struct osns_socket_s *sock, void *ptr)
+{
+    return sizeof(struct fuse_in_header);
+}
 
-static void fuse_read_receive_buffer(void *ptr)
+static unsigned int get_fuse_msg_size(struct osns_socket_s *sock, char *header, unsigned int len, void *ptr)
+{
+    struct fuse_in_header *inh=(struct fuse_in_header *) header;
+    return inh->len;
+}
+
+static void set_fuse_msg_size(struct osns_socket_s *sock, char *header, unsigned int len, void *ptr)
+{
+    struct fuse_in_header *inh=(struct fuse_in_header *) header;
+    inh->len=len;
+}
+
+static void handle_fuse_data_event(struct osns_socket_s *sock, char *header, char *data, struct socket_control_data_s *ctrl, void *ptr)
 {
     struct fuse_receive_s *r=(struct fuse_receive_s *) ptr;
-    struct shared_signal_s *signal=r->loop->signal;
-    struct fuse_in_header *inh=(struct fuse_in_header *) r->buffer;
-
-    logoutput_debug("fuse_read_receive_buffer");
-
-    signal_lock(signal);
-
-    if ((r->read==0) || (r->status & FUSE_RECEIVE_STATUS_WAIT) || (r->threads>1)) {
-
-	signal_unlock(signal);
-	return;
-
-    }
-
-    /* check there is enough data to read the header */
-
-    r->status |= ((r->read < sizeof(struct fuse_in_header) ? FUSE_RECEIVE_STATUS_WAITING1 : 0));
-    r->threads++;
-
-    while (r->status & (FUSE_RECEIVE_STATUS_WAITING1 | FUSE_RECEIVE_STATUS_PACKET)) {
-
-	int result=signal_condwait(signal);
-
-	if (r->read >= sizeof(struct fuse_in_header)) {
-
-	    r->status &= ~FUSE_RECEIVE_STATUS_WAITING1;
-	    break;
-
-	} else if (r->read==0) {
-
-	    r->status &= ~FUSE_RECEIVE_STATUS_WAITING1;
-	    r->threads--;
-	    signal_unlock(signal);
-	    return;
-
-	} else if (result>0) {
-
-	    r->status &= ~FUSE_RECEIVE_STATUS_WAITING1;
-	    r->status |= FUSE_RECEIVE_STATUS_ERROR;
-	    signal_unlock(signal);
-	    goto disconnect;
-
-	} else if (r->status & FUSE_RECEIVE_STATUS_DISCONNECT) {
-
-	    r->status &= ~FUSE_RECEIVE_STATUS_WAITING1;
-	    signal_unlock(signal);
-	    goto disconnect;
-
-	}
-
-    }
-
-    r->status |= FUSE_RECEIVE_STATUS_PACKET;
-    signal_unlock(signal);
-
-    /* from here this thread is the only one reading the buffer for a fuse message */
-
-    {
-	unsigned int size=inh->len;
-	char data[size];
-	struct fuse_in_header header;
-
-	inh->len -= sizeof(struct fuse_in_header);
-
-	if (size > r->size) {
-
-	    logoutput_debug("fuse_read_receive_buffer: received a message too large for buffer (message %u buffer %u)", size, r->size);
-
-	    signal_lock(signal);
-	    r->status |= FUSE_RECEIVE_STATUS_DISCONNECT;
-	    r->status &= ~FUSE_RECEIVE_STATUS_PACKET;
-	    r->threads--;
-	    signal_broadcast(signal);
-	    signal_unlock(signal);
-	    goto disconnect;
-
-	}
-
-	signal_lock(signal);
-
-	memcpy(&header, inh, sizeof(struct fuse_in_header));
-
-	if (r->read < size) {
-	    unsigned int tmp=r->read;
-
-	    /* not enough bytes received ... wait for more to arrive */
-
-	    memcpy(data, (char *) (r->buffer + sizeof(struct fuse_in_header)), (tmp - sizeof(struct fuse_in_header)));
-	    memmove(r->buffer, (char *)(r->buffer + tmp), size - tmp);
-	    r->read=0;
-	    r->status |= FUSE_RECEIVE_STATUS_WAITING2;
-
-	    while (r->read < (size - tmp)) {
-
-		int result=signal_condwait(signal);
-
-		if (r->read >= (size - tmp)) {
-
-		    r->status &= ~FUSE_RECEIVE_STATUS_WAITING2;
-		    break;
-
-		} else if ((result>0) || (r->status & (FUSE_RECEIVE_STATUS_DISCONNECT | FUSE_RECEIVE_STATUS_ERROR))) {
-
-		    r->status &= ~(FUSE_RECEIVE_STATUS_WAITING2 | FUSE_RECEIVE_STATUS_PACKET);
-		    signal_unlock(signal);
-		    goto disconnect;
-
-		}
-
-	    }
-
-	    memcpy(&data[tmp - sizeof(struct fuse_in_header)], r->buffer, (size - tmp));
-	    r->read -= (size - tmp);
-
-	} else {
-
-	    memcpy(data, (char *) (r->buffer + sizeof(struct fuse_in_header)), inh->len);
-	    r->read -= size;
-
-	}
-
-	r->status &= ~FUSE_RECEIVE_STATUS_PACKET;
-	r->threads--;
-
-	if (r->read>0) {
-
-	    memmove(r->buffer, (char *)(r->buffer + size), r->read);
-
-	    if (r->threads==0) {
-
-		start_thread_read_receive_buffer(r);
-
-	    } else {
-
-		/* there are threads already reading the buffer */
-		signal_broadcast(signal);
-
-	    }
-
-	}
-
-	signal_unlock(signal);
-	(* r->process_data)(r, &header, data);
-
-    }
-
-    return;
-
-    disconnect:
-    (* r->close_cb)(r, NULL);
-
+    struct fuse_in_header *inh=(struct fuse_in_header *) header;
+    (* r->process_data)(r, inh, data);
 }
 
-static void start_thread_read_receive_buffer(struct fuse_receive_s *r)
+static void handle_fuse_close_event(struct osns_socket_s *sock, unsigned int level, void *ptr)
 {
-    work_workerthread(NULL, 0, fuse_read_receive_buffer, (void *) r, NULL);
+    struct fuse_receive_s *r=(struct fuse_receive_s *) ptr;
+    process_socket_close_default(sock, level, NULL);
+    (* r->close)(r, level);
 }
 
-/* read data from socket and process it futher */
-
-void handle_fuse_data_event(struct bevent_s *bevent, unsigned int flag, struct bevent_argument_s *arg)
+static void handle_fuse_error_event(struct osns_socket_s *sock, unsigned int level, unsigned int errcode, void *ptr)
 {
-    struct fuse_receive_s *r=(struct fuse_receive_s *) bevent->ptr;
-    struct osns_socket_s *sock=bevent->sock;
-    struct shared_signal_s *signal=r->loop->signal;
-    int bytesread=0;
-    unsigned int errcode=0;
-
-    signal_lock(signal);
-
-    bytesread=(* sock->sops.device.read)(sock, (char *)(r->buffer + r->read), (unsigned int)(r->size - r->read));
-    errcode=errno;
-
-    if (bytesread>0) {
-
-	logoutput_debug("handle_fuse_data_event: %u bytes read buffer size %u read pos %u", (unsigned int) bytesread, r->size, r->read);
-
-	r->read += bytesread;
-
-	if ((r->threads < 2) && (r->status & FUSE_RECEIVE_STATUS_WAIT)==0) {
-
-	    start_thread_read_receive_buffer(r);
-
-	} else {
-
-	    signal_broadcast(signal);
-
-	}
-
-	signal_unlock(signal);
-
-    } else {
-
-	signal_unlock(signal);
-
-	if (bytesread==0) {
-
-	    logoutput_debug("handle_fuse_data_event: connection closed");
-	    goto disconnect;
-
-	} else {
-
-	    if (socket_connection_error(errcode)) {
-
-		goto disconnect;
-
-	    } else {
-
-		logoutput_debug("handle_fuse_data_event: some error (%i:%s)", errcode, strerror(errcode));
-
-	    }
-
-	}
-
-    }
-
-    return;
-
-    disconnect:
-    (* r->close_cb)(r, bevent);
-
+    struct fuse_receive_s *r=(struct fuse_receive_s *) ptr;
+    process_socket_error_default(sock, level, errcode, NULL);
+    (* r->error)(r, level, errcode);
 }
 
-void handle_fuse_close_event(struct bevent_s *bevent, unsigned int flag, struct bevent_argument_s *arg)
+void init_fuse_socket_ops(struct osns_socket_s *sock, char *buffer, unsigned int size)
 {
-    struct fuse_receive_s *r=(struct fuse_receive_s *) bevent->ptr;
-    (* r->close_cb)(r, bevent);
-}
 
-void handle_fuse_error_event(struct bevent_s *bevent, unsigned int flag, struct bevent_argument_s *arg)
-{
-    struct fuse_receive_s *r=(struct fuse_receive_s *) bevent->ptr;
-    (* r->error_cb)(r, bevent);
+    sock->ctx.get_msg_header_size=get_fuse_msg_header_size;
+    sock->ctx.get_msg_size=get_fuse_msg_size;
+    sock->ctx.set_msg_size=set_fuse_msg_size;
+
+    sock->ctx.process_data=handle_fuse_data_event;
+    sock->ctx.process_close=handle_fuse_close_event;
+    sock->ctx.process_error=handle_fuse_error_event;
+
+    sock->rd.buffer=buffer;
+    sock->rd.size=size;
 }
 
 int fuse_socket_reply_error(struct osns_socket_s *sock, uint64_t unique, unsigned int errcode)

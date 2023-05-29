@@ -72,7 +72,7 @@ static struct compress_ops_s none_c_ops = {
     .name			= "none",
     .populate			= populate_compress,
     .get_handle_size		= get_handle_size,
-    .init_compressor		= init_compressor,
+    .init		        = init_compressor,
 };
 
 void init_compress_none()

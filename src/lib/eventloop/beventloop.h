@@ -33,10 +33,15 @@ struct bevent_s;
 #endif
 #include "backend/glib-mainloop.h"
 
+#define BEVENT_EVENT_INDEX_ERROR		0
+#define BEVENT_EVENT_INDEX_CLOSE		1
+#define BEVENT_EVENT_INDEX_DATA		        2
+#define BEVENT_EVENT_INDEX_WRITEABLE		3
+#define BEVENT_EVENT_INDEX_PRI		        4
 
 #define BEVENT_EVENT_FLAG_ERROR			1
 #define BEVENT_EVENT_FLAG_CLOSE			2
-#define BEVENT_EVENT_FLAG_DATAAVAIL		4
+#define BEVENT_EVENT_FLAG_DATA		        4
 #define BEVENT_EVENT_FLAG_WRITEABLE		8
 #define BEVENT_EVENT_FLAG_PRI			16
 
@@ -56,11 +61,13 @@ struct bevent_s;
 
 #define BEVENT_FLAG_CB_ERROR			(BEVENT_EVENT_FLAG_ERROR << 12)
 #define BEVENT_FLAG_CB_CLOSE			(BEVENT_EVENT_FLAG_CLOSE << 12)
-#define BEVENT_FLAG_CB_DATAAVAIL		(BEVENT_EVENT_FLAG_DATAAVAIL << 12)
+#define BEVENT_FLAG_CB_DATA		        (BEVENT_EVENT_FLAG_DATA << 12)
 #define BEVENT_FLAG_CB_WRITEABLE		(BEVENT_EVENT_FLAG_WRITEABLE << 12)
 #define BEVENT_FLAG_CB_PRI			(BEVENT_EVENT_FLAG_PRI << 12)
 
 #define BEVENT_REMOVE_FLAG_UNSET		1
+
+struct bevent_argument_s;
 
 struct bevent_ops_s {
     int						(* ctl_io_bevent)(struct beventloop_s *loop, struct bevent_s *b, unsigned char op, unsigned int events);
@@ -87,16 +94,22 @@ struct bevent_argument_s {
     struct bevent_error_s			error;
 };
 
+struct bevent_event_list_s {
+    struct list_element_s			list;
+    struct bevent_s				*bevent;
+    struct bevent_event_s			event;
+};
+
+typedef void (* cb_bevent_t)(struct bevent_s *bevent, unsigned int flag, struct bevent_argument_s *arg);
+
 struct bevent_s {
     unsigned int				flags;
     struct list_element_s			list;
+    struct list_element_s			elist;
+    struct bevent_event_s			event;
     struct system_timespec_s			unblocked;
     struct bevent_ops_s				*ops;
-    void 					(* cb_dataavail)(struct bevent_s *bevent, unsigned int flag, struct bevent_argument_s *arg);
-    void 					(* cb_writeable)(struct bevent_s *bevent, unsigned int flag, struct bevent_argument_s *arg);
-    void 					(* cb_close)(struct bevent_s *bevent, unsigned int flag, struct bevent_argument_s *arg);
-    void 					(* cb_error)(struct bevent_s *bevent, unsigned int flag, struct bevent_argument_s *arg);
-    void 					(* cb_pri)(struct bevent_s *bevent, unsigned int flag, struct bevent_argument_s *arg);
+    cb_bevent_t                                 cb[5];
     struct osns_socket_s			*sock;
     void					*ptr;
 };
@@ -107,7 +120,7 @@ struct bevent_s {
 
 struct beventloop_ops_s {
     void					(* start_eventloop)(struct beventloop_s *loop);
-    void					(* stop_eventloop)(struct beventloop_s *loop);
+    void					(* stop_eventloop)(struct beventloop_s *loop, unsigned int signo);
     void					(* clear_eventloop)(struct beventloop_s *loop);
     struct bevent_s				*(* create_bevent)(struct beventloop_s *loop);
     int						(* init_io_bevent)(struct beventloop_s *loop, struct bevent_s *bevent);
@@ -166,6 +179,7 @@ struct beventloop_s {
     void					(* first_run)(struct beventloop_s *loop);
     void					(* first_run_ctx_cb)(struct beventloop_s *loop, void *ptr);
     struct list_header_s			bevents;
+    struct list_header_s			events;
     struct bevent_subsystem_s			*asubsystems[BEVENTLOOP_MAX_SUBSYSTEMS];
     unsigned int				count;
     uint32_t					BEVENT_IN;
@@ -190,7 +204,7 @@ int init_beventloop(struct beventloop_s *b);
 void set_first_run_beventloop(struct beventloop_s *eloop, void (* cb)(struct beventloop_s *eloop, void *ptr), void *ptr);
 
 void start_beventloop(struct beventloop_s *b);
-void stop_beventloop(struct beventloop_s *b);
+void stop_beventloop(struct beventloop_s *b, unsigned int signo);
 void clear_beventloop(struct beventloop_s *b);
 void free_beventloop(struct beventloop_s **p_b);
 

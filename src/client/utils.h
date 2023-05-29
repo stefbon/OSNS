@@ -26,10 +26,11 @@
 
 /* prototypes */
 
-struct service_context_s *create_network_shared_context(struct workspace_mount_s *w, uint32_t unique, unsigned int service, unsigned int transport, unsigned int itype, struct service_context_s *primary, int (* compare)(struct service_context_s *ctx, void *ptr), void *ptr);
-struct service_context_s *create_network_browse_context(struct workspace_mount_s *w, struct service_context_s *parent, unsigned int type, uint32_t unique, unsigned int service, struct service_context_s *primary);
-struct service_context_s *check_create_install_context(struct workspace_mount_s *w, struct service_context_s *pctx, uint32_t unique, char *name, unsigned int service, struct service_context_s *primary, unsigned char *p_action);
+struct service_context_s *create_network_shared_context(struct workspace_mount_s *w, uint64_t unique, unsigned int service, unsigned int transport, unsigned int itype, struct service_context_s *primary);
+struct service_context_s *create_network_browse_context(struct workspace_mount_s *w, struct service_context_s *parent, unsigned int type, uint64_t unique, unsigned int service, struct service_context_s *primary);
+struct service_context_s *check_create_install_context(struct workspace_mount_s *w, struct service_context_s *pctx, uint64_t unique, char *name, unsigned int service, struct service_context_s *primary, unsigned char *p_action);
 
 void remove_context(struct workspace_mount_s *w, struct service_context_s *ctx);
+int test_service_context_usable(struct service_context_s *ctx);
 
 #endif

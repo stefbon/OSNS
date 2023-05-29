@@ -27,11 +27,15 @@
 #include "fuse/symlink.h"
 #include "fuse/utils-public.h"
 #include "fuse/utils-create.h"
+#include "fuse/fs-access.h"
 #include "fuse/fs-common.h"
 #include "fuse/fs-create.h"
 #include "fuse/fs-virtual.h"
 #include "fuse/fs-service-browse.h"
 #include "fuse/fs-service-path.h"
 #include "fuse/path.h"
+#include "fuse/handle.h"
+#include "fuse/openfile.h"
+#include "fuse/opendir.h"
 
 #endif

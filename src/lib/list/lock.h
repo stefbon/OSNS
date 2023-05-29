@@ -26,10 +26,13 @@
 #define SIMPLE_LOCK_WRITE			2
 #define SIMPLE_LOCK_READ			4
 
+struct shared_signal_s;
+
 struct list_lock_s {
     unsigned int		value;
     pthread_t			threadidw;
     pthread_t			threadidpw;
+    struct shared_signal_s      *signal;
 };
 
 void write_lock_list(struct list_lock_s *l);

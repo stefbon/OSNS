@@ -48,15 +48,56 @@ struct decrypt_ops_s *get_next_decrypt_ops(struct decrypt_ops_s *ops)
 
     } else {
 
-	list=get_list_head(&list_decrypt_ops, 0);
+	list=get_list_head(&list_decrypt_ops);
 
     }
 
     return (list) ? get_decrypt_ops_container(list) : NULL;
 }
 
+static void cb_lock_decryptors(struct list_header_s *h, unsigned char action)
+{
 
-void reset_decrypt(struct ssh_connection_s *connection, struct algo_list_s *algo_cipher, struct algo_list_s *algo_hmac)
+    /* signal the ssh receive system when a decryptor is put on the list */
+
+    if ((action==SIMPLE_LIST_LOCK_ACTION_WUNLOCK)) {
+	struct ssh_receive_s *receive=(struct ssh_receive_s *)((char *)h - offsetof(struct ssh_receive_s, decrypt.header));
+	struct shared_signal_s *signal=&receive->signal;
+
+	signal_lock(signal);
+	signal_broadcast(signal);
+	signal_unlock(signal);
+
+    }
+
+}
+
+void init_ssh_decrypt(struct ssh_connection_s *connection)
+{
+    struct ssh_receive_s *receive=&connection->receive;
+    struct ssh_decrypt_s *decrypt=&receive->decrypt;
+
+    decrypt->flags=0;
+    decrypt->count=0;
+    decrypt->max_count=0;
+    decrypt->ops=NULL;
+
+    memset(decrypt->ciphername, '\0', sizeof(decrypt->ciphername));
+    memset(decrypt->hmacname, '\0', sizeof(decrypt->hmacname));
+    init_ssh_string(&decrypt->cipher_key);
+    init_ssh_string(&decrypt->cipher_iv);
+    init_ssh_string(&decrypt->hmac_key);
+
+    set_decrypt_generic(decrypt);
+    strcpy(decrypt->ciphername, "none");
+    strcpy(decrypt->hmacname, "none");
+
+    init_list_header(&decrypt->header, SIMPLE_LIST_TYPE_EMPTY, NULL);
+    set_lock_cb_list_header(&decrypt->header, cb_lock_decryptors);
+
+}
+
+void reset_ssh_decrypt(struct ssh_connection_s *connection, struct algo_list_s *algo_cipher, struct algo_list_s *algo_hmac)
 {
     struct ssh_receive_s *receive=&connection->receive;
     struct ssh_decrypt_s *decrypt=&receive->decrypt;
@@ -65,7 +106,8 @@ void reset_decrypt(struct ssh_connection_s *connection, struct algo_list_s *algo
     char *hmacname=NULL;
     struct decrypt_ops_s *ops=(struct decrypt_ops_s *) algo_cipher->ptr;
 
-    remove_decryptors(decrypt);
+    remove_decryptors(decrypt); /* safe choice ... not always nessecary ... when using the same decryptmethod */
+
     clear_ssh_string(&decrypt->cipher_key);
     clear_ssh_string(&decrypt->cipher_iv);
     clear_ssh_string(&decrypt->hmac_key);
@@ -73,17 +115,17 @@ void reset_decrypt(struct ssh_connection_s *connection, struct algo_list_s *algo
     memset(decrypt->hmacname, '\0', sizeof(decrypt->hmacname));
 
     ciphername=algo_cipher->sshname;
-    if (algo_hmac) hmacname=algo_hmac->sshname;
+    if (algo_hmac) hmacname=algo_hmac->sshname; /* maybe empty when using an "all-in-one decryptor" like poly1305-chacha20@openssh.com */
 
     if ((* ops->get_decrypt_flag)(ciphername, hmacname, "parallel")==1) {
 
-	decrypt->max_count=4; /* seems like a good choice, make it configurable; it's also possible to set this to 0: no limit decryptors allowed*/
+	decrypt->max_count=0; /* seems like a good choice, make it configurable; it's also possible to set this to 0: no limit */
 	decrypt->flags |= SSH_DECRYPT_FLAG_PARALLEL;
 
     } else {
 
-	if (decrypt->flags & SSH_DECRYPT_FLAG_PARALLEL) decrypt->flags -= SSH_DECRYPT_FLAG_PARALLEL;
-	decrypt->max_count=1;
+	decrypt->flags &= ~SSH_DECRYPT_FLAG_PARALLEL;
+	decrypt->max_count=1; /* cannot use more than one decryptor at the same time */
 
     }
 

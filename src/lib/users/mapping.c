@@ -29,6 +29,7 @@
 
 #include "mapping.h"
 #include "mapcb.h"
+#include "cache.h"
 
 static pthread_mutex_t mapping_mutex=PTHREAD_MUTEX_INITIALIZER;
 
@@ -52,7 +53,7 @@ void init_net_idmapping(struct net_idmapping_s *mapping, struct passwd *pwd)
 
     set_net_entity_map_func(mapping, NET_IDMAPPING_FLAG_MAPBYID);
 
-    /* mapping->cache=NULL; */
+    mapping->cache=NULL;
 
 }
 
@@ -67,12 +68,13 @@ void free_net_idmapping(struct net_idmapping_s *mapping)
     init_getent_fields(&mapping->su);
     init_getent_fields(&mapping->sg);
 
-    // if (mapping->cache) {
+    if (mapping->cache) {
+	struct net_userscache_s *cache=mapping->cache;
 
-	// clear_net_userscache(mapping->cache);
-	// free(mapping->cache);
-	// mapping->cache=NULL;
+	(* cache->clear)(cache);
+	free(cache);
+	mapping->cache=NULL;
 
-    //}
+    }
 
 }

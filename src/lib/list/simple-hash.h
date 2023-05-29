@@ -34,6 +34,9 @@ struct hash_element_s {
 
 /* TODO: add "add", "remove" and "lookup" functions as cb */
 
+struct osns_locking_s;
+struct osns_lock_s;
+
 struct simple_hash_s {
     struct osns_locking_s	locking;
     unsigned int 		(*hashfunction) (void *data);

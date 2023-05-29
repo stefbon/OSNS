@@ -29,12 +29,12 @@
 
 extern struct fs_options_s fs_options;
 
-static int select_payload_request_reply(struct ssh_connection_s *connection, struct ssh_payload_s *payload, void *ptr)
+static int select_payload_request_reply(struct ssh_payload_s *payload, void *ptr)
 {
-    return (payload->type==SSH_MSG_REQUEST_SUCCESS || payload->type==SSH_MSG_REQUEST_FAILURE) ? 0 : -1;
+    return (payload->type==SSH_MSG_REQUEST_SUCCESS || payload->type==SSH_MSG_REQUEST_FAILURE) ? 1 : 0;
 }
 
-static void process_enum_supported_name(char *name, void *ptr)
+static void process_enum_supported_name(char *name, unsigned int len, void *ptr)
 {
     struct ssh_connection_s *connection=(struct ssh_connection_s *) ptr;
     struct ssh_session_s *session=get_ssh_connection_session(connection);
@@ -82,10 +82,9 @@ static void process_enum_supported_name(char *name, void *ptr)
 
 int process_global_request_message(struct ssh_connection_s *connection, char *request, unsigned char reply, char *data, unsigned int size, void (* cb)(struct ssh_connection_s *connection, struct ssh_payload_s *payload, void *ptr), void *ptr)
 {
-    uint32_t seq=0;
     int result=-1;
 
-    if (send_global_request_message(connection, request, data, size, &seq)==0) {
+    if (send_global_request_message(connection, request, data, size)==0) {
 	struct system_timespec_s expire=SYSTEM_TIME_INIT;
 	struct ssh_payload_s *payload=NULL;
 
@@ -93,7 +92,7 @@ int process_global_request_message(struct ssh_connection_s *connection, char *re
 
 	getpayload:
 
-	payload=get_ssh_payload(connection, &connection->setup.queue, &expire, &seq, select_payload_request_reply, NULL, NULL);
+	payload=get_ssh_payload(&connection->setup.queue, &expire, select_payload_request_reply, NULL, NULL, NULL);
 
 	if (payload==NULL) {
 

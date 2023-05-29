@@ -34,6 +34,11 @@
 #include "interface/sftp-send.h"
 #include "interface/sftp-wait-response.h"
 
+static unsigned char _cb_interrupted_dummy(void *ptr)
+{
+    return 0;
+}
+
 char *get_realpath_sftp(struct context_interface_s *interface, unsigned char *target, unsigned char **path)
 {
     struct sftp_request_s sftp_r;
@@ -49,11 +54,11 @@ char *get_realpath_sftp(struct context_interface_s *interface, unsigned char *ta
 
 	get_sftp_request_timeout_ctx(interface, &timeout);
 
-	if (wait_sftp_response_ctx(interface, &sftp_r, &timeout)==1) {
+	if (wait_sftp_response_ctx(interface, &sftp_r, &timeout, _cb_interrupted_dummy, NULL)==1) {
 	    struct sftp_reply_s *reply=&sftp_r.reply;
 
 	    if (reply->type==SSH_FXP_NAME) {
-		char *pos=reply->response.names.buff;
+		char *pos=reply->data;
 		unsigned int len=0;
 
 		/*

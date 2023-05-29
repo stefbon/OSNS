@@ -24,45 +24,121 @@
 #include "libosns-log.h"
 #include "libosns-misc.h"
 #include "libosns-datatypes.h"
+#include "libosns-list.h"
 
 #include "fshandle.h"
-#include "file.h"
-#include "directory.h"
-#include "hash.h"
 
-void free_commonhandle(struct commonhandle_s **p_handle)
+/*
+    every handle has the form:
+    dev || inode || pid || fd || type
+
+    - 4 bytes                           connection id
+    - 4 bytes                           major
+    - 4 bytes				minor
+    - 8 bytes				inode
+
+    ---------
+    20 bytes
+
+    - encrypt and decrypt? or hash with some key?
+
+    better:
+
+    - 1 byte				length excluding this byte self
+    - 1 byte				version
+    - 1 byte				padding [n]
+    - 4 bytes				dev
+    - 8 bytes				ino
+    - 4 bytes				pid
+    - 4 bytes				fd
+    - 1 byte				type
+    - n bytes				random 
+
+*/
+
+#define FS_HANDLE_HASHTABLE_SIZE        128
+static struct list_header_s hashtable[FS_HANDLE_HASHTABLE_SIZE];
+
+void init_fs_handle_hashtable()
 {
-    struct commonhandle_s *handle=(p_handle) ? *p_handle : NULL;
+    for (unsigned int i=0; i<FS_HANDLE_HASHTABLE_SIZE; i++) init_list_header(&hashtable[i], SIMPLE_LIST_TYPE_EMPTY, NULL);
+}
+
+static struct fs_handle_s *find_fs_handle(unsigned int connectionid, unsigned int major, unsigned int minor, uint64_t ino)
+{
+    struct fs_handle_s *handle=NULL;
+    unsigned int hashvalue=(ino % FS_HANDLE_HASHTABLE_SIZE);
+    struct list_element_s *list=NULL;
+    struct list_header_s *h=&hashtable[hashvalue];
+
+    read_lock_list_header(h);
+    list=get_list_head(h);
+
+    while (list) {
+
+        handle=(struct fs_handle_s *)((char *) list - offsetof(struct fs_handle_s, list));
+        if ((handle->connectionid==connectionid) && (handle->ino==ino) && (handle->dev==makedev(major, minor))) break;
+        handle=NULL;
+        list=get_next_element(list);
+
+    }
+
+    read_unlock_list_header(h);
+    return handle;
+
+}
+
+struct fs_handle_s *get_fs_handle(unsigned int connectionid, char *buffer, unsigned int size, unsigned int *p_count)
+{
+    unsigned char pos=0; /* unsigned char is enough for buffer size */
+    unsigned int major=0;
+    unsigned int minor=0;
+    uint64_t ino=0;
+
+    if (size < 20) {
+
+	logoutput_debug("get_fs_handle: size %u too small (at least %u)", size, 20);
+	return NULL;
+
+    }
+
+    /* read the buffer, assume it's big enough */
+    connectionid=get_uint32(&buffer[pos]);
+    pos+=4;
+    major=get_uint32(&buffer[pos]);
+    pos+=4;
+    minor=get_uint32(&buffer[pos]);
+    pos+=4;
+    ino=get_uint64(&buffer[pos]);
+    pos+=8;
+
+    if (p_count) *p_count+=pos;
+    return find_fs_handle(connectionid, major, minor, ino);
+}
+
+void free_fs_handle(struct fs_handle_s **p_handle)
+{
+    struct fs_handle_s *handle=(p_handle) ? *p_handle : NULL;
+    struct fs_socket_s *sock=NULL;
     unsigned int flags=0;
-    struct osns_lock_s lock;
 
     if (handle==NULL) return;
+    sock=&handle->socket;
     flags=handle->flags;
 
-    writelock_commonhandles(&lock);
-    remove_commonhandle_hash(handle);
-    unlock_commonhandles(&lock);
+    if (handle->list.h) {
+        struct list_header_s *h=handle->list.h;
 
-    if (flags & COMMONHANDLE_FLAG_FILE) {
-
-	free_filehandle(&handle->type.file);
-
-    } else if (flags & COMMONHANDLE_FLAG_DIR) {
-
-	free_dirhandle(&handle->type.dir);
-    }
-
-    if (handle->location.name && (flags & COMMONHANDLE_FLAG_NAME_ALLOC)) {
-
-	free(handle->location.name);
-	handle->location.name=NULL;
+        write_lock_list_header(h);
+        remove_list_element(&handle->list);
+        write_unlock_list_header(h);
 
     }
 
-    (* handle->clear_buffer)(handle);
-    memset(handle, 0, sizeof(struct commonhandle_s));
+    (* sock->clear)(sock);
+    memset(handle, 0, sizeof(struct fs_handle_s));
 
-    if (flags & COMMONHANDLE_FLAG_ALLOC) {
+    if (flags & HANDLE_FLAG_ALLOC) {
 
 	free(handle);
 	*p_handle=NULL;
@@ -71,114 +147,92 @@ void free_commonhandle(struct commonhandle_s **p_handle)
 
 }
 
-static void _clear_buffer_default(struct commonhandle_s *handle)
+static unsigned int _get_access_default(struct fs_handle_s *handle)
 {
-    memset(handle->buffer, 0, handle->size);
+    return ((handle->type == FS_HANDLE_TYPE_DIR) ? 1 : 0);
 }
 
-static unsigned int _get_access_default(struct commonhandle_s *handle)
-{
-    return ((handle->flags & COMMONHANDLE_FLAG_DIR) ? 1 : 0);
-}
-
-static unsigned int _get_flags_default(struct commonhandle_s *handle)
+static unsigned int _get_flags_default(struct fs_handle_s *handle)
 {
     return 0;
 }
 
-struct commonhandle_s *create_commonhandle(unsigned char type, struct fs_location_s *location, unsigned int size)
+static unsigned int write_handle_default(struct fs_handle_s *handle, char *buffer, unsigned int size)
 {
-    struct commonhandle_s *handle=NULL;
+    unsigned int pos=0;
 
-    if (type != COMMONHANDLE_TYPE_DIR && type != COMMONHANDLE_TYPE_FILE) return NULL;
+    /* write a handle to a buffer */
 
-    handle=malloc(sizeof(struct commonhandle_s) + size);
+    if (size < 20) {
 
-    if (handle) {
+        pos=20;
 
-	memset(handle, 0, sizeof(struct commonhandle_s) + size);
-	handle->flags=COMMONHANDLE_FLAG_ALLOC;
-	handle->clear_buffer=_clear_buffer_default;
-	handle->get_access=_get_access_default;
-	handle->get_flags=_get_flags_default;
+    } else {
 
-	if (location) {
+        store_uint32(&buffer[pos], handle->connectionid);
+        pos+=4;
+        store_uint32(&buffer[pos], major(handle->dev));
+        pos+=4;
+        store_uint32(&buffer[pos], minor(handle->dev));
+        pos+=4;
+        store_uint64(&buffer[pos], handle->ino);
+        pos+=8;
 
-	    memcpy(&handle->location, location, sizeof(struct fs_location_s));
+    }
 
-	    if (location->name) {
+    return pos;
 
-		handle->location.name=strdup(location->name);
-		if (handle->location.name) {
+}
 
-		    handle->flags |= COMMONHANDLE_FLAG_NAME_ALLOC;
+unsigned int get_fs_handle_buffer_size()
+{
+    return 20;
+}
 
-		} else {
+struct fs_handle_s *create_fs_handle(unsigned char type, unsigned int size)
+{
+    struct fs_handle_s *handle=malloc(sizeof(struct fs_handle_s) + size);
 
-		    logoutput("create_commonhandle: failed to allocate size for %s", location->name);
-		    goto error;
+    if (handle==NULL) return NULL;
+    memset(handle, 0, sizeof(struct fs_handle_s) + size);
+    handle->flags=HANDLE_FLAG_ALLOC;
+    handle->size=size;
 
-		}
+    handle->get_access=_get_access_default;
+    handle->get_flags=_get_flags_default;
+    handle->write_handle=write_handle_default;
 
-	    }
+    switch (type) {
 
-	}
+	case FS_HANDLE_TYPE_DIR:
 
-	handle->size=size;
+	    handle->type = FS_HANDLE_TYPE_DIR;
+	    init_fs_socket(&handle->socket, FS_SOCKET_TYPE_DIR);
+	    break;
 
-	switch (type) {
+	case FS_HANDLE_TYPE_FILE:
 
-	    case COMMONHANDLE_TYPE_DIR:
-
-		handle->flags |= COMMONHANDLE_FLAG_DIR;
-		init_dirhandle(&handle->type.dir);
-		break;
-
-	    case COMMONHANDLE_TYPE_FILE:
-
-		handle->flags |= COMMONHANDLE_FLAG_FILE;
-		init_filehandle(&handle->type.file);
-		break;
-
-	}
+	    handle->type = FS_HANDLE_TYPE_FILE;
+	    init_fs_socket(&handle->socket, FS_SOCKET_TYPE_FILE);
+	    break;
 
     }
 
     return handle;
 
-    error:
-    free_commonhandle(&handle);
-    return NULL;
-
-}
-pid_t get_pid_commonhandle(struct commonhandle_s *handle)
-{
-
-    if (handle->flags & COMMONHANDLE_FLAG_DIR) {
-
-	return get_unix_pid_fs_socket(&handle->type.dir.socket);
-
-    } else if (handle->flags & COMMONHANDLE_FLAG_FILE) {
-
-	return get_unix_pid_fs_socket(&handle->type.file.socket);
-
-    }
-
-    return 0;
 }
 
-int get_fd_commonhandle(struct commonhandle_s *handle)
+void insert_fs_handle(struct fs_handle_s *handle, unsigned int connectionid, dev_t dev, uint64_t ino)
 {
+    unsigned int hashvalue=(ino % FS_HANDLE_HASHTABLE_SIZE);
+    struct list_header_s *h=&hashtable[hashvalue];
 
-    if (handle->flags & COMMONHANDLE_FLAG_DIR) {
+    handle->connectionid=connectionid;
+    handle->dev=dev;
+    handle->ino=ino;
 
-	return get_unix_fd_fs_socket(&handle->type.dir.socket);
+    write_lock_list_header(h);
+    add_list_element_first(h, &handle->list);
+    write_unlock_list_header(h);
 
-    } else if (handle->flags & COMMONHANDLE_FLAG_FILE) {
-
-	return get_unix_fd_fs_socket(&handle->type.file.socket);
-
-    }
-
-    return -1;
 }

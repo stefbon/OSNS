@@ -24,22 +24,15 @@
 
 /* prototypes */
 
-unsigned char write_sftp_commonhandle(struct commonhandle_s *handle, char *buffer, unsigned int size);
-unsigned char get_sftp_handle_size();
+struct fs_handle_s *sftp_find_fs_handle(struct sftp_subsystem_s *sftp, char *buffer, unsigned int size, unsigned int *p_count);
 
-struct sftp_subsystem_s *get_sftp_subsystem_commonhandle(struct commonhandle_s *handle);
+void set_sftp_handle_access(struct fs_handle_s *handle, unsigned int access);
+void set_sftp_handle_flags(struct fs_handle_s *handle, unsigned int flags);
 
-void set_sftp_handle_access(struct commonhandle_s *handle, unsigned int access);
-void set_sftp_handle_flags(struct commonhandle_s *handle, unsigned int flags);
+struct fs_handle_s *sftp_create_fs_handle(struct sftp_subsystem_s *sftp, dev_t dev, uint64_t ino, unsigned int flags, unsigned int access, const char *what);
 
-struct commonhandle_s *create_sftp_filehandle(struct sftp_subsystem_s *sftp, unsigned int inserttype, dev_t dev, uint64_t ino, char *name, unsigned int flags, unsigned int access);
+struct sftp_valid_s *sftp_get_valid_fs_handle(struct fs_handle_s *handle);
 
-struct commonhandle_s *find_sftp_commonhandle(struct sftp_subsystem_s *sftp, char *buffer, unsigned int size, unsigned int *p_count);
-void release_sftp_handle(struct commonhandle_s **p_handle);
-
-struct commonhandle_s *create_sftp_dirhandle(struct sftp_subsystem_s *sftp, struct fs_location_devino_s *devino);
-
-struct sftp_valid_s *get_valid_sftp_dirhandle(struct commonhandle_s *handle);
-int send_sftp_handle(struct sftp_subsystem_s *sftp, struct sftp_payload_s *payload, struct commonhandle_s *handle);
+int send_sftp_handle(struct sftp_subsystem_s *sftp, struct sftp_in_header_s *inh, struct fs_handle_s *handle);
 
 #endif

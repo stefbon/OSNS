@@ -50,17 +50,17 @@
     */
 
 
-static int reply_sftp_readlink(struct sftp_subsystem_s *sftp, uint32_t id, struct fs_location_path_s *target)
+static int reply_sftp_readlink(struct sftp_subsystem_s *sftp, uint32_t id, struct fs_path_s *target)
 {
-    char name[4 + target->len + 5];
+    char name[4 + fs_path_get_length(target) + 5];
     unsigned int pos=0;
 
     /* write name as ssh string */
 
-    store_uint32(&name[pos], target->len);
+    store_uint32(&name[pos], fs_path_get_length(target));
     pos+=4;
 
-    memcpy(&name[pos], target->ptr, target->len);
+    memcpy(&name[pos], fs_path_get_start(target), fs_path_get_length(target));
     pos+=target->len;
 
     /* write dummy ATTR == uint32 valid | byte type (both can be zero) */
@@ -81,15 +81,13 @@ static int reply_sftp_readlink(struct sftp_subsystem_s *sftp, uint32_t id, struc
     - string				path
     */
 
-void sftp_op_readlink(struct sftp_payload_s *payload)
+void sftp_op_readlink(struct sftp_subsystem_s *sftp, struct sftp_in_header_s *inh, char *data)
 {
-    struct sftp_subsystem_s *sftp=payload->sftp;
     unsigned int status=SSH_FX_BAD_MESSAGE;
 
     /* message should at least have 4 bytes for the path string */
 
-    if (payload->len>=4) {
-	char *data=payload->data;
+    if (inh->len>=4) {
 	unsigned int pos=0;
 	struct ssh_string_s path=SSH_STRING_INIT;
 
@@ -100,9 +98,9 @@ void sftp_op_readlink(struct sftp_payload_s *payload)
 
 	logoutput("sftp_op_readlink: path %.*s", path.len, path.ptr);
 
-	if (path.len + 4 <= payload->len) {
-	    struct fs_location_path_s location;
-	    struct fs_location_path_s target=FS_LOCATION_PATH_INIT;
+	if (path.len + 4 <= inh->len) {
+	    struct fs_path_s location=FS_PATH_INIT;
+	    struct fs_path_s target=FS_PATH_INIT;
 	    struct convert_sftp_path_s convert;
 	    unsigned int size=(* sftp->prefix.get_length_fullpath)(sftp, &path, &convert);
 	    char tmp[size+1];
@@ -110,19 +108,19 @@ void sftp_op_readlink(struct sftp_payload_s *payload)
 
 	    /* get the fullpath on the local system */
 
-	    assign_buffer_location_path(&location, tmp, size+1);
+	    fs_path_assign_buffer(&location, tmp, size+1);
 	    (* convert.complete)(sftp, &path, &location);
 
 #ifdef __linux__
 
-	    result=get_target_unix_symlink(location.ptr, location.len, 0, &target);
+	    result=fs_path_get_target_unix_symlink(&location, &target);
 
 #endif
 
 	    if (result==0) {
 
-		logoutput("sftp_op_readlink: target %.*s", target.len, target.ptr);
-		if (reply_sftp_readlink(sftp, payload->id, &target)==-1) logoutput_warning("sftp_op_readlink: error sending target");
+		logoutput("sftp_op_readlink: target %.*s", fs_path_get_length(&target), fs_path_get_start(&target));
+		if (reply_sftp_readlink(sftp, inh->id, &target)==-1) logoutput_warning("sftp_op_readlink: error sending target");
 		return;
 
 	    } else {
@@ -151,7 +149,7 @@ void sftp_op_readlink(struct sftp_payload_s *payload)
     }
 
     logoutput("sftp_op_readlink: error status %i", status);
-    reply_sftp_status_simple(sftp, payload->id, status);
+    reply_sftp_status_simple(sftp, inh->id, status);
 
 }
 

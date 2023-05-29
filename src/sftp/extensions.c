@@ -26,7 +26,6 @@
 #include "libosns-workspace.h"
 #include "libosns-context.h"
 #include "libosns-fuse-public.h"
-#include "libosns-resources.h"
 
 #include "sftp/common-protocol.h"
 #include "common.h"
@@ -55,7 +54,6 @@ static int _send_sftp_extension_custom(struct sftp_client_s *sftp, struct sftp_p
     memset(&sftp_r->call.extension.id, 0, sizeof(sftp_r->call.extension.id));
     sftp_r->call.extension.type=SFTP_EXTENSION_TYPE_CUSTOM;
     sftp_r->call.extension.id.nr=extension->code;
-    sftp_r->status=SFTP_REQUEST_STATUS_WAITING;
     return (* sftp->send_ops->custom)(sftp, sftp_r);
 }
 
@@ -71,6 +69,7 @@ void init_sftp_extensions(struct sftp_client_s *sftp)
     extensions->aextensions=NULL;
     extensions->size=0;
 
+    init_list_header(&extensions->supported, SIMPLE_LIST_TYPE_EMPTY, NULL);
     init_list_header(&extensions->supported_server, SIMPLE_LIST_TYPE_EMPTY, NULL);
     init_list_header(&extensions->supported_client, SIMPLE_LIST_TYPE_EMPTY, NULL);
 
@@ -86,7 +85,7 @@ void clear_sftp_extensions(struct sftp_client_s *sftp)
 
     /* free the list with extensions received from server */
 
-    list=get_list_head(&extensions->supported_server, SIMPLE_LIST_FLAG_REMOVE);
+    list=remove_list_head(&extensions->supported_server);
 
     while (list) {
 	struct sftp_protocol_extension_server_s *esbs=(struct sftp_protocol_extension_server_s *)(((char *) list) - offsetof(struct sftp_protocol_extension_server_s, list));
@@ -95,7 +94,7 @@ void clear_sftp_extensions(struct sftp_client_s *sftp)
 	clear_ssh_string(&esbs->data);
 	free(esbs);
 
-	list=get_list_head(&extensions->supported_server, SIMPLE_LIST_FLAG_REMOVE);
+	list=remove_list_head(&extensions->supported_server);
 
     }
 
@@ -116,14 +115,11 @@ struct sftp_protocol_extension_server_s *find_protocol_extension_server(struct s
     struct sftp_protocol_extension_server_s *esbs=NULL;
     struct list_element_s *list=NULL;
 
-    logoutput_debug("find_protocol_extension_server: look for %.*s", name->len, name->ptr);
-
-    list=get_list_head(&extensions->supported_server, 0);
+    list=get_list_head(&extensions->supported_server);
 
     while (list) {
 
 	esbs=(struct sftp_protocol_extension_server_s *)(((char *) list) - offsetof(struct sftp_protocol_extension_server_s, list));
-	logoutput_debug("find_protocol_extension_server: found %.*s", esbs->name.len, esbs->name.ptr);
 	if (compare_ssh_string(&esbs->name, 's', (void *) name)==0) break;
 	list=get_next_element(list);
 	esbs=NULL;
@@ -140,7 +136,7 @@ struct sftp_protocol_extension_client_s *find_protocol_extension_client(struct s
     struct sftp_protocol_extension_client_s *esbc=NULL;
     struct list_element_s *list=NULL;
 
-    list=get_list_head(&extensions->supported_client, 0);
+    list=get_list_head(&extensions->supported_client);
 
     while (list) {
 
@@ -203,7 +199,6 @@ int add_protocol_extension_server(struct sftp_client_s *sftp, struct ssh_string_
 
 	}
 
-
 	add_list_element_last(&extensions->supported_server, &esbs->list);
 	logoutput("add_protocol_extension_server: %.*s added", name->len, name->ptr);
 	return SFTP_EXTENSION_ADD_RESULT_CREATED;
@@ -216,13 +211,14 @@ int add_protocol_extension_server(struct sftp_client_s *sftp, struct ssh_string_
 
 static void init_sftp_protocol_extension(struct sftp_client_s *sftp, struct sftp_protocol_extension_s *ext, unsigned int size, struct sftp_protocol_extension_client_s *esbc)
 {
+
     memset(ext, 0, sizeof(struct sftp_protocol_extension_s) + size);
 
-    ext->flags=0;
     ext->esbc=esbc;
     ext->esbs=NULL;
     ext->code=0;
     ext->size=size;
+    init_list_element(&ext->list, NULL);
 
     if (esbc) {
 
@@ -305,7 +301,7 @@ int send_sftp_extension_index(struct sftp_client_s *sftp, unsigned int index, st
     struct sftp_extensions_s *extensions=&sftp->extensions;
 
     if (index < extensions->size) {
-	struct sftp_protocol_extension_s *ext=&extensions->aextensions[index];
+	struct sftp_protocol_extension_s *ext=extensions->aextensions[index];
 
 	return send_sftp_extension_generic(sftp, ext, sftp_r);
 
@@ -324,7 +320,7 @@ unsigned int get_sftp_protocol_extension_index(struct sftp_client_s *sftp, struc
 
     while (index < extensions->size) {
 
-	ext=&extensions->aextensions[index];
+	ext=extensions->aextensions[index];
 
 	if ((ext->esbs) && (compare_ssh_string(&ext->esbs->name, 's', (void *) name)==0)) {
 
@@ -338,9 +334,8 @@ unsigned int get_sftp_protocol_extension_index(struct sftp_client_s *sftp, struc
 
     }
 
-    logoutput("get_sftp_protocol_extension_index: extension %.*s index %u", name->len, name->ptr, index);
-
-    return index;
+    logoutput("get_sftp_protocol_extension_index: extension %.*s index %u", name->len, name->ptr, result);
+    return result;
 }
 
 struct ssh_string_s *get_sftp_protocol_extension_name(struct sftp_client_s *sftp, unsigned int index)
@@ -351,7 +346,7 @@ struct ssh_string_s *get_sftp_protocol_extension_name(struct sftp_client_s *sftp
 
     if (index < extensions->size) {
 
-	ext=&extensions->aextensions[index];
+	ext=extensions->aextensions[index];
 	if (ext->esbs) name=&ext->esbs->name;
 
     }
@@ -378,7 +373,7 @@ struct ssh_string_s *get_supported_next_extension_name(struct sftp_client_s *sft
     } else {
 	struct list_header_s *header=((who>0) ? &extensions->supported_server : &extensions->supported_client);
 
-	list=get_list_head(header, 0);
+	list=get_list_head(header);
 
     }
 
@@ -402,37 +397,142 @@ struct ssh_string_s *get_supported_next_extension_name(struct sftp_client_s *sft
     return name;
 }
 
+static unsigned char _cb_interrupted_dummy(void *ptr)
+{
+    return 0;
+}
+
+void map_sftp_extension(struct sftp_client_s *sftp, unsigned int index)
+{
+    struct sftp_extensions_s *extensions=&sftp->extensions;
+
+    if (index < extensions->size) {
+	struct sftp_request_s sftp_r;
+	struct sftp_protocol_extension_s *ext=extensions->aextensions[index];
+	struct ssh_string_s *name=&ext->esbc->name;
+	unsigned int size=4 + name->len + 1; /* space to write name of extension to map plus 1 byte */
+	char buffer[size];
+	unsigned int pos=0;
+
+	pos += write_ssh_string(buffer, size, 's', (void *) name); /* the name of extension to map */
+	buffer[pos]=1; /* set last byte to 1 to map */
+
+	memset(&sftp_r, 0, sizeof(struct sftp_request_s));
+
+	sftp_r.status = SFTP_REQUEST_STATUS_WAITING;
+	sftp_r.interface=NULL;
+	sftp_r.unique=0;
+	sftp_r.send=send_sftp_request_data_default;
+	sftp_r.ptr=NULL;
+	sftp_r.call.extension.size=size;
+	sftp_r.call.extension.data=buffer;
+
+	if (send_sftp_extension_generic(sftp, ext, &sftp_r)>0) {
+	    struct system_timespec_s timeout=SYSTEM_TIME_INIT;
+
+	    get_sftp_request_timeout(sftp, &timeout);
+
+	    if (wait_sftp_response(sftp, &sftp_r, &timeout, _cb_interrupted_dummy, NULL)==1) {
+		struct sftp_reply_s *reply=&sftp_r.reply;
+
+		if (reply->type==SSH_FXP_EXTENDED_REPLY) {
+
+		    if (reply->size>=4) {
+
+			uint32_t code2use=get_uint32(reply->data);
+
+			logoutput_debug("map_sftp_extension: received code %u", code2use);
+
+			/* here some check ?? */
+
+			if (code2use<=255) {
+
+			    ext->flags |= SFTP_EXTENSION_FLAG_MAPPED;
+			    ext->code = (unsigned char) code2use;
+			    ext->send = _send_sftp_extension_custom;
+
+			}
+
+		    } else {
+
+			logoutput_debug("map_sftp_extension: received buffer too small (size=%u)", reply->size);
+
+		    }
+
+		} else if (reply->type==SSH_FXP_STATUS) {
+
+		    unsigned int errcode=reply->response.status.linux_error;
+		    logoutput_debug("map_sftp_extension: received error %u:%s", errcode, strerror(errcode));
+
+		}
+
+	    }
+
+	}
+
+    }
+
+}
+
 int complete_sftp_extensions(struct sftp_client_s *sftp)
 {
     struct sftp_extensions_s *extensions=&sftp->extensions;
-    unsigned int count=(unsigned int) extensions->supported_client.count;
-    struct sftp_protocol_extension_s tmp[count + 1];
+    unsigned int count=(unsigned int) extensions->supported_client.count; /* an indication of the amount of extensions to be used */
+    struct sftp_protocol_extension_s *ext=NULL;
+    struct sftp_protocol_extension_s *mapext=NULL;
     struct list_element_s *list=NULL;
-    unsigned int index=0;
     int result=0;
 
     /* add the "unsupported" extension */
 
-    init_sftp_protocol_extension(sftp, &tmp[0], 0, NULL);
-    index++;
+    ext=malloc(sizeof(struct sftp_protocol_extension_s));
+
+    if (ext) {
+
+	init_sftp_protocol_extension(sftp, ext, 0, NULL);
+	add_list_element_last(&extensions->supported, &ext->list);
+
+    } else {
+
+	logoutput_debug("complete_sftp_extensions: unable to allocate memory for protocol extension ... cannot continue");
+	return -1;
+
+    }
 
     /* create a list of extensions supported by client and server */
 
-    list=get_list_head(&extensions->supported_client, 0);
+    list=get_list_head(&extensions->supported_client);
 
     while (list) {
 	struct sftp_protocol_extension_client_s *esbc=(struct sftp_protocol_extension_client_s *)(((char *) list) - offsetof(struct sftp_protocol_extension_client_s, list));
+	struct sftp_protocol_extension_server_s *esbs=NULL;
+	struct ssh_string_s *name=&esbc->name;
 
-	/* look for extension supported by server with the same name */
+	/* look for extension supported by server with the same name
+	    TODO: look for extensions with the same function ... */
 
-	struct sftp_protocol_extension_server_s *esbs=find_protocol_extension_server(sftp, &esbc->name);
+	esbs=find_protocol_extension_server(sftp, name);
 
 	if (esbs) {
-	    unsigned int size=(* esbc->get_size_buffer)(sftp, &esbs->name, &esbs->data);
+	    unsigned int size=(* esbc->get_size_buffer)(sftp, name, &esbs->data); /* size for additional data required by extension ... */
 
-	    init_sftp_protocol_extension(sftp, &tmp[index], size, esbc);
-	    tmp[index].esbs=esbs;
-	    index++;
+	    ext=malloc(sizeof(struct sftp_protocol_extension_s) + size);
+
+	    if (ext) {
+
+		logoutput_debug("complete_sftp_extensions: created extension %.*s", name->len, name->ptr);
+		init_sftp_protocol_extension(sftp, ext, size, esbc);
+		add_list_element_last(&extensions->supported, &ext->list);
+		ext->esbs=esbs;
+
+		if ((sftp->flags & SFTP_CLIENT_FLAG_MAPEXTENSIONS) && (compare_ssh_string(name, 'c', NAME_MAPEXTENSION_DEFAULT)==0)) mapext=ext;
+
+	    } else {
+
+		logoutput_debug("complete_sftp_extensions: unable to allocate memory for protocol extension ... cannot continue");
+		return -1;
+
+	    }
 
 	}
 
@@ -440,20 +540,29 @@ int complete_sftp_extensions(struct sftp_client_s *sftp)
 
     }
 
-    if (index>0) {
-	unsigned int len=sizeof(struct sftp_protocol_extension_s);
-	struct sftp_protocol_extension_s *aext=malloc(index * len);
+    if (extensions->supported.count>1) {
+	unsigned int len=sizeof(struct sftp_protocol_extension_s *);
+	struct sftp_protocol_extension_s **aext=malloc(extensions->supported.count * len);
+
+	/* create a fast lookup array: the index is an entry to access the extensions */
 
 	if (aext) {
 
-	    memcpy(aext, tmp, index * len);
+	    list=get_list_head(&extensions->supported);
+
+	    for (unsigned int i=0; i<extensions->supported.count; i++) {
+
+		aext[i]=(struct sftp_protocol_extension_s *)(((char *)list) - offsetof(struct sftp_protocol_extension_s, list));
+		list=get_next_element(list);
+
+	    }
+
 	    extensions->aextensions=aext;
-	    extensions->size=index;
-	    result=(int) index;
+	    extensions->size=extensions->supported.count;
 
 	} else {
 
-	    logoutput_warning("complete_sftp_extensions: unable to allocate memory (%u x %u bytes)", index, len);
+	    logoutput_warning("complete_sftp_extensions: unable to allocate memory (%u x %u bytes)", extensions->supported.count, len);
 	    result=-1;
 
 	}
@@ -464,6 +573,26 @@ int complete_sftp_extensions(struct sftp_client_s *sftp)
 
     }
 
+    /* here: free the list with extensions supported by server ??
+	only when client will not register any more extensions and all well known and useable extensions are initialized */
+
+    /* do remmping of the registered sftp protocol extensions? */
+
+    if (mapext && extensions->aextensions) {
+
+	for (unsigned int i=1; i<extensions->supported.count; i++) {
+
+	    ext=extensions->aextensions[i];
+
+	    /* do not map ourselves */
+
+	    if (ext != mapext) map_sftp_extension(sftp, i);
+
+	}
+
+    }
+
     return result;
 
 }
+

@@ -26,7 +26,6 @@
 #include "libosns-workspace.h"
 #include "libosns-context.h"
 #include "libosns-fuse-public.h"
-#include "libosns-resources.h"
 
 #include "sftp/common-protocol.h"
 #include "sftp/common.h"
@@ -95,6 +94,7 @@ int init_sftp_client(struct sftp_client_s *sftp, uid_t uid, struct net_idmapping
 
     pthread_mutex_init(&sftp->mutex, NULL);
     sftp->refcount=0;
+    sftp->flags |= SFTP_CLIENT_FLAG_MAPEXTENSIONS;
 
     sftp->protocol.version=0;
 
@@ -139,6 +139,11 @@ void free_sftp_client(struct sftp_client_s **p_sftp)
 
 }
 
+static unsigned char _cb_interrupted_dummy(void *ptr)
+{
+    return 0;
+}
+
 int start_init_sftp_client(struct sftp_client_s *sftp)
 {
     struct sftp_request_s sftp_r;
@@ -175,7 +180,7 @@ int start_init_sftp_client(struct sftp_client_s *sftp)
 
 	get_sftp_request_timeout(sftp, &timeout);
 
-	if (wait_sftp_response(sftp, &sftp_r, &timeout)==1) {
+	if (wait_sftp_response(sftp, &sftp_r, &timeout, _cb_interrupted_dummy, NULL)==1) {
 	    struct sftp_reply_s *reply=&sftp_r.reply;
 
 	    if (reply->type==SSH_FXP_VERSION) {

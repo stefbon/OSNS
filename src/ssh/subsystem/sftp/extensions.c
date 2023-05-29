@@ -32,12 +32,14 @@
 #include "extensions/setprefix.h"
 #include "extensions/statvfs.h"
 #include "extensions/fsync.h"
+#include "extensions/fstatat.h"
 #include "extensions/mapextension.h"
 
 static struct sftp_protocol_extension_s extensions[] = {
     {.flags=0, .name="setprefix@sftp.osns.net", 	.code=0, .cb=cb_ext_setprefix,		.op=sftp_op_setprefix},
     {.flags=0, .name="statvfs@openssh.com", 		.code=0, .cb=cb_ext_statvfs, 		.op=sftp_op_statvfs},
     {.flags=0, .name="fsync@openssh.com", 		.code=0, .cb=cb_ext_fsync, 		.op=sftp_op_fsync},
+    {.flags=0, .name="fstatat@sftp.osns.net", 		.code=0, .cb=cb_ext_fstatat, 		.op=sftp_op_fstatat},
     {.flags=0, .name="mapextension@sftp.osns.net", 	.code=0, .cb=cb_ext_mapextension, 	.op=sftp_op_mapextension}
     };
 
@@ -110,29 +112,28 @@ struct sftp_protocol_extension_s *find_sftp_protocol_extension(struct ssh_string
 
 /* SSH_FXP_EXTENDED
     message has the form:
-    - byte 				SSH_FXP_REMOVE/RMDIR
+    - byte 				SSH_FXP_EXTENDED
     - uint32				id
     - string				name of extension
     - ....				extension specific data
-    */
+*/
 
-
-void sftp_op_extension(struct sftp_payload_s *payload)
+void sftp_op_extension(struct sftp_subsystem_s *sftp, struct sftp_in_header_s *inh, char *data)
 {
     unsigned int status=SSH_FX_BAD_MESSAGE;
     struct ssh_string_s name=SSH_STRING_INIT;
-    unsigned int len=read_ssh_string(payload->data, payload->len, &name);
+    unsigned int len=read_ssh_string(data, inh->len, &name);
 
     /* message should at least have 4 bytes for the name string; an empty name is not allowed
 	note that no extension data is allowed */
 
-    if (len>4 && len<=payload->len) {
+    if (len>4 && len<=inh->len) {
 
-	struct sftp_protocol_extension_s *ext=find_sftp_protocol_extension(&name, payload->sftp->extensions.mask);
+	struct sftp_protocol_extension_s *ext=find_sftp_protocol_extension(&name, sftp->extensions.mask);
 
 	if (ext) {
 
-	    (* ext->cb)(payload, len);
+	    (* ext->cb)(sftp, inh, data, len);
 	    return;
 
 	} else {
@@ -144,6 +145,6 @@ void sftp_op_extension(struct sftp_payload_s *payload)
     }
 
     logoutput("sftp_op_extension: status %i", status);
-    reply_sftp_status_simple(payload->sftp, payload->id, status);
+    reply_sftp_status_simple(sftp, inh->id, status);
 
 }

@@ -25,6 +25,9 @@
 #include "libosns-threads.h"
 #include "libosns-eventloop.h"
 
+#include "libosns-fspath.h"
+#include "lib/system/fsrm.h"
+
 #include "protocol.h"
 
 #include "osns_sftp_subsystem.h"
@@ -43,9 +46,8 @@
 
 #define REMOVE_TYPE_DIR			1
 
-static void sftp_op_remove_common(struct sftp_payload_s *payload, unsigned char what)
+static void sftp_op_remove_common(struct sftp_subsystem_s *sftp, struct sftp_in_header_s *inh, char *data, unsigned char what)
 {
-    struct sftp_subsystem_s *sftp=payload->sftp; 
     unsigned int status=SSH_FX_BAD_MESSAGE;
 
     logoutput("sftp_op_remove (%i)", (int) gettid());
@@ -53,52 +55,43 @@ static void sftp_op_remove_common(struct sftp_payload_s *payload, unsigned char 
     /* message should at least have 4 bytes for the path string
 	note an empty path is possible */
 
-    if (payload->len>=4) {
-	char *buffer=payload->data;
+    if (inh->len>=4) {
 	struct ssh_string_s path=SSH_STRING_INIT;
 	unsigned int pos=0;
 
-	path.len=get_uint32(&buffer[pos]);
+	path.len=get_uint32(&data[pos]);
 	pos+=4;
-	path.ptr=&buffer[pos];
+	path.ptr=&data[pos];
 	pos+=path.len;
 
 	/* sftp packet size is at least:
 	    - 4 + len ... path (len maybe zero) */
 
-	if (payload->len >= path.len + 4) {
-	    struct fs_location_path_s location=FS_LOCATION_PATH_INIT;
+	if (inh->len >= path.len + 4) {
+	    struct fs_path_s location=FS_PATH_INIT;
 	    struct convert_sftp_path_s convert={NULL};
 	    unsigned int size=(* sftp->prefix.get_length_fullpath)(sftp, &path, &convert); /* get size of buffer for path */
 	    char tmp[size+1];
 	    unsigned int error=0;
 
-	    assign_buffer_location_path(&location, tmp, size+1);
+	    fs_path_assign_buffer(&location, tmp, size+1);
 	    (* convert.complete)(sftp, &path, &location);
 
-	    logoutput("sftp_op_remove_common : %.*s", location.len, location.ptr);
+	    logoutput("sftp_op_remove_common : %.*s", fs_path_get_length(&location), fs_path_get_start(&location));
+
+            status=SSH_FX_FAILURE;
 
 	    if (what==REMOVE_TYPE_DIR) {
 
-		if (system_remove_dir(&location)==0) {
-
-		    reply_sftp_status_simple(sftp, payload->id, SSH_FX_OK);
-		    return;
-
-		}
+		if (system_remove_dir(&location)==-1) goto error;
 
 	    } else {
 
-		if (system_remove_file(&location)==0) {
-
-		    reply_sftp_status_simple(sftp, payload->id, SSH_FX_OK);
-		    return;
-
-		}
+		if (system_remove_file(&location)==-1) goto error;
 
 	    }
 
-	    status=SSH_FX_FAILURE;
+            reply_sftp_status_simple(sftp, inh->id, SSH_FX_OK);
 
 	}
 
@@ -107,16 +100,16 @@ static void sftp_op_remove_common(struct sftp_payload_s *payload, unsigned char 
     error:
 
     logoutput("sftp_op_remove: status %i", status);
-    reply_sftp_status_simple(sftp, payload->id, status);
+    reply_sftp_status_simple(sftp, inh->id, status);
 
 }
 
-void sftp_op_remove(struct sftp_payload_s *payload)
+void sftp_op_remove(struct sftp_subsystem_s *sftp, struct sftp_in_header_s *inh, char *data)
 {
-    sftp_op_remove_common(payload, 0);
+    sftp_op_remove_common(sftp, inh, data, 0);
 }
 
-void sftp_op_rmdir(struct sftp_payload_s *payload)
+void sftp_op_rmdir(struct sftp_subsystem_s *sftp, struct sftp_in_header_s *inh, char *data)
 {
-    sftp_op_remove_common(payload, REMOVE_TYPE_DIR);
+    sftp_op_remove_common(sftp, inh, data, REMOVE_TYPE_DIR);
 }

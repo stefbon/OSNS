@@ -46,6 +46,12 @@ void replace_cntrl_char(char *buffer, unsigned int size, unsigned char flags)
 	}
 
     }
+
+}
+
+void replace_slash_char(char *buffer, unsigned int size)
+{
+    for (unsigned int i=0; i<size; i++) if (buffer[i]=='/') buffer[i]=' ';
 }
 
 void replace_newline_char(char *ptr, unsigned int size)

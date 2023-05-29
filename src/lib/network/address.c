@@ -40,6 +40,71 @@ unsigned char check_family_ip_address(char *address, const char *what)
 
 }
 
+int compare_ip_addresses(struct ip_address_s *a, struct ip_address_s *b)
+{
+
+    if (a->family==b->family) {
+
+        if (a->family==IP_ADDRESS_FAMILY_IPv4) {
+
+            return memcmp(a->addr.v4, b->addr.v4, INET_ADDRSTRLEN);
+
+        } else if (a->family==IP_ADDRESS_FAMILY_IPv6) {
+
+            return memcmp(a->addr.v6, b->addr.v6, INET6_ADDRSTRLEN);
+
+        }
+
+    }
+
+    return -1;
+}
+
+int compare_ip_address(struct ip_address_s *a, const unsigned char type, void *ptr)
+{
+    int result=-1;
+
+    switch (type) {
+
+        case 'i' :
+        {
+            struct ip_address_s *b=(struct ip_address_s *) ptr;
+
+            result=compare_ip_addresses(a, b);
+            break;
+
+        }
+
+        case 'c' :
+        {
+            char *tmp=(char *) ptr;
+            struct ip_address_s b;
+
+            if (check_family_ip_address(tmp, "ipv4")) {
+
+                b.family=IP_ADDRESS_FAMILY_IPv4;
+                memcpy(b.addr.v4, tmp, strlen(tmp));
+
+            } else if (check_family_ip_address(tmp, "ipv6")) {
+
+                b.family=IP_ADDRESS_FAMILY_IPv6;
+                memcpy(b.addr.v6, tmp, strlen(tmp));
+
+            }
+
+            result=compare_ip_addresses(a, &b);
+            break;
+        }
+
+        default :
+
+            logoutput_warning("compare_ip_address: type %u not supported", type);
+
+    }
+
+    return result;
+}
+
 int set_host_address(struct host_address_s *a, char *hostname, char *ipv4, char *ipv6)
 {
     int result=-1;

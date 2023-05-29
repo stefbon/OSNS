@@ -20,20 +20,6 @@
 #ifndef _FUSE_SFTP_OPEN_H
 #define _FUSE_SFTP_OPEN_H
 
-void _fs_sftp_open(struct fuse_openfile_s *openfile, struct fuse_request_s *f, struct fuse_path_s *fpath, unsigned int flags);
-void _fs_sftp_create(struct fuse_openfile_s *openfile,struct fuse_request_s *f, struct fuse_path_s *fpath, struct system_stat_s *stat, unsigned int flags);
-void _fs_sftp_read(struct fuse_openfile_s *openfile, struct fuse_request_s *f, size_t size, off_t off, unsigned int flags, uint64_t lock_owner);
-void _fs_sftp_write(struct fuse_openfile_s *openfile, struct fuse_request_s *f, const char *buff, size_t size, off_t off, unsigned int flags, uint64_t lock_owner);
-void _fs_sftp_flush(struct fuse_openfile_s *openfile, struct fuse_request_s *f, uint64_t lockowner);
-void _fs_sftp_fsync(struct fuse_openfile_s *openfile, struct fuse_request_s *f, unsigned char datasync);
-void _fs_sftp_release(struct fuse_openfile_s *openfile, struct fuse_request_s *f, unsigned int flags, uint64_t lock_owner);
-
-void _fs_sftp_open_disconnected(struct fuse_openfile_s *openfile, struct fuse_request_s *f_request, struct fuse_path_s *fpath, unsigned int flags);
-void _fs_sftp_create_disconnected(struct fuse_openfile_s *openfile, struct fuse_request_s *f_request, struct fuse_path_s *fpath, struct system_stat_s *st, unsigned int flags);
-void _fs_sftp_read_disconnected(struct fuse_openfile_s *openfile, struct fuse_request_s *f_request, size_t size, off_t off, unsigned int flags, uint64_t lock_owner);
-void _fs_sftp_write_disconnected(struct fuse_openfile_s *openfile, struct fuse_request_s *f_request, const char *buff, size_t size, off_t off, unsigned int flags, uint64_t lock_owner);
-void _fs_sftp_fsync_disconnected(struct fuse_openfile_s *openfile, struct fuse_request_s *f_request, unsigned char datasync);
-void _fs_sftp_flush_disconnected(struct fuse_openfile_s *openfile, struct fuse_request_s *f_request, uint64_t lockowner);
-void _fs_sftp_release_disconnected(struct fuse_openfile_s *openfile, struct fuse_request_s *f_request, unsigned int flags, uint64_t lock_owner);
+void _fs_sftp_open(struct fuse_openfile_s *openfile, struct fuse_request_s *request, struct fuse_path_s *fpath, struct system_stat_s *stat, unsigned int flags);
 
 #endif

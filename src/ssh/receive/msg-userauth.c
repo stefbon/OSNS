@@ -112,8 +112,9 @@ static void receive_msg_userauth_request(struct ssh_connection_s *connection, st
 {
     struct ssh_session_s *session=get_ssh_connection_session(connection);
     struct ssh_setup_s *setup=&connection->setup;
+    struct shared_signal_s *signal=setup->signal;
 
-    signal_lock(setup->signal);
+    signal_lock(signal);
 
     if ((session->flags & SSH_SESSION_FLAG_SERVER)==0) {
 
@@ -122,7 +123,7 @@ static void receive_msg_userauth_request(struct ssh_connection_s *connection, st
 
     } else if (setup->flags & SSH_SETUP_FLAG_DISCONNECT) {
 
-	signal_unlock(setup->signal);
+	signal_unlock(signal);
 	free_payload(&payload);
 	return;
 
@@ -133,16 +134,20 @@ static void receive_msg_userauth_request(struct ssh_connection_s *connection, st
 	    this is a bare minimum
 	*/
 
+        signal_unlock(signal);
+
 	if (payload->len>13) {
 
-	    queue_ssh_payload_locked(&setup->queue, payload);
+	    queue_ssh_payload(&setup->queue, payload);
+	    queue_ssh_broadcast(&setup->queue);
 	    payload=NULL;
 
 	}
 
     }
 
-    signal_unlock(setup->signal);
+    signal_broadcast(signal);
+    signal_unlock(signal);
 
     if (payload) {
 
@@ -157,22 +162,23 @@ static void receive_msg_userauth_result_common(struct ssh_connection_s *connecti
 {
     struct ssh_session_s *session=get_ssh_connection_session(connection);
     struct ssh_setup_s *setup=&connection->setup;
+    struct shared_signal_s *signal=setup->signal;
 
-    signal_lock(setup->signal);
+    signal_lock(signal);
 
     if (setup->flags & SSH_SETUP_FLAG_DISCONNECT) {
 
-	signal_unlock(setup->signal);
+	signal_unlock(signal);
 	free_payload(&payload);
 
     } else if ((setup->flags & SSH_SETUP_FLAG_TRANSPORT) && setup->status==SSH_SETUP_PHASE_SERVICE && setup->phase.service.status==SSH_SERVICE_TYPE_AUTH) {
 
-	queue_ssh_payload_locked(&setup->queue, payload);
+        signal_unlock(signal);
+	queue_ssh_payload(&setup->queue, payload);
+	queue_ssh_broadcast(&setup->queue);
 	payload=NULL;
 
     }
-
-    signal_unlock(setup->signal);
 
     if (payload) {
 

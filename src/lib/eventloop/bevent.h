@@ -26,11 +26,15 @@
 
 void set_bevent_osns_socket(struct bevent_s *bevent, struct osns_socket_s *sock);
 void unset_bevent_osns_socket(struct bevent_s *bevent, struct osns_socket_s *sock);
-struct osns_socket_s *get_bevent_osns_socket(struct bevent_s *bevent);
 
 struct bevent_s *create_fd_bevent(struct beventloop_s *eloop, void *ptr);
 struct beventloop_s *get_eventloop_bevent(struct bevent_s *bevent);
 struct bevent_s *get_next_bevent(struct beventloop_s *loop, struct bevent_s *bevent);
+
+void remove_io_event(struct bevent_s *bevent);
+void clear_io_event(struct bevent_s *bevent, unsigned int code, struct bevent_argument_s *arg);
+void beventloop_process_events_thread(void *ptr);
+unsigned char queue_bevent_events(struct beventloop_s *loop, uint32_t events, struct bevent_s *bevent);
 
 void set_bevent_ptr(struct bevent_s *bevent, void *ptr);
 void set_bevent_cb(struct bevent_s *bevent, unsigned int flag, void (* cb)(struct bevent_s *bevent, unsigned int flag, struct bevent_argument_s *arg));

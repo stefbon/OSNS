@@ -33,8 +33,7 @@
 #include "lib/system/path.h"
 
 #include "osns-protocol.h"
-
-#include "receive.h"
+#include "system.h"
 #include "mount.h"
 
 static struct system_stat_s rootstat;
@@ -68,13 +67,9 @@ static void fuse_fs_getattr(struct fuse_receive_s *r, struct fuse_in_header *inh
 	set_default_fuse_timeout(&timeout, 0);
 	memset(&out, 0, sizeof(struct fuse_attr_out));
 
-	// logoutput_debug("fuse_fs_getattr: rootstat node id %lu mode %u size %u", rootstat.sst_ino, rootstat.sst_mode, rootstat.sst_size);
-
 	fill_fuse_attr_system_stat(&out.attr, &rootstat);
 	out.attr_valid=get_system_time_sec(&timeout);
 	out.attr_valid_nsec=get_system_time_nsec(&timeout);
-
-	// logoutput_debug("fuse_fs_getattr: node id %lu valid %lu:%u mode %u size %u", out.attr.ino, out.attr_valid, out.attr_valid_nsec, out.attr.mode, out.attr.size);
 
 	(* r->reply_VFS)(r, inh->unique, (char *) &out, sizeof(struct fuse_attr_out));
 	return;
@@ -198,38 +193,15 @@ static void fuse_fs_statfs(struct fuse_receive_s *r, struct fuse_in_header *inh,
     reply_VFS_error(r, inh->unique, ENOENT);
 }
 
-void osns_system_process_fuse_close(struct fuse_receive_s *r, struct bevent_s *bevent)
+void osns_system_process_fuse_close(struct fuse_receive_s *r, unsigned int level)
 {
-
-    if ((r->status & FUSE_RECEIVE_STATUS_DISCONNECT)==0) {
-	struct osns_mount_s *om=(struct osns_mount_s *) ((char *) r - offsetof(struct osns_mount_s, receive));
-	struct osns_socket_s *sock=&om->sock;
-
-	/* function called when remote side closes the connection */
-
-	logoutput_debug("osns_system_process_fuse_close");
-
-	signal_set_flag(r->loop->signal, &r->status, FUSE_RECEIVE_STATUS_DISCONNECT);
-	umount_one_fuse_fs(NULL, om);
-
-	if (bevent==NULL) {
-
-	    if (sock->event.type==SOCKET_EVENT_TYPE_BEVENT) bevent=sock->event.link.bevent;
-
-	}
-
-	if (bevent) {
-
-	    remove_bevent_watch(bevent, 0);
-	    unset_bevent_osns_socket(bevent, &om->sock);
-	    free_bevent(&bevent);
-
-	}
-
-    }
-
+    logoutput_debug("osns_system_process_fuse_close");
 }
 
+void osns_system_process_fuse_error(struct fuse_receive_s *r, unsigned int level, unsigned int errcode)
+{
+    logoutput_debug("osns_system_process_fuse_error");
+}
 
 /* process the very first stage of the fuse connection with the kernel ...
     initialize by setting the flags and parameters for the different supported filesystems (devices, network, ...)
@@ -259,9 +231,9 @@ void osns_system_process_fuse_data(struct fuse_receive_s *r, struct fuse_in_head
 
 	    }
 
-	    if (fuse_fs_init(r, inh, data, supported)>0) {
+	    if (fuse_fs_init(r, inh, data, supported)>=0) {
 
-		r->flags |= FUSE_RECEIVE_FLAG_INIT;
+                signal_set_flag(r->signal, &r->flags, FUSE_RECEIVE_FLAG_INIT);
 
 	    } else {
 
@@ -354,15 +326,12 @@ void osns_system_process_fuse_data(struct fuse_receive_s *r, struct fuse_in_head
     }
 
     return;
-
     disconnect:
-    osns_system_process_fuse_close(r, NULL);
+    osns_system_process_fuse_close(r, 0);
 
 }
 
 void init_system_fuse()
 {
     set_rootstat(&rootstat);
-
-    // logoutput_debug("init_system_fuse: node id %lu mode %u size %u", rootstat.sst_ino, rootstat.sst_mode, rootstat.sst_size);
 }

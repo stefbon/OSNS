@@ -19,7 +19,7 @@
 
 #include "libosns-basic-system-headers.h"
 
-#include "ssh-string.h"
+#include "lib/ssh/ssh-string.h"
 #include "name.h"
 
 #define NAMEINDEX_ROOT1						92			/* number of valid chars*/

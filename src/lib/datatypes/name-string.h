@@ -38,4 +38,8 @@ int compare_name_string(struct name_string_s *t, const unsigned char type, void 
 unsigned int read_name_string(char *buffer, unsigned int size, struct name_string_s *s);
 unsigned int write_name_string(char *buffer, unsigned int size, const unsigned char type, void *ptr);
 
+#define COPY_NAME_STRING_FLAG_ALLOW_TRUNCATE				1
+
+unsigned int copy_name_string(struct name_string_s *s, const unsigned char type, void *ptr, unsigned int flags);
+
 #endif

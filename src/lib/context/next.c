@@ -206,7 +206,7 @@ static struct service_context_s *get_next_service_context_tree(struct service_co
 
 	/* get a startpoint: look for the header in the parent */
 
-	if (h) list=get_list_head(h, 0);
+	if (h) list=get_list_head(h);
 	type=((parent->type==SERVICE_CTX_TYPE_BROWSE && parent->service.browse.type==SERVICE_BROWSE_TYPE_NETHOST) ? SERVICE_CTX_TYPE_FILESYSTEM : SERVICE_CTX_TYPE_BROWSE);
 
 
@@ -240,7 +240,7 @@ struct service_context_s *get_next_shared_service_context(struct workspace_mount
 
     if (ctx==NULL) {
 
-	list=(w ? get_list_head(&w->shared_contexes, 0) : NULL);
+	list=(w ? get_list_head(&w->shared_contexes) : NULL);
 
     } else {
 
@@ -253,7 +253,7 @@ struct service_context_s *get_next_shared_service_context(struct workspace_mount
 
 struct service_context_s *get_root_context_workspace(struct workspace_mount_s *w)
 {
-    struct list_element_s *list=(w ? get_list_head(&w->contexes, 0) : NULL);
+    struct list_element_s *list=(w ? get_list_head(&w->contexes) : NULL);
 
     return (list) ? (struct service_context_s *)((char *) list - offsetof(struct service_context_s, wlist)) : NULL;
 }
@@ -300,4 +300,22 @@ int signal_selected_ctx(struct context_interface_s *i, unsigned char shared, con
 
     read_unlock_list_header(h);
     return count;
+}
+
+struct service_context_s *find_service_context_unlocked(struct list_header_s *h, int (* compare)(struct service_context_s *ctx, void *ptr), void *ptr)
+{
+    struct list_element_s *list=get_list_head(h);
+    struct service_context_s *ctx=NULL;
+
+    while (list) {
+
+        ctx=(struct service_context_s *)((char *) list - offsetof(struct service_context_s, wlist));
+	if ((* compare)(ctx, ptr)==1) break;
+	list=get_next_element(list);
+	ctx=NULL;
+
+    }
+
+    return ctx;
+
 }

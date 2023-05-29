@@ -30,9 +30,7 @@
 
 static struct fuse_symlink_s *create_fuse_cache_symlink(char *buffer, unsigned int len)
 {
-    struct fuse_symlink_s *cs=NULL; /* cached symlink */
-
-    cs=malloc(sizeof(struct fuse_symlink_s) + len);
+    struct fuse_symlink_s *cs=malloc(sizeof(struct fuse_symlink_s) + len); /* cached symlink */
 
     if (cs) {
 
@@ -65,7 +63,7 @@ struct fuse_symlink_s *get_inode_fuse_cache_symlink(struct inode_s *inode)
     return cs;
 }
 
-unsigned int set_inode_fuse_cache_symlink(struct workspace_mount_s *w, struct inode_s *inode, char *buffer)
+unsigned int set_inode_fuse_cache_symlink(struct service_context_s *ctx, struct inode_s *inode, char *buffer)
 {
     struct fuse_symlink_s *cs=get_inode_fuse_cache_symlink(inode);
     unsigned int len=strlen(buffer);
@@ -80,9 +78,11 @@ unsigned int set_inode_fuse_cache_symlink(struct workspace_mount_s *w, struct in
 	    if (memcmp(cs->path, buffer, len)) memcpy(cs->path, buffer, len);
 
 	} else {
+	    struct service_context_s *rootctx=get_root_context(ctx);
+	    struct list_header_s *h=&rootctx->service.workspace.symlinks;
 	    struct fuse_symlink_s *keep=cs;
 
-	    write_lock_list_header(&w->inodes.symlinks);
+	    write_lock_list_header(h);
 	    remove_list_element(&cs->list);
 
 	    cs=realloc(cs, (sizeof(struct fuse_symlink_s) + len));
@@ -92,7 +92,7 @@ unsigned int set_inode_fuse_cache_symlink(struct workspace_mount_s *w, struct in
 		memcpy(cs->path, buffer, len);
 		cs->len=len;
 		if (cs != keep) inode->ptr=&cs->link;
-		add_list_element_first(&w->inodes.symlinks, &cs->list);
+		add_list_element_first(h, &cs->list);
 
 	    } else {
 
@@ -100,7 +100,7 @@ unsigned int set_inode_fuse_cache_symlink(struct workspace_mount_s *w, struct in
 
 	    }
 
-	    write_unlock_list_header(&w->inodes.symlinks);
+	    write_unlock_list_header(h);
 
 	}
 
@@ -109,12 +109,14 @@ unsigned int set_inode_fuse_cache_symlink(struct workspace_mount_s *w, struct in
 	cs=create_fuse_cache_symlink(buffer, len);
 
 	if (cs) {
+	    struct service_context_s *rootctx=get_root_context(ctx);
+	    struct list_header_s *h=&rootctx->service.workspace.symlinks;
 
 	    inode->ptr=&cs->link;
 
-	    write_lock_list_header(&w->inodes.symlinks);
-	    add_list_element_first(&w->inodes.symlinks, &cs->list);
-	    write_unlock_list_header(&w->inodes.symlinks);
+	    write_lock_list_header(h);
+	    add_list_element_first(h, &cs->list);
+	    write_unlock_list_header(h);
 
 	} else {
 

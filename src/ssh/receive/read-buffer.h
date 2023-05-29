@@ -20,11 +20,11 @@
 #ifndef _SSH_RECEIVE_READ_BUFFER_H
 #define _SSH_RECEIVE_READ_BUFFER_H
 
-void process_ssh_packet_nodecompress(struct ssh_connection_s *c, struct ssh_packet_s *packet);
-void process_ssh_packet_decompress(struct ssh_connection_s *c, struct ssh_packet_s *packet);
+void process_ssh_packet_nodecompress(struct ssh_connection_s *c, struct ssh_payload_s *p);
+void process_ssh_packet_decompress(struct ssh_connection_s *c, struct ssh_payload_s *p);
 
-void read_ssh_connection_buffer(struct ssh_connection_s *c);
+void cb_read_socket_ssh(struct osns_socket_s *sock, uint64_t ctr, void *ptr);
 
-void set_ssh_receive_behaviour(struct ssh_connection_s *c, const char *phase);
+void set_ssh_receive_behaviour(struct ssh_connection_s *sshc, const char *phase);
 
 #endif

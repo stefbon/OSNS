@@ -59,7 +59,7 @@ static void default_signal_cb(struct beventloop_s *loop, struct bsignal_event_s 
 	case SIGQUIT:
 
 	    logoutput("default_signal_cb: caught (HUP/TERM/INT/STOP/ABRT/QUIT) signal %i", bse->signo);
-	    stop_beventloop(loop);
+	    stop_beventloop(loop, bse->signo);
 	    break;
 
 	case SIGUSR1:
@@ -106,13 +106,9 @@ static struct bsignal_hlp_s *create_bsignal_hlp(struct bevent_s *bevent, struct 
 
 	memset(hlp, 0, sizeof(struct bsignal_hlp_s));
 
-	logoutput_debug("create_bsignal_hlp: subsys defined %s", ((subsys) ? "y" : "n"));
-
 	hlp->loop=get_eventloop_bevent(bevent);
 	hlp->cb=backend->cb;
 	hlp->bse.signo=fdsi->ssi_signo;
-
-	logoutput_debug("create_bsignal_hlp: ready");
 
     }
 
@@ -122,7 +118,8 @@ static struct bsignal_hlp_s *create_bsignal_hlp(struct bevent_s *bevent, struct 
 
 static void signal_bevent_cb(struct bevent_s *bevent, unsigned int flag, struct bevent_argument_s *arg)
 {
-    logoutput("signal_bevent_cb");
+
+    clear_io_event(bevent, flag, arg);
 
     if (signal_is_data(arg)) {
 	int fd=(* bevent->ops->get_unix_fd)(bevent);
@@ -192,7 +189,7 @@ static void signal_bevent_cb(struct bevent_s *bevent, unsigned int flag, struct 
 
 	    } /* switch */
 
-	    if (hlp) work_workerthread(NULL, -1, thread2handle_signal, (void *) hlp, NULL);
+	    if (hlp) work_workerthread(NULL, -1, thread2handle_signal, (void *) hlp);
 
 	}
 
@@ -343,7 +340,7 @@ int init_signalfd_subsystem(struct beventloop_s *loop, struct bevent_subsystem_s
 
     }
 
-    set_bevent_cb(bevent, (BEVENT_FLAG_CB_DATAAVAIL | BEVENT_FLAG_CB_ERROR | BEVENT_FLAG_CB_CLOSE), signal_bevent_cb);
+    set_bevent_cb(bevent, (BEVENT_FLAG_CB_DATA | BEVENT_FLAG_CB_ERROR | BEVENT_FLAG_CB_CLOSE), signal_bevent_cb);
     backend->bevent=bevent;
     return 0;
 

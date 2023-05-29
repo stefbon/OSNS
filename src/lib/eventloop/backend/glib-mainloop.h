@@ -28,6 +28,7 @@ struct _beventloop_glib_s {
 #ifdef HAVE_GLIB2
     GMainLoop				*loop;
     GSourceFuncs			funcs;
+    struct list_header_s                events;
 #endif
 };
 

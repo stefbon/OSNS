@@ -67,7 +67,7 @@ struct hash_element_s *lookup_simple_hash(struct simple_hash_s *group, void *dat
 
     i=((*group->hashfunction) (data) % group->len);
 
-    list=get_list_head(&group->hash[i], 0);
+    list=get_list_head(&group->hash[i]);
 
     while (list) {
 
@@ -144,7 +144,7 @@ void free_group(struct simple_hash_s *group, void (*free_data) (void *data))
 
 	for (unsigned int i=0;i<group->len;i++) {
 
-	    list=get_list_head(&group->hash[i], SIMPLE_LIST_FLAG_REMOVE);
+	    list=remove_list_head(&group->hash[i]);
 
 	    while (list) {
 
@@ -153,7 +153,7 @@ void free_group(struct simple_hash_s *group, void (*free_data) (void *data))
 		free(element);
 		element=NULL;
 
-		list=get_list_head(&group->hash[i], SIMPLE_LIST_FLAG_REMOVE);
+		list=remove_list_head(&group->hash[i]);
 
 	    }
 
@@ -183,7 +183,7 @@ void *get_next_hashed_value(struct simple_hash_s *group, void **index, unsigned 
     } else {
 
 	hashvalue=hashvalue % group->len;
-	list=get_list_head(&group->hash[hashvalue], 0);
+	list=get_list_head(&group->hash[hashvalue]);
 
     }
 

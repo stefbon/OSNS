@@ -34,7 +34,6 @@
 #include "ssh-send.h"
 #include "ssh-data.h"
 #include "ssh-channel.h"
-#include "ssh-signal.h"
 #include "ssh-userauth.h"
 #include "ssh-connections.h"
 #include "extensions.h"
@@ -108,7 +107,6 @@ static void complete_ssh_session_connection_setup(void *ptr)
 
 static void init_ssh_session_connection_cb(struct connection_s *connection, unsigned int fd)
 {
-    struct generic_error_s error=GENERIC_ERROR_INIT;
     struct ssh_server_session_helper_s *helper=malloc(sizeof(struct ssh_server_session_helper_s));
 
     /* start a thread to setup the ssh session using this connection
@@ -121,15 +119,14 @@ static void init_ssh_session_connection_cb(struct connection_s *connection, unsi
 	helper->session=get_ssh_connection_session(connection);
 	helper->fd=fd;
 
-	work_workerthread(NULL, 0, complete_ssh_session_connection_setup, (void *) helper, &error);
+	work_workerthread(NULL, 0, complete_ssh_session_connection_setup, (void *) helper);
 
     } else {
 
-	set_generic_error_system(&error, ENOMEM, __PRETTY_FUNCTION__);
+	logoutput("init_ssh_session_connection_cb: error %s starting thread to complete the session", strerror(ENOMEM));
 
     }
 
-    if (error->value.errnum>0) logoutput("init_ssh_session_connection_cb: error %s starting thread to complete the session", get_error_description(error));
 }
 
 static struct connection_s *accept_ssh_session_connection(struct host_address_s *host, struct connection_s *server)

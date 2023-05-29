@@ -26,8 +26,10 @@
 #include "libosns-misc.h"
 #include "libosns-threads.h"
 #include "libosns-interface.h"
+#include "libosns-users.h"
 
 #include "ssh-common.h"
+#include "ssh-channel.h"
 #include "mapping.h"
 
 /*
@@ -48,8 +50,6 @@ static void get_local_unknown_user(struct ssh_session_s *session)
     mapping->unknown_uid=(uid_t) -1;
     mapping->unknown_gid=(gid_t) -1;
 
-    logoutput("get_local_unknown_user: try option:net.usermapping.user-unknown from context");
-
     /* look for option for user unknown */
 
     init_io_option(&option, 0);
@@ -61,8 +61,6 @@ static void get_local_unknown_user(struct ssh_session_s *session)
 
     pwd=(user ? getpwnam(user) : NULL);
     if (pwd) goto found;
-
-    logoutput("get_local_unknown_user: try option:net.usermapping.user-nobody from context");
 
     /* look for option for user nobody */
 
@@ -77,25 +75,20 @@ static void get_local_unknown_user(struct ssh_session_s *session)
     pwd=((user) ? getpwnam(user) : NULL);
     if (pwd) goto found;
 
-    logoutput("get_local_unknown_user: try user unknown");
-
     /* try user "unknown" */
 
     pwd=getpwnam("unknown");
     if (pwd) goto found;
 
-    logoutput("get_local_unknown_user: try user nobody");
-
     /* try user "nobody" */
 
     pwd=getpwnam("nobody");
     if (pwd) goto found;
-    logoutput("get_local_unknown_user: no user found");
     return;
 
     found:
 
-    logoutput("get_local_unknown_user: user %i:%s", pwd->pw_uid, pwd->pw_name);
+    logoutput_debug("get_local_unknown_user: user %i:%s", pwd->pw_uid, pwd->pw_name);
     mapping->unknown_uid=pwd->pw_uid;
     mapping->unknown_gid=pwd->pw_gid;
 
@@ -156,8 +149,6 @@ static int get_remote_identity_getents(struct ssh_session_s *session)
     struct getent_fields_s *getent=NULL;
     struct io_option_s option;
     int result=0;
-
-    logoutput_debug("get_remote_identity_getents: A");
 
     init_io_option(&option, 0);
 
@@ -243,59 +234,185 @@ static int get_remote_identity_getents(struct ssh_session_s *session)
 
 }
 
-static int get_system_getents_file(struct net_idmapping_s *mapping, const char *target, struct ssh_string_s *file)
+static unsigned int scan_str2array(char *data, unsigned int len, char **ptr, unsigned int count)
 {
-    struct ssh_session_s *session=(struct ssh_session_s *)((char *) mapping - offsetof(struct ssh_session_s, hostinfo.mapping));
-    int result=-1;
+    unsigned int tmp=0;
+    unsigned int ctr=0;
+    char *pos=data;
+    char *sep=NULL;
 
-    pthread_mutex_lock(mapping->mutex);
+    assignarray:
 
-    if ((mapping->flags & NET_IDMAPPING_FLAG_COMPLETE)==0) {
+    sep=memchr(pos, ':', (unsigned int)(data + len - pos));
+    if (ctr<count) ptr[ctr]=pos;
+    ctr++;
 
-	logoutput_warning("get_system_getents_file: usermapping not done");
-	pthread_mutex_unlock(mapping->mutex);
-	return 0;
+    if (sep) {
+
+	if (count>0) *sep='\0';
+	pos=sep+1;
+	if (pos < (char *)(data+len)) goto assignarray;
 
     }
 
-    if (strcmp(target, "remote")==0) {
-	struct io_option_s option;
+    return ctr;
+}
 
-	init_io_option(&option, 0);
+static void add_user2cache(struct ssh_session_s *session, char *buffer, unsigned int len)
+{
+    unsigned int count=scan_str2array(buffer, len, NULL, 0);
 
-	if (get_buffer_option(session, "remote", "info:system.getents:", &option)>=0) {
+	/*
+	    buffer is like:
 
-	    if (option.type==_IO_OPTION_TYPE_BUFFER) {
+	    %USER%:x:%UID%:%GID%:%NAME%:%HOME:%SHELL%
+	    so at least 3 fields are required: username and uid 
 
-		file->ptr=option.value.buffer.ptr;
-		file->len=option.value.buffer.len;
+	*/
 
-		option.value.buffer.ptr=NULL;
-		option.value.buffer.len=0;
-		option.value.buffer.size=0;
-		result=0;
+    if (count>=3 && count<=20) {
+	char *aptr[count];
+	struct net_idmapping_s *mapping=&session->hostinfo.mapping;
+	struct net_entity_s ent;
+	unsigned int errcode=0;
+	struct net_userscache_s *cache=mapping->cache;
 
-	    }
+	count=scan_str2array(buffer, len, aptr, count);
+	memset(&ent, 0, sizeof(struct net_entity_s));
+
+	/* 20220907:
+	    only name is supported now, not domain */
+
+	ent.flags=NET_ENTITY_FLAG_USER;
+	ent.net.name.ptr=aptr[0];
+	ent.net.name.len=strlen(aptr[0]);
+	ent.net.id=atoi(aptr[2]);
+	ent.localid=mapping->unknown_uid; /* this is overwritten with a successfull lookup */
+
+	lookup_user_byname_system(mapping, &ent, &errcode);
+
+	if ((* cache->add_net2local_map)(cache, &ent)==0) {
+
+	    logoutput_debug("add_user2cache: added uid %u - %.*s to cache (mapped to %u)", ent.net.id, ent.net.name.len, ent.net.name.ptr, ent.localid);
+
+	} else {
+
+	    logoutput_debug("add_user2cache: unable to add uid %u - %.*s to cache", ent.net.id, ent.net.name.len, ent.net.name.ptr);
 
 	}
 
-    // } else if (strcmp(target, "local")==0) {
+    }
 
-	// if (get_local_option(session, "info:system.getents:", file)>=0) result=0;
+}
+
+static void add_group2cache(struct ssh_session_s *session, char *buffer, unsigned int len)
+{
+    unsigned int count=scan_str2array(buffer, len, NULL, 0);
+
+	/*
+	    buffer is like:
+
+	    %GROUP%:x:%GID%:%MEMBERS%
+	    so at least 3 fields are required (name and gid)
+
+	*/
+
+
+    if (count>=3 && count<=20) {
+	char *aptr[count];
+	struct net_idmapping_s *mapping=&session->hostinfo.mapping;
+	struct net_entity_s ent;
+	unsigned int errcode=0;
+	struct net_userscache_s *cache=mapping->cache;
+
+	count=scan_str2array(buffer, len, aptr, count);
+	memset(&ent, 0, sizeof(struct net_entity_s));
+
+	/* 20220907:
+	    only name is supported now, not domain */
+
+	ent.flags=NET_ENTITY_FLAG_GROUP;
+	ent.net.name.ptr=aptr[0];
+	ent.net.name.len=strlen(aptr[0]);
+	ent.net.id=atoi(aptr[2]);
+	ent.localid=mapping->unknown_gid; /* this is overwritten with a successfull lookup */
+
+	lookup_group_byname_system(mapping, &ent, &errcode);
+
+	if ((* cache->add_net2local_map)(mapping->cache, &ent)==0) {
+
+	    logoutput_debug("add_user2cache: added gid %u - %.*s to cache (mapped to %u)", ent.net.id, ent.net.name.len, ent.net.name.ptr, ent.localid);
+
+	} else {
+
+	    logoutput_debug("add_user2cache: unable to add gid %u - %.*s to cache", ent.net.id, ent.net.name.len, ent.net.name.ptr);
+
+	}
 
     }
 
-    pthread_mutex_unlock(mapping->mutex);
+}
 
-    if (result==0) {
+static void _cb_enumusers_exec(struct ssh_channel_s *channel, struct ssh_payload_s **p_payload, unsigned int flags, unsigned int errcode, void *ptr)
+{
+    struct ssh_session_s *session=channel->session;
+    struct _cb_exec_hlpr_s *hlpr=(struct _cb_exec_hlpr_s *) ptr;
+    struct ssh_payload_s *payload=*p_payload;
 
-	logoutput("get_system_getents_file: received %s file %.*s", target, file->len, file->ptr);
+    if (payload) {
+	char *buffer=(char *) payload;
+	unsigned int len=payload->len; /* keep since payload->len will be overwritten */
 
-    } else {
+	memmove(buffer, payload->buffer, len);
 
-	logoutput_warning("get_system_getents_file: unable to get %s file", target);
+	if ((flags & SSH_CHANNEL_EXEC_FLAG_ERROR)==0) {
+
+	    logoutput_debug("_cb_enumusers_exec: recv %.*s", len, buffer);
+
+	    /* buffer is like:
+		0001:%USER%:x:%UID%:%GID%:%NAME%:%HOME%:%SHELL%
+		0002:%GROUP%:x:%GID%:%MEMBERS%
+	    */
+
+	    if (len>5) {
+
+		if (memcmp(buffer, "0001:", 5)==0) {
+
+		    add_user2cache(session, &buffer[5], len-5);
+
+		} else if (memcmp(buffer, "0002:", 5)==0) {
+
+		    add_group2cache(session, &buffer[5], len-5);
+
+		} else {
+
+		    logoutput_debug("_cb_enumusers_exec: string starting with code %.*s ... not reckognized", 4, buffer);
+
+		}
+
+	    }
+
+	} else {
+
+	    logoutput_debug("_cb_enumusers_exec: errcode %u %.*s", errcode, len, buffer);
+
+	}
 
     }
+
+}
+
+static int get_remote_usersinfo(struct net_idmapping_s *mapping)
+{
+    struct ssh_session_s *session=(struct ssh_session_s *)((char *) mapping - offsetof(struct ssh_session_s, hostinfo.mapping));
+    unsigned int len=get_ssh2remote_command(NULL, 0, "info:enumusers:", NULL);
+    char command[len+1];
+
+    memset(command, 0, len+1);
+    len=get_ssh2remote_command(command, len+1, "info:enumusers:", NULL);
+    logoutput_debug("get_remote_usersinfo: command %s");
+
+    return exec_remote_command(session, command, _cb_enumusers_exec, NULL);
 
 }
 
@@ -362,13 +479,13 @@ static int setup_net_usermapping(struct net_idmapping_s *mapping, unsigned int f
 	    - strict (default) versus nonstrict, where to get this??
 	*/
 
-	if ((compare_ssh_string(&reply, 'c', "none")==0) | (compare_ssh_string(&reply, 'c', "shared")==0)) {
+	if ((compare_ssh_string(&reply, 'c', "none")==0) || (compare_ssh_string(&reply, 'c', "shared")==0)) {
 
 	    /* no mapping or translation required, uid and gid are shared via ldap/ad for example  */
 
 	    mapping->flags |= NET_IDMAPPING_FLAG_SHARED;
 
-	} else if ((compare_ssh_string(&reply, 'c', "map")==0) | (compare_ssh_string(&reply, 'c', "nonshared")==0)) {
+	} else if ((compare_ssh_string(&reply, 'c', "map")==0) || (compare_ssh_string(&reply, 'c', "nonshared")==0)) {
 
 	    /* simple mapping is used like:
 		local user 	<-> remote user
@@ -387,11 +504,34 @@ static int setup_net_usermapping(struct net_idmapping_s *mapping, unsigned int f
     } else {
 
 	logoutput_warning("setup_net_usermapping: option net.usermapping.type not reckognized by context");
+	mapping->flags &= ~NET_IDMAPPING_FLAG_SHARED;
 
     }
 
     (* option.free)(&option);
     clear_ssh_string(&reply);
+
+    if ((mapping->flags & NET_IDMAPPING_FLAG_SHARED)==0) {
+
+	mapping->cache=create_net_userscache(mapping->flags);
+
+	if (mapping->cache) {
+
+	    int result=get_remote_usersinfo(mapping);
+	    if (result>0) {
+
+		logoutput_debug("setup_net_usermapping: enabling cache (rows read %u)", (unsigned int) result);
+		mapping->flags |= NET_IDMAPPING_FLAG_CACHE;
+
+	    } else {
+
+		logoutput_debug("setup_net_usermapping: not enabling cache");
+
+	    }
+
+	}
+
+    }
 
     mapping->flags |= (flags & (NET_IDMAPPING_FLAG_MAPBYID | NET_IDMAPPING_FLAG_MAPBYNAME | NET_IDMAPPING_FLAG_CLIENT | NET_IDMAPPING_FLAG_SERVER));
 
@@ -404,7 +544,6 @@ static int setup_net_usermapping(struct net_idmapping_s *mapping, unsigned int f
     mapping->flags &= ~NET_IDMAPPING_FLAG_STARTED;
     mapping->flags |= NET_IDMAPPING_FLAG_COMPLETE;
     pthread_mutex_unlock(mapping->mutex);
-
     return 1;
 
 }
@@ -414,7 +553,6 @@ void init_ssh_usermapping(struct ssh_session_s *session, struct passwd *pwd)
     struct net_idmapping_s *mapping=&session->hostinfo.mapping;
     init_net_idmapping(mapping, pwd);
     mapping->setup=setup_net_usermapping;
-
 }
 
 void free_ssh_usermapping(struct ssh_session_s *session)

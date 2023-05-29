@@ -74,6 +74,7 @@ struct attr_ops_s {
     void						(* read_name_name_response)(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct ssh_string_s *name);
     void						(* write_name_name_response)(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct ssh_string_s *name);
     unsigned char					(* enable_attr)(struct attr_context_s *actx, struct sftp_valid_s *p, const char *name);
+    unsigned int					(* get_property)(struct attr_context_s *actx, unsigned int flags);
 };
 
 #define ATTR_CONTEXT_FLAG_CLIENT			1
@@ -85,6 +86,8 @@ struct attr_ops_s {
     - plus one for type (which is always present for version>=4) */
 
 #define ATTR_CONTEXT_COUNT_ATTR_CB			37
+
+#define SFTP_ATTR_PROPERTY_VALIDFIELD_STAT		1
 
 struct attr_context_s {
     unsigned int					flags;

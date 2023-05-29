@@ -26,7 +26,6 @@
 #include "libosns-workspace.h"
 #include "libosns-context.h"
 #include "libosns-fuse-public.h"
-#include "libosns-resources.h"
 
 #include "sftp/common-protocol.h"
 #include "common.h"
@@ -112,10 +111,9 @@ static void process_receive_sftp_reply_error(struct sftp_client_s *sftp, char *b
 
 }
 
-static void _receive_sftp_reply(struct sftp_client_s *sftp, char **p_buffer, unsigned int size, uint32_t seq, unsigned int flags)
+static void _receive_sftp_reply(struct sftp_client_s *sftp, char *buffer, unsigned int size, uint32_t seq, unsigned int flags)
 {
     struct sftp_header_s header;
-    char *buffer=*p_buffer;
     unsigned int pos=0;
     unsigned int len=0;
 
@@ -123,14 +121,6 @@ static void _receive_sftp_reply(struct sftp_client_s *sftp, char **p_buffer, uns
 
 	logoutput("receive_sftp_reply: received size %i too small", size);
 	process_receive_sftp_reply_error(sftp, buffer, size, seq);
-
-	if (flags & SFTP_RECEIVE_FLAG_ALLOC) {
-
-	    free(buffer);
-	    *p_buffer=NULL;
-
-	}
-
 	return;
 
     }
@@ -156,14 +146,6 @@ static void _receive_sftp_reply(struct sftp_client_s *sftp, char **p_buffer, uns
 
 	logoutput("receive_sftp_reply: received size %i smaller than sftp length %i", size, 4 + len);
 	process_receive_sftp_reply_error(sftp, buffer, size, seq);
-
-	if (flags & SFTP_RECEIVE_FLAG_ALLOC) {
-
-	    free(buffer);
-	    *p_buffer=NULL;
-
-	}
-
 	return;
 
     }
@@ -185,7 +167,6 @@ static void _receive_sftp_reply(struct sftp_client_s *sftp, char **p_buffer, uns
     memset(&buffer[header.len], 0, size - header.len); /* clear the area which is of no use anymore */
 
     header.buffer=buffer; /* sftp takes over the buffer */
-    *p_buffer=NULL;
     logoutput_debug("receive_sftp_reply: type %u size %i", header.type, header.len);
 
     switch (header.type) {
@@ -241,22 +222,15 @@ static void _receive_sftp_reply(struct sftp_client_s *sftp, char **p_buffer, uns
 
     }
 
-    if ((flags & SFTP_RECEIVE_FLAG_ALLOC) && header.buffer) {
-
-	free(header.buffer);
-
-    }
-
 }
 
-static void _receive_sftp_init(struct sftp_client_s *sftp, char **p_buffer, unsigned int size, unsigned int seq, unsigned int flags)
+static void _receive_sftp_init(struct sftp_client_s *sftp, char *buffer, unsigned int size, unsigned int seq, unsigned int flags)
 {
 
     sftp->receive.receive_data=_receive_sftp_reply;
 
     if (size>=5) {
 	uint32_t len=0;
-	char *buffer=*p_buffer;
 	char *pos=buffer;
 	unsigned char type=0;
 
@@ -283,9 +257,8 @@ static void _receive_sftp_init(struct sftp_client_s *sftp, char **p_buffer, unsi
 		logoutput("_receive_sftp_init: type %i req found", type);
 
 		reply->type=type;
-		reply->response.init.size=len;
-		reply->response.init.buff=(unsigned char * ) buffer;
-		*p_buffer=NULL;
+		reply->size=len;
+		reply->data=buffer;
 
 		signal_sftp_received_id(sftp, req);
 
@@ -301,23 +274,16 @@ static void _receive_sftp_init(struct sftp_client_s *sftp, char **p_buffer, unsi
     } else {
 
 	logoutput("_receive_sftp_init: protocol error");
-	process_receive_sftp_reply_error(sftp, *p_buffer, size, seq);
-
-    }
-
-    if ((flags & SFTP_RECEIVE_FLAG_ALLOC) && *p_buffer) {
-
-	free(*p_buffer);
-	*p_buffer=NULL;
+	process_receive_sftp_reply_error(sftp, *buffer, size, seq);
 
     }
 
 }
 
-void receive_sftp_data(struct sftp_client_s *sftp, char **p_buffer, unsigned int size, uint32_t seq, unsigned int flags)
+void receive_sftp_data(struct sftp_client_s *sftp, char *buffer, unsigned int size, uint32_t seq, unsigned int flags)
 {
     pthread_mutex_lock(&sftp->mutex);
-    (* sftp->receive.receive_data)(sftp, p_buffer, size, seq, flags);
+    (* sftp->receive.receive_data)(sftp, buffer, size, seq, flags);
     pthread_mutex_unlock(&sftp->mutex);
 }
 
@@ -372,68 +338,3 @@ void set_sftp_recv_version(struct sftp_client_s *sftp)
 
 }
 
-int handle_sftp_reply(struct sftp_request_s *sftp_r, struct sftp_reply_s *reply, unsigned int *error)
-{
-    int result=0;
-
-    reply->type=sftp_r->reply.type;
-
-    if (reply->type==SSH_FXP_STATUS) {
-
-	reply->response.status.code=sftp_r->reply.response.status.code;
-	reply->response.status.linux_error=sftp_r->reply.response.status.linux_error;
-	reply->response.status.buff=sftp_r->reply.response.status.buff;
-	reply->response.status.size=sftp_r->reply.response.status.size;
-	sftp_r->reply.response.status.buff=NULL;
-	sftp_r->reply.response.status.size=0;
-
-    } else if (reply->type==SSH_FXP_HANDLE) {
-
-	reply->response.handle.name=sftp_r->reply.response.handle.name;
-	reply->response.handle.len=sftp_r->reply.response.handle.len;
-	sftp_r->reply.response.handle.name=NULL;
-	sftp_r->reply.response.handle.len=0;
-
-    } else if (reply->type==SSH_FXP_DATA) {
-
-	reply->response.data.data=sftp_r->reply.response.data.data;
-	reply->response.data.size=sftp_r->reply.response.data.size;
-	reply->response.data.flags=sftp_r->reply.response.data.flags;
-	sftp_r->reply.response.data.data=NULL;
-	sftp_r->reply.response.data.size=0;
-
-    } else if (reply->type==SSH_FXP_NAME) {
-
-	reply->response.names.count=sftp_r->reply.response.names.count;
-	reply->response.names.size=sftp_r->reply.response.names.size;
-	reply->response.names.flags=sftp_r->reply.response.names.flags;
-	reply->response.names.buff=sftp_r->reply.response.names.buff;
-	sftp_r->reply.response.names.buff=NULL;
-	sftp_r->reply.response.names.size=0;
-
-    } else if (reply->type==SSH_FXP_ATTRS) {
-
-	reply->response.attr.buff=sftp_r->reply.response.attr.buff;
-	reply->response.attr.size=sftp_r->reply.response.attr.size;
-	sftp_r->reply.response.attr.buff=NULL;
-	sftp_r->reply.response.attr.size=0;
-
-    } else if (reply->type==SSH_FXP_EXTENDED_REPLY) {
-
-	reply->response.extension.buff=sftp_r->reply.response.extension.buff;
-	reply->response.extension.size=sftp_r->reply.response.extension.size;
-	sftp_r->reply.response.extension.buff=NULL;
-	sftp_r->reply.response.extension.size=0;
-
-    } else {
-
-	*error=EPROTO;
-	result=-1;
-
-    }
-
-    reply->error=sftp_r->reply.error;
-
-    return result;
-
-}

@@ -29,6 +29,7 @@
 
 #include "local.h"
 #include "mapping.h"
+#include "cache.h"
 
 /* lookup the local uid/gid given the (remote) id by just accepting it
     these "lookups" are used in the case (SHARED | NSS USERDB | MAPBYID) and (NONSHARED | NONSTRICT | MAPBYID) */
@@ -36,13 +37,13 @@
 void lookup_user_byid_map(struct net_idmapping_s *mapping, struct net_entity_s *user, unsigned int *error)
 {
     *error=0;
-    user->local.uid=user->net.id;
+    user->localid=user->net.id;
 }
 
 void lookup_group_byid_map(struct net_idmapping_s *mapping, struct net_entity_s *group, unsigned int *error)
 {
     *error=0;
-    group->local.gid=group->net.id;
+    group->localid=group->net.id;
 }
 
 /* lookup the local uid/gid given the (remote) id by testing they exist
@@ -51,13 +52,13 @@ void lookup_group_byid_map(struct net_idmapping_s *mapping, struct net_entity_s 
 void lookup_user_byid_system(struct net_idmapping_s *mapping, struct net_entity_s *user, unsigned int *error)
 {
     *error=0;
-    get_local_uid_byid(user->net.id, &user->local.uid, error);
+    get_local_uid_byid(user->net.id, &user->localid, error);
 }
 
 void lookup_group_byid_system(struct net_idmapping_s *mapping, struct net_entity_s *group, unsigned int *error)
 {
     *error=0;
-    get_local_gid_byid(group->net.id, &group->local.gid, error);
+    get_local_gid_byid(group->net.id, &group->localid, error);
 }
 
 /* lookup the local uid/gid given the (remote) name in the local user/group system
@@ -72,7 +73,7 @@ void lookup_user_byname_system(struct net_idmapping_s *mapping, struct net_entit
     tmp[len]='\0';
 
     lock_local_userbase();
-    get_local_uid_byname(tmp, &user->local.uid, error);
+    get_local_uid_byname(tmp, &user->localid, error);
     unlock_local_userbase();
 
 }
@@ -86,7 +87,7 @@ void lookup_group_byname_system(struct net_idmapping_s *mapping, struct net_enti
     tmp[len]='\0';
 
     lock_local_groupbase();
-    get_local_gid_byname(tmp, &group->local.gid, error);
+    get_local_gid_byname(tmp, &group->localid, error);
     unlock_local_groupbase();
 
 }
@@ -94,41 +95,20 @@ void lookup_group_byname_system(struct net_idmapping_s *mapping, struct net_enti
 /* lookup the local uid/gid given the (remote) name in a cache
     these lookups are used in the cases (SHARED | DOMAINDB | MAPBYNAME) */
 
-/* void lookup_user_byname_cache(struct net_idmapping_s *mapping, struct net_entity_s *entity, unsigned int *error)
+void lookup_user_cache(struct net_idmapping_s *mapping, struct net_entity_s *entity, unsigned int *error)
 {
     struct net_userscache_s *cache=mapping->cache;
-    struct net_ent2local_s *ent2local=NULL; // =find_user_ent2local(cache, entity, error);
+    (* cache->find_user_ent2local)(cache, entity, error);
+}
 
-    if (ent2local) {
-
-*/
-
-	/* per protocol the ent2local is a user related struct */
-/*
-	entity->local.uid=ent2local->localid.uid;
-
-    }
-
-}*/
-
-/*void lookup_group_byname_cache(struct net_idmapping_s *mapping, struct net_entity_s *entity, unsigned int *error)
+void lookup_group_cache(struct net_idmapping_s *mapping, struct net_entity_s *entity, unsigned int *error)
 {
     struct net_userscache_s *cache=mapping->cache;
-    struct net_ent2local_s *ent2local=NULL; // find_group_ent2local(cache, entity, error);
-
-    if (ent2local) { */
-
-	/* per protocol the ent2local is a group related struct */
-
-/*	entity->local.gid=ent2local->localid.gid;
-
-    }
-
-}*/
+    (* cache->find_group_ent2local)(cache, entity, error);
+}
 
 /* ignore lookup the local uid/gid
     these lookups are used in the cases (SHARED | DOMAINDB) and (NONSHARED | STRICT) */
 
 void lookup_dummy(struct net_idmapping_s *m, struct net_entity_s *e, unsigned int *error)
 {}
-

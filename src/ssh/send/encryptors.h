@@ -20,9 +20,7 @@
 #ifndef _SSH_SEND_ENCRYPTORS_H
 #define _SSH_SEND_ENCRYPTORS_H
 
-struct ssh_encryptor_s *get_encryptor_container(struct list_element_s *list);
 struct ssh_encryptor_s *get_encryptor(struct ssh_send_s *s, unsigned int *error);
-void queue_encryptor(struct ssh_encryptor_s *encryptor);
 void remove_encryptors(struct ssh_encrypt_s *encrypt);
 
 void init_encryptors_once();

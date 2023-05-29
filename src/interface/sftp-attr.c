@@ -26,7 +26,6 @@
 #include "libosns-workspace.h"
 #include "libosns-context.h"
 #include "libosns-fuse-public.h"
-#include "libosns-resources.h"
 
 #include "sftp/common-protocol.h"
 #include "sftp/common.h"
@@ -34,6 +33,12 @@
 #include "sftp/attr.h"
 #include "sftp/init.h"
 #include "sftp-attr.h"
+
+struct attr_context_s *get_sftp_attr_context(struct context_interface_s *i)
+{
+    struct sftp_client_s *sftp=(struct sftp_client_s *)(* i->get_interface_buffer)(i);
+    return &sftp->attrctx;
+}
 
 void parse_attributes_generic_ctx(struct context_interface_s *i, struct rw_attr_result_s *r, struct system_stat_s *stat, unsigned char what, void (* cb)(unsigned int stat_mask, unsigned int len, unsigned int valid, unsigned int fattr, void *ptr), void *ptr)
 {
@@ -73,10 +78,10 @@ void correct_time_c2s_ctx(struct context_interface_s *i, struct system_timespec_
     (* sftp->time_ops.correct_time_c2s)(sftp, t);
 }
 
-unsigned char enable_attributes_ctx(struct context_interface_s *i, struct sftp_valid_s *valid, const char *name)
+void enable_attributes_ctx(struct context_interface_s *i, struct sftp_valid_s *valid, const char *name)
 {
     struct sftp_client_s *sftp=(struct sftp_client_s *)(* i->get_interface_buffer)(i);
-    return (* sftp->attrctx.ops.enable_attr)(&sftp->attrctx, valid, name);
+    unsigned char enabled=(* sftp->attrctx.ops.enable_attr)(&sftp->attrctx, valid, name);
 }
 
 uid_t get_sftp_unknown_userid_ctx(struct context_interface_s *i)

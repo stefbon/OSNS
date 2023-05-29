@@ -153,3 +153,50 @@ unsigned int write_name_string(char *buffer, unsigned int size, const unsigned c
     return 0;
 
 }
+
+static unsigned int copy_name_string_hlpr(struct name_string_s *s, char *data, unsigned int size, unsigned int flags)
+{
+    unsigned int bytescopied=0;
+
+    if (size <= s->len) {
+
+	memcpy(s->ptr, data, size);
+	bytescopied=size;
+
+    } else if (flags & COPY_NAME_STRING_FLAG_ALLOW_TRUNCATE) {
+
+	memcpy(s->ptr, data, s->len);
+	bytescopied=s->len;
+
+    }
+
+    return bytescopied;
+}
+
+unsigned int copy_name_string(struct name_string_s *s, const unsigned char type, void *ptr, unsigned int flags)
+{
+    unsigned int bytescopied=0;
+
+    switch (type) {
+
+	case 'c' : {
+	    char *data=(char *) ptr;
+	    unsigned int len=strlen(data);
+
+	    bytescopied=copy_name_string_hlpr(s, data, len, flags);
+	    break;
+
+	}
+
+	case 'n' : {
+	    struct name_string_s *o=(struct name_string_s *) ptr;
+
+	    bytescopied=copy_name_string_hlpr(s, o->ptr, o->len, flags);
+	    break;
+
+	}
+
+    }
+
+    return bytescopied;
+}

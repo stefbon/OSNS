@@ -20,10 +20,10 @@
 #ifndef _FUSE_SFTP_LOOKUP_H
 #define _FUSE_SFTP_LOOKUP_H
 
-void _fs_sftp_lookup_new(struct service_context_s *c, struct fuse_request_s *r, struct inode_s *inode, struct name_s *xname, struct fuse_path_s *fpath);
-void _fs_sftp_lookup_existing(struct service_context_s *c, struct fuse_request_s *r, struct entry_s *entry, struct fuse_path_s *path);
+void _sftp_lookup_entry_created(struct entry_s *entry, struct create_entry_s *ce);
+void _sftp_lookup_entry_found(struct entry_s *entry, struct create_entry_s *ce);
+void _sftp_lookup_entry_error(struct entry_s *parent, struct name_s *xname, struct create_entry_s *ce, unsigned int errcode);
 
-void _fs_sftp_lookup_new_disconnected(struct service_context_s *context, struct fuse_request_s *f_request, struct inode_s *inode, struct name_s *xname, struct fuse_path_s *fpath);
-void _fs_sftp_lookup_existing_disconnected(struct service_context_s *context, struct fuse_request_s *f_request, struct entry_s *entry, struct fuse_path_s *fpath);
+void _fs_sftp_lookup(struct service_context_s *c, struct fuse_request_s *r, struct inode_s *inode, struct name_s *xname, struct fuse_path_s *fpath);
 
 #endif

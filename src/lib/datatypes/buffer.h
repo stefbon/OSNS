@@ -21,7 +21,7 @@
 #define LIB_BUFFER_H
 
 #include "lib/datatypes/ssh-uint.h"
-#include "lib/datatypes/ssh-string.h"
+#include "lib/ssh/ssh-string.h"
 
 struct attr_buffer_s;
 

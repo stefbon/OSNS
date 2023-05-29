@@ -28,57 +28,17 @@
 #include "request.h"
 #include "openfile.h"
 
-static void openfile_read_noop(struct fuse_openfile_s *openfile, struct fuse_request_s *request, size_t size, off_t off, unsigned int flags, uint64_t lock_owner)
+static void of_pread_noop(struct fuse_openfile_s *openfile, struct fuse_request_s *request, size_t size, off_t off, unsigned int flags, uint64_t lo)
 {
     reply_VFS_error(request, EIO);
 }
 
-static void openfile_write_noop(struct fuse_openfile_s *openfile, struct fuse_request_s *request, const char *buff, size_t size, off_t off, unsigned int flags, uint64_t lock_owner)
+static void of_pwrite_noop(struct fuse_openfile_s *openfile, struct fuse_request_s *request, const char *buff, size_t size, off_t off, unsigned int flags, uint64_t lo)
 {
     reply_VFS_error(request, EIO);
 }
 
-static void openfile_flush_noop(struct fuse_openfile_s *openfile, struct fuse_request_s *request, uint64_t lock_owner)
-{
-    reply_VFS_error(request, 0);
-}
-
-static void openfile_fsync_noop(struct fuse_openfile_s *openfile, struct fuse_request_s *request, unsigned int datasync)
-{
-    reply_VFS_error(request, 0);
-}
-
-static void openfile_release_noop(struct fuse_openfile_s *openfile, struct fuse_request_s *request, unsigned int flags, uint64_t lock_owner)
-{
-    reply_VFS_error(request, 0);
-}
-
-static void openfile_lseek_noop(struct fuse_openfile_s *openfile, struct fuse_request_s *request, off_t off, int whence)
-{
-    reply_VFS_error(request, EIO);
-}
-
-static void openfile_fgetattr_noop(struct fuse_openfile_s *openfile, struct fuse_request_s *request)
-{
-    reply_VFS_error(request, EIO);
-}
-
-static void openfile_fsetattr_noop(struct fuse_openfile_s *openfile, struct fuse_request_s *request, struct system_stat_s *stat)
-{
-    reply_VFS_error(request, EIO);
-}
-
-static void openfile_getlock_noop(struct fuse_openfile_s *openfile, struct fuse_request_s *request, struct flock *flock)
-{
-    reply_VFS_error(request, EIO);
-}
-
-static void openfile_setlock_noop(struct fuse_openfile_s *openfile, struct fuse_request_s *request, struct flock *flock, unsigned int flags)
-{
-    reply_VFS_error(request, EIO);
-}
-
-static void openfile_flock_noop(struct fuse_openfile_s *openfile, struct fuse_request_s *request, unsigned char type)
+static void of_lseek_noop(struct fuse_openfile_s *openfile, struct fuse_request_s *request, off_t off, int whence)
 {
     reply_VFS_error(request, EIO);
 }
@@ -88,42 +48,19 @@ void init_fuse_openfile(struct fuse_openfile_s *openfile, struct service_context
 
     memset(openfile, 0, sizeof(struct fuse_openfile_s));
 
-    openfile->context=ctx;
-    openfile->inode=inode;
+    /* header */
+
+    init_fuse_open_header(&openfile->header, ctx, inode);
+    openfile->header.type=FUSE_OPEN_TYPE_FILE;
+
+    /* ops */
+
+    openfile->read=of_pread_noop;
+    openfile->write=of_pwrite_noop;
+    openfile->lseek=of_lseek_noop;
+
     openfile->error=0;
     openfile->flags=0;
 
-    openfile->read=openfile_read_noop;
-    openfile->write=openfile_write_noop;
-    openfile->fsync=openfile_fsync_noop;
-    openfile->flush=openfile_flush_noop;
-    openfile->release=openfile_release_noop;
-    openfile->lseek=openfile_lseek_noop;
-
-    openfile->fgetattr=openfile_fgetattr_noop;
-    openfile->fsetattr=openfile_fsetattr_noop;
-
-    openfile->getlock=openfile_getlock_noop;
-    openfile->setlock=openfile_setlock_noop;
-    openfile->flock=openfile_flock_noop;
-
 
 }
-
-/*
-	    void (*read) (struct fuse_openfile_s *openfile, struct fuse_request_s *request, size_t size, off_t off, unsigned int flags, uint64_t lock_owner);
-	    void (*write) (struct fuse_openfile_s *openfile, struct fuse_request_s *request, const char *buff, size_t size, off_t off, unsigned int flags, uint64_t lock_owner);
-	    void (*flush) (struct fuse_openfile_s *openfile, struct fuse_request_s *request, uint64_t lock_owner);
-	    void (*fsync) (struct fuse_openfile_s *openfile, struct fuse_request_s *request, unsigned char datasync);
-	    void (*release) (struct fuse_openfile_s *openfile, struct fuse_request_s *request, unsigned int flags, uint64_t lock_owner);
-	    void (*lseek) (struct fuse_openfile_s *openfile, struct fuse_request_s *request, off_t off, int whence);
-
-	    void (*fgetattr) (struct fuse_openfile_s *openfile, struct fuse_request_s *request);
-	    void (*fsetattr) (struct fuse_openfile_s *openfile, struct fuse_request_s *request, struct system_stat_s *stat);
-
-	    void (*getlock) (struct fuse_openfile_s *openfile, struct fuse_request_s *request, struct flock *flock);
-	    void (*setlock) (struct fuse_openfile_s *openfile, struct fuse_request_s *request, struct flock *flock);
-	    void (*setlockw) (struct fuse_openfile_s *openfile, struct fuse_request_s *request, struct flock *flock);
-
-	    void (*flock) (struct fuse_openfile_s *openfile, struct fuse_request_s *request, unsigned char type);
-*/

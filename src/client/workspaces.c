@@ -37,184 +37,206 @@
 
 struct workspace_mount_s *get_next_workspace_mount(struct client_session_s *session, struct workspace_mount_s *w)
 {
-    struct list_element_s *list=(w ? get_next_element(&w->list) : get_list_head(&session->workspaces, 0));
+    struct list_element_s *list=(w ? get_next_element(&w->list) : get_list_head(&session->workspaces));
     return ((list) ? (struct workspace_mount_s *) ((char *) list - offsetof(struct workspace_mount_s, list)) : NULL);
+}
+
+static void remove_workspace_inode_cb(struct inode_s *inode, void *ptr)
+{
+    struct system_dev_s *dev=(struct system_dev_s *) ptr;
+    struct system_dev_s tmp=SYSTEM_DEV_INIT;
+
+    get_dev_system_stat(&inode->stat, &tmp);
+
+    if (get_unique_system_dev(&tmp)==get_unique_system_dev(dev)) {
+
+        /* inode is part of this workspace */
+
+	if (inode->ptr) {
+	    struct data_link_s *link=inode->ptr;
+
+	    if (link->type == DATA_LINK_TYPE_SPECIAL_ENTRY) {
+		struct fuse_fs_s *fs=inode->fs;
+
+		(* fs->forget)(NULL, inode);
+
+	    }
+
+	}
+
+	inode->ptr=NULL;
+
+	if (inode->alias) {
+	    struct entry_s *entry=inode->alias;
+
+	    destroy_entry(entry);
+	    inode->alias=NULL;
+
+	}
+
+	free(inode);
+
+    }
+
 }
 
 static void remove_inodes_workspace_thread(void *ptr)
 {
-    struct workspace_mount_s *workspace=(struct workspace_mount_s *) ptr;
-    struct workspace_inodes_s *inodes=&workspace->inodes;
+    struct service_context_s *ctx=(struct service_context_s *) ptr;
+    struct inode_s *rootinode=&ctx->service.workspace.rootinode;
+    struct system_dev_s dev=SYSTEM_DEV_INIT;
 
-    signal_set_flag(workspace->signal, &workspace->status, WORKSPACE_STATUS_LOCK_INODES);
-
-    /* remove all inodes on this workspace by walink through the hashtable */
-
-    for (unsigned int i=0; i<WORKSPACE_INODE_HASHTABLE_SIZE; i++) {
-	struct list_element_s *list=get_list_head(&inodes->hashtable[i], SIMPLE_LIST_FLAG_REMOVE);
-
-	while (list) {
-	    struct inode_s *inode=(struct inode_s *)((char *) list - offsetof(struct inode_s, list));
-
-	    if (inode->ptr) {
-		struct data_link_s *link=inode->ptr;
-
-		if (link->type == DATA_LINK_TYPE_SPECIAL_ENTRY) {
-		    struct fuse_fs_s *fs=inode->fs;
-
-		    (* fs->forget)(NULL, inode);
-
-		}
-
-	    }
-
-	    inode->ptr=NULL;
-
-	    if (inode->alias) {
-		struct entry_s *entry=inode->alias;
-
-		destroy_entry(entry);
-		inode->alias=NULL;
-
-	    }
-
-	    free(inode);
-	    list=get_list_head(&inodes->hashtable[i], SIMPLE_LIST_FLAG_REMOVE);
-
-	}
-
-    }
-
-    signal_unset_flag(workspace->signal, &workspace->status, WORKSPACE_STATUS_LOCK_INODES);
+    get_dev_system_stat(&rootinode->stat, &dev);
+    process_workspace_inodes(remove_workspace_inode_cb, (void *)&dev);
+    signal_unset_flag(ctx->service.workspace.signal, &ctx->service.workspace.status, SERVICE_WORKSPACE_FLAG_INODES);
 
 }
 
-static void remove_workspace_symlinks(struct workspace_mount_s *workspace)
+static void remove_workspace_symlinks(struct service_context_s *ctx)
 {
-    struct workspace_inodes_s *inodes=&workspace->inodes;
-    struct list_element_s *list=get_list_head(&inodes->symlinks, SIMPLE_LIST_FLAG_REMOVE);
+    struct list_header_s *h=&ctx->service.workspace.symlinks;
+    struct list_element_s *list=remove_list_head(h);
 
     while (list) {
 	struct fuse_symlink_s *syml=(struct fuse_symlink_s *)((char *) list - offsetof(struct fuse_symlink_s, list));
 
 	free_fuse_symlink(syml);
-	list=get_list_head(&inodes->symlinks, SIMPLE_LIST_FLAG_REMOVE);
+	list=remove_list_head(h);
 
     }
 
 }
 
-static void remove_workspace_directories(struct workspace_mount_s *workspace)
+static void remove_service_context_pathcache(struct service_context_s *ctx)
 {
-    struct workspace_inodes_s *inodes=&workspace->inodes;
-    struct list_element_s *list=get_list_head(&inodes->directories, SIMPLE_LIST_FLAG_REMOVE);
+    struct list_header_s *h=&ctx->service.filesystem.pathcaches;
+    struct list_element_s *list=remove_list_head(h);
+
+    while (list) {
+        struct cached_path_s *cp=(struct cached_path_s *)((char *) list - offsetof(struct cached_path_s, list));
+
+        free(cp);
+        list=remove_list_head(h);
+
+    }
+
+}
+
+static void remove_workspace_directories(struct service_context_s *ctx)
+{
+    struct list_header_s *h=&ctx->service.workspace.directories;
+    struct list_element_s *list=remove_list_head(h);
 
     while (list) {
 	struct directory_s *d=(struct directory_s *)((char *) list - offsetof(struct directory_s, list));
 
 	free_directory(d);
-	list=get_list_head(&inodes->directories, SIMPLE_LIST_FLAG_REMOVE);
+	list=remove_list_head(h);
 
     }
 
 }
 
-static void free_workspace_contexts(struct service_context_s *pctx, unsigned int level)
+static void free_workspace_context(struct service_context_s *ctx)
 {
-    struct service_context_s *ctx=get_next_service_context(pctx, NULL, "tree");
+    struct context_interface_s *i=&ctx->interface;
 
-    /* free the children ctx's */
+    logoutput_debug("free_workspace_context: close and free %s", ctx->name);
 
-    while (ctx) {
+    (* i->iocmd.in)(i, "command:close:", NULL, i, INTERFACE_CTX_SIGNAL_TYPE_WORKSPACE);
+    (* i->iocmd.in)(i, "command:free:", NULL, i, INTERFACE_CTX_SIGNAL_TYPE_WORKSPACE);
 
-	if (ctx->type==SERVICE_CTX_TYPE_FILESYSTEM) {
-	    struct context_interface_s *interface=&ctx->interface;
+    if (ctx->type==SERVICE_CTX_TYPE_FILESYSTEM) {
 
-	    /* a filesystem context is the endpoint, has no children context's
-		so not neccesary to go another level deeper */
+	remove_list_element(&ctx->service.filesystem.clist);
+	remove_service_context_pathcache(ctx);
 
-	    logoutput_debug("free_workspace_contexts: close and free %s (level=%i)", ctx->name, level);
+    } else if (ctx->type==SERVICE_CTX_TYPE_BROWSE) {
 
-	    (* interface->iocmd.in)(interface, "command:close:", NULL, interface, INTERFACE_CTX_SIGNAL_TYPE_WORKSPACE);
-	    (* interface->iocmd.in)(interface, "command:free:", NULL, interface, INTERFACE_CTX_SIGNAL_TYPE_WORKSPACE);
+	remove_list_element(&ctx->service.browse.clist);
 
-	    remove_list_element(&ctx->service.filesystem.clist);
+    }
 
-	    if (ctx->service.filesystem.pathcaches.count>0) {
-		struct list_element_s *list=get_list_head(&ctx->service.filesystem.pathcaches, SIMPLE_LIST_FLAG_REMOVE);
+    free(ctx);
 
-		while (list) {
+}
 
-		    free_cached_path(list);
-		    list=get_list_head(&ctx->service.filesystem.pathcaches, SIMPLE_LIST_FLAG_REMOVE);
+static void free_workspace_contexts(struct list_header_s *h)
+{
+    struct list_element_s *list=remove_list_tail(h);
 
-		}
+    while (list) {
+        struct service_context_s *ctx=(struct service_context_s *)((char *)list - offsetof(struct service_context_s, wlist));
 
-	    }
-
-	} else if (ctx->type==SERVICE_CTX_TYPE_BROWSE) {
-	    struct context_interface_s *interface=&ctx->interface;
-
-	    /* context is part of browse context (==hosts, groups etc,)
-		can have children ctx's */
-
-	    logoutput_debug("free_workspace_contexts: found browse ctx %s (level=%i)", ctx->name, level);
-
-	    free_workspace_contexts(ctx, level+1);
-	    (* interface->iocmd.in)(interface, "command:free:", NULL, interface, INTERFACE_CTX_SIGNAL_TYPE_WORKSPACE);
-	    remove_list_element(&ctx->service.browse.clist);
-
-	} else {
-
-	    logoutput_warning("free_workspace_contexts: context %s not reckognized", ctx->name);
-
-	}
-
-	remove_list_element(&ctx->wlist);
-	free(ctx);
-
-	ctx=get_next_service_context(pctx, NULL, "tree");
+        free_workspace_context(ctx);
+        list=remove_list_tail(h);
 
     }
 
 }
 
-static void _remove_workspace(struct workspace_mount_s *workspace)
+static void free_workspace_contexes_thread(void *ptr)
 {
-    struct service_context_s *context=get_root_context_workspace(workspace);
+    struct list_header_s *h=(struct list_header_s *) ptr;
+    free_workspace_contexts(h);
+}
 
-    if (workspace->inodes.nrinodes>1) {
+/* TODO: find out the method to free all resources in the most fastest way, more threads? */
 
-	logoutput_debug("_remove_workspace: start thread to remove inodes, entries and directories");
-	work_workerthread(NULL, 0, remove_inodes_workspace_thread, (void *) workspace, NULL);
+static void _remove_workspace(struct workspace_mount_s *w)
+{
+    struct service_context_s *ctx=get_root_context_workspace(w);
+
+    if (ctx) {
+
+        remove_list_element(&ctx->wlist);
+
+        if (ctx->service.workspace.nrinodes>1) {
+
+            work_workerthread(NULL, 0, remove_inodes_workspace_thread, (void *) ctx);
+
+        } else {
+
+            signal_unset_flag(ctx->service.workspace.signal, &ctx->service.workspace.status, SERVICE_WORKSPACE_FLAG_INODES);
+
+        }
+
+        remove_workspace_symlinks(ctx);
+        remove_workspace_directories(ctx);
+        remove_workspace_forget(ctx);
 
     }
 
-    if (context) {
-	struct context_interface_s *interface=&context->interface;
+    if (w->contexes.count>0) free_workspace_contexts(&w->contexes);
+    if (w->shared_contexes.count>0) free_workspace_contexts(&w->shared_contexes);
 
-	logoutput_debug("_remove_workspace: close");
+    if (ctx) {
 
-	(* interface->iocmd.in)(interface, "command:close:", NULL, interface, INTERFACE_CTX_SIGNAL_TYPE_WORKSPACE);
-	(* interface->iocmd.in)(interface, "command:free:", NULL, interface, INTERFACE_CTX_SIGNAL_TYPE_WORKSPACE);
+        /* wait for the "remove_inodes" thread to finish */
 
-	logoutput_debug("_remove_workspace: free service contexts");
-
-	free_workspace_contexts(context, 0);
-	remove_workspace_symlinks(workspace);
-	remove_workspace_directories(workspace);
-	remove_list_element(&context->wlist);
-	free(context);
+        logoutput_debug("_remove_workspace: wait for remove inodes thread to finish");
+        signal_wait_flag_unset(ctx->service.workspace.signal, &ctx->service.workspace.status, SERVICE_WORKSPACE_FLAG_INODES, NULL);
+        free_workspace_context(ctx);
 
     }
-
-    remove_list_element(&workspace->list);
-
-    /* wait for the "remove_inodes" thread to finish */
-    signal_wait_flag_unset(workspace->signal, &workspace->status, WORKSPACE_STATUS_LOCK_INODES, NULL);
 
     logoutput_debug("_remove_workspace: free workspace");
-    free(workspace);
+    free(w);
+
+}
+
+void remove_workspaces(struct client_session_s *session)
+{
+    struct list_header_s *h=&session->workspaces;
+    struct list_element_s *list=remove_list_head(h);
+
+    while (list) {
+        struct workspace_mount_s *w=(struct workspace_mount_s *)((char *)list - offsetof(struct workspace_mount_s, list));
+
+        _remove_workspace(w);
+        list=remove_list_head(h);
+
+    }
 
 }
 
@@ -230,13 +252,14 @@ static int iocmd_fuse2ctx(struct context_interface_s *i, const char *what, struc
 
 struct service_context_s *create_mount_context(struct client_session_s *session, unsigned int type, unsigned int maxread)
 {
-    struct service_context_s *context=NULL;
-    struct workspace_mount_s *workspace=NULL;
+    struct list_header_s *h=NULL;
+    struct service_context_s *ctx=NULL;
+    struct workspace_mount_s *w=NULL;
     unsigned int error=0;
     unsigned int count=build_interface_ops_list(NULL, NULL, 0);
     struct interface_list_s ailist[count];
     struct interface_list_s *ilist=NULL;
-    struct context_interface_s *interface=NULL;
+    struct context_interface_s *i=NULL;
     struct fuse_mount_s mount;
     union interface_target_u target;
     union interface_parameters_u param;
@@ -257,18 +280,18 @@ struct service_context_s *create_mount_context(struct client_session_s *session,
 
     }
 
-    workspace=create_workspace_mount(type);
+    w=create_workspace_mount(type);
 
-    if (workspace==NULL) {
+    if (w==NULL) {
 
 	logoutput("create_mount_context: unable to allocate memory for workspace");
 	goto error;
 
     }
 
-    workspace->signal=session->signal;
-    context=create_service_context(workspace, NULL, ilist, SERVICE_CTX_TYPE_WORKSPACE, NULL);
-    if (context==NULL) {
+    w->signal=session->signal;
+    ctx=create_service_context(w, NULL, ilist, SERVICE_CTX_TYPE_WORKSPACE, NULL);
+    if (ctx==NULL) {
 
 	logoutput("create_mount_context: failed to create mount service context");
 	goto error;
@@ -276,12 +299,16 @@ struct service_context_s *create_mount_context(struct client_session_s *session,
     }
 
     logoutput("create_mount_context: created mount context for type %u", type);
-    add_list_element_first(&session->workspaces, &workspace->list);
-    context->service.workspace.signal=workspace->signal;
 
-    interface=&context->interface;
-    interface->iocmd.out=iocmd_fuse2ctx;
-    set_fuse_interface_eventloop(interface, get_default_mainloop());
+    h=&session->workspaces;
+    write_lock_list_header(h);
+    add_list_element_first(h, &w->list);
+    write_unlock_list_header(h);
+
+    ctx->service.workspace.signal=w->signal;
+    i=&ctx->interface;
+    i->iocmd.out=iocmd_fuse2ctx;
+    set_fuse_interface_eventloop(i, get_default_mainloop());
 
     mount.type=type;
     mount.maxread=maxread;
@@ -290,7 +317,7 @@ struct service_context_s *create_mount_context(struct client_session_s *session,
 
     logoutput("create_mount_context: connect FUSE");
 
-    result=(* interface->connect)(interface, &target, &param);
+    result=(* i->connect)(i, &target, &param);
 
     if (result==-1) {
 
@@ -301,11 +328,13 @@ struct service_context_s *create_mount_context(struct client_session_s *session,
 
     logoutput("create_mount_context: starting FUSE");
 
-    if ((* context->interface.start)(interface)==0) {
-	struct inode_s *inode=&workspace->inodes.rootinode;
+    if ((* i->start)(i)==0) {
+	struct inode_s *inode=&ctx->service.workspace.rootinode;
+	struct system_dev_s *dev=get_fuse_interface_system_dev(i);
 
+	use_virtual_fs(ctx, inode);
+	set_dev_system_stat(&inode->stat, dev); /* set the device major and minor coming from the fuse interface ... */
 	logoutput("create_mount_context: FUSE started");
-	use_virtual_fs(context, inode);
 
     } else {
 
@@ -314,11 +343,20 @@ struct service_context_s *create_mount_context(struct client_session_s *session,
 
     }
 
-    return context;
+    return ctx;
 
     error:
 
-    if (workspace) _remove_workspace(workspace);
+    if (w) {
+
+        h=&session->workspaces;
+        write_lock_list_header(h);
+        remove_list_element(&w->list);
+        write_unlock_list_header(h);
+        _remove_workspace(w);
+
+    }
+
     return NULL;
 
 }
@@ -330,4 +368,31 @@ struct client_session_s *get_client_session_workspace(struct workspace_mount_s *
 
     if (h) session=(struct client_session_s *)((char *)h - offsetof(struct client_session_s, workspaces));
     return session;
+}
+
+int walk_interfaces_workspace(struct workspace_mount_s *w, int (* cb)(struct context_interface_s *i, void *ptr), void *ptr)
+{
+    struct list_header_s *h=&w->shared_contexes;
+    struct service_context_s *ctx=NULL;
+    int result=-1;
+
+    /* walk every (shared) interface in this workspace */
+
+    read_lock_list_header(h);
+    ctx=get_next_shared_service_context(w, NULL);
+
+    while (ctx) {
+	struct context_interface_s *i=&ctx->interface;
+
+        logoutput_debug("walk_interfaces_workspace: ctx %s", ctx->name);
+
+	result=cb(i, ptr);
+	if (result==0) break;
+	ctx=get_next_shared_service_context(w, ctx);
+
+    }
+
+    read_unlock_list_header(h);
+    return result;
+
 }

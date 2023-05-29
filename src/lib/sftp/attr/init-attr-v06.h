@@ -25,5 +25,6 @@
 void init_attr_context_v06(struct attr_context_s *actx);
 void parse_attributes_v06(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat);
 unsigned char enable_attr_v06(struct attr_context_s *actx, struct sftp_valid_s *p, const char *name);
+unsigned int get_property_v06(struct attr_context_s *actx, unsigned int flag);
 
 #endif

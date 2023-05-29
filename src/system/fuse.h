@@ -26,7 +26,8 @@ void reply_VFS_error(struct fuse_receive_s *r, uint64_t u, unsigned int errcode)
 void reply_VFS_data(struct fuse_receive_s *r, uint64_t u, char *data, unsigned int len);
 
 void osns_system_process_fuse_data(struct fuse_receive_s *r, struct fuse_in_header *inh, char *data);
-void osns_system_process_fuse_close(struct fuse_receive_s *r, struct bevent_s *bevent);
+void osns_system_process_fuse_close(struct fuse_receive_s *r, unsigned int level);
+void osns_system_process_fuse_error(struct fuse_receive_s *r, unsigned int level, unsigned int errcode);
 void init_system_fuse();
 
 #endif

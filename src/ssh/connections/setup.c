@@ -31,7 +31,6 @@
 #include "ssh-connections.h"
 #include "ssh-receive.h"
 #include "ssh-userauth.h"
-#include "ssh-signal.h"
 
 static void clear_ssh_setup(struct ssh_setup_s *setup)
 {
@@ -78,7 +77,7 @@ void finish_ssh_connection_setup(struct ssh_connection_s *connection, const char
 
     if (strcmp(phase, "transport")==0) {
 
-	if (setup->status!=SSH_SETUP_PHASE_TRANSPORT) return;
+	if (setup->status!=SSH_SETUP_PHASE_TRANSPORT) goto unlock;
 
 	if (type==SSH_TRANSPORT_TYPE_GREETER) {
 
@@ -98,7 +97,7 @@ void finish_ssh_connection_setup(struct ssh_connection_s *connection, const char
 
     } else if (strcmp(phase, "service")==0) {
 
-	if (setup->status!=SSH_SETUP_PHASE_SERVICE) return;
+	if (setup->status!=SSH_SETUP_PHASE_SERVICE) goto unlock;
 
 	if (type==SSH_SERVICE_TYPE_AUTH) {
 
@@ -137,17 +136,19 @@ void finish_ssh_connection_setup(struct ssh_connection_s *connection, const char
     }
 
     signal_broadcast(setup->signal);
+
+    unlock:
     signal_unlock(setup->signal);
 
 }
 
-void init_ssh_connection_setup(struct ssh_connection_s *connection, const char *phase, unsigned int type)
+void init_ssh_connection_setup(struct ssh_connection_s *sshc, const char *phase, unsigned int type)
 {
-    struct ssh_setup_s *setup=&connection->setup;
+    struct ssh_setup_s *setup=&sshc->setup;
 
     if (strcmp(phase, "init")==0) {
 
-	init_payload_queue(connection, &setup->queue);
+	init_payload_queue(setup->signal, &setup->queue);
 	setup->status=0;
 	setup->flags=0;
 	setup->error=0;
@@ -493,6 +494,7 @@ int wait_ssh_connection_setup_change(struct ssh_connection_s *connection, const 
     signal_lock(setup->signal);
 
     result=check_ssh_connection_setup(connection, phase, type, flag);
+    logoutput_debug("wait_ssh_connection_setup_change: phase %s type %u flag %u result %i", phase, type, flag, result);
 
     while (result==0) {
 

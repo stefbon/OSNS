@@ -24,5 +24,6 @@
 #include "context/init.h"
 #include "context/next.h"
 #include "context/lock.h"
+#include "context/inodes.h"
 
 #endif

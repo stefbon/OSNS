@@ -22,7 +22,9 @@
 
 /* prototypes */
 
-struct service_context_s *create_network_browse_context(struct workspace_mount_s *w, struct service_context_s *parent, unsigned int ctxflags, unsigned int type, uint32_t unique);
 void populate_network_workspace_mount(struct service_context_s *pctx);
+void populate_network_host(struct service_context_s *ctx);
+
+void connect_network_shared_directory(void *ptr);
 
 #endif

@@ -21,23 +21,16 @@
 
 #include "libosns-datatypes.h"
 #include "libosns-network.h"
+#include "libosns-fspath.h"
+#include "libosns-socket.h"
 
-#include "path.h"
-#include "location.h"
+#include "fssocket.h"
 #include "stat.h"
 
 #include "lib/sftp/acl-ace4.h"
 
-#define COMMONHANDLE_TYPE_DIR				1
-#define COMMONHANDLE_TYPE_FILE				2
-
-#define COMMONHANDLE_FLAG_ALLOC				(1 << 0)
-#define COMMONHANDLE_FLAG_CREATE			(1 << 1)
-#define COMMONHANDLE_FLAG_FILE				(1 << 2)
-#define COMMONHANDLE_FLAG_DIR				(1 << 3)
-#define COMMONHANDLE_FLAG_NAME_ALLOC			(1 << 4)
-
-#define COMMONHANDLE_FLAG_SFTP				(1 << 10)
+#define FS_HANDLE_TYPE_DIR				1
+#define FS_HANDLE_TYPE_FILE				2
 
 #define INSERTHANDLE_TYPE_CREATE			1
 #define INSERTHANDLE_TYPE_OPEN				2
@@ -45,9 +38,9 @@
 #define INSERTHANDLE_STATUS_OK				1
 #define INSERTHANDLE_STATUS_DENIED_LOCK			2
 
-#define FILEHANDLE_BLOCK_READ				1
-#define FILEHANDLE_BLOCK_WRITE				2
-#define FILEHANDLE_BLOCK_DELETE				4
+#define FS_HANDLE_BLOCK_READ				1
+#define FS_HANDLE_BLOCK_WRITE				2
+#define FS_HANDLE_BLOCK_DELETE				4
 
 struct insert_filehandle_s {
     unsigned int						status;
@@ -60,83 +53,38 @@ struct insert_filehandle_s {
     } info;
 };
 
-#define FILEHANDLE_FLAG_ENABLED				1
-#define FILEHANDLE_FLAG_CREATE				2
-#define FILEHANDLE_FLAG_OPEN				4
+#define HANDLE_FLAG_ALLOC				1
+#define HANDLE_FLAG_CREATE				4
+#define HANDLE_FLAG_EOD				        32
 
-struct filehandle_s {
+#define HANDLE_SUBSYSTEM_TYPE_SFTP			1
+
+struct fs_handle_s {
+    struct list_element_s                               list;
+    unsigned char                                       type;
     unsigned int					flags;
-    int							(* open)(struct filehandle_s *fh, struct fs_location_s *l, unsigned int flags, struct fs_init_s *init);
-    int							(* pwrite)(struct filehandle_s *fh, char *data, unsigned int size, off_t offset);
-    int							(* pread)(struct filehandle_s *fh, char *data, unsigned int size, off_t offset);
-    int							(* flush)(struct filehandle_s *fh);
-    int							(* fsync)(struct filehandle_s *fh, unsigned int flags);
-    int							(* fgetstat)(struct filehandle_s *fh, unsigned int mask, struct system_stat_s *st);
-    int							(* fsetstat)(struct filehandle_s *fh, unsigned int mask, struct system_stat_s *st);
-    off_t						(* lseek)(struct filehandle_s *fh, off_t off, int whence);
-    void						(* close)(struct filehandle_s *fh);
-    struct fs_socket_s					socket;
-};
-
-#define FS_DENTRY_FLAG_FILE				1
-#define FS_DENTRY_FLAG_DIR				2
-#define FS_DENTRY_FLAG_EOD				4
-
-struct fs_dentry_s {
-    uint16_t						flags;
-    uint32_t						type;
-    uint64_t						ino; /* ino on the server; some filesystems rely on this */
-    uint16_t						len;
-    char						*name;
-};
-
-#define FS_DENTRY_INIT					{0, 0, 0, 0, NULL}
-
-#define DIRHANDLE_FLAG_ENABLED				1
-#define DIRHANDLE_FLAG_EOD				2
-#define DIRHANDLE_FLAG_ERROR				4
-#define DIRHANDLE_FLAG_KEEP_DENTRY			8
-
-struct dirhandle_s {
-    unsigned int					flags;
-    unsigned int					valid;
-    int							(* open)(struct dirhandle_s *dh, struct fs_location_s *l, unsigned int flags);
-    struct fs_dentry_s					*(* readdentry)(struct dirhandle_s *dh);
-    int							(* fstatat)(struct dirhandle_s *dh, char *name, unsigned int mask, struct system_stat_s *st);
-    int							(* unlinkat)(struct dirhandle_s *dh, const char *name);
-    int							(* rmdirat)(struct dirhandle_s *dh, const char *name);
-    int							(* fsyncdir)(struct dirhandle_s *dh, unsigned int flags);
-    ssize_t						(* readlinkat)(struct dirhandle_s *dh, const char *name, struct fs_location_path_s *target);
-    void						(* close)(struct dirhandle_s *dh);
-    void						(* set_keep_dentry)(struct dirhandle_s *dh);
-    struct fs_socket_s					socket;
-    char						*buffer;
-    unsigned int					size;
-    unsigned int					read;
-    unsigned int					pos;
-    struct fs_dentry_s					dentry;
-};
-
-struct commonhandle_s {
-    unsigned int					flags;
-    struct fs_location_s				location;
-    union fs_handle_u {
-	struct dirhandle_s				dir;
-	struct filehandle_s				file;
-    } type;
-    void						(* clear_buffer)(struct commonhandle_s *handle);
-    unsigned int					(* get_flags)(struct commonhandle_s *handle);
-    unsigned int					(* get_access)(struct commonhandle_s *handle);
-    unsigned int					size;
-    char						buffer[];
+    unsigned int					subsystem;
+    unsigned int                                        connectionid;
+    dev_t                                               dev;
+    uint64_t                                            ino;
+    struct fs_socket_s				        socket;
+    unsigned int					(* get_flags)(struct fs_handle_s *handle);
+    unsigned int					(* get_access)(struct fs_handle_s *handle);
+    unsigned int                                        (* write_handle)(struct fs_handle_s *handle, char *buffer, unsigned int size);
+    unsigned int                                        size;
+    char                                                buffer[];
 };
 
 /* prototypes */
 
-void free_commonhandle(struct commonhandle_s **p_handle);
-struct commonhandle_s *create_commonhandle(unsigned char type, struct fs_location_s *location, unsigned int size);
+void init_fs_handle_hashtable();
 
-pid_t get_pid_commonhandle(struct commonhandle_s *handle);
-int get_fd_commonhandle(struct commonhandle_s *handle);
+struct fs_handle_s *get_fs_handle(unsigned int connectionid, char *buffer, unsigned int size, unsigned int *p_count);
+void insert_fs_handle(struct fs_handle_s *handle, unsigned int connectionid, dev_t dev, uint64_t ino);
+
+unsigned int get_fs_handle_buffer_size();
+
+void free_fs_handle(struct fs_handle_s **p_handle);
+struct fs_handle_s *create_fs_handle(unsigned char type, unsigned int size);
 
 #endif

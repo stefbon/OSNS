@@ -19,7 +19,7 @@
 #ifndef _SFTP_COMMON_PROTOCOL_H
 #define _SFTP_COMMON_PROTOCOL_H
 
-#include "datatypes/ssh-string.h"
+#include "lib/ssh/ssh-string.h"
 #include "libosns-list.h"
 #include "sftp/protocol.h"
 
@@ -100,58 +100,31 @@
 struct status_response_s {
     unsigned int 		code;
     unsigned int		linux_error;
-    unsigned char		*buff; /* error specific data */
-    unsigned int		size;
-};
-
-struct handle_response_s {
-    unsigned int		len;
-    unsigned char		*name;
 };
 
 struct data_response_s {
     unsigned char		flags;
-    unsigned int		size;
-    unsigned char		*data;
 };
 
 struct name_response_s {
     unsigned char		flags;
     unsigned int		count;
-    unsigned int		size;
-    char			*buff; /* list of names (name, attr) as send by server, leave it to the receiving (FUSE) thread to process */
-};
-
-struct attr_response_s {
-    unsigned int		size;
-    unsigned char		*buff; /* attributes as send by server, leave it to the receiving (FUSE) thread to process */
-};
-
-struct extension_response_s {
-    unsigned int		size;
-    unsigned char		*buff;
-};
-
-struct init_response_s {
-    unsigned int		size;
-    unsigned char		*buff;
 };
 
 union sftp_response_u {
-    struct init_response_s 	init;
     struct status_response_s 	status;
-    struct handle_response_s	handle;
     struct data_response_s	data;
-    struct name_response_s 	names;
-    struct attr_response_s	attr;
-    struct extension_response_s extension;
+    struct name_response_s 	name;
 };
 
 struct sftp_reply_s {
     unsigned char		type;
     uint32_t			sequence;
     union sftp_response_u	response;
+    char			*data;
+    unsigned int		size;
     unsigned int		error;
+    void			(* free)(struct sftp_reply_s *reply);
 };
 
 /* request to SFTP */
@@ -171,12 +144,6 @@ struct sftp_handle_s {
 };
 
 struct sftp_open_s {
-    unsigned char		*path;
-    unsigned int		len;
-    unsigned int		posix_flags;
-};
-
-struct sftp_create_s {
     unsigned char		*path;
     unsigned int		len;
     unsigned int		posix_flags;
@@ -214,11 +181,23 @@ struct sftp_mkdir_s {
     unsigned char		*buff;
 };
 
+struct sftp_getstat_s {
+    unsigned char		*path;
+    unsigned int		len;
+    unsigned int		valid;
+};
+
 struct sftp_setstat_s {
     unsigned char		*path;
     unsigned int		len;
     unsigned int		size;
     unsigned char		*buff;
+};
+
+struct sftp_fgetstat_s {
+    unsigned char		*handle;
+    unsigned int 		len;
+    unsigned int		valid;
 };
 
 struct sftp_fsetstat_s {
@@ -263,6 +242,20 @@ struct sftp_data_s {
     unsigned int		len;
 };
 
+struct sftp_mapextension_s {
+    unsigned int		len;
+    char			*name;
+    unsigned char		domap;
+};
+
+struct sftp_fstatat_s {
+    struct sftp_handle_s	handle;
+    struct sftp_path_s		path;
+    uint32_t			valid;
+    uint32_t			property;
+    uint32_t			flags;
+};
+
 struct sftp_extension_s {
     unsigned char		type;
     void			*ptr;
@@ -289,13 +282,12 @@ struct sftp_request_s {
     struct system_timespec_s		timeout;
     union {
 	struct sftp_init_s		init;
-	struct sftp_path_s		stat;
-	struct sftp_path_s		lstat;
-	struct sftp_handle_s		fstat;
+	struct sftp_getstat_s		stat;
+	struct sftp_getstat_s		lstat;
 	struct sftp_setstat_s		setstat;
+	struct sftp_fgetstat_s		fgetstat;
 	struct sftp_fsetstat_s		fsetstat;
 	struct sftp_open_s		open;
-	struct sftp_create_s		create;
 	struct sftp_path_s		opendir;
 	struct sftp_read_s		read;
 	struct sftp_write_s		write;
@@ -314,6 +306,8 @@ struct sftp_request_s {
 	struct sftp_handle_s		fstatvfs;
 	struct sftp_path_s		statvfs;
 	struct sftp_path_s		realpath;
+	struct sftp_mapextension_s	mapext;
+	struct sftp_fstatat_s		fstatat;
 	struct sftp_extension_s 	extension;
     } call;
     struct sftp_reply_s			reply;

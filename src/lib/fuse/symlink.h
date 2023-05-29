@@ -20,12 +20,14 @@
 #ifndef _LIB_FUSE_SYMLINK_H
 #define _LIB_FUSE_SYMLINK_H
 
+#include "libosns-context.h"
 #include "lib/system/path.h"
 
 #define FUSE_SYMLINK_FLAG_ALLOC			1
 
 struct fuse_symlink_s {
     unsigned int				flags;
+    unsigned int                                errcode;
     struct data_link_s 				link;
     struct list_element_s			list;
     unsigned int				len;
@@ -35,7 +37,7 @@ struct fuse_symlink_s {
 /* */
 
 struct fuse_symlink_s *get_inode_fuse_cache_symlink(struct inode_s *inode);
-unsigned int set_inode_fuse_cache_symlink(struct workspace_mount_s *w, struct inode_s *inode, char *buffer);
+unsigned int set_inode_fuse_cache_symlink(struct service_context_s *ctx, struct inode_s *inode, char *buffer);
 void free_fuse_symlink(struct fuse_symlink_s *syml);
 
 #endif

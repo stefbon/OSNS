@@ -23,7 +23,4 @@
 void _fs_sftp_mkdir(struct service_context_s *ctx, struct fuse_request_s *r, struct entry_s *entry, struct fuse_path_s *fpath, struct system_stat_s *st);
 void _fs_sftp_mknod(struct service_context_s *ctx, struct fuse_request_s *r, struct entry_s *entry, struct fuse_path_s *fpath, struct system_stat_s *st);
 
-void _fs_sftp_mkdir_disconnected(struct service_context_s *ctx, struct fuse_request_s *f_request, struct entry_s *entry, struct fuse_path_s *fpath, struct system_stat_s *st);
-void _fs_sftp_mknod_disconnected(struct service_context_s *ctx, struct fuse_request_s *f_request, struct entry_s *entry, struct fuse_path_s *fpath, struct system_stat_s *st);
-
 #endif

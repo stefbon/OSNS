@@ -22,18 +22,19 @@
 #include "libosns-log.h"
 #include "libosns-misc.h"
 #include "libosns-error.h"
-
 #include "libosns-threads.h"
 #include "libosns-eventloop.h"
 #include "libosns-users.h"
 
 #include "osns_sftp_subsystem.h"
-#include "ssh/subsystem/connection.h"
+#include "osns/pidfile.h"
 
+#include "lib/system/fshandle.h"
+
+#include "ssh/subsystem/connection.h"
 #include "ssh/subsystem/sftp/send.h"
 #include "ssh/subsystem/sftp/receive.h"
 #include "ssh/subsystem/sftp/init.h"
-#include "ssh/subsystem/sftp/payload.h"
 
 #define PIDFILE_PATH							"/run"
 
@@ -53,7 +54,7 @@ static void workspace_signal_handler(struct beventloop_s *loop, struct bsignal_e
 	case SIGSTOP:
 
 	    logoutput("workspace_signal_handler: got signal (%i): terminating", bse->signo);
-	    stop_beventloop(loop);
+	    stop_beventloop(loop, bse->signo);
 	    break;
 
 	case SIGIO:
@@ -140,16 +141,7 @@ int main(int argc, char *argv[])
     result=start_bsignal_subsystem(NULL, id_signal_subsystem);
     logoutput("MAIN: signal handler started (%i)", result);
 
-    if (init_hash_commonhandles(&error)==0) {
-
-	logoutput_info("MAIN: initializing common handles (for open/read/write, opendir/readir, fstatat, mkdirat etc)");
-
-    } else {
-
-	logoutput_info("MAIN: error initializing common handles");
-	goto out;
-
-    }
+    init_fs_handle_hashtable();
 
     /* Initialize and start default threads
 	NOTE: important to start these after initializing the signal handler, if not doing this this way any signal will make the program crash */
@@ -169,18 +161,16 @@ int main(int argc, char *argv[])
 
     }
 
-    if (connect_ssh_subsystem_connection(&sftp.connection)==0) {
+    if (connect_sftp_subsystem(&sftp)==0) {
 
 	logoutput("MAIN: sftp subsystem connected");
 
     } else {
 
-	logoutput_warning("MAIN: failed to connect sftp subsystem");
+	logoutput_warning("MAIN: failed to open sftp subsystem");
 	goto out;
 
     }
-
-    set_process_sftp_payload_init(&sftp);
 
     /* disable pidfile for now: find a location with write access first */
 
@@ -190,7 +180,7 @@ int main(int argc, char *argv[])
 
     out:
 
-    clear_ssh_subsystem_connection(&sftp.connection);
+    clear_sftp_subsystem(&sftp);
 
     logoutput_info("MAIN: stop workerthreads");
     stop_workerthreads(NULL);
@@ -202,7 +192,6 @@ int main(int argc, char *argv[])
 
     logoutput_info("MAIN: destroy eventloop");
     clear_beventloop(NULL);
-    free_hash_commonhandles();
 
     if (pidfile) {
 

@@ -133,10 +133,7 @@ struct net_entity_s {
 	struct ssh_string_s				domain;
 	unsigned int					id;
     } net;
-    union _local_id_u {
-	uid_t						uid;
-	gid_t						gid;
-    } local;
+    unsigned int					localid;
 };
 
 struct net_entlookup_s {
@@ -158,10 +155,10 @@ struct net_entlookup_s {
 
 #define NET_IDMAPPING_FLAG_MAPBYID			1 << 20
 #define NET_IDMAPPING_FLAG_MAPBYNAME			1 << 21
-
 #define NET_IDMAPPING_FLAG_NONSTRICT			1 << 22
+#define NET_IDMAPPING_FLAG_CACHE			1 << 23
 
-#define NET_IDMAPPING_ALLFLAGS	(NET_IDMAPPING_FLAG_SHARED | NET_IDMAPPING_FLAG_NSS_USERDB | NET_IDMAPPING_FLAG_DOMAINDB | NET_IDMAPPING_FLAG_MAPBYID | NET_IDMAPPING_FLAG_MAPBYNAME | NET_IDMAPPING_FLAG_NONSTRICT)
+#define NET_IDMAPPING_ALLFLAGS	(NET_IDMAPPING_FLAG_SHARED | NET_IDMAPPING_FLAG_NSS_USERDB | NET_IDMAPPING_FLAG_DOMAINDB | NET_IDMAPPING_FLAG_MAPBYID | NET_IDMAPPING_FLAG_MAPBYNAME | NET_IDMAPPING_FLAG_NONSTRICT | NET_IDMAPPING_FLAG_CACHE)
 
 /* callbacks to translate the protocol user to a local one and vice versa */
 
@@ -185,14 +182,9 @@ struct net_idmapping_s {
     struct net_mapcb_s					mapcb;
     struct net_entlookup_s				lookup;
     int							(* setup)(struct net_idmapping_s *mapping, unsigned int flags);
-};
-
-/*
-    void						(* add_net_entity)(struct net_client_idmapping_s *mapping, struct net_entity_s *ent);
-    int							(* get_system_getents_file)(struct net_client_idmapping_s *mapping, const char *target, struct ssh_string_s *f);
+    void						(* add_net_entity)(struct net_idmapping_s *mapping, struct net_entity_s *ent);
     struct net_userscache_s				*cache;
 };
-*/
 
 /* prototypes */
 

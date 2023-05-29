@@ -40,10 +40,10 @@
 
 extern struct fuse_config_s *get_fuse_interface_config(struct context_interface_s *i);
 
-void _fs_common_cached_create(struct service_context_s *context, struct fuse_request_s *request, struct fuse_openfile_s *openfile)
+void _fs_common_cached_create(struct service_context_s *ctx, struct fuse_request_s *request, struct fuse_openfile_s *openfile)
 {
     struct fuse_config_s *config=get_fuse_interface_config(request->interface);
-    struct inode_s *inode=openfile->inode;
+    struct inode_s *inode=openfile->header.inode;
     struct fuse_entry_out eout;
     struct fuse_open_out oout;
     unsigned int size_eout=sizeof(struct fuse_entry_out);
@@ -75,25 +75,23 @@ void _fs_common_cached_create(struct service_context_s *context, struct fuse_req
 
 }
 
-struct entry_s *_fs_common_create_entry(struct workspace_mount_s *workspace, struct entry_s *parent, struct name_s *xname, struct system_stat_s *stat, unsigned int size, unsigned int flags, unsigned int *error)
+struct entry_s *_fs_common_create_entry(struct service_context_s *ctx, struct entry_s *parent, struct name_s *xname, struct system_stat_s *stat, unsigned int size, unsigned int flags, unsigned int *error)
 {
-    struct service_context_s *context=get_root_context_workspace(workspace);
     struct create_entry_s ce;
     unsigned int dummy=0;
 
     if (error==0) error=&dummy;
-    init_create_entry(&ce, xname, parent, NULL, NULL, context, stat, NULL);
+    init_create_entry(&ce, xname, parent, NULL, NULL, ctx, stat, NULL);
     return create_entry_extended(&ce);
 }
 
-struct entry_s *_fs_common_create_entry_unlocked(struct workspace_mount_s *workspace, struct directory_s *directory, struct name_s *xname, struct system_stat_s *stat, unsigned int size, unsigned int flags, unsigned int *error)
+struct entry_s *_fs_common_create_entry_unlocked(struct service_context_s *ctx, struct directory_s *directory, struct name_s *xname, struct system_stat_s *stat, unsigned int size, unsigned int flags, unsigned int *error)
 {
-    struct service_context_s *context=get_root_context_workspace(workspace);
     struct create_entry_s ce;
     unsigned int dummy=0;
 
     if (error==0) error=&dummy;
-    init_create_entry(&ce, xname, NULL, directory, NULL, context, stat, NULL);
+    init_create_entry(&ce, xname, NULL, directory, NULL, ctx, stat, NULL);
     enable_ce_extended_batch(&ce);
     return create_entry_extended(&ce);
 }

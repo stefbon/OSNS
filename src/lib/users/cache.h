@@ -44,15 +44,11 @@ struct net_ent2local_s {
     unsigned char					flags;
     struct list_element_s				list;
     unsigned int					remoteid;
-    union _localid_u {
-	uid_t						uid;
-	gid_t						gid;
-    } localid;
+    unsigned int					localid;
     struct name_s					name;
     unsigned int					size;
     char						buffer[];
 };
-
 
 #define NET_USERSCACHE_FLAG_ALLOC			1
 #define NET_USERSCACHE_FLAG_INIT			2
@@ -60,18 +56,16 @@ struct net_ent2local_s {
 struct net_userscache_s {
     unsigned int					flags;
     struct net_domain_s					*localhost;
+    int							(* add_net2local_map)(struct net_userscache_s *cache, struct net_entity_s *entity);
+    void 						(* find_user_ent2local)(struct net_userscache_s *cache, struct net_entity_s *entity, unsigned int *err);
+    void						(* find_group_ent2local)(struct net_userscache_s *cache, struct net_entity_s *entity, unsigned int *err);
+    void						(* clear)(struct net_userscache_s *c);
     unsigned int					size;
     char						buffer[];
 };
 
 /* prototypes */
 
-int add_net2local_map(struct net_userscache_s *cache, struct net_entity_s *entity);
-
-struct net_ent2local_s *find_user_ent2local(struct net_userscache_s *cache, struct net_entity_s *entity, unsigned int *error);
-struct net_ent2local_s *find_group_ent2local(struct net_userscache_s *cache, struct net_entity_s *entity, unsigned int *error);
-
-void clear_net_userscache(struct net_userscache_s *cache);
-struct net_userscache_s *create_net_userscache(unsigned int nrdomains);
+struct net_userscache_s *create_net_userscache(unsigned int flags);
 
 #endif

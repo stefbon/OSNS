@@ -22,6 +22,6 @@
 
 /* prototypes */
 
-void print_record_netcache(struct query_netcache_attr_s *attr);
+void print_record_netcache(struct query_netcache_attr_s *attr, unsigned int flags);
 
 #endif

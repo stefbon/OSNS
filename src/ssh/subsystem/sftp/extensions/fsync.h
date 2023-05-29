@@ -22,7 +22,7 @@
 
 /* prototypes */
 
-void cb_ext_fsync(struct sftp_payload_s *payload, unsigned int pos);
-void sftp_op_fsync(struct sftp_payload_s *payload);
+void cb_ext_fsync(struct sftp_subsystem_s *sftp, struct sftp_in_header_s *inh, char *data, unsigned int pos);
+void sftp_op_fsync(struct sftp_subsystem_s *sftp, struct sftp_in_header_s *inh, char *data);
 
 #endif

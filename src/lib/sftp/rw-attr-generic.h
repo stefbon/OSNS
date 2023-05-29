@@ -49,4 +49,6 @@ void parse_sftp_attributes_stat_mask(struct attr_context_s *actx, struct rw_attr
 void init_hashattr_generic();
 void clear_hashattr_generic(unsigned char force);
 
+uint8_t peek_sftp_file_type(struct attr_buffer_s *ab);
+
 #endif

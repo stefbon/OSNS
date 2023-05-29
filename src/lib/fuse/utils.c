@@ -51,7 +51,5 @@ void fill_fuse_attr_system_stat(struct fuse_attr *attr, struct system_stat_s *st
     attr->gid=get_gid_system_stat(stat);
     attr->rdev=0;
 
-    // logoutput_debug("fill_fuse_attr_system_stat: node id %lu mode %u size %u", attr->ino, attr->mode, attr->size);
-
 }
 

@@ -28,8 +28,9 @@
 #include <sys/uio.h>
 
 #include "libosns-network.h"
-#include "lib/system/path.h"
+#include "libosns-list.h"
 #include "lib/system/stat.h"
+
 
 /*
 
@@ -83,6 +84,10 @@
 #define OSNS_SOCKET_FLAG_TIMERFD			(1 << 7)
 #define OSNS_SOCKET_FLAG_SIGNALFD			(1 << 8)
 
+#define OSNS_SOCKET_FLAG_BEVENT                         (1 << 10)
+#define OSNS_SOCKET_FLAG_RECV_MSG                       (1 << 11)
+#define OSNS_SOCKET_FLAG_RECV_IOV                       (1 << 12)
+
 /* additional */
 
 #define OSNS_SOCKET_FLAG_IPv4				(1 << 20)
@@ -100,6 +105,13 @@
 #define SOCKET_STATUS_CONNECT				4
 #define SOCKET_STATUS_BIND				8
 #define SOCKET_STATUS_LISTEN				16
+
+#define SOCKET_STATUS_READ                              32
+#define SOCKET_STATUS_WRITE                             64
+
+#define SOCKET_STATUS_ERROR                             128
+#define SOCKET_STATUS_CLOSING                           256
+#define SOCKET_STATUS_CLOSED                            512
 
 #define SOCKET_CHANGE_OP_OPEN				1
 #define SOCKET_CHANGE_OP_CLOSE				2
@@ -157,83 +169,36 @@ struct _endpoint_sops_s {
 };
 
 struct _device_sops_s {
-    int							(* open)(struct osns_socket_s *s, struct fs_location_path_s *path);
+    int							(* open)(struct osns_socket_s *s, struct fs_path_s *path);
     int							(* read)(struct osns_socket_s *s, char *buffer, unsigned int size);
     int							(* write)(struct osns_socket_s *s, char *buffer, unsigned int size);
     int							(* writev)(struct osns_socket_s *s, struct iovec *iov, unsigned int count);
     int							(* readv)(struct osns_socket_s *s, struct iovec *iov, unsigned int count);
 };
 
-struct fs_init_s {
-#ifdef __linux__
-    mode_t						mode;
-#endif
-};
-
-#define FS_DENTRY_FLAG_FILE				1
-#define FS_DENTRY_FLAG_DIR				2
-#define FS_DENTRY_FLAG_EOD				4
-
-struct fs_dentry_s {
-    uint16_t						flags;
-    uint32_t						type;
-    uint64_t						ino; /* ino on the server; some filesystems rely on this */
-    uint16_t						len;
-    char						*name;
-};
-
-#define FS_DENTRY_INIT					{0, 0, 0, 0, NULL}
-
-union _filesystem_sops_u {
-    struct file_sops_s {
-	    int					(* open)(struct osns_socket_s *ref, struct fs_location_path_s *path, struct osns_socket_s *s, struct fs_init_s *init, unsigned int flags);
-	    int					(* pread)(struct osns_socket_s *s, char *buffer, unsigned int size, off_t off);
-	    int					(* pwrite)(struct osns_socket_s *s, char *buffer, unsigned int size, off_t off);
-	    int					(* fsync)(struct osns_socket_s *s, unsigned int flags);
-	    int					(* flush)(struct osns_socket_s *s, unsigned int flags);
-	    off_t				(* lseek)(struct osns_socket_s *s, off_t off, int whence);
-	    int					(* fgetstat)(struct osns_socket_s *s, unsigned int mask, struct system_stat_s *st);
-	    int					(* fsetstat)(struct osns_socket_s *s, unsigned int mask, struct system_stat_s *st);
-    } file;
-    struct dir_sops_s {
-	    int					(* open)(struct osns_socket_s *ref, struct fs_location_path_s *l, struct osns_socket_s *s, struct fs_init_s *init, unsigned int flags);
-	    struct fs_dentry_s			*(* get_dentry)(struct osns_socket_s *s, unsigned char next);
-	    int					(* fstatat)(struct osns_socket_s *s, char *name, unsigned int mask, struct system_stat_s *st, unsigned int flags);
-	    int					(* unlinkat)(struct osns_socket_s *s, const char *name, unsigned int flags);
-	    int					(* rmdirat)(struct osns_socket_s *s, const char *name, unsigned int flags);
-	    int					(* fsyncdir)(struct osns_socket_s *s, unsigned int flags);
-	    int					(* readlinkat)(struct osns_socket_s *s, const char *name, struct fs_location_path_s *target);
-    } dir;
-};
-
 struct generic_socket_option_s {
-    int						level;
-    int						type;
-    char					*value;
-    unsigned int				len;
+    int						        level;
+    int						        type;
+    char					        *value;
+    unsigned int				        len;
 };
 
-#define SOCKET_EVENT_TYPE_BEVENT		1
-
-struct osns_socket_event_s {
-    unsigned char				type;
-    union _event_ctx_u {
-	struct bevent_s				*bevent;
-	void					*ptr;
-    } link;
+union socket_event_ctx_u {
+    struct bevent_s				        *bevent;
+    void					        *ptr;
 };
 
 #ifdef __linux__
 
-#define SOCKET_PROPERTY_FLAG_OWNER		1
-#define SOCKET_PROPERTY_FLAG_GROUP		2
-#define SOCKET_PROPERTY_FLAG_MODE		4
+#define SOCKET_PROPERTY_FLAG_OWNER		        1
+#define SOCKET_PROPERTY_FLAG_GROUP		        2
+#define SOCKET_PROPERTY_FLAG_MODE		        4
 
 struct socket_properties_s {
-    unsigned int				valid;
-    char					*owner;
-    char					*group;
-    mode_t					mode;
+    unsigned int				        valid;
+    char					        *owner;
+    char					        *group;
+    mode_t					        mode;
 };
 
 #else
@@ -243,10 +208,69 @@ struct socket_properties_s {
 
 #endif
 
+#define SOCKET_CONTROL_DATA_TYPE_FD		        1
+#define SOCKET_CONTROL_DATA_BUFFER_SIZE                 32
+
+struct socket_control_data_s {
+    unsigned char					type;
+    union {
+	int						fd;
+    } data;
+};
+
+#define OSNS_SOCKET_ENABLE_CTRL_DATA                    1
+#define OSNS_SOCKET_ENABLE_WATCHED_WRITE                2
+#define OSNS_SOCKET_ENABLE_CUSTOM_READ                  4
+
+#define SOCKET_RAWDATA_FLAG_FINISH                      1
+#define SOCKET_RAWDATA_FLAG_CMSG                        2
+#define SOCKET_RAWDATA_FLAG_WATCHED                     4
+
+struct socket_rawdata_s {
+    struct list_element_s                               list;
+    uint64_t                                            ctr;
+    unsigned int                                        flags;
+    struct socket_control_data_s                        ctrl;
+    unsigned int                                        pos;
+    unsigned int                                        size;
+    char                                                *buffer;
+};
+
+#define SOCKET_LEVEL_NETWORK                            1
+#define SOCKET_LEVEL_REMOTE                             2
+#define SOCKET_LEVEL_LOCAL                              3
+#define SOCKET_LEVEL_UNKNOWN                            4
+
+struct read_socket_data_s {
+    unsigned int                                        flags;
+    uint64_t                                            ctr;
+    struct list_header_s                                in;
+    struct list_element_s                               *current;
+    void                                                (* cb_read_cmsg)(struct osns_socket_s *sock, void *pmsg, struct socket_rawdata_s *rawdata);
+    char                                                *buffer;
+    unsigned int                                        pos;
+    unsigned int                                        size;
+    char                                                *cbuffer;
+    unsigned int                                        csize;
+};
+
+struct socket_context_s {
+    unsigned int                                        (* get_msg_header_size)(struct osns_socket_s *sock, void *ptr);
+    unsigned int                                        (* get_msg_size)(struct osns_socket_s *sock, char *buffer, unsigned int size, void *ptr);
+    void                                                (* set_msg_size)(struct osns_socket_s *sock, char *header, unsigned int size, void *ptr);
+    void                                                (* process_data)(struct osns_socket_s *sock, char *header, char *data, struct socket_control_data_s *ctrl, void *ptr);
+    void                                                (* process_close)(struct osns_socket_s *sock, unsigned int level, void *ptr);
+    void                                                (* process_error)(struct osns_socket_s *sock, unsigned int level, unsigned int errcode, void *ptr);
+    uint64_t                                            (* copy)(struct osns_socket_s *sock, char *buffer, void *pmsg, unsigned int bytesread, void *ptr);
+    void                                                (* read)(struct osns_socket_s *sock, uint64_t ctr, void *ptr);
+    void                                                *ptr;
+};
+
 struct osns_socket_s {
     unsigned int					type;
     unsigned int					flags;
     unsigned int					status;
+    struct shared_signal_s                              *signal;
 #ifdef __linux__
     int							fd;
     unsigned int					pid;
@@ -255,31 +279,20 @@ struct osns_socket_s {
     int							(* setsockopt)(struct osns_socket_s *sock, struct generic_socket_option_s *option);
     void						(* close)(struct osns_socket_s *sock);
     void						(* change)(struct osns_socket_s *sock, unsigned int what);
+    void						(* free)(struct osns_socket_s *sock);
 #ifdef __linux__
     int							(* get_unix_fd)(struct osns_socket_s *sock);
     void						(* set_unix_fd)(struct osns_socket_s *sock, int fd);
 #endif
+    struct socket_context_s                             ctx;
+    union socket_event_ctx_u                            event;
+    struct read_socket_data_s                           rd;
     union osns_socket_ops_u {
 	struct _connection_sops_s			connection;
 	struct _endpoint_sops_s				endpoint;
 	struct _device_sops_s				device;
-	union _filesystem_sops_u			filesystem;
     } sops;
-    struct osns_socket_event_s 				event;
-    union osns_socket_data_u {
-	struct _socket_connection_data_s {
-	    struct osns_sockaddr_s			sockaddr;
-	} connection;
-	struct _socket_directory_data_s {
-	    unsigned int				flags;
-	    char					*buffer;
-	    unsigned int				size;
-	    unsigned int				read;
-	    unsigned int				pos;
-	    struct fs_dentry_s				dentry;
-	} directory;
-	char						buffer[256];
-    } data;
+    struct osns_sockaddr_s			        sockaddr;
 };
 
 /* Prototypes */

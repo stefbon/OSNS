@@ -21,6 +21,7 @@
 
 #include "libosns-log.h"
 #include "libosns-misc.h"
+#include "libosns-datatypes.h"
 
 #include "ssh-common.h"
 #include "ssh-utils.h"
@@ -40,13 +41,10 @@ struct decrypt_handle_s {
 static int test_cipher_algo(const char *name)
 {
     int result=-1;
-    int algo=0;
+    int algo=gcry_cipher_map_name(name);
 
-    algo=gcry_cipher_map_name(name);
     if (algo>0 && gcry_cipher_algo_info(algo, GCRYCTL_TEST_ALGO, NULL, NULL)==0) result=0;
-
     return result;
-
 }
 
 static int get_cipher_param(const char *name, unsigned int *mode)
@@ -100,12 +98,7 @@ static int get_hmac_param(const char *name, unsigned int *maclen)
     } else if (strlen(name)>10 && strncmp(name, "hmac-sha1-", 10)==0) {
 
 	m=atoi(name + 10);
-
-	if (m>0 && (m % 8 == 0) && (m <= gcry_mac_get_algo_maclen(GCRY_MAC_HMAC_SHA1))) {
-
-	    algo=GCRY_MAC_HMAC_SHA1;
-
-	}
+	if (m>0 && (m % 8 == 0) && (m <= gcry_mac_get_algo_maclen(GCRY_MAC_HMAC_SHA1))) algo=GCRY_MAC_HMAC_SHA1;
 
     } else if (strcmp(name, "hmac-md5")==0) {
 
@@ -115,12 +108,7 @@ static int get_hmac_param(const char *name, unsigned int *maclen)
     } else if (strncmp(name, "hmac-md5-", 9)==0) {
 
 	m=atoi(name + 9);
-
-	if (m>0 && (m % 8 == 0) && (m <= gcry_mac_get_algo_maclen(GCRY_MAC_HMAC_MD5))) {
-
-	    algo=GCRY_MAC_HMAC_MD5;
-
-	}
+	if (m>0 && (m % 8 == 0) && (m <= gcry_mac_get_algo_maclen(GCRY_MAC_HMAC_MD5))) algo=GCRY_MAC_HMAC_MD5;
 
     } else if (strcmp(name, "hmac-sha256")==0) {
 
@@ -156,12 +144,10 @@ static int get_hmac_param(const char *name, unsigned int *maclen)
 
 static int test_hmac_algo(const char *name)
 {
-    int algo=0;
     int result=-1;
+    int algo=get_hmac_param(name, NULL);
 
-    algo=get_hmac_param(name, NULL);
     if (algo>0 && gcry_mac_test_algo(algo)==0) result=0;
-
     return result;
 }
 
@@ -357,21 +343,21 @@ static void clear_cipher_generic(struct decrypt_handle_s *cipher)
 
 }
 
-static int verify_hmac_none(struct ssh_decryptor_s *d, struct ssh_packet_s *packet)
+static int verify_hmac_none(struct ssh_decryptor_s *d, struct ssh_packet_s *p)
 {
     return 0;
 }
 
-static int decrypt_length(struct ssh_decryptor_s *d, struct ssh_packet_s *packet, char *buffer, unsigned int len)
+static int decrypt_length(struct ssh_decryptor_s *d, struct ssh_packet_s *p, char *buffer, unsigned int len)
 {
     struct decrypt_handle_s *cipher=(struct decrypt_handle_s *) d->buffer;
     gcry_error_t result=0;
 
-    result=gcry_cipher_decrypt(cipher->c_handle, (unsigned char *)buffer, (size_t) len, (const unsigned char *) packet->buffer, (size_t) len);
+    result=gcry_cipher_decrypt(cipher->c_handle, (unsigned char *)buffer, (size_t) len, (const unsigned char *) p->buffer, (size_t) len);
 
     if (result==GPG_ERR_NO_ERROR) {
 
-	packet->decrypted=len;
+	p->decrypted=len;
 	return 0;
 
     }
@@ -381,25 +367,23 @@ static int decrypt_length(struct ssh_decryptor_s *d, struct ssh_packet_s *packet
 
 }
 
-static int decrypt_length_none(struct ssh_decryptor_s *d, struct ssh_packet_s *packet, char *buffer, unsigned int len)
+static int decrypt_length_none(struct ssh_decryptor_s *d, struct ssh_packet_s *p, char *buffer, unsigned int len)
 {
-
-    memcpy(buffer, packet->buffer, len);
-    packet->decrypted=len;
+    memcpy(buffer, p->buffer, len);
+    p->decrypted=len;
     return 0;
-
 }
 
-static int decrypt_packet(struct ssh_decryptor_s *d, struct ssh_packet_s *packet)
+static int decrypt_packet(struct ssh_decryptor_s *d, struct ssh_packet_s *p)
 {
     struct decrypt_handle_s *cipher=(struct decrypt_handle_s *) d->buffer;
     gcry_error_t result=0;
 
-    result=gcry_cipher_decrypt(cipher->c_handle, (unsigned char *)(packet->buffer + packet->decrypted), (size_t)(packet->len - packet->decrypted), NULL, 0);
+    result=gcry_cipher_decrypt(cipher->c_handle, (unsigned char *)(p->buffer + p->decrypted), (size_t)(p->len - p->decrypted), NULL, 0);
 
     if (result==GPG_ERR_NO_ERROR) {
 
-	packet->decrypted=packet->len;
+	p->decrypted=p->len;
 	return 0;
 
     }
@@ -409,24 +393,24 @@ static int decrypt_packet(struct ssh_decryptor_s *d, struct ssh_packet_s *packet
 
 }
 
-static int decrypt_packet_none(struct ssh_decryptor_s *d, struct ssh_packet_s *packet)
+static int decrypt_packet_none(struct ssh_decryptor_s *d, struct ssh_packet_s *p)
 {
     return 0;
 }
 
-static int verify_hmac_post(struct ssh_decryptor_s *d, struct ssh_packet_s *packet)
+static int verify_hmac_post(struct ssh_decryptor_s *d, struct ssh_packet_s *p)
 {
     struct decrypt_handle_s *cipher=(struct decrypt_handle_s *) d->buffer;
     char tmp[4];
     gcry_error_t result;
 
     memset(tmp, '\0', 4);
-    store_uint32(tmp, packet->sequence);
+    store_uint32(tmp, p->sequence);
 
     gcry_mac_write(cipher->m_handle, (void *) tmp, 4);
-    gcry_mac_write(cipher->m_handle, (void *) packet->buffer, packet->len);
+    gcry_mac_write(cipher->m_handle, (void *) p->buffer, p->len);
 
-    result=gcry_mac_verify(cipher->m_handle, (void *)(packet->buffer + packet->len), d->hmac_maclen);
+    result=gcry_mac_verify(cipher->m_handle, (void *)(p->buffer + p->len), d->hmac_maclen);
     if (result==GPG_ERR_NO_ERROR) return 0;
 
     logoutput("verify_hmac_post: error %s/%s", gcry_strsource(result), gcry_strerror(result));
@@ -687,7 +671,7 @@ static struct decrypt_ops_s generic_d_ops = {
     .populate_cipher		= populate_cipher,
     .populate_hmac		= populate_hmac,
     .get_handle_size		= get_handle_size,
-    .init_decryptor		= init_decryptor,
+    .init		        = init_decryptor,
     .get_cipher_blocksize	= get_cipher_blocksize,
     .get_cipher_keysize		= get_cipher_keysize,
     .get_cipher_ivsize		= get_cipher_ivsize,

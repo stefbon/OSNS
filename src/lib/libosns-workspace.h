@@ -21,7 +21,6 @@
 #define _LIB_WORKSPACE_H
 
 #include "workspace/workspaces.h"
-#include "workspace/inodes.h"
 #include "workspace/address.h"
 #include "workspace/utils.h"
 

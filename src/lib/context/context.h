@@ -30,6 +30,9 @@
 #define SERVICE_CTX_TYPE_FILESYSTEM		3
 #define SERVICE_CTX_TYPE_SHARED			4
 
+#define SERVICE_CTX_NAME_LENGTH                 32
+#define SERVICE_FILESYSTEM_NAME_LENGTH          64
+
 /* TO DO:
     - CTX TYPE ID: fs based upon id's provided by remote server */
 
@@ -38,11 +41,22 @@
 #define SERVICE_CTX_FLAG_TOBEDELETED		( 1 << 2 )
 #define SERVICE_CTX_FLAG_WLIST			( 1 << 3 )
 #define SERVICE_CTX_FLAG_CLIST			( 1 << 4 )
+#define SERVICE_CTX_FLAG_FS                     ( 1 << 5 )
+#define SERVICE_CTX_FLAG_THREAD                 ( 1 << 6 )
+#define SERVICE_CTX_FLAG_REFRESH                ( 1 << 7 )
+
+#define SERVICE_WORKSPACE_FLAG_PATH             1
+#define SERVICE_WORKSPACE_FLAG_INODES           2
+#define SERVICE_WORKSPACE_FLAG_DIRECTORIES      4
+#define SERVICE_WORKSPACE_FLAG_SYMLINKS         8
 
 #define SERVICE_BROWSE_TYPE_NETWORK		1
 #define SERVICE_BROWSE_TYPE_NETGROUP		2
 #define SERVICE_BROWSE_TYPE_NETHOST		3
 #define SERVICE_BROWSE_TYPE_NETSOCKET		4
+
+#define SERVICE_BROWSE_FLAG_REFRESH_LOOKUP      1
+#define SERVICE_BROWSE_FLAG_REFRESH_OPENDIR     2
 
 #define SERVICE_OP_TYPE_LOOKUP			0
 #define SERVICE_OP_TYPE_LOOKUP_EXISTING		1
@@ -107,36 +121,47 @@ struct fuse_path_s;
 struct service_context_s {
     unsigned int				type;
     uint32_t					flags;
-    char					name[32];
+    char					name[SERVICE_CTX_NAME_LENGTH];
     struct data_link_s				link;
     union {
 	struct workspace_context_s {
+	    unsigned int                                status;
 	    struct shared_signal_s			*signal;
 	    struct list_header_s			header;
 	    struct browse_service_fs_s			*fs; 		/* the fs used for browsing the network map */
+            struct inode_s 				rootinode;
+            uint64_t 					nrinodes;
+            struct list_header_s			directories;
+            struct list_header_s			symlinks;
+            struct list_header_s			forget;
+            uint16_t                                    pathmax;
 	} workspace;
 	struct browse_context_s {
+	    unsigned int                                status;
 	    struct browse_service_fs_s			*fs; 		/* the fs used for browsing the network map */
 	    struct list_element_s			clist;		/* the list of the parent: part of a tree */
 	    unsigned int				type;		/* type: network, netgroup or nethost or netsocket */
 	    struct list_header_s			header;		/* has children */
-	    struct system_timespec_s			refresh;	/* time of latest refresh: to keep cache and contexes in sync */
-	    uint32_t					unique;
+	    struct system_timespec_s			refresh_lookup;	/* time of latest refresh: to keep cache and contexes in sync */
+	    struct system_timespec_s			refresh_opendir;
+	    uint64_t					unique;
 	    unsigned int				service;
 	    pthread_t					threadid;
 	} browse;
 	struct filesystem_context_s {
+	    unsigned int                                status;
 	    struct path_service_fs_s			*fs; 		/* the path based fs used for this service: sftp, webdav, smb ... */
 	    struct list_element_s			clist;		/* the list of the parent: part of a tree */
 	    struct inode_s 				*inode; 	/* the inode the service is attached to */
 	    struct shared_signal_s			*signal;
-	    char					name[32];
+	    struct system_timespec_s			refresh;	/* time of latest refresh: to keep cache and contexes in sync */
+	    char					name[SERVICE_FILESYSTEM_NAME_LENGTH];
 	    unsigned int				service;
 	    struct list_header_s			pathcaches;
 	} filesystem;
 	struct shared_context_s {
 	    struct system_timespec_s			refresh;	/* time of latest refresh: to keep cache and contexes in sync */
-	    uint32_t					unique;
+	    uint64_t					unique;
 	    unsigned int				service;
 	    unsigned int				transport;
 	} shared;
@@ -148,5 +173,8 @@ struct service_context_s {
 /* prototypes */
 
 struct service_context_s *get_service_context(struct context_interface_s *interface);
+
+void adjust_pathmax(struct service_context_s *ctx, unsigned int len);
+unsigned int get_pathmax(struct service_context_s *ctx);
 
 #endif

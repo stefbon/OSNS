@@ -38,7 +38,4 @@ int add_direntry_plus_buffer(struct fuse_config_s *c, struct direntry_buffer_s *
 void set_default_fuse_timeout(struct system_timespec_s *timeout, unsigned char w);
 void set_rootstat(struct system_stat_s *stat);
 
-void set_fuse_request_flags_cb(struct fuse_request_s *request, void (* cb)(struct fuse_request_s *request));
-void unset_fuse_request_flags_cb(struct fuse_request_s *request);
-
 #endif

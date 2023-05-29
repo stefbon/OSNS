@@ -47,4 +47,7 @@
 #include <sys/param.h>
 #include <sys/types.h>
 
+#define OSNS_DATA_BUFFER_FLAG_ALLOC			1
+#define OSNS_DATA_BUFFER_FLAG_ERROR			2
+
 #endif

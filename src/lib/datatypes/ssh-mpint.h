@@ -21,8 +21,7 @@
 #define LIB_DATATYPES_SSH_MPINT_H
 
 #include "ssh-uint.h"
-#include "ssh-string.h"
-#include "ssh-payload.h"
+#include "lib/ssh/ssh-string.h"
 #include "ssh-msg-buffer.h"
 
 #define SSH_MPINT_TYPE_GCRYPT		1

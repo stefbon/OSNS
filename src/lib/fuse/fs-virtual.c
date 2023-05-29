@@ -28,6 +28,8 @@
 
 #include "request.h"
 #include "fs-common.h"
+#include "openfile.h"
+#include "opendir.h"
 
 static struct fuse_fs_s virtual_dir_fs;
 static struct fuse_fs_s virtual_nondir_fs;
@@ -42,7 +44,7 @@ static void _fs_lookup(struct service_context_s *context, struct fuse_request_s 
 
 static void _fs_getattr(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode)
 {
-    _fs_common_getattr(context, request, inode);
+    _fs_common_getattr(request, &inode->stat);
 }
 
 static void _fs_access(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, unsigned int mask)
@@ -52,7 +54,7 @@ static void _fs_access(struct service_context_s *context, struct fuse_request_s 
 
 static void _fs_setattr(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, struct system_stat_s *stat)
 {
-    _fs_common_getattr(context, request, inode);
+    _fs_common_getattr(request, &inode->stat);
 }
 
 static void _fs_readlink(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode)

@@ -34,20 +34,15 @@
 #include "ssh-send.h"
 #include "ssh-data.h"
 #include "ssh-channel.h"
-#include "ssh-signal.h"
 #include "ssh-userauth.h"
 #include "ssh-connections.h"
 #include "ssh-extensions.h"
 #include "alloc/init.h"
 
-// #define UINT32_T_MAX				0xFFFFFFFF
-
 #define GLOBAL_STATUS_FLAG_SSH_INIT				1
 #define GLOBAL_STATUS_FLAG_BACKEND_INIT				2
 
 static unsigned int global_status=0;
-
-static pthread_mutex_t init_mutex=PTHREAD_MUTEX_INITIALIZER;
 
 void init_ssh_session_config(struct ssh_session_s *session)
 {
@@ -126,6 +121,7 @@ int init_ssh_backend(struct shared_signal_s *signal)
 	init_ssh_receive_once();
 	init_ssh_utils();
 	init_keyex_once();
+	init_ssh_channels_table(signal);
 
     }
 
@@ -142,93 +138,104 @@ int init_ssh_backend(struct shared_signal_s *signal)
 void _close_ssh_session_connections(struct ssh_session_s *session, unsigned char flags)
 {
     struct ssh_connections_s *connections=&session->connections;
-    struct ssh_connection_s *connection=NULL;
-    unsigned char remove=((flags & (CLOSE_SSH_SESSION_FLAG_CLEAR | CLOSE_SSH_SESSION_FLAG_FREE)) ? 1 : 0);
+    struct ssh_connection_s *sshc=NULL;
 
-    connection=get_next_ssh_connection(connections, connection, remove);
+    if (flags & (CLOSE_SSH_SESSION_FLAG_CLEAR | CLOSE_SSH_SESSION_FLAG_FREE)) flags |= CLOSE_SSH_SESSION_FLAG_CLOSE;
 
-    while (connection) {
-	struct ssh_connection_s *next=get_next_ssh_connection(connections, connection, remove);
+    sshc=get_next_ssh_connection(connections, NULL);
 
-	if (flags & CLOSE_SSH_SESSION_FLAG_CLOSE) remove_ssh_connection_eventloop(connection);
-
-	/* send a ssh disconnect message
-	    only when initiative is not taken by remote side (then they already know, don't have to be notified) AND
-	    not send already */
-
-	if (connection->flags & SSH_CONNECTION_FLAG_MAIN) {
-
-	    if ((flags & CLOSE_SSH_SESSION_FLAG_CLOSE) && (flags & CLOSE_SSH_SESSION_FLAG_REMOTE) && (connection->flags & SSH_CONNECTION_FLAG_DISCONNECT_SEND)==0) {
-
-		send_disconnect_message(connection, SSH_DISCONNECT_BY_APPLICATION);
-		connection->flags |= SSH_CONNECTION_FLAG_DISCONNECT_SEND;
-
-	    }
-
-	    if (flags & (CLOSE_SSH_SESSION_FLAG_CLEAR | CLOSE_SSH_SESSION_FLAG_FREE)) connections->main=NULL;
-
-	}
+    while (sshc) {
+	struct ssh_connection_s *next=get_next_ssh_connection(connections, sshc);
 
 	if (flags & CLOSE_SSH_SESSION_FLAG_CLOSE) {
 
-	    set_ssh_send_behaviour(connection, "disconnect");
-	    set_ssh_receive_behaviour(connection, "disconnect");
+            disconnect_ssh_connection(sshc);
 
-	}
+        }
 
-	if (remove) free_ssh_connection(&connection);
-	connection=next;
+	if (flags & (CLOSE_SSH_SESSION_FLAG_CLEAR | CLOSE_SSH_SESSION_FLAG_FREE)) {
+
+            if (sshc->flags & SSH_CONNECTION_FLAG_MAIN) connections->main=NULL;
+            free_ssh_connection(&sshc);
+
+        }
+
+	sshc=next;
 
     }
 
 }
 
-void _walk_ssh_session_channels(struct ssh_session_s *session, unsigned int flags, struct ssh_connection_s *connection)
+struct clear_ssh_session_channels_hlpr_s {
+    unsigned int                                flags;
+    struct ssh_connection_s                     *sshc;
+    struct ssh_session_s                        *session;
+};
+
+static int clear_ssh_channel_cb(struct ssh_channel_s *channel, void *ptr)
 {
-    struct channel_table_s *table=&session->channel_table;
-    struct osns_lock_s wlock;
-    unsigned char remove=((flags & (CLOSE_SSH_SESSION_FLAG_CLEAR | CLOSE_SSH_SESSION_FLAG_FREE)) ? 1 : 0);
+    struct clear_ssh_session_channels_hlpr_s *hlpr=(struct clear_ssh_session_channels_hlpr_s *) ptr;
 
-    logoutput_debug("_walk_ssh_session_channels: flags %u", flags);
+    if ((hlpr->session==channel->session) && ((hlpr->sshc==NULL) || (channel->connection == hlpr->sshc))) {
 
-    if (channeltable_writelock(table, &wlock)==0) {
-	struct ssh_channel_s *channel=get_next_channel(session, NULL);
+        if (hlpr->flags & CLOSE_SSH_SESSION_FLAG_CLOSE) {
 
-	while (channel) {
-	    struct ssh_channel_s *next=get_next_channel(session, channel);
+            close_ssh_channel(channel, SSH_CHANNEL_FLAG_CLIENT_CLOSE);
+            if (hlpr->flags & CLOSE_SSH_SESSION_FLAG_SIGNAL) (* channel->context.signal_channel2ctx)(channel, "event:close:", NULL, INTERFACE_CTX_SIGNAL_TYPE_SSH_CHANNEL);
 
-	    if (connection && (channel->connection != connection)) goto next;
+        }
 
-	    if (flags & CLOSE_SSH_SESSION_FLAG_CLOSE) {
+        if (hlpr->flags & (CLOSE_SSH_SESSION_FLAG_CLEAR | CLOSE_SSH_SESSION_FLAG_FREE)) {
 
-		switch_channel_send_data(channel, "close");
-		switch_msg_channel_receive_data(channel, "down", NULL);
+            if (hlpr->flags & CLOSE_SSH_SESSION_FLAG_SIGNAL) (* channel->context.signal_channel2ctx)(channel, "event:free:", NULL, INTERFACE_CTX_SIGNAL_TYPE_SSH_CHANNEL);
+	    remove_ssh_channel(channel, 0, 1);
+	    free_ssh_channel(&channel);
 
-		if (flags & CLOSE_SSH_SESSION_FLAG_SIGNAL) {
-
-		    (* channel->context.signal_channel2ctx)(channel, "event:close:", NULL, INTERFACE_CTX_SIGNAL_TYPE_SSH_CHANNEL);
-
-		}
-
-	    }
-
-	    if (remove) {
-
-		if (flags & CLOSE_SSH_SESSION_FLAG_SIGNAL) (* channel->context.signal_channel2ctx)(channel, "event:free:", NULL, INTERFACE_CTX_SIGNAL_TYPE_SSH_CHANNEL);
-		table_remove_channel(channel);
-		close_channel(channel, CHANNEL_FLAG_CLIENT_CLOSE);
-		free_ssh_channel(&channel);
-
-	    }
-
-	    next:
-	    channel=next;
-
-	}
-
-	channeltable_unlock(table, &wlock);
+        }
 
     }
+
+    return 0;
+
+}
+
+static void clear_ssh_session_channels(struct ssh_session_s *session, unsigned int flags, struct ssh_connection_s *sshc)
+{
+    struct clear_ssh_session_channels_hlpr_s hlpr;
+
+    if (flags & (CLOSE_SSH_SESSION_FLAG_CLEAR | CLOSE_SSH_SESSION_FLAG_FREE)) flags |= CLOSE_SSH_SESSION_FLAG_CLOSE;
+    logoutput_debug("clear_ssh_session_channels: flags %u", flags);
+
+    hlpr.flags=flags;
+    hlpr.sshc=sshc;
+    hlpr.session=session;
+
+    struct ssh_channel_s *channel=walk_ssh_channels(clear_ssh_channel_cb, (void *) &hlpr);
+}
+
+void disconnect_ssh_connection(struct ssh_connection_s *sshc)
+{
+    struct osns_socket_s *sock=&sshc->connection.sock;
+    struct clear_ssh_session_channels_hlpr_s hlpr;
+
+    /* send a ssh disconnect message
+	only when initiative is not taken by remote side (then they already know, don't have to be notified) AND
+	not send already */
+
+    if ((sshc->flags & SSH_CONNECTION_FLAG_DISCONNECT_SEND)==0) {
+
+	send_disconnect_message(sshc, SSH_DISCONNECT_BY_APPLICATION);
+	sshc->flags |= SSH_CONNECTION_FLAG_DISCONNECT_SEND;
+
+    }
+
+    remove_osns_socket_eventloop(sock);
+    process_socket_close_default(sock, SOCKET_LEVEL_LOCAL, NULL);
+
+    hlpr.flags=(CLOSE_SSH_SESSION_FLAG_CLOSE | CLOSE_SSH_SESSION_FLAG_SIGNAL);
+    hlpr.sshc=sshc;
+    hlpr.session=get_ssh_connection_session(sshc);
+    struct ssh_channel_s *channel=walk_ssh_channels(clear_ssh_channel_cb, (void *) &hlpr);
 
 }
 
@@ -258,7 +265,7 @@ void close_ssh_session(struct ssh_session_s *session)
 
     if (signal_set_flag(session->connections.signal, &session->connections.flags, SSH_CONNECTIONS_FLAG_DISCONNECTING)) {
 
-	_walk_ssh_session_channels(session, (CLOSE_SSH_SESSION_FLAG_CLOSE | CLOSE_SSH_SESSION_FLAG_SIGNAL), NULL);
+	clear_ssh_session_channels(session, (CLOSE_SSH_SESSION_FLAG_CLOSE | CLOSE_SSH_SESSION_FLAG_SIGNAL), NULL);
 	_close_ssh_session_connections(session, (CLOSE_SSH_SESSION_FLAG_CLOSE | CLOSE_SSH_SESSION_FLAG_SIGNAL));
 	signal_set_flag(session->connections.signal, &session->connections.flags, SSH_CONNECTIONS_FLAG_DISCONNECTED);
 
@@ -271,14 +278,12 @@ void clear_ssh_session(struct ssh_session_s *session)
 
     if (signal_set_flag(session->signal, &session->flags, SSH_SESSION_FLAG_CLEARING)) {
 
-	_walk_ssh_session_channels(session, CLOSE_SSH_SESSION_FLAG_CLEAR, NULL);
+	clear_ssh_session_channels(session, CLOSE_SSH_SESSION_FLAG_CLEAR, NULL);
 	_close_ssh_session_connections(session, CLOSE_SSH_SESSION_FLAG_CLEAR);
 	signal_set_flag(session->signal, &session->flags, SSH_SESSION_FLAG_CLEARED);
 
     }
 
-    free_ssh_connections(session);
-    free_ssh_channels_table(session);
     free_ssh_hostinfo(session);
     free_ssh_identity(session);
     free_ssh_session_data(session);
@@ -321,12 +326,12 @@ struct ssh_session_s *_create_ssh_session(unsigned int flags, struct generic_err
     return session;
 }
 
-static int signal_ssh2ctx_default(struct ssh_session_s *session, const char *what, struct io_option_s *o)
+static int signal_ssh2ctx_default(struct ssh_session_s *session, const char *what, struct io_option_s *o, unsigned int t)
 {
     return 0;
 }
 
-static int signal_ctx2ssh_default(void **ptr, const char *what, struct io_option_s *o)
+static int signal_ctx2ssh_default(void **ptr, const char *what, struct io_option_s *o, unsigned int t)
 {
     return 0;
 }
@@ -342,10 +347,9 @@ int init_ssh_session(struct ssh_session_s *session, uid_t uid, void *ctx, struct
 
     session->signal=signal;
     session->connections.signal=signal;
-
     init_list_element(&session->list, NULL);
+
     init_ssh_session_config(session);
-    init_ssh_channels_table(session, NULL, CHANNELS_TABLE_SIZE);
     init_ssh_session_data(session);
     init_ssh_hostinfo(session);
     init_ssh_extensions(session);
@@ -361,23 +365,10 @@ int setup_ssh_session(struct ssh_session_s *session)
     int result=-1;
     struct ssh_connection_s *connection=session->connections.main;
 
-    logoutput("setup_ssh_session");
+    logoutput_debug("setup_ssh_session");
 
     register_transport_cb(connection);
     change_ssh_connection_setup(connection, "setup", 0, SSH_SETUP_FLAG_SETUPTHREAD, 0, NULL, NULL);
-
-    /* setup keyexchange and payload queue here already to make sure there is a queue available
-	some servers send a kexinit message just with or just behind the greeter
-	it's important there is a payload queue present */
-
-    // if (add_ssh_connection_eventloop(connection, fd, &error)==-1) {
-
-	// logoutput("_setup_ssh_session: error %i adding fd %i to eventloop (%s)", error, fd, strerror(error));
-	// goto out_setup;
-
-    // }
-
-    // logoutput("setup_ssh_session: added fd %i to eventloop", fd);
 
     /* setup greeter */
 
@@ -408,15 +399,19 @@ int setup_ssh_session(struct ssh_session_s *session)
     logoutput("setup_ssh_session: greeter finished, start key exchange");
     init_ssh_connection_setup(connection, "transport", SSH_TRANSPORT_TYPE_KEX);
 
-    if (key_exchange(connection)==-1) {
+    result=key_exchange(connection);
+
+    if (result==-1) {
 
 	logoutput("setup_ssh_session: key exchange failed");
 	goto out_kex;
 
     }
 
-    /* immediatly after the newkeys message the server may send a SSH_MSG_EXT_INFO message
-	be prepared for this */
+    /* TODO: (20220927)
+	immediatly after the newkeys message the server may send a SSH_MSG_EXT_INFO message
+	be prepared for this
+	see: https://datatracker.ietf.org/doc/html/rfc8308 */
 
     if (check_ssh_connection_setup(connection, "transport", SSH_TRANSPORT_TYPE_KEX, 0)<1) {
 
@@ -556,18 +551,8 @@ static void analyze_ssh_connection_problem(void *ptr)
 	    logoutput("analyze_connection_problem: error %i (%s): disconnecting", error, strerror(error));
 
 	    change_ssh_connection_setup(connection, "setup", 0, SSH_SETUP_FLAG_DISCONNECTING, 0, NULL, 0);
-	    remove_ssh_connection_eventloop(connection);
 	    disconnect_ssh_connection(connection);
 	    change_ssh_connection_setup(connection, "setup", 0, SSH_SETUP_FLAG_DISCONNECTED, 0, NULL, 0);
-
-	    if (connection->refcount>=0) {
-		struct ssh_session_s *session=get_ssh_connection_session(connection);
-
-		/* send close to channels context using this connection */
-
-		_walk_ssh_session_channels(session, CLOSE_SSH_SESSION_FLAG_CLOSE, connection);
-
-	    }
 
 	} else {
 
@@ -583,8 +568,7 @@ static void analyze_ssh_connection_problem(void *ptr)
 
 static int setup_cb_thread_connection_problem(struct ssh_connection_s *connection, void *data)
 {
-    struct generic_error_s error=GENERIC_ERROR_INIT;
-    work_workerthread(NULL, 0, analyze_ssh_connection_problem, (void *) connection, &error);
+    work_workerthread(NULL, 0, analyze_ssh_connection_problem, (void *) connection);
     return 0;
 }
 

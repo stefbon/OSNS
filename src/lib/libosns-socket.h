@@ -26,5 +26,7 @@
 #include "socket/directory.h"
 #include "socket/file.h"
 #include "socket/utils.h"
+#include "socket/event.h"
+#include "socket/control.h"
 
 #endif

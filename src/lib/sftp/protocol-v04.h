@@ -60,14 +60,6 @@
 #define SSH_FX_WRITE_PROTECT	 		12
 #define SSH_FX_NO_MEDIA 			13
 
-/* file types */
-
-#define SSH_FILEXFER_TYPE_REGULAR		1
-#define SSH_FILEXFER_TYPE_DIRECTORY		2
-#define SSH_FILEXFER_TYPE_SYMLINK		3
-#define SSH_FILEXFER_TYPE_SPECIAL		4
-#define SSH_FILEXFER_TYPE_UNKNOWN		5
-
 /* open pflags */
 
 #define SSH_FXF_READ     			0x00000001

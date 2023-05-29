@@ -43,5 +43,6 @@ struct service_context_s *get_root_context_workspace(struct workspace_mount_s *w
 struct service_context_s *get_root_context(struct service_context_s *ctx);
 
 int signal_selected_ctx(struct context_interface_s *i, unsigned char shared, const char *what, struct io_option_s *option, unsigned int type, int (* select)(struct context_interface_s *i, void *ptr), void *ptr);
+struct service_context_s *find_service_context_unlocked(struct list_header_s *h, int (* compare)(struct service_context_s *ctx, void *ptr), void *ptr);
 
 #endif

@@ -20,12 +20,10 @@
 #ifndef _SSH_SEND_SEND_H
 #define _SSH_SEND_SEND_H
 
-void set_ssh_send_behaviour(struct ssh_connection_s *c, const char *what);
+void set_ssh_send_behaviour(struct ssh_send_s *send, const char *what);
 
-int write_ssh_packet(struct ssh_connection_s *c, struct ssh_payload_s *payload, unsigned int *seq);
-int write_ssh_packet_kexinit(struct ssh_connection_s *c, struct ssh_payload_s *payload, unsigned int *seq);
-int write_ssh_packet_newkeys(struct ssh_connection_s *c, struct ssh_payload_s *payload, unsigned int *seq);
-int write_ssh_packet_kexinit(struct ssh_connection_s *c, struct ssh_payload_s *payload, unsigned int *seq);
+int write_ssh_packet(struct ssh_connection_s *c, struct ssh_payload_s *payload);
+int write_ssh_packet_kexinit(struct ssh_connection_s *c, struct ssh_payload_s *payload);
 
 int request_ssh_service(struct ssh_connection_s *c, const char *service);
 

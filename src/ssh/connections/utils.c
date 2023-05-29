@@ -36,27 +36,15 @@
 struct ssh_connection_s *get_main_ssh_connection(struct ssh_connections_s *connections)
 {
     struct list_header_s *h=&connections->header;
-    struct list_element_s *list=get_list_head(h, 0);
+    struct list_element_s *list=get_list_head(h);
 
-    return ((list) ? ((struct ssh_connection_s *)((char *) list - offsetof(struct ssh_connection_s, list))) : NULL);
-
+    return ((list) ? ((struct ssh_connection_s *)((char *) list - offsetof(struct ssh_connection_s, connection.list))) : NULL);
 }
 
-struct ssh_connection_s *get_next_ssh_connection(struct ssh_connections_s *connections, struct ssh_connection_s *connection, unsigned char remove)
+struct ssh_connection_s *get_next_ssh_connection(struct ssh_connections_s *connections, struct ssh_connection_s *connection)
 {
-    struct list_element_s *next=NULL;
-
-    if (remove) {
-
-	next=get_list_head(&connections->header, SIMPLE_LIST_FLAG_REMOVE);
-
-    } else {
-
-	next=(connection) ? get_next_element(&connection->list) : get_list_head(&connections->header, 0);
-
-    }
-
-    return (next) ? (struct ssh_connection_s *)(((char *) next) - offsetof(struct ssh_connection_s, list)) : NULL;
+    struct list_element_s *next=(connection) ? get_next_element(&connection->connection.list) : get_list_head(&connections->header);
+    return (next) ? (struct ssh_connection_s *)(((char *) next) - offsetof(struct ssh_connection_s, connection.list)) : NULL;
 }
 
 unsigned int get_status_ssh_connection(struct ssh_connection_s *connection)
@@ -64,40 +52,27 @@ unsigned int get_status_ssh_connection(struct ssh_connection_s *connection)
     return get_status_osns_socket(&connection->connection.sock);
 }
 
+void get_ssh_connection_expire_custom(struct system_timespec_s *expire, unsigned int sec)
+{
+    get_current_time_system_time(expire);
+    system_time_add(expire, SYSTEM_TIME_ADD_ZERO, sec);
+}
+
 void get_ssh_connection_expire_init(struct ssh_connection_s *c, struct system_timespec_s *expire)
 {
-    struct connection_s *connection=&c->connection;
-
-    get_current_time_system_time(expire);
-    system_time_add(expire, SYSTEM_TIME_ADD_ZERO, c->connection.expire); /* connection expire is only in sec */
+    get_ssh_connection_expire_custom(expire, c->connection.expire);
 }
 
 void get_ssh_connection_expire_session(struct ssh_connection_s *c, struct system_timespec_s *expire)
 {
     struct ssh_session_s *session=get_ssh_connection_session(c);
-
-    get_current_time_system_time(expire);
-    system_time_add(expire, SYSTEM_TIME_ADD_ZERO, session->config.connection_expire); /* connection expire is only in sec */
+    get_ssh_connection_expire_custom(expire, session->config.connection_expire);
 }
 
 void get_ssh_connection_expire_userauth(struct ssh_connection_s *c, struct system_timespec_s *expire)
 {
     struct ssh_session_s *session=get_ssh_connection_session(c);
-
-    get_current_time_system_time(expire);
-    system_time_add(expire, SYSTEM_TIME_ADD_ZERO, session->config.userauth_expire); /* connection expire is only in sec */
-}
-
-void signal_ssh_connections(struct ssh_session_s *session)
-{
-    struct ssh_connections_s *c=&session->connections;
-
-    /* signal any waiting thread for a payload (this is done via signal) */
-
-    signal_lock(c->signal);
-    signal_broadcast(c->signal);
-    signal_unlock(c->signal);
-
+    get_ssh_connection_expire_custom(expire, session->config.userauth_expire);
 }
 
 static void common_refcount_ssh_connection(struct ssh_connection_s *connection, signed char step)
@@ -135,7 +110,7 @@ void decrease_refcount_ssh_connection(struct ssh_connection_s *connection)
 
 struct ssh_session_s *get_ssh_connection_session(struct ssh_connection_s *connection)
 {
-    struct list_header_s *h=connection->list.h;
+    struct list_header_s *h=connection->connection.list.h;
 
     if (h) {
 	struct ssh_connections_s *connections=(struct ssh_connections_s *)(((char *) h) - offsetof(struct ssh_connections_s, header));
@@ -149,7 +124,7 @@ struct ssh_session_s *get_ssh_connection_session(struct ssh_connection_s *connec
 
 struct ssh_connections_s *get_ssh_connection_connections(struct ssh_connection_s *connection)
 {
-    struct list_header_s *h=connection->list.h;
+    struct list_header_s *h=connection->connection.list.h;
     return ((h) ? (struct ssh_connections_s *)(((char *) h) - offsetof(struct ssh_connections_s, header)) : NULL);
 }
 

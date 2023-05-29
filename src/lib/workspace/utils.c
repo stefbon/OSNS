@@ -158,7 +158,7 @@ char *get_path_from_template(char *template, struct passwd *pwd, char *buff, siz
 
 }
 
-int create_directory(char *dir, mode_t mode, unsigned int *error)
+int system_create_directory(char *dir, mode_t mode, unsigned int *error)
 {
     char path[strlen(dir) + 1];
     char *slash=NULL;
@@ -182,7 +182,7 @@ int create_directory(char *dir, mode_t mode, unsigned int *error)
 
 	    if (errno != EEXIST) {
 
-		logoutput("create_directory: error %i%s creating %s", errno, strerror(errno), path);
+		logoutput_debug("system_create_directory: error %i%s creating %s", errno, strerror(errno), path);
 		*error=errno;
 		return -1;
 

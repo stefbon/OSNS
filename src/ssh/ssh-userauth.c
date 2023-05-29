@@ -314,14 +314,14 @@ static int start_ssh_userauth_client(struct ssh_session_s *session, struct ssh_c
 
 }
 
-static int select_service_request_message(struct ssh_connection_s *connection, struct ssh_payload_s *payload, void *ptr)
+static int select_service_request_message(struct ssh_payload_s *payload, void *ptr)
 {
-    return (payload->type==SSH_MSG_SERVICE_REQUEST) ? 0 : -1;
+    return ((payload->type==SSH_MSG_SERVICE_REQUEST) ? 1 : 0);
 }
 
-static int select_userauth_request_message(struct ssh_connection_s *connection, struct ssh_payload_s *payload, void *ptr)
+static int select_userauth_request_message(struct ssh_payload_s *payload, void *ptr)
 {
-    return (payload->type==SSH_MSG_USERAUTH_REQUEST) ? 0 : -1;
+    return ((payload->type==SSH_MSG_USERAUTH_REQUEST) ? 1 : 0);
 }
 
 static int start_ssh_userauth_server(struct ssh_session_s *session, struct ssh_connection_s *connection)
@@ -331,7 +331,6 @@ static int start_ssh_userauth_server(struct ssh_session_s *session, struct ssh_c
     struct ssh_payload_s *payload=NULL;
     struct generic_error_s error=GENERIC_ERROR_INIT;
     struct system_timespec_s expire=SYSTEM_TIME_INIT;
-    uint32_t seq=0;
     int result=-1;
     char *buffer=payload->buffer;
     unsigned int size=payload->len;
@@ -344,7 +343,7 @@ static int start_ssh_userauth_server(struct ssh_session_s *session, struct ssh_c
 
     get_ssh_connection_expire_userauth(connection, &expire);
 
-    payload=get_ssh_payload(connection, &connection->setup.queue, &expire, &seq, select_service_request_message, NULL, &error);
+    payload=get_ssh_payload(&connection->setup.queue, &expire, select_service_request_message, NULL, NULL, NULL);
     if (payload==NULL || payload->len<5) {
 
 	logoutput("start_ssh_auth_server: not received a service request message or message is too small (%s)", get_error_description(&error));
@@ -381,7 +380,7 @@ static int start_ssh_userauth_server(struct ssh_session_s *session, struct ssh_c
 	struct ssh_string_s method=SSH_STRING_INIT;
 	struct ssh_string_s data=SSH_STRING_INIT;
 
-	if (send_service_accept_message(connection, "ssh-userauth", &seq)==-1) {
+	if (send_service_accept_message(connection, "ssh-userauth")==-1) {
 
 	    logoutput("start_ssh_auth_server: unable to send service accept message for userauth");
 	    goto disconnect;
@@ -408,7 +407,7 @@ static int start_ssh_userauth_server(struct ssh_session_s *session, struct ssh_c
 	    - string			method {publickey, password, hostbased, none}
 	    - method specific data */
 
-	payload=get_ssh_payload(connection, &connection->setup.queue, &expire, &seq, select_service_request_message, NULL, &error);
+	payload=get_ssh_payload(&connection->setup.queue, &expire, select_service_request_message, NULL, NULL, NULL);
 	if (payload==NULL || payload->len<5) {
 
 	    logoutput("start_ssh_auth_server: not received a service request message or message is too small (%s)", get_error_description(&error));

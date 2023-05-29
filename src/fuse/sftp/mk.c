@@ -34,276 +34,128 @@
 #include "interface/sftp-send.h"
 #include "interface/sftp-wait-response.h"
 #include "inode-stat.h"
+#include "path.h"
+#include "handle.h"
 
 /* CREATE a directory */
 
-void _fs_sftp_mkdir(struct service_context_s *ctx, struct fuse_request_s *f_request, struct entry_s *entry, struct fuse_path_s *fpath, struct system_stat_s *stat)
+struct _cb_mk_hlpr_s {
+    struct fuse_request_s 	*request;
+    struct inode_s		*inode;
+    unsigned int		pathlen;
+    unsigned int		errcode;
+    char			*handle;
+    unsigned int		size;
+};
+
+static void _cb_success_mk(struct service_context_s *ctx, struct sftp_reply_s *reply, void *ptr)
 {
     struct workspace_mount_s *w=get_workspace_mount_ctx(ctx);
-    struct service_context_s *rootcontext=get_root_context(ctx);
-    struct context_interface_s *i=&ctx->interface;
-    struct inode_s *inode=entry->inode;
-    struct sftp_request_s sftp_r;
-    struct rw_attr_result_s r=RW_ATTR_RESULT_INIT;
-    struct get_supported_sftp_attr_s gssa;
-    unsigned int attrsize=get_attr_buffer_size(i, &r, stat, &gssa) + 5; /* uid and gid by server ?*/
-    char attrs[attrsize];
-    struct attr_buffer_s abuff;
-    unsigned int error=EIO;
-    unsigned int pathlen=sftp_get_complete_pathlen(i, fpath);
-    unsigned int size=sftp_get_required_buffer_size_l2p(i, pathlen);
-    char buffer[size];
-    int result=0;
+    struct _cb_mk_hlpr_s *hlpr=(struct _cb_mk_hlpr_s *) ptr;
+    struct inode_s *inode=hlpr->inode;
+    struct entry_s *entry=inode->alias;
+    struct directory_s *d=NULL;
+    uint32_t nlink=1;
 
-    memset(buffer, 0, size);
-    result=sftp_convert_path_l2p(i, buffer, size, fpath->pathstart, pathlen);
+    inode->nlookup++;
 
-    if (result==-1) {
+    nlink=(system_stat_test_ISDIR(&inode->stat) ? 2 : 1);
+    set_nlink_system_stat(&inode->stat, nlink);
+    _fs_common_cached_lookup(ctx, hlpr->request, inode);
 
-	logoutput_debug("_fs_sftp_mkdir: error converting local path");
-	goto out;
-
-    }
-
-    /* compare the stat mask as asked by FUSE and the ones SFTP can set using this protocol version */
-
-    if (gssa.stat_mask_result != gssa.stat_mask_asked)
-	logoutput_warning("_fs_sftp_mkdir: not able to set every stat attr: asked %i to set %i", gssa.stat_mask_asked, gssa.stat_mask_result);
-
-    /* enable writing of subseconds (only of course if one of the time attr is included)*/
-
-    if (gssa.stat_mask_result & (SYSTEM_STAT_ATIME | SYSTEM_STAT_MTIME | SYSTEM_STAT_BTIME | SYSTEM_STAT_CTIME)) {
-
-	if (enable_attributes_ctx(i, &gssa.valid, "subseconds")==1) {
-
-	    logoutput_debug("_fs_sftp_mkdir: enabled setting subseconds");
-
-	} else {
-
-	    logoutput_debug("_fs_sftp_mkdir: subseconds not supported");
-
-	}
-
-    }
-
-    set_attr_buffer_write(&abuff, attrs, attrsize);
-    (* abuff.ops->rw.write.write_uint32)(&abuff, gssa.valid.mask);
-    write_attributes_ctx(i, &abuff, &r, stat, &gssa.valid);
-
-    init_sftp_request(&sftp_r, i, f_request);
-
-    sftp_r.call.mkdir.path=(unsigned char *) buffer;
-    sftp_r.call.mkdir.len=(unsigned int) result;
-    sftp_r.call.mkdir.size=(unsigned int) abuff.pos;
-    sftp_r.call.mkdir.buff=(unsigned char *) abuff.buffer;
-
-    if (send_sftp_mkdir_ctx(i, &sftp_r)>0) {
-	struct system_timespec_s timeout=SYSTEM_TIME_INIT;
-
-	get_sftp_request_timeout_ctx(i, &timeout);
-
-	if (wait_sftp_response_ctx(i, &sftp_r, &timeout)==1) {
-	    struct sftp_reply_s *reply=&sftp_r.reply;
-
-	    if (reply->type==SSH_FXP_STATUS) {
-
-		if (reply->response.status.code==0) {
-		    struct directory_s *d=get_upper_directory_entry(entry);
-
-		    inode->nlookup++;
-		    set_nlink_system_stat(&inode->stat, 2);
-		    _fs_common_cached_lookup(ctx, f_request, inode);
-
-		    add_inode_context(ctx, inode);
-		    (* d->inode->fs->type.dir.use_fs)(ctx, inode);
-		    adjust_pathmax(w, pathlen);
-		    assign_directory_inode(w, inode);
-		    unset_fuse_request_flags_cb(f_request);
-		    get_current_time_system_time(&inode->stime);
-		    return;
-
-		}
-
-		error=reply->response.status.linux_error;
-		logoutput("_fs_sftp_create: status reply %i", error);
-
-	    } else {
-
-		error=EINVAL;
-
-	    }
-
-	}
-
-    } else {
-
-	error=(sftp_r.reply.error) ? sftp_r.reply.error : EIO;
-
-    }
-
-    queue_inode_2forget(w, get_ino_system_stat(&inode->stat), 0, 0);
-
-    out:
-
-    reply_VFS_error(f_request, error);
-    unset_fuse_request_flags_cb(f_request);
+    add_inode_context(ctx, inode);
+    d=get_upper_directory_entry(entry);
+    (* d->inode->fs->type.dir.use_fs)(ctx, inode);
+    adjust_pathmax(get_root_context(ctx), hlpr->pathlen);
+    if (system_stat_test_ISDIR(&inode->stat)) assign_directory_inode(inode);
+    get_current_time_system_time(&inode->stime);
 
 }
 
-/* mknod not supported in sftp; emulate with create? */
-
-void _fs_sftp_mknod(struct service_context_s *ctx, struct fuse_request_s *f_request, struct entry_s *entry, struct fuse_path_s *fpath, struct system_stat_s *stat)
+static void _cb_error_mk(struct service_context_s *ctx, unsigned int errcode, void *ptr)
 {
-    struct workspace_mount_s *w=get_workspace_mount_ctx(ctx);
-    struct context_interface_s *i=&ctx->interface;
-    struct sftp_request_s sftp_r;
-    unsigned int error=EIO;
-    struct rw_attr_result_s r=RW_ATTR_RESULT_INIT;
-    struct get_supported_sftp_attr_s gssa;
-    unsigned int attrsize=get_attr_buffer_size(i, &r, stat, &gssa) + 5;
-    char attrs[attrsize];
-    struct attr_buffer_s abuff;
-    unsigned int pathlen=sftp_get_complete_pathlen(i, fpath);
-    unsigned int size=sftp_get_required_buffer_size_l2p(i, pathlen);
-    char buffer[size];
-    int result=0;
+    struct _cb_mk_hlpr_s *hlpr=(struct _cb_mk_hlpr_s *) ptr;
+    struct inode_s *inode=NULL;
 
-    memset(buffer, 0, size);
-    result=sftp_convert_path_l2p(i, buffer, size, fpath->pathstart, pathlen);
+    reply_VFS_error(hlpr->request, errcode);
 
-    if (result==-1) {
-
-	logoutput_debug("_fs_sftp_mknod: error converting local path");
-	goto out;
-
-    }
-
-    /* compare the stat mask as asked by FUSE and the ones SFTP can set using this protocol version */
-
-    if (gssa.stat_mask_result != gssa.stat_mask_asked)
-	logoutput_warning("_fs_sftp_mknod: not able to set every stat attr: asked %i to set %i", gssa.stat_mask_asked, gssa.stat_mask_result);
-
-    /* enable writing of subseconds (only of course if one of the time attr is included)*/
-
-    if (gssa.stat_mask_result & (SYSTEM_STAT_ATIME | SYSTEM_STAT_MTIME | SYSTEM_STAT_BTIME | SYSTEM_STAT_CTIME)) {
-
-	if (enable_attributes_ctx(i, &gssa.valid, "subseconds")==1) {
-
-	    logoutput_info("_fs_sftp_mknod: enabled setting subseconds");
-
-	} else {
-
-	    logoutput_info("_fs_sftp_mknod: subseconds not supported");
-
-	}
-
-    }
-
-    logoutput("_fs_sftp_mknod: path %s", fpath->pathstart);
-
-    set_attr_buffer_write(&abuff, attrs, attrsize);
-    (* abuff.ops->rw.write.write_uint32)(&abuff, gssa.valid.mask);
-    write_attributes_ctx(i, &abuff, &r, stat, &gssa.valid);
-
-    init_sftp_request(&sftp_r, i, f_request);
-
-    sftp_r.call.create.path=(unsigned char *) buffer;
-    sftp_r.call.create.len=(unsigned int) result;
-    sftp_r.call.create.posix_flags=(O_CREAT | O_EXCL);
-    sftp_r.call.create.size=(unsigned int) abuff.pos;
-    sftp_r.call.create.buff=(unsigned char *) abuff.buffer;
-
-    if (send_sftp_create_ctx(i, &sftp_r)>0) {
-	struct system_timespec_s timeout=SYSTEM_TIME_INIT;
-
-	get_sftp_request_timeout_ctx(i, &timeout);
-
-	if (wait_sftp_response_ctx(i, &sftp_r, &timeout)==1) {
-	    struct sftp_reply_s *reply=&sftp_r.reply;
-
-	    unset_fuse_request_flags_cb(f_request);
-
-	    if (reply->type==SSH_FXP_HANDLE) {
-		struct handle_response_s handle;
-		struct inode_s *inode=entry->inode;
-		struct directory_s *d=get_upper_directory_entry(entry);
-
-		add_inode_context(ctx, inode);
-		_fs_common_cached_lookup(ctx, f_request, inode);
-
-		(* d->inode->fs->type.dir.use_fs)(ctx, inode);
-		adjust_pathmax(w, pathlen);
-		get_current_time_system_time(&inode->stime);
-
-		/* send here a fgetstat to get the attributes as set on the server ?? */
-		/* send a close ... reuse sftp request */
-
-		handle.len=reply->response.handle.len;
-		handle.name=reply->response.handle.name;
-		init_sftp_request_minimal(&sftp_r, i);
-
-		sftp_r.call.close.handle=(unsigned char *) handle.name;
-		sftp_r.call.close.len=handle.len;
-		get_sftp_request_timeout_ctx(i, &timeout);
-
-		if (send_sftp_close_ctx(i, &sftp_r)>0) {
-
-		    if (wait_sftp_response_ctx(i, &sftp_r, &timeout)==1) {
-			struct sftp_reply_s *reply=&sftp_r.reply;
-
-			if (reply->type==SSH_FXP_STATUS) {
-
-			    if (reply->response.status.code!=0) {
-
-				error=reply->response.status.linux_error;
-
-			    } else {
-
-				logoutput_notice("_fs_sftp_mknod: filehandle closed");
-
-			    }
-
-			} else {
-
-			    logoutput_warning("_fs_sftp_mknod: received reply type %i expecting %i", reply->type, SSH_FXP_STATUS);
-
-			}
-
-		    }
-
-		}
-
-		free(handle.name);
-		handle.name=NULL;
-		handle.len=0;
-		return;
-
-	    } else {
-
-		error=EPROTO;
-
-	    }
-
-	}
-
-    } else {
-
-	error=(sftp_r.reply.error) ? sftp_r.reply.error : EIO;
-
-    }
-
-    out:
-    reply_VFS_error(f_request, error);
-    unset_fuse_request_flags_cb(f_request);
+    inode=hlpr->inode;
+    queue_inode_2forget(get_root_context(ctx), get_ino_system_stat(&inode->stat), 0, 0);
 }
 
-void _fs_sftp_mkdir_disconnected(struct service_context_s *context, struct fuse_request_s *f_request, struct entry_s *entry, struct fuse_path_s *fpath, struct system_stat_s *st)
+static unsigned char _cb_interrupted_mk(void *ptr)
 {
-    reply_VFS_error(f_request, ENOTCONN);
+    struct _cb_mk_hlpr_s *hlpr=(struct _cb_mk_hlpr_s *) ptr;
+    return ((hlpr->request->flags & FUSE_REQUEST_FLAG_INTERRUPTED) ? 1 : 0);
 }
 
-void _fs_sftp_mknod_disconnected(struct service_context_s *context, struct fuse_request_s *f_request, struct entry_s *entry, struct fuse_path_s *fpath, struct system_stat_s *st)
+void _fs_sftp_mkdir(struct service_context_s *ctx, struct fuse_request_s *request, struct entry_s *entry, struct fuse_path_s *fpath, struct system_stat_s *stat)
 {
-    reply_VFS_error(f_request, ENOTCONN);
+    struct _cb_mk_hlpr_s hlpr;
+
+    hlpr.request=request;
+    hlpr.inode=entry->inode;
+    hlpr.pathlen=(unsigned int)(fpath->path + fpath->len - fpath->pathstart); /* to determine the buffer is still big enough to hold every path on the workspace */
+    hlpr.errcode=0;
+    hlpr.handle=NULL;
+    hlpr.size=0;
+
+    _sftp_path_mkdir(ctx, fpath, stat, _cb_success_mk, _cb_error_mk, _cb_interrupted_mk, (void *) &hlpr);
+}
+
+/* MKNOD 
+    mknod not supported in sftp; emulate with create */
+
+static void _cb_success_mknod(struct service_context_s *ctx, struct sftp_reply_s *reply, void *ptr)
+{
+    struct _cb_mk_hlpr_s *hlpr=(struct _cb_mk_hlpr_s *) ptr;
+
+    _cb_success_mk(ctx, reply, ptr);
+
+    /* keep the received handle */
+
+    hlpr->handle=reply->data;
+    hlpr->size=reply->size;
+
+    reply->data=NULL;
+    reply->size=0;
+
+}
+
+void _fs_sftp_mknod(struct service_context_s *ctx, struct fuse_request_s *request, struct entry_s *entry, struct fuse_path_s *fpath, struct system_stat_s *stat)
+{
+    struct _cb_mk_hlpr_s hlpr;
+
+    hlpr.request=request;
+    hlpr.inode=entry->inode;
+    hlpr.pathlen=(unsigned int)(fpath->path + fpath->len - fpath->pathstart); /* to determine the buffer is still big enough to hold every path on the workspace */
+    hlpr.errcode=0;
+    hlpr.handle=NULL;
+    hlpr.size=0;
+
+    /* sftp does not have a mknod,
+        do this by using create and close it directly
+        (emulate it using create/close) */
+
+    _sftp_path_open(ctx, fpath, stat, (O_CREAT | O_EXCL), "open", _cb_success_mknod, _cb_error_mk, _cb_interrupted_mk, (void *) &hlpr);
+
+    if (hlpr.handle && hlpr.size>0) {
+
+	/* received a handle: operation success ... close it directly ... create a tmp fuse handle for that */
+
+	unsigned int len=sizeof(struct fuse_handle_s) + hlpr.size;
+	char buffer[len];
+	struct fuse_handle_s *handle=(struct fuse_handle_s *) buffer;
+
+	memset(handle, 0, len);
+	init_fuse_handle(handle, FUSE_HANDLE_FLAG_OPENFILE, hlpr.handle, hlpr.size);
+	release_fuse_handle(handle);
+
+	free(hlpr.handle);
+	hlpr.handle=NULL;
+	hlpr.size=0;
+
+    }
+
 }
 

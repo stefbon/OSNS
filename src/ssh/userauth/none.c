@@ -37,7 +37,6 @@ int send_userauth_none_request(struct ssh_connection_s *connection, struct ssh_s
 {
     struct ssh_setup_s *setup=&connection->setup;
     struct ssh_auth_s *auth=&setup->phase.service.type.auth;
-    unsigned int seq=0;
     int result=-1;
 
     /* get the list of authemtication 'method name' values
@@ -49,10 +48,10 @@ int send_userauth_none_request(struct ssh_connection_s *connection, struct ssh_s
     /* send with the client username since the username used to connect is not known here
 	this username will follow after pubkey when the different pubkeys/user are offered */
 
-    if (send_userauth_none_message(connection, &auth->c_username, service, &seq)>0) {
+    if (send_userauth_none_message(connection, &auth->c_username, service)>0) {
 	struct ssh_payload_s *payload=NULL;
 
-	payload=receive_message_common(connection, select_userauth_reply, NULL, NULL);
+	payload=receive_message_common(connection, select_userauth_reply, NULL);
 	if (payload==NULL) goto finish;
 
 	if (payload->type == SSH_MSG_USERAUTH_SUCCESS) {

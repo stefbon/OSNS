@@ -175,3 +175,16 @@ unsigned char enable_attr_v03(struct attr_context_s *actx, struct sftp_valid_s *
 
     return result;
 }
+
+unsigned int get_property_v03(struct attr_context_s *actx, unsigned int flag)
+{
+    unsigned int result=0;
+
+    if (flag & SFTP_ATTR_PROPERTY_VALIDFIELD_STAT) {
+
+	result |= 0;
+
+    }
+
+    return result;
+}

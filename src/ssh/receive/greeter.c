@@ -26,10 +26,6 @@
 #include "ssh-connections.h"
 #include "ssh-receive.h"
 
-#define SSH_GREETER_START			"SSH-"
-#define SSH_GREETER_TERMINATOR_CRLF		1
-#define SSH_GREETER_TERMINATOR_LF		2
-
 /*
     get the remote ssh version
     this string has the form:
@@ -39,16 +35,19 @@
     - it's also possible that there is no comment, then there is also no <SP>
 */
 
-static int read_ssh_version(struct ssh_session_s *session)
+int read_ssh_protocol_version(struct ssh_session_s *session)
 {
     struct ssh_string_s *greeter=&session->data.greeter_server;
     char *sep=NULL;
     char *start=NULL;
     unsigned int left=0;
-
-    logoutput("read_ssh_version: analyze %.*s", greeter->len, greeter->ptr);
+    int result=-1;
 
     if (greeter->ptr==NULL || greeter->len==0) return -1;
+    logoutput_debug("read_ssh_protocol_version: analyze %.*s", greeter->len, greeter->ptr);
+
+    session->data.remote_version_major=0;
+    session->data.remote_version_minor=0;
 
     start=(char *) (greeter->ptr + strlen(SSH_GREETER_START));
     left=greeter->len - strlen(SSH_GREETER_START);
@@ -56,171 +55,193 @@ static int read_ssh_version(struct ssh_session_s *session)
 
     if (sep) {
 	unsigned int len=(unsigned int) (sep - start);
-	char ssh_version[len+1];
-	char *dot=NULL;
+	char tmp[len+1];
+	char *sep=NULL;
 
-	memset(ssh_version, '\0', len+1);
-	memcpy(ssh_version, start, len);
+	memcpy(tmp, start, len);
+	tmp[len]='\0';
 
-	dot=memchr(ssh_version, '.', len);
+	sep=memchr(tmp, '.', len);
 
-	if (dot) {
+	if (sep) {
 
-	    *dot='\0';
-
-	    session->data.remote_version_major=atoi(ssh_version);
-	    session->data.remote_version_minor=atoi(dot+1);
-
-	} else {
-
-	    session->data.remote_version_major=atoi(ssh_version);
-	    session->data.remote_version_minor=0;
+	    *sep='\0';
+	    session->data.remote_version_minor=atoi(sep+1);
 
 	}
+
+        session->data.remote_version_major=atoi(tmp);
+        result=(int) session->data.remote_version_major;
 
     } else {
 
 	/* error in the version: there should be a '-' */
 
-	logoutput("read_ssh_version: format error (no - seperator found)");
-	return -1;
+	logoutput_debug("read_ssh_protocl_version: format error (no - seperator found)");
 
     }
 
-    return 0;
+    logoutput_debug("read_ssh_protocol_version: result %u", result);
+    return result;
 
 }
 
-int read_server_greeter(struct ssh_connection_s *connection)
+unsigned int get_ssh_protocol_version(struct ssh_session_s *session)
 {
-    struct ssh_session_s *session=get_ssh_connection_session(connection);
-    struct ssh_receive_s *receive=&connection->receive;
-    char line[255];
-    unsigned int size=0;
-    char *sep=NULL;
-    unsigned int len=0;
-    unsigned char terminator=SSH_GREETER_TERMINATOR_CRLF;
-    unsigned char found=0;
+    return session->data.remote_version_major;
+}
+
+unsigned int get_ssh_protocol_minor(struct ssh_session_s *session)
+{
+    return session->data.remote_version_minor;
+}
+
+static int save_ssh_protocol_greeter_string(struct ssh_session_s *session, char *line, unsigned int len)
+{
+    struct ssh_string_s *greeter=&session->data.greeter_server;
+    return (create_ssh_string(&greeter, len, line, SSH_STRING_FLAG_ALLOC) ? 0 : -1);
+}
+
+/*
+    read the first data from server
+    this is the greeter
+    take in account the second ssh message can be attached
+*/
+
+void cb_read_socket_ssh_greeter(struct osns_socket_s *sock, uint64_t ctr, void *ptr)
+{
+    struct ssh_connection_s *sshc=(struct ssh_connection_s *) ptr;
+    struct ssh_session_s *session=get_ssh_connection_session(sshc);
+    struct ssh_receive_s *r=&sshc->receive;
+    unsigned int errcode=0;
+    struct system_timespec_s expire;
     char term_crlf[2];
-    char term_lf[1];
 
     term_crlf[0]=13;
     term_crlf[1]=10;
-    term_lf[0]=10;
+    get_ssh_connection_expire_init(sshc, &expire);
 
-    logoutput("read_server_greeter: %i bytes in buffer", receive->read);
+    if (signal_set_flag(&r->signal, &r->status, SSH_RECEIVE_STATUS_THREAD)==0) return;
 
-    readlinegreeter:
+    logoutput_debug("cb_read_ssh_socket_greeter: %u bytes in buffer", sock->rd.pos);
 
-    pthread_mutex_lock(&receive->mutex);
+    while ((get_ssh_protocol_version(session)==0) && (errcode==0)) {
+        char line[256]; /* max length per line send (rfc4253#section-4.2)*/
+        char *sep=NULL;
+        unsigned int len=0;
 
-    /* dealing with the line seperator :
-       for SSH1 lines end with 10, SSH2 lines end with 13 and 10
-       TODO: here a expire & cond_timedwait*/
+        memset(line, 0, 256);
 
-    sep=memmem(receive->buffer, receive->read, term_crlf, 2);
+        signal_lock(sock->signal);
 
-    if (sep) {
+        while (sep==NULL) {
 
-	terminator=SSH_GREETER_TERMINATOR_CRLF;
+            sep=memmem(sock->rd.buffer, sock->rd.pos, term_crlf, 2); /* look for the line terminator */
 
-    } else {
+            if (sep) {
+                unsigned int size = (unsigned int)(sep - r->buffer); /* size exclusive the terminator (crlf) */
 
-	terminator=SSH_GREETER_TERMINATOR_LF;
-	sep=memmem(receive->buffer, receive->read, term_lf, 1);
+                /* for SSH 2 the line length may not exceed 255
+                (note 253 = 255 minus the length of the terminator) */
 
-    }
+                if (size > 253) {
 
-    if (! sep) {
+                    errcode=EPROTO;
+                    goto disconnect;
 
-	logoutput("read_server_greeter: no CR or LF found");
-	pthread_mutex_unlock(&receive->mutex);
-	goto error;
+                }
 
-    }
+                memmove(line, sock->rd.buffer, size);
+                line[size]='\0';
 
-    size = (unsigned int)(sep + ((terminator==SSH_GREETER_TERMINATOR_CRLF) ? 2 : 1) - receive->buffer);
+                logoutput_debug("cb_read_ssh_socket_greeter: read %u size %u", sock->rd.pos, size);
 
-    if (size>255) {
+                if ((size + 2) < sock->rd.pos) {
+                    unsigned int tmp=size+2;
 
-	logoutput("read_server_greeter: found line with size %i which is greater than 255; cannot continue", size);
-	pthread_mutex_unlock(&receive->mutex);
-	goto error;
+                    memmove(sock->rd.buffer, (char *)(sock->rd.buffer + tmp), (sock->rd.pos - tmp));
+                    sock->rd.pos -= tmp;
 
-    }
+                } else {
 
-    size = (unsigned int)(sep - receive->buffer);
-    memcpy(line, receive->buffer, size);
-    line[size]='\0';
+                    sock->rd.pos = 0;
 
-    /* shift */
-    size = (unsigned int)(sep + ((terminator==SSH_GREETER_TERMINATOR_CRLF) ? 2 : 1) - receive->buffer);
-    if (receive->read>size) memmove(receive->buffer, (char *)(receive->buffer + size), receive->read - size);
-    receive->read-=size;
+                }
 
-    pthread_mutex_unlock(&receive->mutex);
+                break;
 
-    len=strlen(line);
+            }
 
-    if (len > strlen(SSH_GREETER_START) && memcmp(line, SSH_GREETER_START, strlen(SSH_GREETER_START))==0) {
-	struct ssh_string_s *greeter=&session->data.greeter_server;
+            int result=signal_condtimedwait(sock->signal, &expire);
 
-	if (found==1) {
+            if (result==ETIMEDOUT) {
 
-	    logoutput("read_server_greeter: string %s found more than once", SSH_GREETER_START);
-	    goto error;
+                errcode=result;
+                signal_unlock(sock->signal);
+                goto disconnect;
 
-	}
+            }
 
-	found=1;
+        }
 
-	if (create_ssh_string(&greeter, len, line, SSH_STRING_FLAG_ALLOC)) {
+        signal_unlock(sock->signal);
 
-	    logoutput("read_server_greeter: received identification %s (len=%i)", line, len);
+        len=strlen(line);
 
-	} else {
+        /* see RFC 4253 4.2 Protocol Version Exchange
+        server may provide more than one line, only the last starts (or the only) with the SSH- protocol string */
 
-	    logoutput("read_server_greeter: not enough memory");
-	    goto error;
+        if ((len > strlen(SSH_GREETER_START)) && memcmp(line, SSH_GREETER_START, strlen(SSH_GREETER_START))==0) {
 
-	}
+            logoutput_debug("read_ssh_socket_greeter: found remote protocol %.*s", len, line);
 
-    } else {
+            if (save_ssh_protocol_greeter_string(session, line, len)==-1) {
 
-	/* another line */
+                errcode=ENOMEM;
+                logoutput_debug("read_ssh_buffer_socket: unable to save greeter string");
+                goto disconnect;
 
-	logoutput("read_server_greeter: received extra line %s", line);
-	goto readlinegreeter;
+            }
 
-    }
+            if (read_ssh_protocol_version(session)==-1) {
 
-    out:
+                logoutput_debug("read_ssh_socket_greeter: unable to read protocol version");
+                errcode=EPROTO;
+                goto disconnect;
 
-    if (found==1) {
+            }
 
-	if (read_ssh_version(session)==0) {
+            errcode=0;
+            break;
 
-	    logoutput("read_server_greeter: found server version %i.%i", session->data.remote_version_major, session->data.remote_version_minor);
+        } else if (len>0) {
 
-	} else {
+            logoutput_debug("read_ssh_buffer_socket: found line %.*s", len, line);
 
-	    logoutput("read_server_greeter: unable to determine server version");
-	    goto error;
-
-	}
-
-    } else {
-
-	logoutput("read_server_greeter: no identification string found, cannot continue");
-	goto error;
+        }
 
     }
 
-    return 0;
+    signal_unset_flag(&r->signal, &r->status, SSH_RECEIVE_STATUS_THREAD);
 
-    error:
+    if ((errcode==0) && (get_ssh_protocol_version(session)==0)) errcode=EPROTO;
 
-    return -1;
+    if (errcode==0) {
+        unsigned int tmp=get_ssh_protocol_version(session);
+
+        logoutput_debug("read_ssh_buffer_greeter: found version %u", tmp);
+
+        change_ssh_connection_setup(sshc, "transport", SSH_TRANSPORT_TYPE_GREETER, SSH_GREETER_FLAG_S2C, 0, NULL, NULL);
+        set_ssh_receive_behaviour(sshc, "session");
+        set_ssh_socket_behaviour(sock, "session");
+
+        (* sock->ctx.read)(sock, ctr, ptr);
+
+    }
+
+    return;
+
+    disconnect:
+    (* sock->close)(sock);
 
 }
-

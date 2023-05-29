@@ -26,7 +26,6 @@
 #include "libosns-workspace.h"
 #include "libosns-context.h"
 #include "libosns-fuse-public.h"
-#include "libosns-resources.h"
 
 #include "sftp/common-protocol.h"
 #include "sftp/common.h"
@@ -36,12 +35,6 @@ int send_sftp_open_ctx(struct context_interface_s *i, struct sftp_request_s *sft
 {
     struct sftp_client_s *sftp=(struct sftp_client_s *)(* i->get_interface_buffer)(i);
     return (*sftp->send_ops->open)(sftp, sftp_r);
-}
-
-int send_sftp_create_ctx(struct context_interface_s *i, struct sftp_request_s *sftp_r)
-{
-    struct sftp_client_s *sftp=(struct sftp_client_s *)(* i->get_interface_buffer)(i);
-    return (*sftp->send_ops->create)(sftp, sftp_r);
 }
 
 int send_sftp_opendir_ctx(struct context_interface_s *i, struct sftp_request_s *sftp_r)

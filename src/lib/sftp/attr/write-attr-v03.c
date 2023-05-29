@@ -44,11 +44,11 @@ void write_attr_uidgid_v03(struct attr_context_s *ctx, struct attr_buffer_s *buf
     struct net_entity_s user;
     struct net_entity_s group;
 
-    user.local.uid=get_uid_system_stat(stat);
+    user.localid=get_uid_system_stat(stat);
     (* ctx->mapping->mapcb.get_user_l2p)(ctx->mapping, &user);
     (* buffer->ops->rw.write.write_uint32)(buffer, user.net.id);
 
-    group.local.gid=get_gid_system_stat(stat);
+    group.localid=get_gid_system_stat(stat);
     (* ctx->mapping->mapcb.get_group_l2p)(ctx->mapping, &group);
     (* buffer->ops->rw.write.write_uint32)(buffer, group.net.id);
 
@@ -82,6 +82,5 @@ void write_name_name_response_v03(struct attr_context_s *actx, struct attr_buffe
 {
     /* longname: an empty string, not important */
     (* buffer->ops->rw.write.write_uint32)(buffer, 0);
-
     (* buffer->ops->rw.write.write_string)(buffer, name);
 }

@@ -20,8 +20,8 @@
 #ifndef _LIB_FUSE_FS_CREATE_H
 #define _LIB_FUSE_FS_CREATE_H
 
-void _fs_common_cached_create(struct service_context_s *context, struct fuse_request_s *request, struct fuse_openfile_s *openfile);
-struct entry_s *_fs_common_create_entry(struct workspace_mount_s *workspace, struct entry_s *parent, struct name_s *xname, struct system_stat_s *stat, unsigned int size, unsigned int flags, unsigned int *error);
-struct entry_s *_fs_common_create_entry_unlocked(struct workspace_mount_s *workspace, struct directory_s *directory, struct name_s *xname, struct system_stat_s *stat, unsigned int size, unsigned int flags, unsigned int *error);
+void _fs_common_cached_create(struct service_context_s *ctx, struct fuse_request_s *request, struct fuse_openfile_s *openfile);
+struct entry_s *_fs_common_create_entry(struct service_context_s *ctx, struct entry_s *parent, struct name_s *xname, struct system_stat_s *stat, unsigned int size, unsigned int flags, unsigned int *error);
+struct entry_s *_fs_common_create_entry_unlocked(struct service_context_s *ctx, struct directory_s *directory, struct name_s *xname, struct system_stat_s *stat, unsigned int size, unsigned int flags, unsigned int *error);
 
 #endif

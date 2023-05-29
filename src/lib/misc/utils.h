@@ -52,6 +52,11 @@ uint32_t safe_atoi(char *b);
 uint64_t safe_atoii(char *b);
 
 void strdup_target_path(char *target, char **p_path, unsigned int *error);
-int compare_starting_substring(char *name, unsigned int len, const char *start);
+int compare_starting_substring(char *name, unsigned int len, const char *start, unsigned int *p_pos);
+int compare_name_what(const char *what, unsigned int len, const char *name, unsigned int *p_pos);
+
+int compare_unsigned(unsigned int a, unsigned int b);
+
+int dup_fd_another_process(pid_t pid, unsigned int fd);
 
 #endif

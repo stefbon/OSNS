@@ -21,8 +21,7 @@
 #define _SSH_CHANNEL_H
 
 #include "channel/init.h"
-#include "channel/payload.h"
-#include "channel/shell.h"
+#include "channel/exec.h"
 #include "channel/startclose.h"
 #include "channel/table.h"
 #include "channel/uri.h"

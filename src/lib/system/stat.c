@@ -29,22 +29,22 @@
 #include "libosns-misc.h"
 #include "libosns-datatypes.h"
 #include "libosns-socket.h"
+#include "libosns-fspath.h"
 
-#include "path.h"
-#include "location.h"
 #include "stat.h"
 
 #ifdef STATX_TYPE
 
-int system_getstat(struct fs_location_path_s *path, unsigned int mask, struct system_stat_s *stat)
+int system_getstat(struct fs_path_s *path, unsigned int mask, struct system_stat_s *stat)
 {
     struct statx *stx=&stat->stx;
+    char *tmp=fs_path_get_start(path);
 
     if (mask==0) mask=SYSTEM_STAT_ALL;
 
-    if (statx(0, path->ptr, AT_STATX_SYNC_AS_STAT, mask, stx)==-1) {
+    if (statx(0, tmp, AT_STATX_SYNC_AS_STAT, mask, stx)==-1) {
 
-	logoutput_warning("system_getstat: error %i on path %s (%s)", errno, path->ptr, strerror(errno));
+	logoutput_warning("system_getstat: error %i on path %s (%s)", errno, tmp, strerror(errno));
 	return -errno;
 
     }
@@ -53,15 +53,16 @@ int system_getstat(struct fs_location_path_s *path, unsigned int mask, struct sy
     return 0;
 }
 
-int system_getlstat(struct fs_location_path_s *path, unsigned int mask, struct system_stat_s *stat)
+int system_getlstat(struct fs_path_s *path, unsigned int mask, struct system_stat_s *stat)
 {
     struct statx *stx=&stat->stx;
+    char *tmp=fs_path_get_start(path);
 
     if (mask==0) mask=SYSTEM_STAT_ALL;
 
-    if (statx(0, path->ptr, AT_STATX_DONT_SYNC | AT_SYMLINK_NOFOLLOW, mask, stx)==-1) {
+    if (statx(0, tmp, AT_STATX_DONT_SYNC | AT_SYMLINK_NOFOLLOW, mask, stx)==-1) {
 
-	logoutput_warning("system_getlstat: error %i on path %s (%s)", errno, path->ptr, strerror(errno));
+	logoutput_warning("system_getlstat: error %i on path %s (%s)", errno, tmp, strerror(errno));
 	return -errno;
 
     }
@@ -70,16 +71,17 @@ int system_getlstat(struct fs_location_path_s *path, unsigned int mask, struct s
     return 0;
 }
 
-int system_setstat(struct fs_location_path_s *path, unsigned int mask, struct system_stat_s *stat)
+int system_setstat(struct fs_path_s *path, unsigned int mask, struct system_stat_s *stat)
 {
     struct statx *stx=&stat->stx;
+    char *tmp=fs_path_get_start(path);
     unsigned int error=0;
 
     stat->mask=0;
 
     if (mask & SYSTEM_STAT_SIZE) {
 
-	if (truncate(path->ptr, stx->stx_size)==-1) {
+	if (truncate(tmp, stx->stx_size)==-1) {
 
 	    logoutput_warning("system_setstat: error %i set size to %li (%s)", errno, (long unsigned int) stx->stx_size, strerror(errno));
 	    error=errno;
@@ -103,7 +105,7 @@ int system_setstat(struct fs_location_path_s *path, unsigned int mask, struct sy
 	    NOTE: using (uid_t) -1 and (gid_t) -1 in fchown will ignore this value
 	    */
 
-	if (fchownat(0, path->ptr, uid, gid, 0)==-1) {
+	if (fchownat(0, tmp, uid, gid, 0)==-1) {
 
 	    logoutput("system_setstat: error %i set user and/or group (%s)", errno, strerror(errno));
 	    error=errno;
@@ -121,7 +123,7 @@ int system_setstat(struct fs_location_path_s *path, unsigned int mask, struct sy
     if (mask & SYSTEM_STAT_MODE) {
 	mode_t mode=(stx->stx_mode & ~S_IFMT);
 
-	if (fchmodat(0, path->ptr, mode, 0)==-1) {
+	if (fchmodat(0, tmp, mode, 0)==-1) {
 
 	    logoutput("system_setstat: error %i set mode (%s)", errno, strerror(errno));
 	    error=errno;
@@ -166,7 +168,7 @@ int system_setstat(struct fs_location_path_s *path, unsigned int mask, struct sy
 
 	}
 
-	if (utimensat(0, path->ptr, times, 0)==-1) {
+	if (utimensat(0, tmp, times, 0)==-1) {
 
 	    logoutput("system_setstat: error %i set atime and/or mtime (%s)", errno, strerror(errno));
 	    error=errno;
@@ -207,183 +209,6 @@ int system_setstat(struct fs_location_path_s *path, unsigned int mask, struct sy
 
 }
 
-int system_fgetstat(struct osns_socket_s *socket, unsigned int mask, struct system_stat_s *stat)
-{
-    struct statx *stx=&stat->stx;
-    int fd=(* socket->get_unix_fd)(socket);
-
-    if (mask==0) mask=SYSTEM_STAT_ALL;
-
-    if (statx(fd, "", AT_EMPTY_PATH, mask, stx)==-1) {
-
-	logoutput_warning("system_fgetstat: error %i on fd %i (%s)", errno, fd, strerror(errno));
-	return -errno;
-
-    }
-
-    stat->mask=stx->stx_mask;
-    return 0;
-}
-
-int system_fsetstat(struct osns_socket_s *socket, unsigned int mask, struct system_stat_s *stat)
-{
-    struct statx *stx=&stat->stx;
-    int fd=(* socket->get_unix_fd)(socket);
-    unsigned int error=0;
-
-    stat->mask=0;
-
-    if (mask & SYSTEM_STAT_SIZE) {
-
-	if (ftruncate(fd, stx->stx_size)==-1) {
-
-	    logoutput_warning("system_fsetstat: error %i set size to %li (%s)", errno, (long unsigned int) stx->stx_size, strerror(errno));
-	    error=errno;
-	    goto error;
-
-	} else {
-
-	    logoutput("system_fsetstat: set size to %li", (long unsigned int) stx->stx_size);
-	    stat->mask |= SYSTEM_STAT_SIZE;
-	    mask &= ~SYSTEM_STAT_SIZE;
-
-	}
-
-    }
-
-    if (mask & (SYSTEM_STAT_UID | SYSTEM_STAT_GID)) {
-	uid_t uid=(mask & SYSTEM_STAT_UID) ? stx->stx_uid : (uid_t) -1;
-	gid_t gid=(mask & SYSTEM_STAT_GID) ? stx->stx_gid : (gid_t) -1;
-
-	/* set the uid and gid
-	    NOTE: using (uid_t) -1 and (gid_t) -1 in fchown will ignore this value
-	    */
-
-	if (fchown(fd, uid, gid)==-1) {
-
-	    logoutput_warning("system_fsetstat: error %i set user and/or group (%s)", errno, strerror(errno));
-	    error=errno;
-	    goto error;
-
-	} else {
-
-	    logoutput("system_fsetstat: set uid %i and gid %i", uid, gid);
-	    stat->mask |= ((mask & SYSTEM_STAT_UID) ? SYSTEM_STAT_UID : 0) | ((mask & SYSTEM_STAT_GID) ? SYSTEM_STAT_GID : 0);
-	    mask &= ~(SYSTEM_STAT_UID | SYSTEM_STAT_GID);
-
-	}
-
-    }
-
-    if (mask & SYSTEM_STAT_MODE) {
-	mode_t mode=(stx->stx_mode & ~S_IFMT);
-
-	if (fchmod(fd, mode)==-1) {
-
-	    logoutput_warning("system_fsetstat: error %i set mode to %i (%s)", errno, mode, strerror(errno));
-	    error=errno;
-	    goto error;
-
-	} else {
-
-	    logoutput("system_fsetstat: mode set to %i", mode);
-	    stat->mask |= SYSTEM_STAT_MODE;
-	    mask &= ~SYSTEM_STAT_MODE;
-
-	}
-
-    }
-
-    if (mask & (SYSTEM_STAT_ATIME | SYSTEM_STAT_MTIME)) {
-	struct timespec times[2];
-	unsigned int todo=0;
-
-	if (mask & SYSTEM_STAT_ATIME) {
-
-	    times[0].tv_sec=stx->stx_atime.tv_sec;
-	    times[0].tv_nsec=stx->stx_atime.tv_nsec;
-	    todo|=SYSTEM_STAT_ATIME;
-
-	} else {
-
-	    times[0].tv_sec=0;
-	    times[0].tv_nsec=UTIME_OMIT;
-
-	}
-
-	if (mask & SYSTEM_STAT_MTIME) {
-
-	    times[1].tv_sec=stx->stx_mtime.tv_sec;
-	    times[1].tv_nsec=stx->stx_mtime.tv_nsec;
-	    todo|=SYSTEM_STAT_MTIME;
-
-	} else {
-
-	    times[1].tv_sec=0;
-	    times[1].tv_nsec=UTIME_OMIT;
-
-	}
-
-	if (futimens(fd, times)==-1) {
-
-	    logoutput_warning("system_fsetstat: error %i set atime and/or mtime (%s)", errno, strerror(errno));
-	    error=errno;
-	    goto error;
-
-	}
-
-	stat->mask |= todo;
-	mask &= ~todo;
-
-    }
-
-    if (mask & SYSTEM_STAT_CTIME) {
-
-	logoutput("system_fsetstat: change of ctime not supported/possible");
-	mask &= ~SYSTEM_STAT_CTIME;
-
-    }
-
-    if (mask>0) {
-
-	logoutput_warning("system_fsetstat: still actions (%i) requested but ignored (done %i)", mask, stat->mask);
-
-    } else {
-
-	logoutput("system_fsetstat: all actions done %i", stat->mask);
-
-    }
-
-    return 0;
-
-    error:
-
-    /* a rollback here ? then required a mask of operations done (successfully) and a backup of what is was before
-	TODO?? */
-
-    return -error;
-
-}
-
-int system_fgetstatat(struct osns_socket_s *socket, char *name, unsigned int mask, struct system_stat_s *stat, unsigned int flags)
-{
-    struct statx *stx=&stat->stx;
-    int fd=(* socket->get_unix_fd)(socket);
-
-    if (mask==0) mask=SYSTEM_STAT_ALL;
-    flags |= ((stat->flags & SYSTEM_STAT_FLAG_FOLLOW_SYMLINK) ? 0 : AT_SYMLINK_NOFOLLOW);
-
-    if (statx(fd, name, flags, mask, stx)==-1) {
-
-	logoutput_warning("system_fgetstatat: error %i on fd %i (%s)", errno, fd, strerror(errno));
-	return -errno;
-
-    }
-
-    stat->mask=stx->stx_mask;
-    return 0;
-}
-
 /* GET statx values */
 
 uint64_t get_ino_system_stat(struct system_stat_s *stat)
@@ -416,7 +241,7 @@ uint32_t get_gid_system_stat(struct system_stat_s *stat)
     return stat->stx.stx_gid;
 }
 
-uint32_t get_size_system_stat(struct system_stat_s *stat)
+off_t get_size_system_stat(struct system_stat_s *stat)
 {
     return stat->stx.stx_size;
 
@@ -570,7 +395,7 @@ void set_gid_system_stat(struct system_stat_s *stat, uint32_t gid)
     stat->mask |= SYSTEM_STAT_GID;
 }
 
-void set_size_system_stat(struct system_stat_s *stat, uint64_t size)
+void set_size_system_stat(struct system_stat_s *stat, off_t size)
 {
     stat->stx.stx_size=size;
     stat->mask |= SYSTEM_STAT_SIZE;
@@ -690,15 +515,16 @@ void set_blocks_system_stat(struct system_stat_s *stat, uint32_t blocks)
 
 #else
 
-int system_getstat(struct fs_location_path_s *path, unsigned int mask, struct system_stat_s *sst)
+int system_getstat(struct fs_path_s *path, unsigned int mask, struct system_stat_s *sst)
 {
     struct stat *st=&sst->st;
+    char *tmp=fs_path_get_start(path);
 
     if (mask==0) mask=SYSTEM_STAT_ALL;
 
-    if (stat(path->ptr, st)==-1) {
+    if (stat(tmp, st)==-1) {
 
-	logoutput_warning("system_getstat: error %i on path %s (%s)", errno, path->ptr, strerror(errno));
+	logoutput_warning("system_getstat: error %i on path %s (%s)", errno, tmp, strerror(errno));
 	return -errno;
 
     }
@@ -707,15 +533,16 @@ int system_getstat(struct fs_location_path_s *path, unsigned int mask, struct sy
     return 0;
 }
 
-int system_getlstat(struct fs_location_path_s *path, unsigned int mask, struct system_stat_s *sst)
+int system_getlstat(struct fs_path_s *path, unsigned int mask, struct system_stat_s *sst)
 {
     struct stat *st=&sst->st;
+    char *tmp=fs_path_get_start(path);
 
     if (mask==0) mask=SYSTEM_STAT_ALL;
 
-    if (lstat(path->ptr, st)==-1) {
+    if (lstat(tmp, st)==-1) {
 
-	logoutput_warning("system_getlstat: error %i on path %s (%s)", errno, path->ptr, strerror(errno));
+	logoutput_warning("system_getlstat: error %i on path %s (%s)", errno, tmp, strerror(errno));
 	return -errno;
 
     }
@@ -724,16 +551,17 @@ int system_getlstat(struct fs_location_path_s *path, unsigned int mask, struct s
     return 0;
 }
 
-int system_setstat(struct fs_location_path_s *path, unsigned int mask, struct system_stat_s *sst)
+int system_setstat(struct fs_path_s *path, unsigned int mask, struct system_stat_s *sst)
 {
     struct stat *st=&sst->st;
+    char *tmp=fs_path_get_start(path);
     unsigned int error=0;
 
     sst->mask=0;
 
     if (mask & SYSTEM_STAT_SIZE) {
 
-	if (truncate(path->ptr, st->st_size)==-1) {
+	if (truncate(tmp, st->st_size)==-1) {
 
 	    logoutput_warning("system_setstat: error %i set size to %li (%s)", errno, (long unsigned int) st->st_size, strerror(errno));
 	    error=errno;
@@ -757,7 +585,7 @@ int system_setstat(struct fs_location_path_s *path, unsigned int mask, struct sy
 	    NOTE: using (uid_t) -1 and (gid_t) -1 in fchown will ignore this value
 	    */
 
-	if (fchownat(0, path->ptr, uid, gid, 0)==-1) {
+	if (fchownat(0, tmp, uid, gid, 0)==-1) {
 
 	    logoutput("system_setstat: error %i set user and/or group (%s)", errno, strerror(errno));
 	    error=errno;
@@ -775,7 +603,7 @@ int system_setstat(struct fs_location_path_s *path, unsigned int mask, struct sy
     if (mask & SYSTEM_STAT_MODE) {
 	mode_t mode=(st->st_mode & ~S_IFMT);
 
-	if (fchmodat(0, path->ptr, mode, 0)==-1) {
+	if (fchmodat(0, tmp, mode, 0)==-1) {
 
 	    logoutput("system_setstat: error %i set mode (%s)", errno, strerror(errno));
 	    error=errno;
@@ -820,7 +648,7 @@ int system_setstat(struct fs_location_path_s *path, unsigned int mask, struct sy
 
 	}
 
-	if (utimensat(0, path->ptr, times, 0)==-1) {
+	if (utimensat(0, tmp, times, 0)==-1) {
 
 	    logoutput("system_setstat: error %i set atime and/or mtime (%s)", errno, strerror(errno));
 	    error=errno;
@@ -861,183 +689,6 @@ int system_setstat(struct fs_location_path_s *path, unsigned int mask, struct sy
 
 }
 
-int system_fgetstat(struct fs_socket_s *socket, unsigned int mask, struct system_stat_s *sst)
-{
-    struct stat *st=&sst->st;
-    int fd=get_unix_fd_fs_socket(socket);
-
-    if (mask==0) mask=SYSTEM_STAT_ALL;
-
-    if (fstat(fd, st)==-1) {
-
-	logoutput_warning("system_fgetstat: error %i on fd %i (%s)", errno, fd, strerror(errno));
-	return -errno;
-
-    }
-
-    sst->mask = (mask & SYSTEM_STAT_BASIC_STATS);
-    return 0;
-}
-
-int system_fsetstat(struct fs_socket_s *socket, unsigned int mask, struct system_stat_s *sst)
-{
-    struct stat *st=&sst->st;
-    int fd=get_unix_fd_fs_socket(socket);
-    unsigned int error=0;
-
-    sst->mask=0;
-
-    if (mask & SYSTEM_STAT_SIZE) {
-
-	if (ftruncate(fd, st->st_size)==-1) {
-
-	    logoutput_warning("system_fsetstat: error %i set size to %li (%s)", errno, (long unsigned int) st->st_size, strerror(errno));
-	    error=errno;
-	    goto error;
-
-	} else {
-
-	    logoutput("system_fsetstat: set size to %li", (long unsigned int) st->st_size);
-	    sst->mask |= SYSTEM_STAT_SIZE;
-	    mask &= ~SYSTEM_STAT_SIZE;
-
-	}
-
-    }
-
-    if (mask & (SYSTEM_STAT_UID | SYSTEM_STAT_GID)) {
-	uid_t uid=(mask & SYSTEM_STAT_UID) ? st->st_uid : (uid_t) -1;
-	gid_t gid=(mask & SYSTEM_STAT_GID) ? st->st_gid : (gid_t) -1;
-
-	/* set the uid and gid
-	    NOTE: using (uid_t) -1 and (gid_t) -1 in fchown will ignore this value
-	    */
-
-	if (fchown(fd, uid, gid)==-1) {
-
-	    logoutput_warning("system_fsetstat: error %i set user and/or group (%s)", errno, strerror(errno));
-	    error=errno;
-	    goto error;
-
-	} else {
-
-	    logoutput("system_fsetstat: set uid %i and gid %i", uid, gid);
-	    sst->mask |= ((mask & SYSTEM_STAT_UID) ? SYSTEM_STAT_UID : 0) | ((mask & SYSTEM_STAT_GID) ? SYSTEM_STAT_GID : 0);
-	    mask &= ~(SYSTEM_STAT_UID | SYSTEM_STAT_GID);
-
-	}
-
-    }
-
-    if (mask & SYSTEM_STAT_MODE) {
-	mode_t mode=(st->st_mode & ~S_IFMT);
-
-	if (fchmod(fd, mode)==-1) {
-
-	    logoutput_warning("system_fsetstat: error %i set mode to %i (%s)", errno, mode, strerror(errno));
-	    error=errno;
-	    goto error;
-
-	} else {
-
-	    logoutput("system_fsetstat: mode set to %i", mode);
-	    sst->mask |= SYSTEM_STAT_MODE;
-	    mask &= ~SYSTEM_STAT_MODE;
-
-	}
-
-    }
-
-    if (mask & (SYSTEM_STAT_ATIME | SYSTEM_STAT_MTIME)) {
-	struct timespec times[2];
-	unsigned int todo=0;
-
-	if (mask & SYSTEM_STAT_ATIME) {
-
-	    times[0].tv_sec=st->st_atim.tv_sec;
-	    times[0].tv_nsec=st->st_atim.tv_nsec;
-	    todo |= SYSTEM_STAT_ATIME;
-
-	} else {
-
-	    times[0].tv_sec=0;
-	    times[0].tv_nsec=UTIME_OMIT;
-
-	}
-
-	if (mask & SYSTEM_STAT_MTIME) {
-
-	    times[1].tv_sec=st->st_mtim.tv_sec;
-	    times[1].tv_nsec=st->st_mtim.tv_nsec;
-	    todo |= SYSTEM_STAT_MTIME;
-
-	} else {
-
-	    times[1].tv_sec=0;
-	    times[1].tv_nsec=UTIME_OMIT;
-
-	}
-
-	if (futimens(fd, times)==-1) {
-
-	    logoutput_warning("system_fsetstat: error %i set atime and/or mtime (%s)", errno, strerror(errno));
-	    error=errno;
-	    goto error;
-
-	}
-
-	sst->mask |= todo;
-	mask &= ~todo;
-
-    }
-
-    if (mask & SYSTEM_STAT_CTIME) {
-
-	logoutput("system_fsetstat: change of ctime not supported/possible");
-	mask &= ~SYSTEM_STAT_CTIME;
-
-    }
-
-    if (mask>0) {
-
-	logoutput_warning("system_fsetstat: still actions (%i) requested but ignored (done %i)", mask, sst->mask);
-
-    } else {
-
-	logoutput("system_fsetstat: all actions done %i", sst->mask);
-
-    }
-
-    return 0;
-
-    error:
-
-    /* a rollback here ? then required a mask of operations done (successfully) and a backup of what is was before
-	TODO?? */
-
-    return -error;
-
-}
-
-int system_fgetstatat(struct fs_socket_s *socket, char *name, unsigned int mask, struct system_stat_s *sst, unsigned int flags)
-{
-    struct stat *st=&sst->st;
-    int fd=get_unix_fd_fs_socket(socket);
-
-    if (mask==0) mask=SYSTEM_STAT_ALL;
-    flags |= ((sst->flags & SYSTEM_STAT_FLAG_FOLLOW_SYMLINK) ? 0 : AT_SYMLINK_NOFOLLOW);
-
-    if (fstatat(fd, name, st, flags)==-1) {
-
-	logoutput_warning("system_fgetstatat: error %i on fd %i (%s)", errno, fd, strerror(errno));
-	return -errno;
-
-    }
-
-    sst->mask = (mask & SYSTEM_STAT_BASIC_STATS);
-    return 0;
-}
-
 /* GET stat values */
 
 uint64_t get_ino_system_stat(struct system_stat_s *sst)
@@ -1065,14 +716,14 @@ uint32_t get_uid_system_stat(struct system_stat_s *sst)
     return (uint32_t) sst->st.st_uid;
 }
 
-uint32_t get_gid_system_sst(struct system_stat_s *sst)
+uint32_t get_gid_system_stat(struct system_stat_s *sst)
 {
     return (uint32_t) sst->st.st_gid;
 }
 
-uint32_t get_size_system_stat(struct system_stat_s *sst)
+off_t get_size_system_stat(struct system_stat_s *sst)
 {
-    return (uint32_t) sst->st.st_size;
+    return (off_t) sst->st.st_size;
 }
 
 void get_atime_system_stat(struct system_stat_s *sst, struct system_timespec_s *atime)
@@ -1197,7 +848,7 @@ void set_gid_system_stat(struct system_stat_s *sst, uint32_t gid)
     sst->mask |= SYSTEM_STAT_GID;
 }
 
-void set_size_system_stat(struct system_stat_s *sst, uint64_t size)
+void set_size_system_stat(struct system_stat_s *sst, off_t size)
 {
     sst->st.st_size=size;
     sst->mask |= SYSTEM_STAT_SIZE;
@@ -1423,12 +1074,12 @@ int system_stat_test_ISREG(struct system_stat_s *sst)
 #endif
 }
 
-int system_getstatvfs(struct fs_location_path_s *path, struct system_statvfs_s *s)
+int system_getstatvfs(struct fs_path_s *path, struct system_statvfs_s *s)
 {
 #ifdef __linux__
     char tmp[path->len + 1];
 
-    memcpy(tmp, path->ptr, path->len);
+    memcpy(tmp, path->buffer, path->len);
     tmp[path->len]='\0';
 
     return statvfs(tmp, &s->stvfs);

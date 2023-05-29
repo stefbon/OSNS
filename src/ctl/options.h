@@ -37,11 +37,17 @@ struct ctl_arguments_s {
 	    unsigned int			type;
 	    struct osns_record_s		target;
 	} watch;
+	struct channel_argument_s {
+	    unsigned int			type;
+	    struct osns_record_s		host;
+	    struct osns_record_s		command;
+	} channel;
     } cmd;
 };
 
 /* Prototypes */
 
-int parse_arguments(int argc, char *argv[], struct ctl_arguments_s *arguments);
+int read_osnsctl_arguments(int argc, char *argv[], struct ctl_arguments_s *arguments);
+void free_osnsctl_arguments(struct ctl_arguments_s *arguments);
 
 #endif

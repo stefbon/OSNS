@@ -31,61 +31,85 @@
 
 #include "next.h"
 
+static unsigned int unique=0;
+static pthread_mutex_t mutex=PTHREAD_MUTEX_INITIALIZER;
+
 void free_service_context(struct service_context_s *ctx)
 {
     free(ctx);
 }
 
-static void init_service_context(struct service_context_s *context, unsigned char ctype, unsigned int size, unsigned int itype)
+static void init_service_context(struct service_context_s *ctx, unsigned char type)
 {
-    struct context_interface_s *interface=&context->interface;
 
     /* context */
 
-    context->type=ctype; /* like SERVICE_CTX_TYPE_WORKSPACE */
-    init_list_element(&context->wlist, NULL);
-    context->link.type=DATA_LINK_TYPE_CONTEXT;
-    context->link.refcount=0;
+    ctx->type=type; /* like SERVICE_CTX_TYPE_WORKSPACE */
+    init_list_element(&ctx->wlist, NULL);
+    ctx->link.type=DATA_LINK_TYPE_CONTEXT;
+    ctx->link.refcount=0;
 
-    if (ctype==SERVICE_CTX_TYPE_WORKSPACE) {
+    if (type==SERVICE_CTX_TYPE_WORKSPACE) {
+        struct inode_s *inode=&ctx->service.workspace.rootinode;
+        struct directory_s *directory=get_dummy_directory();
 
-	init_list_header(&context->service.workspace.header, SIMPLE_LIST_TYPE_EMPTY, NULL);
-	context->service.workspace.signal=NULL;
-	context->service.workspace.fs=NULL;
+        /* root of a FUSE workspace (or browsable map) */
 
-    } else if (ctype==SERVICE_CTX_TYPE_BROWSE) {
+        init_inode(inode);
+        inode->nlookup=1;
+        inode->fs=NULL;
+        inode->alias=get_rootentry();
+        set_rootstat(&inode->stat); /* root inode stat */
 
-	context->service.browse.type=0;
-	context->service.browse.fs=NULL;
-	init_list_element(&context->service.browse.clist, NULL);
-	set_system_time(&context->service.browse.refresh, 0, 0);
-	init_list_header(&context->service.browse.header, SIMPLE_LIST_TYPE_EMPTY, NULL);
-	context->service.browse.threadid=0;
-	context->service.browse.unique=0;
-	context->service.browse.service=0;
+        ctx->service.workspace.nrinodes=1;
+	ctx->service.workspace.pathmax=512;
 
-    } else if (ctype==SERVICE_CTX_TYPE_FILESYSTEM) {
+	init_list_header(&ctx->service.workspace.header, SIMPLE_LIST_TYPE_EMPTY, NULL);
+	init_list_header(&ctx->service.workspace.directories, SIMPLE_LIST_TYPE_EMPTY, NULL);
+	init_list_header(&ctx->service.workspace.symlinks, SIMPLE_LIST_TYPE_EMPTY, NULL);
+	init_list_header(&ctx->service.workspace.forget, SIMPLE_LIST_TYPE_EMPTY, NULL);
 
-	context->service.filesystem.inode=NULL;
-	context->service.filesystem.fs=NULL;
-	init_list_element(&context->service.filesystem.clist, NULL);
-	init_list_header(&context->service.filesystem.pathcaches, SIMPLE_LIST_TYPE_EMPTY, NULL);
-	context->service.filesystem.service=0;
+        inode->ptr=&directory->link;
+        directory->link.refcount++;
 
-    } else if (ctype==SERVICE_CTX_TYPE_SHARED) {
+	ctx->service.workspace.signal=NULL;
+	ctx->service.workspace.fs=NULL;
 
-	set_system_time(&context->service.shared.refresh, 0, 0);
-	context->service.shared.unique=0;
-	context->service.shared.service=0;
-	context->service.shared.transport=0;
+    } else if (type==SERVICE_CTX_TYPE_BROWSE) {
+
+        /* link to a resource like a network group and host (in network)
+            or a device or a backup */
+
+	ctx->service.browse.type=0;
+	ctx->service.browse.fs=NULL;
+	init_list_element(&ctx->service.browse.clist, NULL);
+	set_system_time(&ctx->service.browse.refresh_lookup, 0, 0);
+	set_system_time(&ctx->service.browse.refresh_opendir, 0, 0);
+	init_list_header(&ctx->service.browse.header, SIMPLE_LIST_TYPE_EMPTY, NULL);
+	ctx->service.browse.threadid=0;
+	ctx->service.browse.unique=0;
+	ctx->service.browse.service=0;
+
+    } else if (type==SERVICE_CTX_TYPE_FILESYSTEM) {
+
+        /* link to a resource like a shared directory (in network), a backup (local or remote) or a device */
+
+	ctx->service.filesystem.inode=NULL;
+	ctx->service.filesystem.fs=NULL;
+	init_list_element(&ctx->service.filesystem.clist, NULL);
+	init_list_header(&ctx->service.filesystem.pathcaches, SIMPLE_LIST_TYPE_EMPTY, NULL);
+	ctx->service.filesystem.service=0;
+
+    } else if (type==SERVICE_CTX_TYPE_SHARED) {
+
+        /* link to a transport, connection or subsystem, used by others above */
+
+	set_system_time(&ctx->service.shared.refresh, 0, 0);
+	ctx->service.shared.unique=0;
+	ctx->service.shared.service=0;
+	ctx->service.shared.transport=0;
 
     }
-
-    /* interface */
-
-    interface->type=itype; /* like _INTERFACE_TYPE_SSH_SESSION, _INTERFACE_TYPE_FUSE */
-    interface->flags=0;
-    interface->size=size;
 
 }
 
@@ -155,11 +179,7 @@ struct service_context_s *create_service_context(struct workspace_mount_s *works
     if (ilist) {
 	struct interface_ops_s *ops=ilist->ops;
 
-	if ((primary==NULL) || (primary->interface.type!=ilist->type)) {
-
-	    size=(* ops->get_buffer_size)(ilist);
-
-	}
+	size=(* ops->get_buffer_size)(ilist, &primary->interface);
 
     }
 
@@ -169,8 +189,14 @@ struct service_context_s *create_service_context(struct workspace_mount_s *works
     if (context==NULL) return NULL;
     memset(context, 0, sizeof(struct service_context_s) + size);
     context->flags=SERVICE_CTX_FLAG_ALLOC;
-    init_context_interface(&context->interface, NULL, NULL);
-    init_service_context(context, type, size, (ilist) ? ilist->type : 0);
+
+    init_context_interface(&context->interface, ((ilist) ? ilist->type : 0), size);
+    init_service_context(context, type);
+
+    pthread_mutex_lock(&mutex);
+    unique++;
+    context->interface.unique=unique;
+    pthread_mutex_unlock(&mutex);
 
     if (workspace) add_service_context_workspace(workspace, context);
     if (parent) set_parent_service_context(parent, context);

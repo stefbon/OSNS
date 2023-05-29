@@ -25,6 +25,6 @@
 #define FUSE_NETWORK_ACTION_FLAG_ERROR						3
 
 struct entry_s *create_network_map_entry(struct service_context_s *context, struct directory_s *directory, struct name_s *xname, unsigned int *error);
-struct entry_s *install_virtualnetwork_map(struct service_context_s *context, struct entry_s *parent, char *name, const char *what, unsigned char *p_action);
+struct entry_s *install_virtualnetwork_map(struct service_context_s *ctx, struct directory_s *pdirectory, char *name, const char *what, unsigned char *p_action);
 
 #endif

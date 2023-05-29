@@ -26,7 +26,6 @@
 #include "libosns-workspace.h"
 #include "libosns-context.h"
 #include "libosns-fuse-public.h"
-#include "libosns-resources.h"
 
 #include <linux/fs.h>
 
@@ -130,21 +129,21 @@ static int send_sftp_lstat_v04(struct sftp_client_s *sftp, struct sftp_request_s
 
 int send_sftp_fstat_v04_generic(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r, unsigned int flags)
 {
-    char data[17 + sftp_r->call.fstat.len];
+    char data[17 + sftp_r->call.fgetstat.len];
     unsigned int pos=0;
 
     sftp_r->id=get_sftp_request_id(sftp);
 
-    store_uint32(&data[pos], 13 + sftp_r->call.fstat.len);
+    store_uint32(&data[pos], 13 + sftp_r->call.fgetstat.len);
     pos+=4;
     data[pos]=(unsigned char) SSH_FXP_FSTAT;
     pos++;
     store_uint32(&data[pos], sftp_r->id);
     pos+=4;
-    store_uint32(&data[pos], sftp_r->call.fstat.len);
+    store_uint32(&data[pos], sftp_r->call.fgetstat.len);
     pos+=4;
-    memcpy((char *) &data[pos], sftp_r->call.fstat.handle, sftp_r->call.fstat.len);
-    pos+=sftp_r->call.fstat.len;
+    memcpy((char *) &data[pos], sftp_r->call.fgetstat.handle, sftp_r->call.fgetstat.len);
+    pos+=sftp_r->call.fgetstat.len;
     store_uint32(&data[pos], flags);
     pos+=4;
 
@@ -163,7 +162,6 @@ static struct sftp_send_ops_s send_ops_v04 = {
     .version				= 4,
     .init				= send_sftp_init_v03,
     .open				= send_sftp_open_v03,
-    .create				= send_sftp_create_v03,
     .read				= send_sftp_read_v03,
     .write				= send_sftp_write_v03,
     .close				= send_sftp_close_v03,

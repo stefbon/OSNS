@@ -21,7 +21,7 @@
 #ifndef LIB_LOCK_LOCKING_H
 #define LIB_LOCK_LOCKING_H
 
-#include "libosns-list.h"
+#include "lib/list/simple-list.h"
 
 #define OSNS_LOCK_TYPE_NONE		0
 #define OSNS_LOCK_TYPE_READ		1
@@ -38,6 +38,9 @@
 #define OSNS_LOCKING_FLAG_ALLOC_COND	4
 
 #define OSNS_LOCKING_FLAG_UPGRADE	8
+
+struct list_header_s;
+struct list_element_s;
 
 struct osns_locking_s {
     unsigned int			flags;

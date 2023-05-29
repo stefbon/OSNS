@@ -35,7 +35,7 @@ struct cached_path_s {
 /* Prototypes */
 
 int get_path_root_workspace(struct directory_s *directory, struct fuse_path_s *fpath);
-int get_path_root_context(struct directory_s *directory, struct fuse_path_s *fpath);
+void get_path_root_context(struct directory_s *directory, struct fuse_path_s *fpath);
 
 void init_fuse_path(struct fuse_path_s *fpath, unsigned int len);
 void append_name_fpath(struct fuse_path_s *fpath, struct name_s *xname);

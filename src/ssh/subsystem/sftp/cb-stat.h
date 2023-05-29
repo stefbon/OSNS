@@ -24,8 +24,8 @@
 
 int reply_sftp_attr_from_stat(struct sftp_subsystem_s *sftp, uint32_t id, struct sftp_valid_s *valid, struct system_stat_s *stat);
 
-void sftp_op_stat(struct sftp_payload_s *p);
-void sftp_op_lstat(struct sftp_payload_s *p);
-void sftp_op_fstat(struct sftp_payload_s *p);
+void sftp_op_stat(struct sftp_subsystem_s *sftp, struct sftp_in_header_s *inh, char *data);
+void sftp_op_lstat(struct sftp_subsystem_s *sftp, struct sftp_in_header_s *inh, char *data);
+void sftp_op_fstat(struct sftp_subsystem_s *sftp, struct sftp_in_header_s *inh, char *data);
 
 #endif

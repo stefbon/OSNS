@@ -20,7 +20,9 @@
 #ifndef OSNS_SSH_SUBSYSTEM_SFTP_PATH_H
 #define OSNS_SSH_SUBSYSTEM_SFTP_PATH_H
 
-void path_append_none(struct sftp_subsystem_s *sftp, struct ssh_string_s *path, struct fs_location_path_s *localpath);
+#include "libosns-fspath.h"
+
+void path_append_none(struct sftp_subsystem_s *sftp, struct ssh_string_s *path, struct fs_path_s *localpath);
 
 #define CONVERT_PATH_INIT		{path_append_none}
 

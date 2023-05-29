@@ -41,38 +41,18 @@ struct service_context_s;
 #define WORKSPACE_STATUS_LOCK_FORGET				(1 << 4)
 #define WORKSPACE_STATUS_LOCK_SYMLINK				(1 << 5)
 
-struct directory_s;
-
-struct workspace_inodes_s {
-    struct inode_s 				rootinode;
-    struct entry_s				rootentry;
-    struct directory_s				dummy_directory;
-    uint64_t 					nrinodes;
-    uint64_t					inoctr;
-    unsigned char				thread;
-    struct list_header_s			directories;
-    struct list_header_s			symlinks;
-    struct list_header_s			forget;
-    struct list_header_s			hashtable[WORKSPACE_INODE_HASHTABLE_SIZE];
-};
-
 struct workspace_mount_s {
     unsigned int				flags;
     unsigned int				status;
     unsigned char 				type;
-    unsigned int				pathmax;
     struct shared_signal_s			*signal;
     struct system_timespec_s			syncdate;
     struct list_header_s			contexes;
     struct list_header_s			shared_contexes;
     struct list_element_s			list;
-    struct workspace_inodes_s			inodes;
 };
 
 /* prototypes */
-
-void adjust_pathmax(struct workspace_mount_s *w, unsigned int len);
-unsigned int get_pathmax(struct workspace_mount_s *w);
 
 struct workspace_mount_s *create_workspace_mount(unsigned char type);
 

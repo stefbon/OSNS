@@ -78,7 +78,7 @@ struct mount_monitor_s {
 
 struct mount_monitor_s *get_default_mount_monitor();
 
-struct bevent_s *open_mountmonitor(struct shared_signal_s *signal, void *ptr, unsigned int flags);
+int open_mountmonitor(struct shared_signal_s *signal, void *ptr, unsigned int flags);
 void close_mountmonitor();
 FILE *fopen_mountmonitor();
 

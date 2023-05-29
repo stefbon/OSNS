@@ -54,8 +54,7 @@ static struct entry_s *_cb_insert_entry_batch(struct directory_s *directory, str
 }
 static void _cb_adjust_pathmax_default(struct create_entry_s *ce)
 {
-    struct workspace_mount_s *workspace=get_workspace_mount_ctx(ce->context);
-    adjust_pathmax(workspace, ce->pathlen);
+    adjust_pathmax(ce->context, ce->pathlen);
 }
 static void _cb_adjust_pathmax_ignore(struct create_entry_s *ce)
 {
@@ -105,7 +104,7 @@ static void _cb_created_default(struct entry_s *entry, struct create_entry_s *ce
 	struct directory_s *directory=get_upper_directory_entry(entry);
 	struct workspace_mount_s *w=get_workspace_mount_ctx(ce->context);
 
-	assign_directory_inode(w, inode);
+	assign_directory_inode(inode);
 	increase_nlink_system_stat(stat, 1);
 
 	/* directory has to exist ... check is not required */
@@ -151,8 +150,7 @@ static void _cb_error_default(struct entry_s *parent, struct name_s *xname, stru
 static struct directory_s *get_directory_01(struct create_entry_s *ce)
 {
     struct inode_s *inode=ce->tree.parent->inode;
-    struct workspace_mount_s *w=get_workspace_mount_ctx(ce->context);
-    return get_directory(w, inode, 0);
+    return get_directory(ce->context, inode, 0);
 }
 
 static struct directory_s *get_directory_02(struct create_entry_s *ce)
@@ -162,9 +160,8 @@ static struct directory_s *get_directory_02(struct create_entry_s *ce)
 
 static struct directory_s *get_directory_03(struct create_entry_s *ce)
 {
-    struct inode_s *inode=ce->tree.opendir->inode;
-    struct workspace_mount_s *w=get_workspace_mount_ctx(ce->context);
-    return get_directory(w, inode, 0);
+    struct inode_s *inode=ce->tree.opendir->header.inode;
+    return get_directory(ce->context, inode, 0);
 }
 
 void init_create_entry(struct create_entry_s *ce, struct name_s *n, struct entry_s *p, struct directory_s *d, struct fuse_opendir_s *fo, struct service_context_s *c, struct system_stat_s *stat, void *ptr)

@@ -42,11 +42,32 @@ void add_encrypt_ops(struct encrypt_ops_s *ops)
 
 struct encrypt_ops_s *get_next_encrypt_ops(struct encrypt_ops_s *ops)
 {
-    struct list_element_s *list=(ops) ? get_next_element(&ops->list) : get_list_head(&list_encrypt_ops, 0);
+    struct list_element_s *list=(ops) ? get_next_element(&ops->list) : get_list_head(&list_encrypt_ops);
     return (list) ? get_encrypt_ops_container(list) : NULL;
 }
 
-void reset_encrypt(struct ssh_connection_s *connection, struct algo_list_s *algo_cipher, struct algo_list_s *algo_hmac)
+void init_ssh_encrypt(struct ssh_connection_s *connection)
+{
+    struct ssh_send_s *send=&connection->send;
+    struct ssh_encrypt_s *encrypt=&send->encrypt;
+
+    encrypt->flags=0;
+    memset(encrypt->ciphername, '\0', sizeof(encrypt->ciphername));
+    memset(encrypt->hmacname, '\0', sizeof(encrypt->hmacname));
+    encrypt->count=0;
+    encrypt->max_count=0;
+    init_list_header(&encrypt->header, SIMPLE_LIST_TYPE_EMPTY, NULL);
+    encrypt->ops=NULL;
+    init_ssh_string(&encrypt->cipher_key);
+    init_ssh_string(&encrypt->cipher_iv);
+    init_ssh_string(&encrypt->hmac_key);
+    strcpy(encrypt->ciphername, "none");
+    strcpy(encrypt->hmacname, "none");
+    set_encrypt_generic(encrypt);
+
+}
+
+void reset_ssh_encrypt(struct ssh_connection_s *connection, struct algo_list_s *algo_cipher, struct algo_list_s *algo_hmac)
 {
     struct ssh_send_s *send=&connection->send;
     struct ssh_encrypt_s *encrypt=&send->encrypt;
@@ -80,7 +101,7 @@ void reset_encrypt(struct ssh_connection_s *connection, struct algo_list_s *algo
 
     } else {
 
-	if (encrypt->flags & SSH_DECRYPT_FLAG_PARALLEL) encrypt->flags -= SSH_DECRYPT_FLAG_PARALLEL;
+	encrypt->flags &= ~SSH_DECRYPT_FLAG_PARALLEL;
 	encrypt->max_count=1;
 
     }

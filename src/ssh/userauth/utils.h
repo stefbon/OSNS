@@ -45,7 +45,7 @@ unsigned int read_private_pwlist(struct ssh_connection_s *c, struct pw_list_s **
 struct pw_list_s *get_next_pwlist(struct pw_list_s *pwlist, struct pw_list_s *element);
 void free_pwlist(struct pw_list_s *pwlist);
 
-int select_userauth_reply(struct ssh_connection_s *connection, struct ssh_payload_s *payload, void *ptr);
+int select_userauth_reply(struct ssh_payload_s *payload, void *ptr);
 
 int respond_userauth_request(struct ssh_connection_s *connection, unsigned char success);
 

@@ -48,15 +48,28 @@ struct compress_ops_s *get_next_compress_ops(struct compress_ops_s *ops)
 
     } else {
 
-	list=get_list_head(&list_compress_ops, 0);
+	list=get_list_head(&list_compress_ops);
 
     }
 
     return (list) ? get_compress_ops_container(list) : NULL;
 }
 
+void init_ssh_compress(struct ssh_send_s *send)
+{
+    struct ssh_compress_s *compress=&send->compress;
 
-void reset_compress(struct ssh_send_s *send, struct algo_list_s *algo)
+    compress->flags=0;
+    memset(compress->name, '\0', sizeof(compress->name));
+    init_list_header(&compress->header, SIMPLE_LIST_TYPE_EMPTY, NULL);
+    compress->count=0; /* total amount of compressors */
+    compress->max_count=0; /* no limit */
+    compress->ops=NULL;
+    set_compress_none(compress);
+
+}
+
+void reset_ssh_compress(struct ssh_send_s *send, struct algo_list_s *algo)
 {
     logoutput("reset_compress");
 }

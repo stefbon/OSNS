@@ -29,6 +29,9 @@
 #include "ssh-send.h"
 #include "ssh-utils.h"
 
+static pthread_mutex_t send_mutex=PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t send_cond=PTHREAD_COND_INITIALIZER;
+
 int init_ssh_connection_send(struct ssh_connection_s *connection)
 {
     struct ssh_session_s *session=get_ssh_connection_session(connection);
@@ -39,38 +42,20 @@ int init_ssh_connection_send(struct ssh_connection_s *connection)
     /* send */
 
     send->flags=0;
-    pthread_mutex_init(&send->mutex, NULL);
-    pthread_cond_init(&send->cond, NULL);
+    set_custom_shared_signal(&send->signal, &send_mutex, &send_cond);
     set_system_time(&send->newkeys, 0, 0);
-    set_ssh_send_behaviour(connection, "default"); /* start with serialized handling of the send queue */
+    send->kexctr=0;
+    set_ssh_send_behaviour(send, "serial"); /* start with serialized handling of the send queue */
     send->sequence_number=0;
     init_list_header(&send->senders, SIMPLE_LIST_TYPE_EMPTY, NULL);
 
     /* encrypt */
 
-    encrypt->flags=0;
-    memset(encrypt->ciphername, '\0', sizeof(encrypt->ciphername));
-    memset(encrypt->hmacname, '\0', sizeof(encrypt->hmacname));
-    encrypt->count=0;
-    encrypt->max_count=0;
-    init_list_header(&encrypt->header, SIMPLE_LIST_TYPE_EMPTY, NULL);
-    encrypt->ops=NULL;
-    init_ssh_string(&encrypt->cipher_key);
-    init_ssh_string(&encrypt->cipher_iv);
-    init_ssh_string(&encrypt->hmac_key);
-    strcpy(encrypt->ciphername, "none");
-    strcpy(encrypt->hmacname, "none");
-    set_encrypt_generic(encrypt);
+    init_ssh_encrypt(connection);
 
     /* compress */
 
-    compress->flags=0;
-    memset(compress->name, '\0', sizeof(compress->name));
-    init_list_header(&compress->header, SIMPLE_LIST_TYPE_EMPTY, NULL);
-    compress->count=0; /* total amount of compressors */
-    compress->max_count=0; /* no limit */
-    compress->ops=NULL;
-    set_compress_none(compress);
+    init_ssh_compress(send);
 
     return 0;
 
@@ -84,8 +69,6 @@ void free_ssh_connection_send(struct ssh_connection_s *connection)
 
     remove_compressors(compress);
     remove_encryptors(encrypt);
-    pthread_mutex_destroy(&send->mutex);
-    pthread_cond_destroy(&send->cond);
 }
 
 void init_ssh_send_once()

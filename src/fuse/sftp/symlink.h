@@ -20,12 +20,10 @@
 #ifndef _FUSE_SFTP_READLINK_H
 #define _FUSE_SFTP_READLINK_H
 
-void _fs_sftp_readlink(struct service_context_s *c, struct fuse_request_s *f, struct inode_s *inode, struct fuse_path_s *fpath);
-void _fs_sftp_symlink(struct service_context_s *c, struct fuse_request_s *f, struct entry_s *entry, struct fuse_path_s *fpath, struct fs_location_path_s *target);
-int _fs_sftp_symlink_validate(struct service_context_s *context, struct fuse_path_s *fpath, char *target, struct fs_location_path_s *sub);
+unsigned int _fs_sftp_getlink(struct service_context_s *ctx, struct fuse_request_s *request, struct fuse_opendir_s *opendir, struct inode_s *inode, struct fuse_path_s *fpath);
 
-void _fs_sftp_readlink_disconnected(struct service_context_s *context, struct fuse_request_s *f_request, struct inode_s *inode, struct fuse_path_s *fpath);
-void _fs_sftp_symlink_disconnected(struct service_context_s *context, struct fuse_request_s *f_request, struct entry_s *entry, struct fuse_path_s *fpath, struct fs_location_path_s *target);
-int _fs_sftp_symlink_validate_disconnected(struct service_context_s *context, struct fuse_path_s *fpath, char *target, struct fs_location_path_s *sub);
+void _fs_sftp_readlink(struct service_context_s *ctx, struct fuse_request_s *r, struct inode_s *inode, struct fuse_path_s *fpath);
+void _fs_sftp_symlink(struct service_context_s *ctx, struct fuse_request_s *r, struct entry_s *entry, struct fuse_path_s *fpath, struct fs_location_path_s *target);
+int _fs_sftp_symlink_validate(struct service_context_s *ctx, struct fuse_path_s *fpath, char *target, struct fs_location_path_s *sub);
 
 #endif

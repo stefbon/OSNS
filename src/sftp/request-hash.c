@@ -26,7 +26,6 @@
 #include "libosns-workspace.h"
 #include "libosns-context.h"
 #include "libosns-fuse-public.h"
-#include "libosns-resources.h"
 #include "libosns-error.h"
 #include "libosns-list.h"
 
@@ -109,13 +108,13 @@ struct sftp_request_s *lookup_request_hashtable(struct sftp_client_s *sftp, unsi
 	it's very simple here since only write locks are */
 
     write_lock_list_header(header);
-    list=get_list_head(header, 0);
+    list=get_list_head(header);
 
     while (list) {
 
 	sftp_r=get_container_sftp_r(list);
 
-	if ((sftp_r->id==id) && (sftp_r->unique==sftp->context.unique)) {
+	if (sftp_r->id==id) {
 
 	    remove_list_element(list);
 	    break;
@@ -198,6 +197,30 @@ void signal_sftp_received_id_error(struct sftp_client_s *sftp, struct sftp_reque
     signal_unlock(signal);
 }
 
+int send_sftp_request_data_default(struct sftp_request_s *r, char *data, unsigned int size, uint32_t *seq, struct list_element_s *list)
+{
+    struct context_interface_s *i=r->interface;
+
+    struct sftp_client_s *sftp=(struct sftp_client_s *) (* i->get_interface_buffer)(i);
+
+    logoutput_debug("send_sftp_request_data_default");
+
+    int result=(* sftp->context.send_data)(sftp, data, size, seq, list);
+    r->status |= SFTP_REQUEST_STATUS_SEND;
+    return result;
+}
+
+static int send_sftp_request_data_blocked(struct sftp_request_s *r, char *data, unsigned int size, uint32_t *seq, struct list_element_s *list)
+{
+    return -1;
+}
+
+void set_sftp_request_blocked(struct sftp_request_s *r)
+{
+    r->reply.error=EINTR;
+    r->send=send_sftp_request_data_blocked;
+}
+
 /*	wait for a response on a request
 	here are more signal which lead to a finish of the request:
 	- response from the remote sftp server: SFTP_REQUEST_STATUS_RESPONSE and SFTP_REQUEST_STATUS_FINISH
@@ -207,7 +230,7 @@ void signal_sftp_received_id_error(struct sftp_client_s *sftp, struct sftp_reque
 	- original request from context is cancelled by the caller
 */
 
-unsigned char wait_sftp_response(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r, struct system_timespec_s *timeout)
+unsigned char wait_sftp_response(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r, struct system_timespec_s *timeout, unsigned char (* cb_interrupted)(void *ptr), void *ptr)
 {
     struct shared_signal_s *signal=sftp->signal.signal;
     unsigned int hash=sftp_r->id % hashsize;
@@ -224,10 +247,8 @@ unsigned char wait_sftp_response(struct sftp_client_s *sftp, struct sftp_request
     system_time_add_time(&expire, timeout);
     copy_system_time(&sftp_r->timeout, timeout);
 
-    /* add to the hash table */
-    logoutput_debug("wait_sftp_response: add %u to hashtable", sftp_r->id);
+    logoutput_debug("wait_sftp_response: add id=%i hash", sftp_r->id);
     add_request_hashtable(sftp_r);
-
     signal_lock(signal);
 
     startcheckwait:
@@ -240,11 +261,11 @@ unsigned char wait_sftp_response(struct sftp_client_s *sftp, struct sftp_request
 	signal_unlock(signal);
 	return 1;
 
-    } else if (sftp_r->status & SFTP_REQUEST_STATUS_INTERRUPT) {
+    } else if ((* cb_interrupted)(ptr)) {
 
 	/* 	test for additional events:
 		- original sftp_r request is interrupted; this happens for example with a FUSE filesystem, the initiating fuse
-		request can be interrupted; in this case the status of the sftp_r is also changed to INTERRUPT
+		    request can be interrupted; in this case the status of the sftp_r is also changed to INTERRUPT
 		- waiting for a reply has been timedout, remote server has taken too long, or connection problems or channel closed etc etc
 		- connection used for sftp is closed */
 
@@ -257,20 +278,28 @@ unsigned char wait_sftp_response(struct sftp_client_s *sftp, struct sftp_request
 
 	} else {
 
+	    sftp_r->status |= SFTP_REQUEST_STATUS_INTERRUPT;
+	    sftp_r->reply.error=EINTR;
 	    signal_unlock(signal);
-	    /* interrupted: remove from hash */
 	    remove_request_hashtable(sftp_r);
 	    logoutput("wait_sftp_response: interrupted (id=%i seq=%i)", sftp_r->id, sftp_r->reply.sequence);
 	    return 0;
 
 	}
 
+    } else if ((* sftp->context.break_request)(sftp, &sftp_r->status)) {
+
+	/* break/interrupt/connectionloss from ctx */
+
+	sftp_r->reply.error=ENOTCONN;
+	signal_unlock(signal);
+	remove_request_hashtable(sftp_r);
+	return 0;
+
     } else if (sftp_r->status & SFTP_REQUEST_STATUS_ERROR) {
 
 	signal_unlock(signal);
-
 	/* error : not required to remove from hash: thread setting this error has already done that */
-
 	logoutput("wait_sftp_response: error (packet wrong format?) (id=%i seq=%i)", sftp_r->id, sftp_r->reply.sequence);
 	return 0;
 
@@ -281,7 +310,8 @@ unsigned char wait_sftp_response(struct sftp_client_s *sftp, struct sftp_request
 	/* received a signal on the reply for this request: possibly something wrong with reply */
 
 	logoutput("wait_sftp_response: received a signal on sequence (packet wrong format?) (id=%i seq=%i)", sftp_r->id, sftp_r->reply.sequence);
-	sftp_r->status=SFTP_REQUEST_STATUS_ERROR;
+	sftp_r->status |= SFTP_REQUEST_STATUS_ERROR;
+	sftp_r->reply.error=EIO; /* a guess here ... TODO */
 	remove_request_hashtable(sftp_r);
 	return 0;
 
@@ -294,6 +324,7 @@ unsigned char wait_sftp_response(struct sftp_client_s *sftp, struct sftp_request
 
 	logoutput("wait_sftp_response: connection for sftp disconnected");
 	sftp_r->status |= SFTP_REQUEST_STATUS_DISCONNECT;
+	sftp_r->reply.error=ECONNABORTED;
 	remove_request_hashtable(sftp_r);
 	return 0;
 
@@ -311,23 +342,22 @@ unsigned char wait_sftp_response(struct sftp_client_s *sftp, struct sftp_request
 	    /* timeout: remove from hash */
 
 	    logoutput("wait_sftp_response: timeout (id=%i seq=%i)", sftp_r->id, sftp_r->reply.sequence);
-	    sftp_r->status=SFTP_REQUEST_STATUS_TIMEDOUT;
+	    sftp_r->status |= SFTP_REQUEST_STATUS_TIMEDOUT;
+	    sftp_r->reply.error=ETIMEDOUT;
 	    return 0;
 
 	} else {
 
 	    logoutput("wait_sftp_response: error %i condition wait (%s)", result, strerror(result));
-	    sftp_r->status=SFTP_REQUEST_STATUS_ERROR;
+	    sftp_r->status |= SFTP_REQUEST_STATUS_ERROR;
 	    sftp_r->reply.error=result;
 	    return 0;
 
 	}
 
-    } else if ((sftp_r->status & SFTP_REQUEST_STATUS_FINISH)==0) {
-
-	goto startcheckwait;
-
     }
+
+    goto startcheckwait;
 
     unlock:
     signal_unlock(signal);
@@ -382,72 +412,5 @@ void init_sftp_sendhash()
 	initdone=1;
 
     }
-
-}
-
-void clear_sftp_reply(struct sftp_reply_s *r)
-{
-
-    switch (r->type) {
-
-
-	case SSH_FXP_VERSION:
-
-	    if (r->response.init.buff) {
-
-		free(r->response.init.buff);
-		r->response.init.buff=NULL;
-
-	    }
-
-	    break;
-
-	case SSH_FXP_HANDLE:
-
-	    if (r->response.handle.name) {
-
-		free(r->response.handle.name);
-		r->response.handle.name=NULL;
-
-	    }
-
-	    break;
-
-	case SSH_FXP_DATA:
-
-	    if (r->response.data.data) {
-
-		free(r->response.data.data);
-		r->response.data.data=NULL;
-
-	    }
-
-	    break;
-
-	case SSH_FXP_NAME:
-
-	    if (r->response.names.buff) {
-
-		free(r->response.names.buff);
-		r->response.names.buff=NULL;
-
-	    }
-
-	    break;
-
-	case SSH_FXP_ATTRS:
-
-	    if (r->response.attr.buff) {
-
-		free(r->response.attr.buff);
-		r->response.attr.buff=NULL;
-
-	    }
-
-	    break;
-
-    }
-
-    memset(&r->response, '\0', sizeof(union sftp_response_u));
 
 }

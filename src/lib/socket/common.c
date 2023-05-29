@@ -62,14 +62,7 @@ int socket_read_common(struct osns_socket_s *sock, char *buffer, unsigned int si
 #ifdef __linux__
 
     int fdc=(* sock->get_unix_fd)(sock);
-
     result=read(fdc, (void *) buffer, (size_t) size);
-
-    if (result==-1) {
-
-	logoutput_debug("socket_read_common: error %u:%s", errno, strerror(errno));
-
-    }
 
 #endif
 

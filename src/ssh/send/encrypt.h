@@ -24,7 +24,8 @@ struct encrypt_ops_s *get_encrypt_ops_container(struct list_element_s *list);
 void add_encrypt_ops(struct encrypt_ops_s *ops);
 struct encrypt_ops_s *get_next_encrypt_ops(struct encrypt_ops_s *ops);
 
-void reset_encrypt(struct ssh_connection_s *c, struct algo_list_s *algo_cipher, struct algo_list_s *algo_hmac);
+void init_ssh_encrypt(struct ssh_connection_s *connection);
+void reset_ssh_encrypt(struct ssh_connection_s *c, struct algo_list_s *algo_cipher, struct algo_list_s *algo_hmac);
 
 unsigned int build_cipher_list_c2s(struct ssh_connection_s *c, struct algo_list_s *alist, unsigned int start);
 unsigned int build_hmac_list_c2s(struct ssh_connection_s *c, struct algo_list_s *alist, unsigned int start);

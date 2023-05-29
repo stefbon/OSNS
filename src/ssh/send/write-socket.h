@@ -20,6 +20,6 @@
 #ifndef _SSH_SEND_WRITE_SOCKET_H
 #define _SSH_SEND_WRITE_SOCKET_H
 
-int write_socket(struct ssh_connection_s *connection, struct ssh_packet_s *packet, unsigned int *error);
+int write_ssh_socket(struct ssh_connection_s *connection, struct ssh_packet_s *packet, unsigned int *error);
 
 #endif

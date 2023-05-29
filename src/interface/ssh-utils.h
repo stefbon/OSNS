@@ -24,4 +24,8 @@
 struct connection_s *get_connection_ssh_interface(struct context_interface_s *i);
 unsigned int get_default_ssh_port(struct context_interface_s *i);
 
+struct beventloop_s *get_ssh_session_eventloop(struct context_interface_s *i);
+struct beventloop_s *get_workspace_beventloop(struct context_interface_s *i);
+struct shared_signal_s *get_workspace_signal(struct context_interface_s *i);
+
 #endif

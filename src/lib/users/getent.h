@@ -20,7 +20,7 @@
 #ifndef LIB_USERS_GETENT_H
 #define LIB_USERS_GETENT_H
 
-#include "datatypes/ssh-string.h"
+#include "lib/ssh/ssh-string.h"
 
 #define GETENT_FLAG_USER				1
 #define GETENT_FLAG_GROUP				2

@@ -38,6 +38,7 @@ struct _bevent_epoll_s {
     uint32_t			events;
     uint32_t			properties;
     int				fd;
+    struct list_element_s       list;
     struct bevent_s		common;
 };
 
@@ -222,62 +223,25 @@ static void start_beventloop_epoll(struct beventloop_s *loop)
     tmp=&loop->backend.epoll;
     signal=loop->signal;
 
-    while (tmp->fd>=0) {
+    while ((tmp->fd>=0) && (loop->flags & BEVENTLOOP_FLAG_STOP)==0) {
 	struct epoll_event aevents[45]; /* arbritary */
 
 	(* loop->first_run)(loop);
 
 	int result=epoll_wait(tmp->fd, aevents, 45, -1);
 
-	logoutput_debug("start_beventloop_epoll: wake up: %i", result);
-
 	if (result>0) {
+	    unsigned int count=0;
 
 	    for (unsigned int i=0; i<result; i++) {
 		struct bevent_s *bevent=(struct bevent_s *) aevents[i].data.ptr;
-		uint32_t events=aevents[i].events;
-		struct bevent_argument_s arg;
-		int fd=((bevent) ? ((* bevent->ops->get_unix_fd)(bevent)) : -1);
 
-		logoutput_debug("start_beventloop_epoll: i %u events %u fd %i", i, events, fd);
-
-		arg.loop=loop;
-		arg.event.code=events;
-		arg.event.flags=((events & EPOLLPRI) ? BEVENT_EVENT_FLAG_PRI : 0);
-
-		if (arg.event.code & EPOLLERR) {
-
-		    (* bevent->cb_error)(bevent, BEVENT_EVENT_FLAG_ERROR, &arg);
-
-		}
-
-		if (arg.event.code & (EPOLLHUP | EPOLLRDHUP)) {
-
-		    (* bevent->cb_close)(bevent, BEVENT_EVENT_FLAG_CLOSE, &arg);
-
-		}
-
-		if (arg.event.code & EPOLLPRI) {
-
-		    (* bevent->cb_pri)(bevent, BEVENT_EVENT_FLAG_PRI, &arg);
-
-		}
-
-		if (arg.event.code & EPOLLIN) {
-
-		    (* bevent->cb_dataavail)(bevent, BEVENT_EVENT_FLAG_DATAAVAIL, &arg);
-
-		}
-
-		if (arg.event.code & EPOLLOUT) {
-
-		    (* bevent->cb_writeable)(bevent, BEVENT_EVENT_FLAG_WRITEABLE, &arg);
-
-		}
-
+                count+=queue_bevent_events(loop, aevents[i].events, bevent);
 		aevents[i].events=0;
 
 	    }
+
+            if (count>0) work_workerthread(NULL, 0, beventloop_process_events_thread, (void *) loop);
 
 	} else if (result==-1) {
 
@@ -296,7 +260,7 @@ static void start_beventloop_epoll(struct beventloop_s *loop)
 
 }
 
-static void stop_beventloop_epoll(struct beventloop_s *loop)
+static void stop_beventloop_epoll(struct beventloop_s *loop, unsigned int signo)
 {
     struct _beventloop_epoll_s *tmp=NULL;
     struct shared_signal_s *signal=NULL;
@@ -312,7 +276,11 @@ static void stop_beventloop_epoll(struct beventloop_s *loop)
 
     }
 
-    signal_set_flag(signal, &loop->flags, BEVENTLOOP_FLAG_STOP);
+    if (signal_set_flag(signal, &loop->flags, BEVENTLOOP_FLAG_STOP) && signo) {
+
+	kill(getpid(), signo);
+
+    }
 
 }
 
@@ -329,6 +297,7 @@ static int init_io_bevent_epoll(struct beventloop_s *eloop, struct bevent_s *bev
     tmp->events 	= 0;
     tmp->properties	= 0;
     tmp->fd		=-1;
+    init_list_element(&tmp->list, NULL);
     bevent->ops		= &epoll_bevent_ops;
     return 0;
 }
@@ -342,6 +311,7 @@ static struct bevent_s *create_io_bevent_epoll(struct beventloop_s *eloop)
 
 	memset(tmp, 0, sizeof(struct _bevent_epoll_s));
 	tmp->fd=-1;
+	init_list_element(&tmp->list, NULL);
 	bevent=&tmp->common;
 	init_bevent(bevent);
 	bevent->flags=BEVENT_FLAG_CREATE;
@@ -380,7 +350,6 @@ int init_beventloop_epoll(struct beventloop_s *loop)
     logoutput("init_beventloop_epoll");
 
     if (loop==NULL) return -1;
-
     tmp=&loop->backend.epoll;
     tmp->flags=0;
     tmp->fd=epoll_create1(0);

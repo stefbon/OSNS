@@ -42,9 +42,8 @@
     - ATTR				attrs
     */
 
-void sftp_op_mkdir(struct sftp_payload_s *payload)
+void sftp_op_mkdir(struct sftp_subsystem_s *sftp, struct sftp_in_header_s *inh, char *data)
 {
-    struct sftp_subsystem_s *sftp=payload->sftp; 
     unsigned int status=SSH_FX_BAD_MESSAGE;
 
     logoutput("sftp_op_mkdir (%i)", (int) gettid());
@@ -52,21 +51,20 @@ void sftp_op_mkdir(struct sftp_payload_s *payload)
     /* message should at least have 8 bytes for the path string and the valid
 	note an empty path is possible */
 
-    if (payload->len>=8) {
-	char *buffer=payload->data;
+    if (inh->len>=8) {
 	struct ssh_string_s path=SSH_STRING_INIT;
 	unsigned int pos=0;
 
-	path.len=get_uint32(&buffer[pos]);
+	path.len=get_uint32(&data[pos]);
 	pos+=4;
-	path.ptr=&buffer[pos];
+	path.ptr=&data[pos];
 	pos+=path.len;
 
 	/* sftp packet size is at least:
 	    - 4 + len ... path (len maybe zero) */
 
-	if (payload->len >= path.len + 8) {
-	    struct fs_location_path_s location=FS_LOCATION_PATH_INIT;
+	if (inh->len >= path.len + 8) {
+	    struct fs_path_s location=FS_PATH_INIT;
 	    struct convert_sftp_path_s convert;
 	    unsigned int size=(* sftp->prefix.get_length_fullpath)(sftp, &path, &convert); /* get size of buffer for path */
 	    char tmp[size+1];
@@ -77,10 +75,9 @@ void sftp_op_mkdir(struct sftp_payload_s *payload)
 	    struct rw_attr_result_s r=RW_ATTR_RESULT_INIT;
 	    unsigned int valid_bits=0;
 
-	    assign_buffer_location_path(&location, tmp, size+1);
+	    fs_path_assign_buffer(&location, tmp, size+1);
 	    (* convert.complete)(sftp, &path, &location);
-
-	    logoutput("sftp_op_mkdir : %.*s", location.len, location.ptr);
+	    logoutput("sftp_op_mkdir : %.*s", fs_path_get_length(&location), fs_path_get_start(&location));
 
 	    /* initialize the stat with sane values */
 
@@ -91,8 +88,7 @@ void sftp_op_mkdir(struct sftp_payload_s *payload)
 
 	    /* read the atributes received from client */
 
-	    set_attr_buffer_read(&abuff, &buffer[pos], payload->len - pos);
-
+	    set_attr_buffer_read(&abuff, &data[pos], inh->len - pos);
 	    valid_bits=(* abuff.ops->rw.read.read_uint32)(&abuff);
 	    read_attributes_generic(&sftp->attrctx, &abuff, &r, &stat, valid_bits);
 
@@ -104,7 +100,7 @@ void sftp_op_mkdir(struct sftp_payload_s *payload)
 
 	    if (system_create_dir(&location, &init)==0) {
 
-		reply_sftp_status_simple(sftp, payload->id, SSH_FX_OK);
+		reply_sftp_status_simple(sftp, inh->id, SSH_FX_OK);
 		return;
 
 	    }
@@ -118,6 +114,6 @@ void sftp_op_mkdir(struct sftp_payload_s *payload)
     error:
 
     logoutput("sftp_op_remove: status %i", status);
-    reply_sftp_status_simple(sftp, payload->id, status);
+    reply_sftp_status_simple(sftp, inh->id, status);
 
 }

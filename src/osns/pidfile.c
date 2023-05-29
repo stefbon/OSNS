@@ -41,14 +41,16 @@ static uid_t get_current_uid_running()
     return getuid();
 }
 
-static int get_pid_executable(unsigned int pid, struct fs_location_path_s *target)
+static int get_pid_executable(unsigned int pid, struct fs_path_s *target)
 {
-    char path[64];
-    int result=-EIO;
+    char procpath[64];
+    int result=snprintf(procpath, 64, "/proc/%i/exe", pid);
 
-    if (snprintf(path, 64, "/proc/%i/exe", pid)>0) {
+    if (result>0) {
+        struct fs_path_s tmp=FS_PATH_INIT;
 
-	result=get_target_unix_symlink(path, strlen(path), 0, target);
+        fs_path_assign_buffer(&tmp, procpath, (unsigned int) result);
+	result=fs_path_get_target_unix_symlink(&tmp, target);
 
     }
 
@@ -56,16 +58,16 @@ static int get_pid_executable(unsigned int pid, struct fs_location_path_s *targe
 
 }
 
-static int compare_pid_running(unsigned int pid, struct fs_location_path_s *target)
+static int compare_pid_running(unsigned int pid, struct fs_path_s *target)
 {
-    struct fs_location_path_s compare=FS_LOCATION_PATH_INIT;
+    struct fs_path_s compare=FS_PATH_INIT;
     int tmp=get_pid_executable(pid, &compare);
     int result=0;
 
     if (tmp==0) {
 
 	result=1;
-	if (compare_location_paths(&compare, target)==0) result=2;
+	if (fs_path_compare(&compare, 'p', target, NULL)==0) result=2;
 
     } else if (tmp==-ENOENT || tmp==-ENOTDIR) {
 
@@ -73,37 +75,44 @@ static int compare_pid_running(unsigned int pid, struct fs_location_path_s *targ
 
     }
 
-    clear_location_path(&compare);
+    fs_path_clear(&compare);
     return result;
 
 }
 
-static unsigned int get_pidnumber_pidfile(char *name, unsigned int tmp, unsigned int len)
+static unsigned int get_id_pidfile(char *name, unsigned int len, const char *what)
 {
-    unsigned int pid=0;
+    unsigned int id=0;
+    char *sep=NULL;
 
-    logoutput_debug("get_pidnumber_pidfile: name %s tmp %u len %u", name, tmp, len);
+    sep=memchr(name, '-', len);
 
-    /* pid is stored from len + 1 to tmp - 5 */
+    if (sep) {
+	char buffer[len];
 
-    if (len + 1 < tmp - 5) {
-	unsigned int width=(unsigned int)(tmp - 5 - len);
-	char pidbuffer[width + 1];
+	memset(buffer, 0, len);
 
-	memset(pidbuffer, 0, width+1);
-	memcpy(pidbuffer, &name[len+1], width);
+	if (strcmp(what, "uid")==0) {
 
-	pid=strtol(pidbuffer, NULL, 10);
+	    memcpy(buffer, name, (unsigned int)(sep - name));
+
+	} else if (strcmp(what, "pid")==0) {
+
+	    memcpy(buffer, (sep + 1), (unsigned int)(name + len - sep - 1));
+
+	}
+
+	id=strtol(buffer, NULL, 10);
 
     }
 
-    return pid;
+    return id;
 
 }
 
 int check_program_is_running(char *rundir, char *program, unsigned int flags)
 {
-    struct fs_location_path_s target=FS_LOCATION_PATH_INIT;
+    struct fs_path_s target=FS_PATH_INIT;
     unsigned int len=strlen(program);
     DIR *dp=NULL;
     struct dirent *de=NULL;
@@ -119,7 +128,8 @@ int check_program_is_running(char *rundir, char *program, unsigned int flags)
     while (de) {
 	char *name=de->d_name;
 	unsigned int tmp=strlen(name);
-	unsigned int pid=0;
+	unsigned int pid_pidfile=0;
+	unsigned int uid_pidfile=0;
 
 	/* the filename has be like: %program%-%pid%.pid
 	    so at least len + 4 + 1 */
@@ -128,8 +138,13 @@ int check_program_is_running(char *rundir, char *program, unsigned int flags)
 
 	    if (strcmp(&name[tmp-4], ".pid")==0 && memcmp(name, program, len)==0 && name[len]=='-') {
 
-		pid=get_pidnumber_pidfile(name, tmp, len);
-		if (pid==0) goto nextdirentryLabel;
+		/* look at the name without the starting program name and the last bytes with ".pid" */
+
+		uid_pidfile=get_id_pidfile(&name[len + 1], tmp - 5 - len, "uid");
+		pid_pidfile=get_id_pidfile(&name[len + 1], tmp - 5 - len, "pid");
+		if (pid_pidfile==0) goto nextdirentryLabel;
+
+		logoutput_debug("check_program_is_running: found %s : pid %u uid %u", name, pid_pidfile, uid_pidfile);
 
 		/* dealing with a pid belonging to an instance of this program ...
 		    check its's running under the same user or not */
@@ -138,7 +153,12 @@ int check_program_is_running(char *rundir, char *program, unsigned int flags)
 		    struct stat st;
 		    uid_t uid=get_current_uid_running();
 
-		    if (fstatat(dirfd(dp), name, &st, 0)==0 && (st.st_uid != uid)) pid=0;
+		    if (fstatat(dirfd(dp), name, &st, 0)==0) {
+
+			if (st.st_uid != uid_pidfile) logoutput_warning("check_program_is_running: uid %u found is not same as owner of file (%u)", uid_pidfile, st.st_uid);
+			if (st.st_uid != uid) pid_pidfile=0; /* belongs to another user */
+
+		    }
 
 		}
 
@@ -146,8 +166,8 @@ int check_program_is_running(char *rundir, char *program, unsigned int flags)
 
 	}
 
-	if (pid>0) {
-	    int test=compare_pid_running(pid, &target);
+	if (pid_pidfile>0) {
+	    int test=compare_pid_running(pid_pidfile, &target);
 
 	    if (test==-1) {
 
@@ -173,7 +193,7 @@ int check_program_is_running(char *rundir, char *program, unsigned int flags)
 
 	    } else if (test==2) {
 
-		logoutput("check_program_is_running: already running with pid %u", pid);
+		logoutput("check_program_is_running: already running with pid %u", pid_pidfile);
 		result=1;
 		break;
 
@@ -211,10 +231,10 @@ int check_create_pid_file(char *rundir, char *progname, char **p_pidfile)
 	logoutput_warning("check_create_pid_file: %s already running", filename);
 
     } else {
-	unsigned int len=strlen(rundir) + strlen(filename) + 32;
+	unsigned int len=strlen(rundir) + strlen(filename) + 64;
 	char path[len];
 
-	if (snprintf(path, len, "%s/%s-%u.pid", rundir, filename, getpid())>0) {
+	if (snprintf(path, len, "%s/%s-%u-%u.pid", rundir, filename, getuid(), getpid())>0) {
 
 	    if (mknod(path, S_IFREG | S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH, 0)==0) {
 
@@ -239,4 +259,14 @@ int check_create_pid_file(char *rundir, char *progname, char **p_pidfile)
 void remove_pid_file(char *pidfile)
 {
     unlink(pidfile);
+}
+
+unsigned int get_path_exe_pid(pid_t pid, struct fs_path_s *path)
+{
+    int tmp=get_pid_executable(pid, path);
+    unsigned int len=0;
+
+    if (tmp==0) len=path->len;
+    return len;
+
 }

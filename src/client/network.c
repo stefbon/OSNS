@@ -67,12 +67,10 @@ struct entry_s *create_network_map_entry(struct service_context_s *context, stru
 
 }
 
-struct entry_s *install_virtualnetwork_map(struct service_context_s *context, struct entry_s *parent, char *name, const char *what, unsigned char *p_action)
+struct entry_s *install_virtualnetwork_map(struct service_context_s *ctx, struct directory_s *pdirectory, char *name, const char *what, unsigned char *p_action)
 {
-    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
     struct entry_s *entry=NULL;
     unsigned int error=0;
-    struct directory_s *pdirectory=get_directory(workspace, parent->inode, 0);
     struct osns_lock_s wlock;
 
     if (wlock_directory(pdirectory, &wlock)==0) {
@@ -95,7 +93,7 @@ struct entry_s *install_virtualnetwork_map(struct service_context_s *context, st
 	}
 
 	error=0;
-	entry=create_network_map_entry(context, pdirectory, &xname, &error);
+	entry=create_network_map_entry(ctx, pdirectory, &xname, &error);
 
 	if (entry==NULL) {
 
@@ -108,17 +106,17 @@ struct entry_s *install_virtualnetwork_map(struct service_context_s *context, st
 	logoutput_debug("install_virtualnetwork_map: created map %s for %s", name, ((what) ? what : "unknown"));
 	if (p_action) *p_action=FUSE_NETWORK_ACTION_FLAG_ADDED;
 
-	if (context->type==SERVICE_CTX_TYPE_BROWSE) {
+	if (ctx->type==SERVICE_CTX_TYPE_BROWSE) {
 
-	    use_service_browse_fs(context, entry->inode);
+	    use_service_browse_fs(ctx, entry->inode);
 
-	} else if (context->type==SERVICE_CTX_TYPE_FILESYSTEM) {
+	} else if (ctx->type==SERVICE_CTX_TYPE_FILESYSTEM) {
 
-	    use_service_path_fs(context, entry->inode);
+	    use_service_path_fs(ctx, entry->inode);
 
 	} else {
 
-	    inherit_fuse_fs_parent(context, entry->inode);
+	    inherit_fuse_fs_parent(ctx, entry->inode);
 
 	}
 

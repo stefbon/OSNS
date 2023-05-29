@@ -86,18 +86,18 @@ void msg_write_userauth_pubkey_request(struct msg_buffer_s *mb, struct ssh_strin
     _msg_write_userauth_pubkey_message(mb, s_username, service, pkey, signature);
 }
 
-int send_userauth_pubkey_message(struct ssh_connection_s *connection, struct ssh_string_s *s_username, struct ssh_string_s *service, struct ssh_key_s *pkey, struct ssh_string_s *signature, uint32_t *seq)
+int send_userauth_pubkey_message(struct ssh_connection_s *connection, struct ssh_string_s *s_username, struct ssh_string_s *service, struct ssh_key_s *pkey, struct ssh_string_s *signature)
 {
     struct msg_buffer_s mb=INIT_SSH_MSG_BUFFER;
-    unsigned int len=_write_userauth_pubkey_message(&mb, s_username, service, pkey, signature) + 64;
-    char buffer[sizeof(struct ssh_payload_s) + len];
+    unsigned int size=_write_userauth_pubkey_message(&mb, s_username, service, pkey, signature) + 64;
+    char buffer[sizeof(struct ssh_payload_s) + size];
     struct ssh_payload_s *payload=(struct ssh_payload_s *) buffer;
 
-    init_ssh_payload(payload, len);
+    init_ssh_payload(payload, size);
     payload->type=SSH_MSG_USERAUTH_REQUEST;
     set_msg_buffer_payload(&mb, payload);
     payload->len=_write_userauth_pubkey_message(&mb, s_username, service, pkey, signature);
-    return write_ssh_packet(connection, payload, seq);
+    return write_ssh_packet(connection, payload);
 }
 
 unsigned int write_userauth_pubkey_ok_message(struct msg_buffer_s *mb, struct ssh_key_s *pkey)
@@ -108,18 +108,18 @@ unsigned int write_userauth_pubkey_ok_message(struct msg_buffer_s *mb, struct ss
     return mb->pos;
 }
 
-int send_userauth_pubkey_ok_message(struct ssh_connection_s *connection, struct ssh_key_s *pkey, uint32_t *seq)
+int send_userauth_pubkey_ok_message(struct ssh_connection_s *connection, struct ssh_key_s *pkey)
 {
     struct msg_buffer_s mb=INIT_SSH_MSG_BUFFER;
-    unsigned int len=write_userauth_pubkey_ok_message(&mb, pkey) + 64;
-    char buffer[sizeof(struct ssh_payload_s) + len];
+    unsigned int size=write_userauth_pubkey_ok_message(&mb, pkey) + 64;
+    char buffer[sizeof(struct ssh_payload_s) + size];
     struct ssh_payload_s *payload=(struct ssh_payload_s *) buffer;
 
-    init_ssh_payload(payload, len);
+    init_ssh_payload(payload, size);
     payload->type=SSH_MSG_USERAUTH_PK_OK;
     set_msg_buffer_payload(&mb, payload);
     payload->len=write_userauth_pubkey_ok_message(&mb, pkey);
-    return write_ssh_packet(connection, payload, seq);
+    return write_ssh_packet(connection, payload);
 }
 
 /*
@@ -150,18 +150,18 @@ void msg_write_userauth_none_message(struct msg_buffer_s *mb, struct ssh_string_
     _msg_write_userauth_none_message(mb, user, service);
 }
 
-int send_userauth_none_message(struct ssh_connection_s *connection, struct ssh_string_s *user, struct ssh_string_s *service, uint32_t *seq)
+int send_userauth_none_message(struct ssh_connection_s *connection, struct ssh_string_s *user, struct ssh_string_s *service)
 {
     struct msg_buffer_s mb=INIT_SSH_MSG_BUFFER;
-    unsigned int len=_write_userauth_none_message(&mb, user, service);
-    char buffer[sizeof(struct ssh_payload_s) + len];
+    unsigned int size=_write_userauth_none_message(&mb, user, service);
+    char buffer[sizeof(struct ssh_payload_s) + size];
     struct ssh_payload_s *payload=(struct ssh_payload_s *) buffer;
 
-    init_ssh_payload(payload, len);
+    init_ssh_payload(payload, size);
     payload->type=SSH_MSG_USERAUTH_REQUEST;
     set_msg_buffer_payload(&mb, payload);
     payload->len=_write_userauth_none_message(&mb, user, service);
-    return write_ssh_packet(connection, payload, seq);
+    return write_ssh_packet(connection, payload);
 }
 
 /*
@@ -204,18 +204,18 @@ void msg_write_userauth_hostbased_request(struct msg_buffer_s *mb, struct ssh_st
     _msg_write_userauth_hostbased_message(mb, s_u, service, pkey, c_h, c_u, NULL);
 }
 
-int send_userauth_hostbased_message(struct ssh_connection_s *connection, struct ssh_string_s *s_u, struct ssh_string_s *service, struct ssh_key_s *pkey, struct ssh_string_s *c_h, struct ssh_string_s *c_u, struct ssh_string_s *signature, uint32_t *seq)
+int send_userauth_hostbased_message(struct ssh_connection_s *connection, struct ssh_string_s *s_u, struct ssh_string_s *service, struct ssh_key_s *pkey, struct ssh_string_s *c_h, struct ssh_string_s *c_u, struct ssh_string_s *signature)
 {
     struct msg_buffer_s mb=INIT_SSH_MSG_BUFFER;
-    unsigned int len=_write_userauth_hostbased_message(&mb, s_u, service, pkey, c_h, c_u, signature) + 64;
-    char buffer[sizeof(struct ssh_payload_s) + len];
+    unsigned int size=_write_userauth_hostbased_message(&mb, s_u, service, pkey, c_h, c_u, signature) + 64;
+    char buffer[sizeof(struct ssh_payload_s) + size];
     struct ssh_payload_s *payload=(struct ssh_payload_s *) buffer;
 
-    init_ssh_payload(payload, len);
+    init_ssh_payload(payload, size);
     payload->type=SSH_MSG_USERAUTH_REQUEST;
     set_msg_buffer_payload(&mb, payload);
     payload->len=_write_userauth_hostbased_message(&mb, s_u, service, pkey, c_h, c_u, signature);
-    return write_ssh_packet(connection, payload, seq);
+    return write_ssh_packet(connection, payload);
 }
 
 /*
@@ -246,11 +246,11 @@ static unsigned int _write_userauth_password_message(struct msg_buffer_s *mb, ch
     return mb->pos;
 }
 
-int send_userauth_password_message(struct ssh_connection_s *connection, char *user, char *pw, struct ssh_string_s *service, uint32_t *seq)
+int send_userauth_password_message(struct ssh_connection_s *connection, char *user, char *pw, struct ssh_string_s *service)
 {
     struct msg_buffer_s mb=INIT_SSH_MSG_BUFFER;
-    unsigned int len=_write_userauth_password_message(&mb, user, pw, service) + 64;
-    char buffer[sizeof(struct ssh_payload_s) + len];
+    unsigned int size=_write_userauth_password_message(&mb, user, pw, service) + 64;
+    char buffer[sizeof(struct ssh_payload_s) + size];
     struct ssh_payload_s *payload=(struct ssh_payload_s *) buffer;
 
     if (user==NULL || pw==NULL) {
@@ -260,14 +260,14 @@ int send_userauth_password_message(struct ssh_connection_s *connection, char *us
 
     }
 
-    init_ssh_payload(payload, len);
+    init_ssh_payload(payload, size);
     payload->type=SSH_MSG_USERAUTH_REQUEST;
     set_msg_buffer_payload(&mb, payload);
     payload->len=_write_userauth_password_message(&mb, user, pw, service);
-    return write_ssh_packet(connection, payload, seq);
+    return write_ssh_packet(connection, payload);
 }
 
-int send_userauth_request_reply(struct ssh_connection_s *connection, unsigned int methods, unsigned char success, uint32_t *seq)
+int send_userauth_request_reply(struct ssh_connection_s *connection, unsigned int methods, unsigned char success)
 {
     struct msg_buffer_s mb=INIT_SSH_MSG_BUFFER;
 
@@ -275,7 +275,7 @@ int send_userauth_request_reply(struct ssh_connection_s *connection, unsigned in
 	char buffer[sizeof(struct ssh_payload_s) + 8];
 	struct ssh_payload_s *payload=(struct ssh_payload_s *) buffer;
 
-	init_ssh_payload(payload, 64);
+	init_ssh_payload(payload, 8);
 
 	/* auth success */
 
@@ -284,28 +284,28 @@ int send_userauth_request_reply(struct ssh_connection_s *connection, unsigned in
 	msg_write_byte(&mb, SSH_MSG_USERAUTH_SUCCESS);
 
 	payload->len=mb.pos;
-	return write_ssh_packet(connection, payload, seq);
+	return write_ssh_packet(connection, payload);
 
     } else {
-	unsigned int len=write_required_auth_methods(NULL, 0, methods);
-	char namelist[len];
-	char buffer[sizeof(struct ssh_payload_s) + len + 8];
+	unsigned int size=write_required_auth_methods(NULL, 0, methods);
+	char namelist[size];
+	char buffer[sizeof(struct ssh_payload_s) + size + 8];
 	struct ssh_payload_s *payload=(struct ssh_payload_s *) buffer;
 
-	init_ssh_payload(payload, len + 64);
+	init_ssh_payload(payload, size + 8);
 
 	payload->type=SSH_MSG_USERAUTH_FAILURE;
 	set_msg_buffer_payload(&mb, payload);
 
-	memset(namelist, 0, len);
-	len=write_required_auth_methods(namelist, len, methods);
+	memset(namelist, 0, size);
+	size=write_required_auth_methods(namelist, size, methods);
 
 	msg_write_byte(&mb, SSH_MSG_USERAUTH_FAILURE);
 	msg_write_ssh_string(&mb, 'c', namelist);
 	msg_write_byte(&mb, success);
 
 	payload->len=mb.pos;
-	return write_ssh_packet(connection, payload, seq);
+	return write_ssh_packet(connection, payload);
 
     }
 

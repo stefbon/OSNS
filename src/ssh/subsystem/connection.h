@@ -21,18 +21,19 @@
 #define SSH_SUBSYSTEM_CONNECTION_H
 
 #include "libosns-lock.h"
-// #include "lib/system.h"
 #include "libosns-socket.h"
 
 #define SSH_SUBSYSTEM_CONNECTION_FLAG_STD			(1 << 0)
-#define SSH_SUBSYSTEM_CONNECTION_FLAG_RECV_ERROR		(1 << 2)
-#define SSH_SUBSYSTEM_CONNECTION_FLAG_SEND_BLOCKED		(1 << 3)
-
-#define SSH_SUBSYSTEM_CONNECTION_FLAG_DISCONNECTING		(1 << 4)
-#define SSH_SUBSYSTEM_CONNECTION_FLAG_DISCONNECTED		(1 << 5)
-#define SSH_SUBSYSTEM_CONNECTION_FLAG_DISCONNECT		( SSH_SUBSYSTEM_CONNECTION_FLAG_DISCONNECTING | SSH_SUBSYSTEM_CONNECTION_FLAG_DISCONNECTED )
-
 #define SSH_SUBSYSTEM_CONNECTION_FLAG_TROUBLE			(1 << 28)
+
+#define SSH_SUBSYSTEM_SOCKET_TYPE_UNKNOWN                       0
+#define SSH_SUBSYSTEM_SOCKET_TYPE_IN                            1
+#define SSH_SUBSYSTEM_SOCKET_TYPE_OUT                           2
+#define SSH_SUBSYSTEM_SOCKET_TYPE_ERROR                         3
+
+#define SSH_SUBSYSTEM_SOCKET_FLAG_IN                            1
+#define SSH_SUBSYSTEM_SOCKET_FLAG_OUT                           2
+#define SSH_SUBSYSTEM_SOCKET_FLAG_ERROR                         4
 
 struct subsystem_std_connection_s {
     struct osns_socket_s				stdin;
@@ -44,23 +45,20 @@ struct subsystem_std_connection_s {
 
 struct ssh_subsystem_connection_s {
     unsigned int					flags;
-    unsigned int					error;
-    struct osns_locking_s				locking;
+    unsigned int                                        unique;
+    unsigned int					errcode;
     struct shared_signal_s				*signal;
     union {
 	struct subsystem_std_connection_s		std;
     } type;
-    int							(* open)(struct ssh_subsystem_connection_s *c);
-    void						(* read)(struct ssh_subsystem_connection_s *c, struct osns_socket_s *sock);
-    void						(* read_error)(struct ssh_subsystem_connection_s *c, struct osns_socket_s *sock);
-    int							(* write)(struct ssh_subsystem_connection_s *c, char *data, unsigned int size);
-    void						(* close)(struct ssh_subsystem_connection_s *c, struct osns_socket_s *sock, unsigned char free);
+    int							(* open)(struct ssh_subsystem_connection_s *c, int (* open_socket)(struct ssh_subsystem_connection_s *connection, struct osns_socket_s *sock, unsigned int type, unsigned int flags));
+    void						(* close)(struct ssh_subsystem_connection_s *c, unsigned int type);
+    int                                                 (* write)(struct ssh_subsystem_connection_s *c, char *data, unsigned int size);
 };
 
 /* prototypes */
 
-int init_ssh_subsystem_connection(struct ssh_subsystem_connection_s *connection, unsigned char type, struct shared_signal_s *signal, void (* read_cb)(struct ssh_subsystem_connection_s *connection, struct osns_socket_s *sock));
-int connect_ssh_subsystem_connection(struct ssh_subsystem_connection_s *c);
-void clear_ssh_subsystem_connection(struct ssh_subsystem_connection_s *connection);
+int init_ssh_subsystem_connection(struct ssh_subsystem_connection_s *connection, unsigned char type, struct shared_signal_s *signal, void (* init_socket)(struct ssh_subsystem_connection_s *connection, struct osns_socket_s *sock, unsigned int type, unsigned int flags));
+int open_ssh_subsystem_connection(struct ssh_subsystem_connection_s *connection, int (* open_socket)(struct ssh_subsystem_connection_s *connection, struct osns_socket_s *sock, unsigned int type, unsigned int flags));
 
 #endif

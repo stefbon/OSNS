@@ -27,27 +27,29 @@
 static pthread_mutex_t			default_mutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t			default_cond=PTHREAD_COND_INITIALIZER;
 
-int default_lock(struct shared_signal_s *s)
+/* DEFAULT SIGNAL */
+
+int _signal_default_lock(struct shared_signal_s *s)
 {
     return pthread_mutex_lock(s->mutex);
 }
 
-int default_unlock(struct shared_signal_s *s)
+int _signal_default_unlock(struct shared_signal_s *s)
 {
     return pthread_mutex_unlock(s->mutex);
 }
 
-int default_broadcast(struct shared_signal_s *s)
+int _signal_default_broadcast(struct shared_signal_s *s)
 {
     return pthread_cond_broadcast(s->cond);
 }
 
-int default_condwait(struct shared_signal_s *s)
+int _signal_default_condwait(struct shared_signal_s *s)
 {
     return pthread_cond_wait(s->cond, s->mutex);
 }
 
-int default_condtimedwait(struct shared_signal_s *s, struct system_timespec_s *t)
+int _signal_default_condtimedwait(struct shared_signal_s *s, struct system_timespec_s *t)
 {
     struct timespec expire={.tv_sec=t->st_sec, .tv_nsec=t->st_nsec};
     return pthread_cond_timedwait(s->cond, s->mutex, &expire);
@@ -58,11 +60,11 @@ static struct shared_signal_s default_shared_signal = {
 	.flags				= SHARED_SIGNAL_FLAG_DEFAULT,
 	.mutex				= &default_mutex,
 	.cond				= &default_cond,
-	.lock				= default_lock,
-	.unlock				= default_unlock,
-	.broadcast			= default_broadcast,
-	.condwait			= default_condwait,
-	.condtimedwait			= default_condtimedwait
+	.lock				= _signal_default_lock,
+	.unlock				= _signal_default_unlock,
+	.broadcast			= _signal_default_broadcast,
+	.condwait			= _signal_default_condwait,
+	.condtimedwait			= _signal_default_condtimedwait
 
 };
 
@@ -71,26 +73,94 @@ struct shared_signal_s *get_default_shared_signal()
     return &default_shared_signal;
 }
 
+int _signal_none_lock(struct shared_signal_s *s)
+{
+    return 0;
+}
+
+int _signal_none_unlock(struct shared_signal_s *s)
+{
+    return 0;
+}
+
+int _signal_none_broadcast(struct shared_signal_s *s)
+{
+    return 0;
+}
+
+int _signal_none_condwait(struct shared_signal_s *s)
+{
+    return 0;
+}
+
+int _signal_none_condtimedwait(struct shared_signal_s *s, struct system_timespec_s *t)
+{
+    return 0;
+}
+
+static struct shared_signal_s none_shared_signal = {
+
+	.flags				= SHARED_SIGNAL_FLAG_NONE,
+	.mutex				= NULL,
+	.cond				= NULL,
+	.lock				= _signal_none_lock,
+	.unlock				= _signal_none_unlock,
+	.broadcast			= _signal_none_broadcast,
+	.condwait			= _signal_none_condwait,
+	.condtimedwait			= _signal_none_condtimedwait
+
+};
+
+struct shared_signal_s *get_none_shared_signal()
+{
+    return &none_shared_signal;
+}
+
+void set_custom_shared_signal_none(struct shared_signal_s *signal)
+{
+	signal->flags			        = SHARED_SIGNAL_FLAG_NONE;
+	signal->lock				= _signal_none_lock;
+	signal->unlock				= _signal_none_unlock;
+	signal->broadcast			= _signal_none_broadcast;
+	signal->condwait			= _signal_none_condwait;
+	signal->condtimedwait			= _signal_none_condtimedwait;
+}
+
+void set_custom_shared_signal_default(struct shared_signal_s *signal, pthread_mutex_t *mutex, pthread_cond_t *cond)
+{
+    signal->mutex 			= mutex;
+    signal->cond  			= cond;
+    signal->lock  			= _signal_default_lock;
+    signal->unlock 			= _signal_default_unlock;
+    signal->broadcast			= _signal_default_broadcast;
+    signal->condwait			= _signal_default_condwait;
+    signal->condtimedwait		= _signal_default_condtimedwait;
+}
+
+void set_custom_shared_signal(struct shared_signal_s *signal, pthread_mutex_t *mutex, pthread_cond_t *cond)
+{
+    signal->flags=0;
+    set_custom_shared_signal_default(signal, mutex, cond);
+}
+
 struct shared_signal_s *create_custom_shared_signal()
 {
     unsigned size=sizeof(struct shared_signal_s) + sizeof(pthread_mutex_t) + sizeof(pthread_cond_t);
     struct shared_signal_s *signal=malloc(size);
 
     if (signal) {
+	pthread_mutex_t *mutex=NULL;
+	pthread_cond_t *cond=NULL;
 
 	memset(signal, 0, size);
 
-	signal->flags 			= SHARED_SIGNAL_FLAG_ALLOC | SHARED_SIGNAL_FLAG_ALLOC_MUTEX | SHARED_SIGNAL_FLAG_ALLOC_COND;
-	signal->mutex 			= (pthread_mutex_t *) signal->buffer;
- 	signal->cond  			= (pthread_cond_t *) (signal->buffer + sizeof(pthread_mutex_t));
-	signal->lock  			= default_lock;
-	signal->unlock 			= default_unlock;
-	signal->broadcast		= default_broadcast;
-	signal->condwait		= default_condwait;
-	signal->condtimedwait		= default_condtimedwait;
+	mutex = (pthread_mutex_t *) signal->buffer;
+ 	cond  = (pthread_cond_t *) (signal->buffer + sizeof(pthread_mutex_t));
+	pthread_mutex_init(mutex, NULL);
+	pthread_cond_init(cond, NULL);
 
-	pthread_mutex_init(signal->mutex, NULL);
-	pthread_cond_init(signal->cond, NULL);
+	signal->flags = SHARED_SIGNAL_FLAG_ALLOC | SHARED_SIGNAL_FLAG_ALLOC_MUTEX | SHARED_SIGNAL_FLAG_ALLOC_COND;
+ 	set_custom_shared_signal_default(signal, mutex, cond);
 
     }
 
@@ -103,14 +173,8 @@ struct shared_signal_s *get_custom_shared_signal(pthread_mutex_t *mutex, pthread
 
     if (signal) {
 
-	signal->flags 			= SHARED_SIGNAL_FLAG_ALLOC;
-	signal->mutex 			= mutex;
- 	signal->cond  			= cond;
-	signal->lock  			= default_lock;
-	signal->unlock 			= default_unlock;
-	signal->broadcast		= default_broadcast;
-	signal->condwait		= default_condwait;
-	signal->condtimedwait		= default_condtimedwait;
+	signal->flags = SHARED_SIGNAL_FLAG_ALLOC;
+	set_custom_shared_signal_default(signal, mutex, cond);
 
     }
 
@@ -157,4 +221,11 @@ void clear_shared_signal(struct shared_signal_s **p_s)
 
     }
 
+}
+
+void signal_broadcast_locked(struct shared_signal_s *s)
+{
+    signal_lock(s);
+    signal_broadcast(s);
+    signal_unlock(s);
 }

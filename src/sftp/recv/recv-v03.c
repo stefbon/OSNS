@@ -26,7 +26,6 @@
 #include "libosns-workspace.h"
 #include "libosns-context.h"
 #include "libosns-fuse-public.h"
-#include "libosns-resources.h"
 
 #include "sftp/common-protocol.h"
 #include "sftp/common.h"
@@ -110,7 +109,7 @@ void receive_sftp_status_v03(struct sftp_client_s *sftp, struct sftp_header_s *h
 
     } else {
 
-	logoutput("receive_sftp_status_v03: error finding id %i (%s)", header->id, get_error_description(&error));
+	logoutput("receive_sftp_status_v03: error finding id %u (%s)", header->id, get_error_description(&error));
 
     }
 
@@ -127,20 +126,20 @@ void receive_sftp_handle_v03(struct sftp_client_s *sftp, struct sftp_header_s *h
 	struct sftp_reply_s *reply=&req->reply;
 
 	reply->type=header->type;
-	reply->response.handle.len=get_uint32(&buffer[pos]);
+	reply->size=get_uint32(&buffer[pos]);
 	pos+=4;
 
-	if (reply->response.handle.len <= SFTP_HANDLE_MAXSIZE && reply->response.handle.len + pos <= header->len) {
+	if (reply->size <= SFTP_HANDLE_MAXSIZE && reply->size + pos <= header->len) {
 
-	    memmove(buffer, &buffer[pos], reply->response.handle.len);
-	    reply->response.handle.name=(unsigned char *) buffer;
+	    memmove(buffer, &buffer[pos], reply->size);
+	    reply->data=buffer;
 	    signal_sftp_received_id(sftp, req);
 	    header->buffer=NULL;
 
 	} else {
 
 	    set_generic_error_application(&error, _ERROR_APPLICATION_TYPE_PROTOCOL, NULL, __PRETTY_FUNCTION__);
-	    logoutput("receive_sftp_handle_v03: error received handle len %i too long (%s)", reply->response.handle.len, get_error_description(&error));
+	    logoutput("receive_sftp_handle_v03: error received handle len %i too long (%s)", reply->size, get_error_description(&error));
 	    signal_sftp_received_id_error(sftp, req, &error);
 
 	}
@@ -165,16 +164,16 @@ void receive_sftp_data_v03(struct sftp_client_s *sftp, struct sftp_header_s *hea
 
 	reply->type=header->type;
 	reply->response.data.flags=0;
-	reply->response.data.size=get_uint32(&buffer[pos]);
+	reply->size=get_uint32(&buffer[pos]);
 	pos+=4;
-	memmove(buffer, &buffer[pos], reply->response.data.size);
-	reply->response.data.data=(unsigned char *) buffer; /* let the processing of this into names, attr to the caller/initiator */
+	memmove(buffer, &buffer[pos], reply->size);
+	reply->data=buffer; /* let the processing of this into names, attr to the caller/initiator */
 	header->buffer=NULL;
 	signal_sftp_received_id(sftp, req);
 
     } else {
 
-	logoutput("receive_sftp_data_v03: error finding id %i (%s)", header->id, get_error_description(&error));
+	logoutput("receive_sftp_data_v03: error finding id %u (%s)", header->id, get_error_description(&error));
 
     }
 
@@ -191,19 +190,19 @@ void receive_sftp_name_v03(struct sftp_client_s *sftp, struct sftp_header_s *hea
 	struct sftp_reply_s *reply=&req->reply;
 
 	reply->type=header->type;
-	reply->response.names.flags=0;
-	reply->response.names.count=get_uint32(&buffer[pos]);
+	reply->response.name.flags=0;
+	reply->response.name.count=get_uint32(&buffer[pos]);
 	pos+=4;
-	reply->response.names.size=header->len - pos; /* minus the count field */
-	memmove(buffer, &buffer[pos], reply->response.names.size);
-	reply->response.names.buff=buffer; /* let the processing of this into names, attr to the receiving (FUSE) thread */
+	reply->size=header->len - pos; /* minus the count field */
+	memmove(buffer, &buffer[pos], reply->size);
+	reply->data=buffer; /* let the processing of this into names, attr to the receiving (FUSE) thread */
 	header->buffer=NULL;
 
 	signal_sftp_received_id(sftp, req);
 
     } else {
 
-	logoutput("receive_sftp_name_v03: error finding id (%s)", header->id, get_error_description(&error));
+	logoutput("receive_sftp_name_v03: error finding id %u (%s)", header->id, get_error_description(&error));
 
     }
 
@@ -218,17 +217,15 @@ void receive_sftp_attr_v03(struct sftp_client_s *sftp, struct sftp_header_s *hea
 	char *buffer=header->buffer;
 	struct sftp_reply_s *reply=&req->reply;
 
-	// logoutput("receive_sftp_attr_v03: id %i: size %i", header->id, header->len);
-
 	reply->type=header->type;
-	reply->response.attr.size=header->len;
-	reply->response.attr.buff=(unsigned char *)buffer;
+	reply->size=header->len;
+	reply->data=buffer;
 	header->buffer=NULL;
 	signal_sftp_received_id(sftp, req);
 
     } else {
 
-	logoutput("receive_sftp_attr_v03: error finding id %i (%s)", header->id, get_error_description(&error));
+	logoutput("receive_sftp_attr_v03: error finding id %u (%s)", header->id, get_error_description(&error));
 
     }
 
@@ -248,14 +245,14 @@ void receive_sftp_extension_reply_v03(struct sftp_client_s *sftp, struct sftp_he
 	struct sftp_reply_s *reply=&req->reply;
 
 	reply->type=header->type;
-	reply->response.extension.size=header->len;
-	reply->response.extension.buff=(unsigned char *)header->buffer;
+	reply->size=header->len;
+	reply->data=header->buffer;
 	header->buffer=NULL;
 	signal_sftp_received_id(sftp, req);
 
     } else {
 
-	logoutput("receive_sftp_extension_reply_v03: error finding id %i (%s)", header->id, get_error_description(&error));
+	logoutput("receive_sftp_extension_reply_v03: error finding id %u (%s)", header->id, get_error_description(&error));
 
     }
 

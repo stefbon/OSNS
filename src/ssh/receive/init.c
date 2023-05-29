@@ -30,10 +30,14 @@
 #include "ssh-utils.h"
 #include "ssh-send.h"
 
+static pthread_mutex_t recv_mutex=PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t recv_cond=PTHREAD_COND_INITIALIZER;
+
 void msg_not_supported(struct ssh_connection_s *connection, struct ssh_payload_s *payload)
 {
     unsigned int seq=payload->sequence;
-    logoutput("msg_not_supported: received type %i", payload->type);
+
+    logoutput_debug("msg_not_supported: received type %i", payload->type);
     free_payload(&payload);
 
     if (send_unimplemented_message(connection, seq)>0) {
@@ -58,87 +62,59 @@ void process_cb_ssh_payload(struct ssh_connection_s *connection, struct ssh_payl
     (* connection->cb[payload->type])(connection, payload);
 }
 
-int init_ssh_connection_receive(struct ssh_connection_s *connection, unsigned int *error)
+int init_ssh_connection_receive(struct ssh_session_s *session, struct ssh_connection_s *sshc, unsigned int *error)
 {
-    struct ssh_session_s *session=get_ssh_connection_session(connection);
-    struct ssh_receive_s *receive=&connection->receive;
+    struct ssh_receive_s *receive=&sshc->receive;
     struct ssh_decrypt_s *decrypt=&receive->decrypt;
     struct ssh_decompress_s *decompress=&receive->decompress;
 
-    logoutput("init_ssh_connection_receive");
+    logoutput_debug("init_ssh_connection_receive");
 
     memset(receive, 0, sizeof(struct ssh_receive_s));
 
-    /* central signal used by channels and other queues
-	the cond and mutex are shared with fuse
-	threads can thus not only be signalled when a reply
-	from the server arrives but also when the original request
-	is interrupted by fuse/user */
-
-    init_ssh_signal(&receive->signal, 0, session->connections.signal);
+    set_custom_shared_signal(&receive->signal, &recv_mutex, &recv_cond);
 
     receive->status=0;
-    pthread_mutex_init(&receive->mutex, NULL);
-    pthread_cond_init(&receive->cond, NULL);
     receive->threads=0;
     receive->sequence_number=0;
+    receive->sequence_error.sequence_number_error=0;
+    receive->sequence_error.errcode=0;
+
+    set_system_time(&receive->newkeys, 0, 0);
+    set_system_time(&receive->kexinit, 0, 0);
+    receive->kexctr=0;
+
+    init_ssh_decrypt(sshc);
+    init_ssh_decompress(sshc);
+    init_ssh_socket_behaviour(&sshc->connection.sock);
+    set_ssh_receive_behaviour(sshc, "greeter");
 
     /* the maximum size for the buffer RFC4253 6.1 Maximum Packet Length */
 
     receive->size=session->config.max_receive_size;
     receive->read=0;
+    receive->msgsize=0;
     receive->buffer=malloc(receive->size);
 
     if (receive->buffer) {
 
 	memset(receive->buffer, '\0', receive->size);
 	*error=0;
+	logoutput_debug("init_ssh_connection_receive: allocated receive buffer (%u bytes)", receive->size);
+	set_osns_socket_buffer(&sshc->connection.sock, receive->buffer, receive->size);
 
     } else {
 
-	logoutput("init_ssh_connection_receive: error allocating buffer (%i bytes)", receive->size);
+	logoutput_warning("init_ssh_connection_receive: error allocating receive buffer (%u bytes)", receive->size);
 	receive->size=0;
 	*error=ENOMEM;
 	goto error;
 
     }
 
-    set_ssh_receive_behaviour(connection, "greeter");
-    receive->process_ssh_packet=process_ssh_packet_nodecompress;
-    set_system_time(&receive->newkeys, 0, 0);
-
-    /* decrypt */
-
-    decrypt->flags=0;
-    memset(decrypt->ciphername, '\0', sizeof(decrypt->ciphername));
-    memset(decrypt->hmacname, '\0', sizeof(decrypt->hmacname));
-    init_list_header(&decrypt->header, SIMPLE_LIST_TYPE_EMPTY, NULL);
-    decrypt->count=0;
-    decrypt->max_count=0;
-    decrypt->ops=NULL;
-    init_ssh_string(&decrypt->cipher_key);
-    init_ssh_string(&decrypt->cipher_iv);
-    init_ssh_string(&decrypt->hmac_key);
-    set_decrypt_generic(decrypt);
-    strcpy(decrypt->ciphername, "none");
-    strcpy(decrypt->hmacname, "none");
-
-    /* decompress */
-
-    decompress->flags=0;
-    memset(decompress->name, '\0', sizeof(decompress->name));
-    init_list_header(&decompress->header, SIMPLE_LIST_TYPE_EMPTY, NULL);
-    decompress->count=0;
-    decompress->max_count=0;
-    decompress->ops=NULL;
-    set_decompress_none(connection);
-
     return 0;
 
     error:
-
-    pthread_mutex_destroy(&receive->mutex);
-    pthread_cond_destroy(&receive->cond);
 
     if (receive->buffer) {
 
@@ -156,10 +132,6 @@ void free_ssh_connection_receive(struct ssh_connection_s *connection)
     struct ssh_receive_s *receive=&connection->receive;
     struct ssh_decrypt_s *decrypt=&receive->decrypt;
     struct ssh_decompress_s *decompress=&receive->decompress;
-
-    receive->signal.signal=NULL;
-    pthread_mutex_destroy(&receive->mutex);
-    pthread_cond_destroy(&receive->cond);
 
     if (receive->buffer) {
 

@@ -22,13 +22,30 @@
 #include "libosns-log.h"
 #include "libosns-misc.h"
 #include "libosns-datatypes.h"
+#include "libosns-lock.h"
 
 #include "socket.h"
 #include "connection.h"
 #include "device.h"
-#include "file.h"
-#include "directory.h"
 #include "utils.h"
+#include "event.h"
+
+static pthread_mutex_t socket_mutex=PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t socket_cond=PTHREAD_COND_INITIALIZER;
+
+static struct shared_signal_s socket_shared_signal = {
+
+	.flags				= 0,
+	.mutex				= &socket_mutex,
+	.cond				= &socket_cond,
+	.lock				= _signal_default_lock,
+	.unlock				= _signal_default_unlock,
+	.broadcast			= _signal_default_broadcast,
+	.condwait			= _signal_default_condwait,
+	.condtimedwait			= _signal_default_condtimedwait
+
+};
+
 
 static int cb_open_socket_default(struct osns_socket_s *sock, unsigned int flags)
 {
@@ -111,8 +128,10 @@ static void cb_set_unix_fd_default(struct osns_socket_s *sock, int fd)
 }
 
 static void cb_change_default(struct osns_socket_s *sock, unsigned int what)
+{}
+
+static void cb_free_default(struct osns_socket_s *sock)
 {
-    
 }
 
 static unsigned char countbitsset(unsigned int value)
@@ -128,7 +147,6 @@ static unsigned char countbitsset(unsigned int value)
 
     return count;
 }
-
 
 /* initialization */
 
@@ -244,22 +262,10 @@ void init_osns_socket(struct osns_socket_s *sock, unsigned int type, unsigned in
 
 	}
 
-	case OSNS_SOCKET_TYPE_FILESYSTEM:
+	case OSNS_SOCKET_TYPE_SYSTEM:
 	{
 	    unsigned int tmp=0;
 	    unsigned char count=0;
-
-	    tmp=(OSNS_SOCKET_FLAG_FILE | OSNS_SOCKET_FLAG_DIR);
-	    count=countbitsset(flags & tmp);
-
-	    if (count==0 || count>1) {
-
-		/* at least one (and not more) has to be set */
-
-		logoutput_error("init_osns_socket: invalid flags ... one of FILE and DIR has to be set");
-		return;
-
-	    }
 
 	    tmp |= (OSNS_SOCKET_FLAG_RDWR | OSNS_SOCKET_FLAG_WRONLY);
 
@@ -278,7 +284,7 @@ void init_osns_socket(struct osns_socket_s *sock, unsigned int type, unsigned in
 	default:
 
 	{
-	    logoutput_error("init_osns_socket: type not reckognized, must be one of CONNECTION, SYSTEM or FILESYSTEM: invalid ... cannot continue");
+	    logoutput_error("init_osns_socket: type not reckognized, must be one of CONNECTION, SYSTEM or SYSTEM: invalid ... cannot continue");
 	    return;
 	}
 
@@ -287,6 +293,7 @@ void init_osns_socket(struct osns_socket_s *sock, unsigned int type, unsigned in
     sock->status=SOCKET_STATUS_INIT;
     sock->type=type;
     sock->flags=flags;
+    sock->signal=&socket_shared_signal;
 
     /* context */
 
@@ -312,6 +319,19 @@ void init_osns_socket(struct osns_socket_s *sock, unsigned int type, unsigned in
 
 #endif
     sock->change=cb_change_default;
+    sock->free=cb_free_default;
+
+    set_socket_context_defaults(sock);
+
+    sock->rd.ctr=0;
+    init_list_header(&sock->rd.in, SIMPLE_LIST_TYPE_EMPTY, NULL);
+    sock->rd.current=NULL;
+
+    sock->rd.buffer=NULL;
+    sock->rd.size=0;
+    sock->rd.pos=0;
+    sock->rd.cbuffer=NULL;
+    sock->rd.csize=0;
 
     switch (sock->type) {
 
@@ -323,21 +343,6 @@ void init_osns_socket(struct osns_socket_s *sock, unsigned int type, unsigned in
 	case OSNS_SOCKET_TYPE_DEVICE:
 
 	    init_osns_device_socket(sock);
-	    break;
-
-
-	case OSNS_SOCKET_TYPE_FILESYSTEM:
-
-	    if (sock->flags & OSNS_SOCKET_FLAG_FILE) {
-
-		init_osns_file_socket(sock);
-
-	    } else if (sock->flags & OSNS_SOCKET_FLAG_DIR) {
-
-		init_osns_directory_socket(sock);
-
-	    }
-
 	    break;
 
 	default:

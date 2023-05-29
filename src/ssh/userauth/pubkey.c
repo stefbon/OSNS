@@ -152,7 +152,6 @@ static int ssh_send_pk_signature(struct ssh_connection_s *connection, struct ssh
     struct ssh_auth_s *auth=&setup->phase.service.type.auth;
     struct ssh_string_s signature=SSH_STRING_INIT;
     int result=-1;
-    uint32_t seq=0;
 
     if (create_pk_signature(connection, s_username, service, pkey, skey, &signature)==-1) {
 
@@ -163,10 +162,10 @@ static int ssh_send_pk_signature(struct ssh_connection_s *connection, struct ssh
 
     /* send userauth publickey request to server with signature */
 
-    if (send_userauth_pubkey_message(connection, s_username, service, pkey, &signature, &seq)>0) {
+    if (send_userauth_pubkey_message(connection, s_username, service, pkey, &signature)>0) {
 	struct ssh_payload_s *payload=NULL;
 
-	payload=receive_message_common(connection, select_userauth_reply, NULL, NULL);
+	payload=receive_message_common(connection, select_userauth_reply, NULL);
 	if (payload==NULL) goto out;
 
 	if (payload->type==SSH_MSG_USERAUTH_SUCCESS) {
@@ -194,25 +193,23 @@ static int ssh_send_pk_signature(struct ssh_connection_s *connection, struct ssh
 
 }
 
-static int select_userauth_pubkey_reply(struct ssh_connection_s *connection, struct ssh_payload_s *payload, void *ptr)
+static int select_userauth_pubkey_reply(struct ssh_payload_s *payload, void *ptr)
 {
-    if (payload->type == SSH_MSG_USERAUTH_PK_OK || payload->type == SSH_MSG_USERAUTH_FAILURE) return 0;
-    return -1;
+    return ((payload->type == SSH_MSG_USERAUTH_PK_OK || payload->type == SSH_MSG_USERAUTH_FAILURE) ? 1 : 0);
 }
 
 /* test pk algo and public key are accepted */
 
 static int send_userauth_pubkey(struct ssh_connection_s *connection, struct ssh_string_s *s_username, struct ssh_string_s *service, struct ssh_key_s *pkey)
 {
-    unsigned int seq=0;
     int result=-1;
 
     logoutput("send_userauth_pubkey");
 
-    if (send_userauth_pubkey_message(connection, s_username, service, pkey, NULL, &seq)>0) {
+    if (send_userauth_pubkey_message(connection, s_username, service, pkey, NULL)>0) {
 	struct ssh_payload_s *payload=NULL;
 
-	payload=receive_message_common(connection, select_userauth_pubkey_reply, NULL, NULL);
+	payload=receive_message_common(connection, select_userauth_pubkey_reply, NULL);
 	if (payload==NULL) goto out;
 
 	if (payload->type==SSH_MSG_USERAUTH_PK_OK) {
@@ -359,7 +356,6 @@ int respond_userauth_publickey_request(struct ssh_connection_s *connection, stru
     struct ssh_string_s algo=SSH_STRING_INIT;
     struct ssh_pkalgo_s *pkalgo=NULL;
     struct ssh_key_s pkey;
-    uint32_t seq=0;
     int result=-1;
 
     set_msg_buffer_string(&mb1, data1);
@@ -382,12 +378,12 @@ int respond_userauth_publickey_request(struct ssh_connection_s *connection, stru
     msg_read_pkey(&mb1, &pkey, PK_DATA_FORMAT_SSH);
     if (mb1.error>0) goto out;
 
-    if (send_userauth_pubkey_ok_message(connection, &pkey, &seq)>0) {
+    if (send_userauth_pubkey_ok_message(connection, &pkey)>0) {
 	struct ssh_payload_s *payload=NULL;
 
 	/* wait for SSH_MSG_USERAUTH_REQUEST with signature */
 
-	payload=get_ssh_payload(connection, &connection->setup.queue, expire, &seq, select_userauth_pubkey_reply, NULL, NULL);
+	payload=get_ssh_payload(&connection->setup.queue, expire, select_userauth_pubkey_reply, NULL, NULL, NULL);
 	if (payload==NULL || payload->len<5) {
 
 	    logoutput("respond_userauth_publickey_request: not received a service request message or message is too small");

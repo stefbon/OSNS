@@ -39,6 +39,7 @@ char *lookupname_dns(char *ip)
 
 char *lookupname_dns(char *ip)
 {
+    logoutput_debug("lookupname_dns: not supported");
     return NULL;
 }
 

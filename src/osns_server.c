@@ -153,7 +153,7 @@ static void terminate_user_connections(struct osns_user_s *user)
 
     logoutput("terminate_user_connections");
 
-    list=get_list_head(&user->connections, SIMPLE_LIST_FLAG_REMOVE);
+    list=remove_list_head(&user->connections);
 
     while (list) {
 	struct service_context_s *context=NULL;
@@ -166,7 +166,7 @@ static void terminate_user_connections(struct osns_user_s *user)
 	logoutput("terminate_user_workspaces: free mount");
 	free_workspace_mount(workspace);
 
-	list=get_list_head(&user->workspaces, SIMPLE_LIST_FLAG_REMOVE);
+	list=remove_list_head(&user->workspaces);
 
     }
 
@@ -207,7 +207,7 @@ static void end_osns_user_sessions(void *ptr)
 
     if (user) {
 
-	work_workerthread(NULL, 0, end_osns_user_session, (void *) user, NULL);
+	work_workerthread(NULL, 0, end_osns_user_session, (void *) user);
 	index=NULL;
 	goto getuser;
 
@@ -317,7 +317,7 @@ static void change_usersessions(uid_t uid, signed char change, void *ptr)
 
 	    remove_osns_user_hash(user);
 	    unlock_users_hash(&wlock);
-	    work_workerthread(NULL, 0, end_osns_user_session, NULL, (void *) user);
+	    work_workerthread(NULL, 0, end_osns_user_session, (void *) user);
 	    return;
 
 	}

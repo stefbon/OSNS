@@ -31,23 +31,25 @@
 #include "osns_client.h"
 #include "client/workspaces.h"
 
-#include "osns/mountcmd.h"
+#include "osns/send/mountcmd.h"
 
 #define FUSE_HASHTABLE_SIZE			64
 
 typedef void (* fuse_request_cb_t)(struct fuse_request_s *req, char *data);
 
-#define FUSE_REQUEST_BUFFER_SIZE		8192
+#define FUSE_REQUEST_BUFFER_SIZE	        16384
 
 struct fuse_interface_s {
     struct beventloop_s 			*loop;
     struct osns_socket_s			socket;
     struct fuse_config_s			config;
+    struct system_dev_s                         dev;
     unsigned int				countcb;
     fuse_request_cb_t				cb[FUSE_REQUEST_CB_MAX+1];
     struct list_header_s			hashtable[FUSE_HASHTABLE_SIZE];
     struct fuse_receive_s			receive;
-    char					buffer[];
+    unsigned int                                size;
+    char					*buffer;
 };
 
 /* FUSE io functions */
@@ -84,16 +86,15 @@ static void set_fuse_request_flags_default(struct fuse_request_s *req)
 static void osns_client_process_fuse_data(struct fuse_receive_s *r, struct fuse_in_header *inh, char *data)
 {
     struct fuse_interface_s *fi=(struct fuse_interface_s *)((char *) r - offsetof(struct fuse_interface_s, receive));
-    struct context_interface_s *interface=NULL	;
+    struct context_interface_s *interface=(struct context_interface_s *)((char *) fi - offsetof(struct context_interface_s, buffer));
 
     logoutput_debug("osns_client_process_fuse_data: code %u node id %lu unique %lu", inh->opcode, inh->nodeid, inh->unique);
-
-    interface=(struct context_interface_s *)((char *) fi - offsetof(struct context_interface_s, buffer));
 
     if (inh->opcode <= FUSE_REQUEST_CB_MAX) {
 	struct fuse_request_s request;
 
 	memset(&request, 0, sizeof(struct fuse_request_s));
+
 	request.interface=interface;
 	request.ptr=NULL;
 	request.sock=&fi->socket;
@@ -105,7 +106,6 @@ static void osns_client_process_fuse_data(struct fuse_receive_s *r, struct fuse_
 	request.unique=inh->unique;
 	init_list_element(&request.list, NULL);
 	request.flags=0;
-	request.set_flags=set_fuse_request_flags_default;
 	request.size=inh->len;
 
 	add_fuse_request_hashtable(fi, &request);
@@ -115,7 +115,7 @@ static void osns_client_process_fuse_data(struct fuse_receive_s *r, struct fuse_
     } else {
 	struct fuse_request_s request;
 
-	memset(&request, 0, sizeof(struct fuse_request_s) + inh->len);
+	memset(&request, 0, sizeof(struct fuse_request_s));
 	request.interface=interface;
 	request.sock=&fi->socket;
 	request.unique=inh->unique;
@@ -126,55 +126,22 @@ static void osns_client_process_fuse_data(struct fuse_receive_s *r, struct fuse_
 
 }
 
-static void osns_client_close_fuse_interface(struct fuse_interface_s *fuse, struct bevent_s *bevent)
-{
-    struct osns_socket_s *sock=&fuse->socket;
-
-    (* sock->close)(sock);
-
-    if (bevent==NULL) {
-
-	if (sock->event.type==SOCKET_EVENT_TYPE_BEVENT) bevent=sock->event.link.bevent;
-
-    }
-
-    sock->event.type=0;
-    sock->event.link.bevent=NULL;
-
-    if (bevent) {
-
-	remove_bevent_watch(bevent, 0);
-	free_bevent(&bevent);
-
-    }
-
-}
-
-static void osns_client_process_fuse_close(struct fuse_receive_s *r, struct bevent_s *bevent)
-{
-    struct fuse_interface_s *fuse=(struct fuse_interface_s *)((char *) r - offsetof(struct fuse_interface_s, receive));
-    osns_client_close_fuse_interface(fuse, bevent);
-}
-
-static void osns_client_process_fuse_error(struct fuse_receive_s *r, struct bevent_s *bevent)
-{
-    /* 20220429: for now close no matter what */
-    osns_client_process_fuse_close(r, bevent);
-}
-
 static void _signal_fuse_request_interrupted(struct fuse_interface_s *fi, uint64_t unique)
 {
     struct context_interface_s *interface=(struct context_interface_s *)((char *) fi - offsetof(struct context_interface_s, buffer));
+    struct service_context_s *ctx=get_service_context(interface);
     unsigned int hashvalue=(unique % FUSE_HASHTABLE_SIZE);
     struct list_header_s *h=&fi->hashtable[hashvalue];
     struct list_element_s *list=NULL;
     struct fuse_request_s *req=NULL;
 
+    logoutput_debug("_signal_fuse_request_interrupted: unique %lu", unique);
+
     /* get read access to this header/list */
 
     read_lock_list_header(h);
 
-    list=get_list_head(h, 0);
+    list=get_list_head(h);
 
     while (list) {
 
@@ -182,20 +149,30 @@ static void _signal_fuse_request_interrupted(struct fuse_interface_s *fi, uint64
 
 	if ((req->unique==unique) && (req->interface==interface)) {
 
-	    req->flags |= FUSE_REQUEST_FLAG_INTERRUPTED;
-	    (* req->set_flags)(req);
+	    logoutput_debug("_signal_fuse_request_interrupted: req with unique %lu found", unique);
+	    signal_set_flag(ctx->service.workspace.signal, &req->flags, FUSE_REQUEST_FLAG_INTERRUPTED);
 	    break;
 
 	}
 
 	list=get_next_element(list);
+	req=NULL;
 
     }
 
     read_unlock_list_header(h);
 
-}
+    if (req) {
 
+	logoutput_debug("_signal_fuse_request_interrupted: req with unique %lu set", unique);
+
+    } else {
+
+	logoutput_debug("_signal_fuse_request_interrupted: unique %lu not found", unique);
+
+    }
+
+}
 
 void signal_fuse_request_interrupted(struct context_interface_s *interface, uint64_t unique)
 {
@@ -247,7 +224,29 @@ static int _connect_interface_fuse(struct context_interface_s *interface, union 
 
     }
 
-    result=process_mountcmd(&session->osns, mount->type, mount->maxread, &fuse->socket);
+    if (fuse->buffer==NULL) {
+        void *buffer=NULL;
+
+        buffer=malloc(FUSE_REQUEST_BUFFER_SIZE);
+
+        //if (posix_memalign(&buffer, getpagesize(), FUSE_REQUEST_BUFFER_SIZE)==0) {
+
+        if (buffer) {
+
+            fuse->buffer=(char *) buffer;
+            fuse->size=FUSE_REQUEST_BUFFER_SIZE;
+            logoutput_debug("_connect_interface_fuse: allocated %u alligned memory", fuse->size);
+
+        } else {
+
+            logoutput_debug("_connect_interface_fuse: unable to allocate %u alligned memory", fuse->size);
+            goto out;
+
+        }
+
+    }
+
+    result=do_osns_mountcmd(&session->osns, mount->type, mount->maxread, &fuse->socket, &fuse->dev);
 
     if (result==1) {
 
@@ -276,26 +275,24 @@ static int _connect_interface_fuse(struct context_interface_s *interface, union 
 static int _start_interface_fuse(struct context_interface_s *interface)
 {
     struct fuse_interface_s *fuse=(struct fuse_interface_s *) interface->buffer;
-    struct bevent_s *bevent=NULL;
+    struct osns_socket_s *sock=&fuse->socket;
+    int result=-1;
 
     /* add to common eventloop */
 
-    bevent=create_fd_bevent(fuse->loop, (void *) &fuse->receive);
-    if (bevent==NULL) goto error;
+    if (add_osns_socket_eventloop(sock, fuse->loop, (void *) &fuse->receive, 0)==0) {
 
-    set_bevent_cb(bevent, BEVENT_FLAG_CB_DATAAVAIL, handle_fuse_data_event);
-    set_bevent_cb(bevent, BEVENT_FLAG_CB_CLOSE, handle_fuse_close_event);
-    set_bevent_cb(bevent, BEVENT_FLAG_CB_ERROR, handle_fuse_error_event);
-    set_bevent_osns_socket(bevent, &fuse->socket);
-    add_bevent_watch(bevent);
+        logoutput("_start_interface_fuse: added to eventloop");
+        init_fuse_socket_ops(sock, fuse->buffer, FUSE_REQUEST_BUFFER_SIZE);
+        result=0;
 
-    logoutput("_start_interface_fuse: added to eventloop");
-    return 0;
-    error:
+    } else {
 
-    logoutput("_start_interface_fuse: failed to add to eventloop");
-    if (bevent) free_bevent(&bevent);
-    return -1;
+        logoutput("_start_interface_fuse: failed to add to eventloop");
+
+    }
+
+    return result;
 
 }
 
@@ -311,29 +308,13 @@ static int iocmd_ctx2fuse(struct context_interface_s *i, const char *what, struc
 
 	if (strncmp(&what[pos], "close:", 6)==0) {
 
-	    osns_client_close_fuse_interface(fuse, NULL);
+	    // osns_client_close_fuse_interface(fuse, NULL);
 	    return 1;
 
 	} else if (strncmp(&what[pos], "free:", 5)==0) {
 	    struct osns_socket_s *sock=&fuse->socket;
 
 	    /* free additional data allocated */
-
-	    if (sock->event.type==SOCKET_EVENT_TYPE_BEVENT) {
-
-		struct bevent_s *bevent=sock->event.link.bevent;
-
-		if (bevent) {
-
-		    remove_bevent_watch(bevent, 0);
-		    free_bevent(&bevent);
-
-		}
-
-		sock->event.type=0;
-		sock->event.link.bevent=NULL;
-
-	    }
 
 	    return 1;
 
@@ -379,7 +360,6 @@ static int error_VFS_client_cb(struct fuse_receive_s *r, uint64_t unique, unsign
     return fuse_socket_reply_error(sock, unique, code);
 }
 
-
 /*
 	INTERFACE OPS
 			*/
@@ -399,7 +379,7 @@ static unsigned int _populate_fuse_interface(struct context_interface_s *interfa
     return start;
 }
 
-static unsigned int _get_interface_buffer_size_fuse(struct interface_list_s *ilist)
+static unsigned int _get_interface_buffer_size_fuse(struct interface_list_s *ilist, struct context_interface_s *p)
 {
     logoutput("_get_interface_buffer_size_fuse");
 
@@ -412,7 +392,6 @@ static unsigned int _get_interface_buffer_size_fuse(struct interface_list_s *ili
     return 0;
 }
 
-
 static int _init_interface_buffer_fuse(struct context_interface_s *interface, struct interface_list_s *ilist, struct context_interface_s *primary)
 {
     struct service_context_s *context=get_service_context(interface);
@@ -422,9 +401,9 @@ static int _init_interface_buffer_fuse(struct context_interface_s *interface, st
 
     logoutput("_init_interface_buffer_fuse");
 
-    if (interface->size < (* ops->get_buffer_size)(ilist)) {
+    if (interface->size < (* ops->get_buffer_size)(ilist, NULL)) {
 
-	logoutput_warning("_init_interface_buffer_fuse: buffer size too small (%i, required %i) cannot continue", interface->size, (* ops->get_buffer_size)(ilist));
+	logoutput_warning("_init_interface_buffer_fuse: buffer size too small (%i, required %i) cannot continue", interface->size, (* ops->get_buffer_size)(ilist, NULL));
 	return -1;
 
     }
@@ -451,26 +430,22 @@ static int _init_interface_buffer_fuse(struct context_interface_s *interface, st
     fuse->countcb=FUSE_REQUEST_CB_MAX;
     for (unsigned int i=0; i<=fuse->countcb; i++) fuse->cb[i]=fuse_fs_reply_error_enosys;
     register_fuse_functions(interface, register_fuse_function);
-
     for (unsigned int i=0; i<FUSE_HASHTABLE_SIZE; i++) init_list_header(&fuse->hashtable[i], SIMPLE_LIST_TYPE_EMPTY, NULL);
 
     fuse->receive.status=0;
     fuse->receive.flags=0;
     fuse->receive.ptr=NULL;
     fuse->receive.loop=((fuse->loop) ? (fuse->loop) : get_default_mainloop());
+    fuse->receive.signal=workspace->signal; /* use the shared signal for this workspace */
 
     fuse->receive.process_data=osns_client_process_fuse_data;
-    fuse->receive.close_cb=osns_client_process_fuse_close;
-    fuse->receive.error_cb=osns_client_process_fuse_error;
-
     fuse->receive.notify_VFS=notify_VFS_client_cb;
     fuse->receive.reply_VFS=reply_VFS_client_cb;
     fuse->receive.error_VFS=error_VFS_client_cb;
+    fuse->receive.sock=&fuse->socket;
 
-    fuse->receive.read=0;
-    fuse->receive.size=FUSE_REQUEST_BUFFER_SIZE;
-    fuse->receive.threads=0;
-    fuse->receive.buffer=fuse->buffer;
+    fuse->buffer=NULL;
+    fuse->size=0;
 
     interface->type=_INTERFACE_TYPE_FUSE;
     interface->connect=_connect_interface_fuse;
@@ -485,7 +460,17 @@ static int _init_interface_buffer_fuse(struct context_interface_s *interface, st
 
 static void _clear_interface_buffer(struct context_interface_s *i)
 {
+    struct fuse_interface_s *fuse=(struct fuse_interface_s *) i->buffer;
+
+    if (fuse->buffer) {
+
+        free(fuse->buffer);
+        fuse->buffer=NULL;
+
+    }
+
     clear_interface_buffer_default(i);
+
 }
 
 static struct interface_ops_s fuse_interface_ops = {
@@ -512,14 +497,25 @@ void init_fuse_interface()
 
 void set_fuse_interface_eventloop(struct context_interface_s *i, struct beventloop_s *loop)
 {
-    struct fuse_interface_s *fuse=(struct fuse_interface_s *) i->buffer;
-    fuse->loop=loop;
+    if (i->type==_INTERFACE_TYPE_FUSE) {
+
+        struct fuse_interface_s *fuse=(struct fuse_interface_s *) i->buffer;
+        fuse->loop=loop;
+
+    }
+
 }
 
 struct beventloop_s *get_fuse_interface_eventloop(struct context_interface_s *i)
 {
-    struct fuse_interface_s *fuse=(struct fuse_interface_s *) i->buffer;
-    return fuse->loop;
+
+    if (i->type==_INTERFACE_TYPE_FUSE) {
+        struct fuse_interface_s *fuse=(struct fuse_interface_s *) i->buffer;
+        return fuse->loop;
+
+    }
+
+    return NULL;
 }
 
 struct system_timespec_s *get_fuse_attr_timeout(struct context_interface_s *i)
@@ -544,6 +540,12 @@ struct fuse_config_s *get_fuse_interface_config(struct context_interface_s *i)
 {
     struct fuse_interface_s *fuse=(struct fuse_interface_s *) i->buffer;
     return &fuse->config;
+}
+
+struct system_dev_s *get_fuse_interface_system_dev(struct context_interface_s *i)
+{
+    struct fuse_interface_s *fuse=(struct fuse_interface_s *) i->buffer;
+    return &fuse->dev;
 }
 
 int fuse_notify_VFS_delete(struct context_interface_s *i, uint64_t pino, uint64_t ino, char *name, unsigned int len)
@@ -585,4 +587,3 @@ int fuse_reply_VFS_error(struct context_interface_s *i, uint64_t unique, unsigne
 
     return fuse_socket_reply_error(sock, unique, errcode);
 }
-

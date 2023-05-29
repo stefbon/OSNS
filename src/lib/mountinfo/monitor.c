@@ -71,18 +71,24 @@ static int dummy_update(unsigned char what, struct mountentry_s *me)
 
 static int open_mountmonior_system_watch(struct osns_socket_s *sock)
 {
+    int fd=-1;
+
+    init_osns_socket(sock, OSNS_SOCKET_TYPE_SYSTEM, 0);
 
 #ifdef __linux__
 
-    struct fs_location_path_s path=FS_LOCATION_PATH_INIT;
+    fd=open(MOUNTINFO_FILE, O_RDONLY);
 
-    set_location_path(&path, 'c', MOUNTINFO_FILE);
-    logoutput_debug("open_mountmonior_system_watch: open file %s", MOUNTINFO_FILE);
-    init_osns_socket(sock, OSNS_SOCKET_TYPE_FILESYSTEM, OSNS_SOCKET_FLAG_FILE, &path);
+    if (fd>=0) {
+
+        logoutput_debug("open_mountmonior_system_watch: open file %s", MOUNTINFO_FILE);
+        (* sock->set_unix_fd)(sock, fd);
+
+    }
 
 #endif
 
-    return ((* sock->sops.filesystem.file.open)(NULL, &path, sock, NULL, 0);
+    return fd;
 
 }
 
@@ -97,28 +103,13 @@ FILE *fopen_mountmonitor()
 
 static void close_mountmonitor_system_watch(struct osns_socket_s *sock)
 {
-    (* sock->sops.close)(sock);
-
-    if (sock->event.type==SOCKET_EVENT_TYPE_BEVENT) {
-	struct bevent_s *bevent=sock->event.link.bevent;
-
-	if (bevent) {
-
-	    remove_bevent_watch(bevent, 0);
-	    free_bevent(&bevent);
-
-	    sock->event.type=0;
-	    sock->event.link.bevent=NULL;
-
-	}
-
-    }
-
+    (* sock->close)(sock);
 }
 
-struct bevent_s *open_mountmonitor(struct shared_signal_s *signal, void *ptr, unsigned int flags)
+int open_mountmonitor(struct shared_signal_s *signal, void *ptr, unsigned int flags)
 {
-    struct bevent_s *bevent=NULL;
+    struct osns_socket_s *sock=&monitor.sock;
+    int result=-1;
 
     logoutput_debug("open_mountmonitor");
 
@@ -143,22 +134,30 @@ struct bevent_s *open_mountmonitor(struct shared_signal_s *signal, void *ptr, un
 
     }
 
-    if (open_mountmonior_system_watch(&monitor.sock)==-1) {
+    sock->signal=signal;
+
+    if (open_mountmonior_system_watch(sock)==-1) {
 
 	logoutput_error("open_mountmonitor: unable to open the system watch");
 	goto error;
 
     }
 
-    bevent=create_fd_bevent(NULL, (void *) &monitor);
-    if (bevent==NULL) goto error;
-    set_bevent_osns_socket(bevent, &monitor.sock);
-    set_bevent_cb(bevent, (BEVENT_FLAG_CB_PRI | BEVENT_FLAG_CB_ERROR), process_mountinfo_event);
-    return bevent;
+    set_socket_context_defaults(sock);
+
+    if (add_osns_socket_eventloop(sock, NULL, (void *) &monitor, 0)==0) {
+
+        sock->ctx.process_error=process_mountinfo_event;
+        result=0;
+
+    }
+
+    return result;
 
     error:
-    close_mountmonitor_system_watch(&monitor.sock);
-    return NULL;
+    remove_osns_socket_eventloop(sock);
+    close_mountmonitor_system_watch(sock);
+    return -1;
 }
 
 void read_mounttable()

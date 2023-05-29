@@ -20,17 +20,24 @@
 #ifndef _SSH_CHANNEL_UTILS_H
 #define _SSH_CHANNEL_UTILS_H
 
+#define SSH_CHANNEL_START_COMMAND_FLAG_REPLY				1
+#define SSH_CHANNEL_START_COMMAND_FLAG_DATA				2
+#define SSH_CHANNEL_START_COMMAND_FLAG_ERROR				4
+#define SSH_CHANNEL_START_COMMAND_FLAG_UNEXPECTED			8
+#define SSH_CHANNEL_START_COMMAND_FLAG_ALL				16
+
 /* prototypes */
 
-const char *get_openfailure_reason(unsigned int reason);
-void get_channel_expire_init(struct ssh_channel_s *channel, struct system_timespec_s *expire);
+const char *get_ssh_channel_open_failure_reason(unsigned int reason);
 
-void get_timeinfo_ssh_server(struct ssh_session_s *session);
-unsigned int get_channel_interface_info(struct ssh_channel_s *channel, char *buffer, unsigned int size);
+void get_ssh_channel_expire_custom(struct ssh_channel_s *channel, struct system_timespec_s *expire);
+void get_ssh_channel_expire_init(struct ssh_channel_s *channel, struct system_timespec_s *expire);
 
-void switch_msg_channel_receive_data(struct ssh_channel_s *channel, const char *name, void (* cb)(struct ssh_channel_s *c, char **b, unsigned int size, uint32_t seq, unsigned char f));
-void switch_channel_send_data(struct ssh_channel_s *channel, const char *what);
+unsigned int get_ssh_channel_interface_info(struct ssh_channel_s *channel, char *buffer, unsigned int size);
 
 unsigned int get_ssh_channel_exit_signal(struct ssh_string_s *name);
+
+struct ssh_channel_s *create_ssh_session_channel(struct ssh_session_s *session, const char *what, char *command);
+int ssh_channel_start_command(struct ssh_channel_s *channel, unsigned int flags, void (* cb)(struct ssh_channel_s *c, struct ssh_payload_s **p, unsigned int flags, unsigned int errcode, void *ptr), void *ptr);
 
 #endif

@@ -22,16 +22,36 @@
 
 /* prototypes */
 
-int send_channel_open_message(struct ssh_channel_s *channel, uint32_t *seq);
-int send_channel_close_message(struct ssh_channel_s *channel);
-int send_channel_window_adjust_message(struct ssh_channel_s *channel, unsigned int increase);
-int send_channel_start_command_message(struct ssh_channel_s *channel, unsigned char reply, uint32_t *seq);
-int send_channel_data_message_connected(struct ssh_channel_s *channel, char *data, unsigned int size, uint32_t *seq);
-int send_channel_data_message_error(struct ssh_channel_s *channel, char *data, unsigned int size, uint32_t *seq);
-int send_channel_data_message(struct ssh_channel_s *channel, char *data, unsigned int len, uint32_t *seq);
-int send_channel_request_message(struct ssh_channel_s *channel, const char *request, unsigned char reply, struct ssh_string_s *data, uint32_t *seq);
+int send_ssh_channel_open_message(struct ssh_connection_s *c, unsigned char type, union ssh_message_u *msg);
 
-int send_channel_open_confirmation(struct ssh_channel_s *channel, struct ssh_string_s *data, uint32_t *seq);
-int send_channel_open_failure(struct ssh_connection_s *c, unsigned int remote_channel, uint32_t code, uint32_t *seq);
+unsigned int get_length_ssh_channel_open_confirmation_msg(struct ssh_channel_open_msg_s *msg);
+unsigned int write_ssh_channel_open_comfirmation_msg(unsigned int target_channel, struct ssh_channel_open_msg_s *msg, char *buffer);
+int send_ssh_channel_open_confirmation_msg(struct ssh_channel_s *channel, union ssh_message_u *msg);
+
+unsigned int get_length_ssh_channel_open_failure_msg(struct ssh_channel_open_failure_msg_s *msg);
+unsigned int write_ssh_channel_open_failure_msg(unsigned int target_channel, struct ssh_channel_open_failure_msg_s *msg, char *buffer);
+int send_ssh_channel_open_failure_msg(struct ssh_connection_s *c, unsigned int remote_channel, union ssh_message_u *msg);
+
+unsigned int get_length_ssh_channel_close_msg(struct ssh_channel_close_msg_s *close);
+unsigned int write_ssh_channel_close_msg(unsigned int target_channel, struct ssh_channel_close_msg_s *close, char *buffer);
+int send_ssh_channel_eofclose_msg(struct ssh_channel_s *channel, union ssh_message_u *msg);
+
+unsigned int get_length_ssh_channel_windowadjust_msg(struct ssh_channel_windowadjust_msg_s *adjust);
+unsigned int write_ssh_channel_windowadjust_msg(unsigned int target_channel, struct ssh_channel_windowadjust_msg_s *adjust, char *buffer);
+int send_ssh_channel_window_adjust_msg(struct ssh_channel_s *channel, union ssh_message_u *msg);
+
+unsigned int get_length_ssh_channel_request_msg(struct ssh_channel_request_msg_s *msg);
+unsigned int write_ssh_channel_request_msg(unsigned int target_channel, struct ssh_channel_request_msg_s *msg, char *buffer);
+int send_ssh_channel_request_msg(struct ssh_channel_s *channel, union ssh_message_u *msg);
+
+int send_ssh_channel_start_command_msg(struct ssh_channel_s *channel, unsigned char reply);
+
+unsigned int get_length_ssh_channel_data_msg(struct ssh_channel_data_msg_s *msg);
+unsigned int write_ssh_channel_data_msg(unsigned int target_channel, struct ssh_channel_data_msg_s *msg, char *buffer);
+int send_ssh_channel_data_msg(struct ssh_channel_s *channel, union ssh_message_u *msg);
+
+unsigned int get_length_ssh_channel_xdata_msg(struct ssh_channel_xdata_msg_s *msg);
+unsigned int write_ssh_channel_xdata_msg(unsigned int target_channel, struct ssh_channel_xdata_msg_s *msg, char *buffer);
+int send_ssh_channel_xdata_msg(struct ssh_channel_s *channel, union ssh_message_u *msg);
 
 #endif

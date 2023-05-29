@@ -21,6 +21,7 @@
 
 #include "libosns-log.h"
 #include "libosns-misc.h"
+#include "libosns-datatypes.h"
 
 #include "ssh-common.h"
 #include "ssh-utils.h"
@@ -165,33 +166,33 @@ static void clear_cipher(struct decrypt_handle_s *cipher)
 
 }
 
-static int verify_hmac_pre(struct ssh_decryptor_s *d, struct ssh_packet_s *packet)
+static int verify_hmac_pre(struct ssh_decryptor_s *d, struct ssh_packet_s *p)
 {
     struct decrypt_handle_s *cipher=(struct decrypt_handle_s *) d->buffer;
     gcry_error_t result;
 
-    gcry_mac_write(cipher->m_handle, packet->buffer, packet->len + 4);
-    result=gcry_mac_verify(cipher->m_handle, (void *)(packet->buffer + packet->len + 4), d->hmac_maclen);
-
+    gcry_mac_write(cipher->m_handle, p->buffer, p->len + 4);
+    result=gcry_mac_verify(cipher->m_handle, (void *)(p->buffer + p->len + 4), d->hmac_maclen);
     if (result==GPG_ERR_NO_ERROR) return 0;
+
     logoutput("verify_hmac_pre: error %s/%s", gcry_strsource(result), gcry_strerror(result));
     return -1;
 
 }
 
-static int decrypt_length(struct ssh_decryptor_s *d, struct ssh_packet_s *packet, char *buffer, unsigned int len)
+static int decrypt_length(struct ssh_decryptor_s *d, struct ssh_packet_s *p, char *buffer, unsigned int len)
 {
     struct decrypt_handle_s *cipher=(struct decrypt_handle_s *) d->buffer;
     gcry_error_t result=0;
     char seqbuff[8];
 
     memset(seqbuff, '\0', 8);
-    store_uint64(seqbuff, packet->sequence);
+    store_uint64(seqbuff, p->sequence);
 
     gcry_cipher_setiv(cipher->c_headerhandle, (const void *)seqbuff, 8);
     gcry_cipher_setiv(cipher->c_packethandle, (const void *)seqbuff, 8);
 
-    result=gcry_cipher_decrypt(cipher->c_headerhandle, (unsigned char *)buffer, (size_t) len, (unsigned char *)packet->buffer, (size_t) len);
+    result=gcry_cipher_decrypt(cipher->c_headerhandle, (unsigned char *)buffer, (size_t) len, (unsigned char *)p->buffer, (size_t) len);
 
     if (result==0) {
 	unsigned char poly1305_key[CHACHA20_BLOCKSIZE];
@@ -200,8 +201,7 @@ static int decrypt_length(struct ssh_decryptor_s *d, struct ssh_packet_s *packet
 
 	gcry_cipher_encrypt(cipher->c_packethandle, poly1305_key, CHACHA20_BLOCKSIZE, NULL, 0);
 	gcry_mac_setkey(cipher->m_handle, poly1305_key, POLY1305_KEYLEN);
-
-	packet->decrypted=len;
+	p->decrypted=len;
 	return 0;
 
     }
@@ -211,17 +211,17 @@ static int decrypt_length(struct ssh_decryptor_s *d, struct ssh_packet_s *packet
 
 }
 
-static int decrypt_packet(struct ssh_decryptor_s *d, struct ssh_packet_s *packet)
+static int decrypt_packet(struct ssh_decryptor_s *d, struct ssh_packet_s *p)
 {
     struct decrypt_handle_s *cipher=(struct decrypt_handle_s *) d->buffer;
     gcry_error_t result=0;
-    size_t len=(size_t) (packet->len - packet->decrypted);
+    size_t len=(size_t) (p->len - p->decrypted);
 
-    result=gcry_cipher_decrypt(cipher->c_packethandle, (unsigned char *)(packet->buffer + packet->decrypted), len, NULL, 0);
+    result=gcry_cipher_decrypt(cipher->c_packethandle, (unsigned char *)(p->buffer + p->decrypted), len, NULL, 0);
 
     if (result==0) {
 
-	packet->decrypted+=len;
+	p->decrypted+=len;
 	return 0;
 
     }
@@ -231,7 +231,7 @@ static int decrypt_packet(struct ssh_decryptor_s *d, struct ssh_packet_s *packet
 
 }
 
-static int verify_hmac_post(struct ssh_decryptor_s *d, struct ssh_packet_s *packet)
+static int verify_hmac_post(struct ssh_decryptor_s *d, struct ssh_packet_s *p)
 {
     return 0;
 }
@@ -420,7 +420,7 @@ static struct decrypt_ops_s special_d_ops = {
     .populate_cipher		= populate_cipher,
     .populate_hmac		= populate_hmac,
     .get_handle_size		= get_handle_size,
-    .init_decryptor		= init_decryptor,
+    .init		        = init_decryptor,
     .get_cipher_blocksize	= get_cipher_blocksize,
     .get_cipher_keysize		= get_cipher_keysize,
     .get_cipher_ivsize		= get_cipher_ivsize,

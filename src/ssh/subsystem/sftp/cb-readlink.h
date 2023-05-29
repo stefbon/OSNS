@@ -22,6 +22,6 @@
 
 /* prototypes */
 
-void sftp_op_readlink(struct sftp_payload_s *payload);
+void sftp_op_readlink(struct sftp_subsystem_s *sftp, struct sftp_in_header_s *inh, char *data);
 
 #endif

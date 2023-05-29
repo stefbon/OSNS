@@ -27,10 +27,12 @@ struct sftp_request_s *get_sftp_request(struct sftp_client_s *sftp, unsigned int
 int signal_sftp_received_id(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r);
 void signal_sftp_received_id_error(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r, struct generic_error_s *error);
 
-unsigned char wait_sftp_response(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r, struct system_timespec_s *timeout);
+int send_sftp_request_data_default(struct sftp_request_s *r, char *data, unsigned int size, uint32_t *seq, struct list_element_s *list);
+void set_sftp_request_blocked(struct sftp_request_s *r);
+
+unsigned char wait_sftp_response(struct sftp_client_s *sftp, struct sftp_request_s *sftp_r, struct system_timespec_s *timeout, unsigned char (* cb_interrupted)(void *ptr), void *ptr);
 unsigned char wait_sftp_service_complete(struct sftp_client_s *sftp, struct timespec *timeout);
 
 void init_sftp_sendhash();
-void clear_sftp_reply(struct sftp_reply_s *r);
 
 #endif

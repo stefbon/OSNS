@@ -26,7 +26,6 @@
 #include "libosns-workspace.h"
 #include "libosns-context.h"
 #include "libosns-fuse-public.h"
-#include "libosns-resources.h"
 
 #include "sftp/common-protocol.h"
 #include "sftp/common.h"
@@ -211,8 +210,8 @@ static void process_sftp_extension(struct sftp_client_s *sftp, struct ssh_string
 
 int process_sftp_version(struct sftp_client_s *sftp, struct sftp_reply_s *reply)
 {
-    unsigned char *buffer=reply->response.init.buff;
-    unsigned int size=reply->response.init.size;
+    unsigned char *buffer=reply->data;
+    unsigned int size=reply->size;
     unsigned int len=0;
     unsigned int version=0;
     unsigned int pos=0;
@@ -270,7 +269,6 @@ int set_sftp_protocol(struct sftp_client_s *sftp)
 	set_sftp_attr_version(sftp);
 	set_sftp_recv_version(sftp);
 	set_sftp_send_version(sftp);
-
 	result=(int) version;
 
     } else {

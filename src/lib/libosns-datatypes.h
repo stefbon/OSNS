@@ -24,8 +24,6 @@
 #include "datatypes/name.h"
 #include "datatypes/name-string.h"
 #include "datatypes/ssh-uint.h"
-#include "datatypes/ssh-string.h"
-#include "datatypes/ssh-payload.h"
 #include "datatypes/ssh-msg-buffer.h"
 #include "datatypes/ssh-namelist.h"
 #include "datatypes/ssh-mpint.h"

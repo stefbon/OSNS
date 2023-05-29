@@ -44,7 +44,7 @@ static void add_attrcb_hashtable(struct hashed_attrcb_s *hcb)
     struct list_element_s *list=NULL;
 
     write_lock_list_header(header);
-    list=get_list_head(header, 0);
+    list=get_list_head(header);
 
     /* test it's not added in the meantime for sure */
 
@@ -88,7 +88,7 @@ struct hashed_attrcb_s *lookup_hashed_attrcb(struct sftp_valid_s *valid, unsigne
     struct hashed_attrcb_s *hcb=NULL;
 
     read_lock_list_header(header);
-    list=get_list_head(header, 0);
+    list=get_list_head(header);
 
     while (list) {
 
@@ -153,7 +153,7 @@ void parse_attributes_generic(struct attr_context_s *actx, struct attr_buffer_s 
     r->ignored = (valid->mask & ~r->valid.mask);		/* which attributes are not taken into account */
     r->todo = r->valid.mask;					/* the flags of the main attributes */
     r->done=0;
-    logoutput_debug("parse_attributes_generic: valid mask %i:%i supported mask %i r->valid %i:%i todo %i ignored %i", valid->mask, valid->flags, supported->mask, r->valid.mask, r->valid.flags, r->todo, r->ignored);
+    // logoutput_debug("parse_attributes_generic: valid mask %i:%i supported mask %i r->valid %i:%i todo %i ignored %i", valid->mask, valid->flags, supported->mask, r->valid.mask, r->valid.flags, r->todo, r->ignored);
 
     hcb=lookup_hashed_attrcb(&r->valid, version);
 
@@ -200,7 +200,7 @@ static void _attr_read_cb(struct attr_context_s *actx, struct attr_buffer_s *buf
     r->done |= actx->attrcb[ctr].code;
     r->todo &= ~actx->attrcb[ctr].code;
     (* actx->attrcb[ctr].r_cb)(actx, buffer, r, stat);
-    logoutput_debug("_attr_read_cb: ctr %i name %s index %i code %i done %i todo %i pos %i", ctr, actx->attrcb[ctr].name, actx->attrcb[ctr].shift, actx->attrcb[ctr].code, r->done, r->todo, buffer->pos);
+    // logoutput_debug("_attr_read_cb: ctr %i name %s index %i code %i done %i todo %i pos %i", ctr, actx->attrcb[ctr].name, actx->attrcb[ctr].shift, actx->attrcb[ctr].code, r->done, r->todo, buffer->pos);
 }
 
 void read_attributes_generic(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat, unsigned int valid_bits)
@@ -223,7 +223,7 @@ void read_attributes_generic(struct attr_context_s *actx, struct attr_buffer_s *
     valid.mask = valid_bits & ~attr_subsecond_times;
     valid.flags = valid_bits & attr_subsecond_times;
 
-    logoutput_debug("read_attributes_generic: valid_bits %u valid %u:%u", valid_bits, valid.mask, valid.flags);
+    // logoutput_debug("read_attributes_generic: valid_bits %u valid %u:%u", valid_bits, valid.mask, valid.flags);
 
     parse_attributes_generic(actx, buffer, r, stat, &valid);
 
@@ -272,7 +272,7 @@ static void _prepare_write_cb(struct attr_context_s *actx, struct attr_buffer_s 
     r->done |= actx->attrcb[ctr].code;
     r->todo &= ~actx->attrcb[ctr].code;
 
-    logoutput_debug("_prepare_write_cb: ctr %i stat_mask %i done %i", ctr, actx->attrcb[ctr].stat_mask, r->done);
+    // logoutput_debug("_prepare_write_cb: ctr %i stat_mask %i done %i", ctr, actx->attrcb[ctr].stat_mask, r->done);
 
 }
 
@@ -445,7 +445,7 @@ void clear_hashattr_generic(unsigned char force)
 	    struct list_header_s *header=&header_attrcbs[hash];
 	    struct list_element_s *list=NULL;
 
-	    while ((list=get_list_head(header, SIMPLE_LIST_FLAG_REMOVE))) {
+	    while ((list=remove_list_head(header))) {
 
 		struct hashed_attrcb_s *hcb=(struct hashed_attrcb_s *)((char *) list - offsetof(struct hashed_attrcb_s, list));
 		free(hcb);
@@ -458,5 +458,13 @@ void clear_hashattr_generic(unsigned char force)
 	}
 
     }
+
+}
+
+uint8_t peek_sftp_file_type(struct attr_buffer_s *ab)
+{
+    unsigned char *buffer=ab->buffer;
+
+    return (uint8_t) buffer[ab->pos + 4];
 
 }

@@ -29,6 +29,7 @@
 /* prototypes */
 
 void replace_cntrl_char(char *buffer, unsigned int size, unsigned char flag);
+void replace_slash_char(char *buffer, unsigned int size);
 void replace_newline_char(char *ptr, unsigned int size);
 unsigned int skip_trailing_spaces(char *ptr, unsigned int size, unsigned int flags);
 unsigned int skip_heading_spaces(char *ptr, unsigned int size);

@@ -23,7 +23,6 @@
 /* prototypes */
 
 int send_sftp_open_ctx(struct context_interface_s *i, struct sftp_request_s *sftp_r);
-int send_sftp_create_ctx(struct context_interface_s *i, struct sftp_request_s *sftp_r);
 int send_sftp_opendir_ctx(struct context_interface_s *i, struct sftp_request_s *sftp_r);
 int send_sftp_read_ctx(struct context_interface_s *i, struct sftp_request_s *sftp_r);
 int send_sftp_write_ctx(struct context_interface_s *i, struct sftp_request_s *sftp_r);

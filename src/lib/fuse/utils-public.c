@@ -42,7 +42,7 @@ static void copy_stat_direntry_buffer(struct fuse_dirent *dirent, struct name_s 
     unsigned int type=get_type_system_stat(stat);
 
     dirent->ino=get_ino_system_stat(stat);
-    dirent->off=offset;
+    dirent->off=(offset + 1);
     dirent->namelen=xname->len;
     dirent->type=((type) ? (type >> 12) : DT_UNKNOWN);
     memcpy(dirent->name, xname->name, xname->len);
@@ -129,17 +129,4 @@ void set_rootstat(struct system_stat_s *stat)
 
     calc_blocks_system_stat(stat);
 
-}
-
-static void set_fuse_request_flags_default(struct fuse_request_s *request)
-{}
-
-void set_fuse_request_flags_cb(struct fuse_request_s *request, void (* cb)(struct fuse_request_s *request))
-{
-    request->set_flags=cb;
-}
-
-void unset_fuse_request_flags_cb(struct fuse_request_s *request)
-{
-    request->set_flags=set_fuse_request_flags_default;
 }

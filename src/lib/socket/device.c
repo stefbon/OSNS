@@ -49,14 +49,14 @@ static char *get_name_system_device(unsigned int flags)
     return name;
 }
 
-static int socket_open_dummy(struct osns_socket_s *sock, struct fs_location_path_s *path)
+static int socket_open_dummy(struct osns_socket_s *sock, struct fs_path_s *path)
 {
     return -1;
 }
 
 static void set_device_socket_cb(struct osns_socket_s *sock, unsigned char enable);
 
-static int socket_open(struct osns_socket_s *sock, struct fs_location_path_s *path)
+static int socket_open(struct osns_socket_s *sock, struct fs_path_s *path)
 {
     struct system_stat_s stat;
     int result=-1;
@@ -64,7 +64,7 @@ static int socket_open(struct osns_socket_s *sock, struct fs_location_path_s *pa
     /* a connection to a local character or block device,
 	a valid path to device is required */
 
-    if ((path==NULL) || (get_unix_location_path_length(path)==0) || (test_location_path_absolute(path)==0)) return -1;
+    if ((path==NULL) || (fs_path_get_length(path)==0)) return -1;
 
     /* device/file must exist */
 
@@ -93,13 +93,13 @@ static int socket_open(struct osns_socket_s *sock, struct fs_location_path_s *pa
 	    return -1;
 
 	} else {
-	    unsigned int size=get_unix_location_path_length(path);
+	    unsigned int size=fs_path_get_length(path);
 	    char buffer[size+1];
 	    unsigned int openflags=translate_osns_socket_flags(sock->flags);
 	    int fd=0;
 
 	    memset(buffer, 0, size+1);
-	    size=copy_unix_location_path(path, buffer, size);
+	    size=fs_path_copy(path, buffer, size);
 
 #ifdef __linux__
 
@@ -111,6 +111,7 @@ static int socket_open(struct osns_socket_s *sock, struct fs_location_path_s *pa
 		sock->status |= SOCKET_STATUS_OPEN;
 		result=0;
 		logoutput_debug("socket_open: open %s %s with fd %i flags %u", get_name_system_device(tmp), buffer, fd, openflags);
+		(* sock->set_unix_fd)(sock, fd);
 
 	    } else {
 

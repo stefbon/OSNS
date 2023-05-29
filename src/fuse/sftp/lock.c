@@ -34,177 +34,20 @@
 #include "interface/sftp-wait-response.h"
 #include "inode-stat.h"
 
-static void _fs_sftp_flock_lock(struct fuse_openfile_s *openfile, struct fuse_request_s *f_request, unsigned char type)
+/* no locking */
+
+void _fs_sftp_flock(struct fuse_open_header_s *oh, struct fuse_request_s *request, uint64_t lo, unsigned char type)
 {
-    struct service_context_s *context=(struct service_context_s *) openfile->context;
-    struct context_interface_s *interface=&context->interface;
-    struct sftp_request_s sftp_r;
-    unsigned int error=EIO;
-
-    /* emulate file locks */
-
-    init_sftp_request(&sftp_r, interface, f_request);
-
-    sftp_r.call.block.handle=(unsigned char *) openfile->handle->name;
-    sftp_r.call.block.len=openfile->handle->len;
-    sftp_r.call.block.offset=0;
-    sftp_r.call.block.size=0;
-    sftp_r.call.block.type=type;
-
-    if (send_sftp_block_ctx(interface, &sftp_r)>0) {
-	struct system_timespec_s timeout=SYSTEM_TIME_INIT;
-
-	get_sftp_request_timeout_ctx(interface, &timeout);
-
-	if (wait_sftp_response_ctx(interface, &sftp_r, &timeout)==1) {
-	    struct sftp_reply_s *reply=&sftp_r.reply;
-
-	    if (reply->type==SSH_FXP_STATUS) {
-
-		if (reply->response.status.code==0) {
-
-		    openfile->flock=type; /* lock successfull */
-		    reply_VFS_error(f_request, 0);
-		    unset_fuse_request_flags_cb(f_request);
-		    return;
-
-		}
-
-		logoutput("_fs_sftp_flock: status code %i", reply->response.status.code);
-		error=reply->response.status.linux_error;
-
-	    } else {
-
-		error=EPROTO;
-
-	    }
-
-	}
-
-    } else {
-
-	error=(sftp_r.reply.error) ? sftp_r.reply.error : EIO;
-
-    }
-
-    out:
-
-    openfile->error=error;
-    unset_fuse_request_flags_cb(f_request);
-    reply_VFS_error(f_request, error);
-
+    reply_VFS_error(request, ENOSYS);
 }
 
-static void _fs_sftp_flock_unlock(struct fuse_openfile_s *openfile, struct fuse_request_s *f_request)
+void _fs_sftp_getlock(struct fuse_open_header_s *oh, struct fuse_request_s *request, struct flock *flock)
 {
-    struct service_context_s *context=(struct service_context_s *) openfile->context;
-    struct context_interface_s *interface=&context->interface;
-    struct sftp_request_s sftp_r;
-    unsigned int error=EIO;
-
-    /* emulate file locks */
-
-    init_sftp_request(&sftp_r, interface, f_request);
-
-    sftp_r.id=0;
-    sftp_r.call.unblock.handle=(unsigned char *) openfile->handle->name;
-    sftp_r.call.unblock.len=openfile->handle->len;
-    sftp_r.call.unblock.offset=0;
-    sftp_r.call.unblock.size=0;
-
-    if (send_sftp_unblock_ctx(interface, &sftp_r)>0) {
-	struct system_timespec_s timeout=SYSTEM_TIME_INIT;
-
-	get_sftp_request_timeout_ctx(interface, &timeout);
-
-	if (wait_sftp_response_ctx(interface, &sftp_r, &timeout)==1) {
-	    struct sftp_reply_s *reply=&sftp_r.reply;
-
-	    if (reply->type==SSH_FXP_STATUS) {
-
-		if (reply->response.status.code==0) {
-
-		    openfile->flock=0; /* lock removed */
-		    reply_VFS_error(f_request, 0);
-		    unset_fuse_request_flags_cb(f_request);
-		    return;
-
-		}
-
-		logoutput("_fs_sftp_funlock: status code %i", reply->response.status.code);
-		error=reply->response.status.linux_error;
-
-	    } else {
-
-		error=EPROTO;
-
-	    }
-
-	}
-
-    } else {
-
-	error=(sftp_r.reply.error) ? sftp_r.reply.error : EIO;
-
-    }
-
-    out:
-
-    reply_VFS_error(f_request, error);
-    unset_fuse_request_flags_cb(f_request);
-
+    reply_VFS_error(request, ENOSYS);
 }
 
-void _fs_sftp_flock(struct fuse_openfile_s *openfile, struct fuse_request_s *f_request, unsigned char type)
+void _fs_sftp_setlock(struct fuse_open_header_s *oh, struct fuse_request_s *request, struct flock *flock, uint64_t lo, unsigned int flags)
 {
-
-    if (type & LOCK_UN) {
-
-	_fs_sftp_flock_unlock(openfile, f_request);
-
-    } else if (type & (LOCK_SH | LOCK_EX)) {
-
-	_fs_sftp_flock_lock(openfile, f_request, type);
-
-    } else {
-
-	reply_VFS_error(f_request, EINVAL);
-
-    }
-
+    reply_VFS_error(request, ENOSYS);
 }
 
-void _fs_sftp_getlock(struct fuse_openfile_s *openfile, struct fuse_request_s *f_request, struct flock *flock)
-{
-    reply_VFS_error(f_request, ENOSYS);
-}
-
-void _fs_sftp_setlock(struct fuse_openfile_s *openfile, struct fuse_request_s *f_request, struct flock *flock, unsigned int flags)
-{
-    reply_VFS_error(f_request, ENOSYS);
-}
-
-void _fs_sftp_setlockw(struct fuse_openfile_s *openfile, struct fuse_request_s *f_request, struct flock *flock)
-{
-    reply_VFS_error(f_request, ENOSYS);
-}
-
-void _fs_sftp_flock_disconnected(struct fuse_openfile_s *openfile, struct fuse_request_s *f_request, unsigned char type)
-{
-    reply_VFS_error(f_request, ENOTCONN);
-}
-
-void _fs_sftp_getlock_disconnected(struct fuse_openfile_s *openfile, struct fuse_request_s *f_request, struct flock *flock)
-{
-    reply_VFS_error(f_request, ENOTCONN);
-}
-
-void _fs_sftp_setlock_disconnected(struct fuse_openfile_s *openfile, struct fuse_request_s *f_request, struct flock *flock)
-{
-    reply_VFS_error(f_request, ENOTCONN);
-}
-
-void _fs_sftp_setlockw_disconnected(struct fuse_openfile_s *openfile, struct fuse_request_s *f_request, struct flock *flock)
-{
-    reply_VFS_error(f_request, ENOTCONN);
-}

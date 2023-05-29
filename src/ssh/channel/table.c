@@ -27,46 +27,34 @@
 #include "ssh-connections.h"
 #include "ssh-channel.h"
 
-int channeltable_readlock(struct channel_table_s *table, struct osns_lock_s *rlock)
-{
-    init_osns_readlock(&table->locking, rlock);
-    return osns_lock(rlock);
-}
+#define SSH_CHANNELS_TABLE_SIZE				64
 
-int channeltable_upgrade_readlock(struct channel_table_s *table, struct osns_lock_s *rlock)
-{
-    return osns_upgradelock(rlock);
-}
+static struct list_header_s				tablehash[SSH_CHANNELS_TABLE_SIZE];
+static unsigned int                                     channelctr = 0;
+static struct shared_signal_s                           *tablesignal=NULL;
+static unsigned int                                     tablecount = 0;
 
-int channeltable_writelock(struct channel_table_s *table, struct osns_lock_s *wlock)
+int lookup_ssh_channel_for_cb(unsigned int lcnr, struct ssh_payload_s **p_payload, int (* cb)(struct ssh_channel_s *c, struct ssh_payload_s **p, void *ptr), void *ptr)
 {
-    init_osns_writelock(&table->locking, wlock);
-    return osns_lock(wlock);
-}
-
-int channeltable_unlock(struct channel_table_s *table, struct osns_lock_s *lock)
-{
-    return osns_unlock(lock);
-}
-
-struct ssh_channel_s *lookup_session_channel_for_payload(struct channel_table_s *table, unsigned int nr, struct ssh_payload_s **p_payload)
-{
-    unsigned int hashvalue = nr % CHANNELS_TABLE_SIZE;
-    struct list_header_s *h=&table->hash[hashvalue];
+    struct ssh_payload_s *payload=*p_payload;
+    unsigned int hashvalue = (lcnr % SSH_CHANNELS_TABLE_SIZE);
+    struct list_header_s *h=&tablehash[hashvalue];
     struct list_element_s *list=NULL;
     struct ssh_channel_s *channel=NULL;
+    int result=-1;
+
+    logoutput_debug("lookup_ssh_channel_for_cb: local channel nr %u payload type %u", lcnr, payload->type);
 
     read_lock_list_header(h);
-    list=get_list_head(h, 0);
+    list=get_list_head(h);
 
     while (list) {
 
 	channel=(struct ssh_channel_s *)(((char *)list) - offsetof(struct ssh_channel_s, list));
 
-	if (channel->local_channel==nr) {
+	if (channel->lcnr==lcnr) {
 
-	    queue_ssh_payload_channel(channel, *p_payload);
-	    *p_payload=NULL;
+	    result=(* cb)(channel, p_payload, ptr);
 	    break;
 
 	}
@@ -77,116 +65,45 @@ struct ssh_channel_s *lookup_session_channel_for_payload(struct channel_table_s 
     }
 
     read_unlock_list_header(h);
-    return channel;
+    return result;
 }
 
-struct ssh_channel_s *lookup_session_channel_for_data(struct channel_table_s *table, unsigned int nr, struct ssh_payload_s **p_payload)
+struct doiocb_hlpr_s {
+    unsigned char iocbnr;
+};
+
+static int doiocb(struct ssh_channel_s *c, struct ssh_payload_s **p, void *ptr)
 {
-    unsigned int hashvalue = nr % CHANNELS_TABLE_SIZE;
-    struct list_header_s *h=&table->hash[hashvalue];
-    struct list_element_s *list=NULL;
-    struct ssh_channel_s *channel=NULL;
+    struct doiocb_hlpr_s *hlpr=(struct doiocb_hlpr_s *) ptr;
 
-    read_lock_list_header(h);
-    list=get_list_head(h, 0);
+    logoutput_debug("doiocb: iocb nr %u", hlpr->iocbnr);
+    (* c->iocb[hlpr->iocbnr])(c, p);
+    return 0;
+}
 
-    while (list) {
+int lookup_ssh_channel_for_iocb(unsigned int lcnr, struct ssh_payload_s **p_payload, unsigned char iocbnr)
+{
+    struct doiocb_hlpr_s hlpr={.iocbnr=iocbnr};
+    return lookup_ssh_channel_for_cb(lcnr, p_payload, doiocb, (void *)&hlpr);
+}
 
-	channel=(struct ssh_channel_s *)(((char *)list) - offsetof(struct ssh_channel_s, list));
+void init_ssh_channels_table(struct shared_signal_s *signal)
+{
 
-	if (channel->local_channel==nr) {
+    if (tablesignal==NULL) {
 
-	    (* channel->receive_msg_channel_data)(channel, p_payload);
-	    break;
-
-	}
-
-	list=get_next_element(list);
-	channel=NULL;
+        tablesignal=((signal) ? signal : get_default_shared_signal());
+        for (unsigned int i=0; i<SSH_CHANNELS_TABLE_SIZE; i++) init_list_header(&tablehash[i], SIMPLE_LIST_TYPE_EMPTY, NULL);
 
     }
 
-    read_unlock_list_header(h);
-    if (*p_payload) free_payload(p_payload);
-    return channel;
 }
 
-struct ssh_channel_s *lookup_session_channel_for_cb(struct channel_table_s *table, unsigned int nr, void (* cb)(struct ssh_channel_s *c, void *ptr), void *ptr)
+void clear_ssh_channels_table()
 {
-    unsigned int hashvalue = nr % CHANNELS_TABLE_SIZE;
-    struct list_header_s *h=&table->hash[hashvalue];
-    struct list_element_s *list=NULL;
-    struct ssh_channel_s *channel=NULL;
 
-    read_lock_list_header(h);
-    list=get_list_head(h, 0);
-
-    while (list) {
-
-	channel=(struct ssh_channel_s *)(((char *)list) - offsetof(struct ssh_channel_s, list));
-
-	if (channel->local_channel==nr) {
-
-	    (* cb)(channel, ptr);
-	    break;
-
-	}
-
-	list=get_next_element(list);
-	channel=NULL;
-
-    }
-
-    read_unlock_list_header(h);
-    return channel;
-}
-
-struct ssh_channel_s *lookup_session_channel(struct channel_table_s *table, unsigned int nr)
-{
-    unsigned int hashvalue = nr % CHANNELS_TABLE_SIZE;
-    struct list_header_s *h=&table->hash[hashvalue];
-    struct list_element_s *list=NULL;
-    struct ssh_channel_s *channel=NULL;
-
-    read_lock_list_header(h);
-    list=get_list_head(h, 0);
-
-    while (list) {
-
-	channel=(struct ssh_channel_s *)(((char *)list) - offsetof(struct ssh_channel_s, list));
-	if (channel->local_channel==nr) break;
-	list=get_next_element(list);
-	channel=NULL;
-
-    }
-
-    read_unlock_list_header(h);
-    return channel;
-}
-
-void init_ssh_channels_table(struct ssh_session_s *session, struct shared_signal_s *signal, unsigned int size)
-{
-    struct channel_table_s *table=&session->channel_table;
-
-    table->flags=0;
-    table->latest_channel=0;
-    table->free_channel=(unsigned int) -1;
-    table->count=0;
-    table->shell=NULL;
-    table->signal=((signal) ? signal : get_default_shared_signal());
-    table->table_size=size;
-
-    for (unsigned int i=0; i<size; i++) init_list_header(&table->hash[i], SIMPLE_LIST_TYPE_EMPTY, NULL);
-    init_osns_locking(&table->locking, 0);
-
-}
-
-void free_ssh_channels_table(struct ssh_session_s *session)
-{
-    struct channel_table_s *table=&session->channel_table;
-
-    for (unsigned int i=0; i<CHANNELS_TABLE_SIZE; i++) {
-	struct list_element_s *list=get_list_head(&table->hash[i], SIMPLE_LIST_FLAG_REMOVE);
+    for (unsigned int i=0; i<SSH_CHANNELS_TABLE_SIZE; i++) {
+	struct list_element_s *list=remove_list_head(&tablehash[i]);
 
 	/* remove every element from the individual list headers */
 
@@ -194,7 +111,7 @@ void free_ssh_channels_table(struct ssh_session_s *session)
 
 	    struct ssh_channel_s *channel=(struct ssh_channel_s *)(((char *)list) - offsetof(struct ssh_channel_s, list));
 	    free_ssh_channel(&channel);
-	    list=get_list_head(&table->hash[i], SIMPLE_LIST_FLAG_REMOVE);
+	    list=remove_list_head(&tablehash[i]);
 
 	}
 
@@ -202,149 +119,94 @@ void free_ssh_channels_table(struct ssh_session_s *session)
 
 }
 
-struct ssh_channel_s *find_channel(struct ssh_session_s *session, unsigned int type)
+struct ssh_channel_s *get_next_ssh_channel(struct ssh_channel_s *channel, unsigned int hashvalue)
 {
-    struct channel_table_s *table=&session->channel_table;
-    struct channellist_head_s *channellist_head=NULL;
-    struct ssh_channel_s *channel=NULL;
-
-    for (unsigned int i=0; i<CHANNELS_TABLE_SIZE; i++) {
-	struct list_element_s *list=get_list_head(&table->hash[i], 0);
-
-	while (list) {
-
-	    channel=(struct ssh_channel_s *)(((char *)list) - offsetof(struct ssh_channel_s, list));
-	    if (channel->type==type) break;
-	    list=get_next_element(list);
-	    channel=NULL;
-
-	}
-
-    }
-
-    return channel;
-
-}
-
-struct ssh_channel_s *get_next_channel(struct ssh_session_s *session, struct ssh_channel_s *channel)
-{
-    struct channel_table_s *table=&session->channel_table;
-    unsigned int hashvalue = 0;
     struct list_element_s *list=NULL;
 
-    if (channel) {
+    if (hashvalue>=SSH_CHANNELS_TABLE_SIZE) return NULL;
+    list=(channel ? get_next_element(&channel->list) : get_list_head(&tablehash[hashvalue]));
 
-	list=get_next_element(&channel->list);
-	if (list) goto found;
-	hashvalue = (channel->local_channel % CHANNELS_TABLE_SIZE) + 1; /* start at next row */
-
-    }
-
-    for (unsigned int i=hashvalue; i<CHANNELS_TABLE_SIZE; i++) {
-
-	list=get_list_head(&table->hash[i], 0);
-	if (list) goto found;
-
-    }
-
-    return NULL;
-
-    found:
-    return (struct ssh_channel_s *)(((char *)list) - offsetof(struct ssh_channel_s, list));
+    return (list ? (struct ssh_channel_s *)((char *) list - offsetof(struct ssh_channel_s, list)) : NULL);
 
 }
 
-void table_add_channel(struct ssh_channel_s *channel)
+void ssh_channel_table_writelock(unsigned int row)
+{
+
+    if (row<SSH_CHANNELS_TABLE_SIZE) {
+        struct list_header_s *h=&tablehash[row];
+
+        write_lock_list_header(h);
+
+    }
+
+}
+
+void ssh_channel_table_writeunlock(unsigned int row)
+{
+
+    if (row<SSH_CHANNELS_TABLE_SIZE) {
+        struct list_header_s *h=&tablehash[row];
+
+        write_unlock_list_header(h);
+
+    }
+
+}
+
+static void table_add_ssh_channel(struct ssh_channel_s *channel)
 {
     unsigned int hashvalue=0;
-    struct ssh_session_s *session=channel->session;
-    struct channel_table_s *table=&session->channel_table;
     struct list_header_s *h=NULL;
 
-    if (channel->flags & CHANNEL_FLAG_TABLE) return;
+    if (channel->flags & SSH_CHANNEL_FLAG_TABLE) return;
 
-    if (table->latest_channel==0) {
+    signal_lock(tablesignal);
+    channel->lcnr=channelctr;
+    channelctr++;
+    tablecount++;
+    signal_unlock(tablesignal);
 
-	channel->local_channel=table->latest_channel;
+    hashvalue = (channel->lcnr % SSH_CHANNELS_TABLE_SIZE);
+    h=&tablehash[hashvalue];
 
-    } else {
-	unsigned int start=((table->free_channel < table->latest_channel) ? table->free_channel : (table->latest_channel + 1));
-	unsigned int tmp=start;
-
-	/* try a free local channel */
-
-	while (lookup_session_channel(table, tmp)) tmp++;
-
-	channel->local_channel=tmp;
-
-	if (tmp>table->latest_channel) {
-
-	    table->free_channel=(unsigned int) -1; /* max value */
-	    table->latest_channel=tmp;
-
-	} else {
-
-	    /* free channel found, find the next free channel if any */
-
-	    tmp++;
-	    while (lookup_session_channel(table, tmp)) tmp++;
-	    table->free_channel=((tmp<table->latest_channel) ? tmp : (unsigned int) -1);
-
-	}
-
-    }
-
-    hashvalue = (channel->local_channel % CHANNELS_TABLE_SIZE);
-    h=&table->hash[hashvalue];
+    write_lock_list_header(h);
     add_list_element_first(h, &channel->list);
-    logoutput("table_add_channel: add channel %u to table", channel->local_channel);
-    table->count++;
-    channel->flags|=CHANNEL_FLAG_TABLE;
+    write_unlock_list_header(h);
+
+    channel->flags|=SSH_CHANNEL_FLAG_TABLE;
 
 }
 
-void table_remove_channel(struct ssh_channel_s *channel)
+static void table_remove_ssh_channel(struct ssh_channel_s *channel, unsigned char locked)
 {
-    struct ssh_session_s *session=channel->session;
-    struct channel_table_s *table=&session->channel_table;
+    unsigned int hashvalue = (channel->lcnr % SSH_CHANNELS_TABLE_SIZE);
+    struct list_header_s *h=&tablehash[hashvalue];
 
-    if ((channel->flags & CHANNEL_FLAG_TABLE)==0) return;
+    if ((channel->flags & SSH_CHANNEL_FLAG_TABLE)==0) return;
 
+    if (locked==0) write_lock_list_header(h);
     remove_list_element(&channel->list);
-    table->count--;
-    channel->flags-=CHANNEL_FLAG_TABLE;
-    if (channel->local_channel < table->free_channel) table->free_channel=channel->local_channel;
+    if (locked==0) write_unlock_list_header(h);
+
+    signal_lock(tablesignal);
+    tablecount--;
+    signal_unlock(tablesignal);
+
+    channel->flags &= ~SSH_CHANNEL_FLAG_TABLE;
 
 }
 
-int add_channel(struct ssh_channel_s *channel, unsigned int flags)
+int add_ssh_channel(struct ssh_channel_s *channel, unsigned int flags)
 {
-    struct ssh_session_s *session=channel->session;
-    struct channel_table_s *table=&session->channel_table;
     int result=-1;
-    struct osns_lock_s wlock;
+    unsigned int error=0;
 
-    /* protect the handling of adding/removing channels */
+    table_add_ssh_channel(channel);
 
-    logoutput("add_channel: add channel to table");
+    if ((* channel->start)(channel, NULL)==-1) {
 
-    channeltable_writelock(table, &wlock);
-    table_add_channel(channel);
-    channeltable_unlock(table, &wlock);
-
-    if (flags & CHANNEL_FLAG_OPEN) {
-	unsigned int error=0;
-
-	result=0;
-
-	if ((* channel->start)(channel, &error)==-1) {
-
-	    channeltable_writelock(table, &wlock);
-	    table_remove_channel(channel);
-	    channeltable_unlock(table, &wlock);
-	    result=-1;
-
-	}
+	table_remove_ssh_channel(channel, 0);
 
     } else {
 
@@ -356,22 +218,42 @@ int add_channel(struct ssh_channel_s *channel, unsigned int flags)
 
 }
 
-void remove_channel(struct ssh_channel_s *channel, unsigned int flags)
+void remove_ssh_channel(struct ssh_channel_s *channel, unsigned int flags, unsigned char locked)
 {
-    struct ssh_session_s *session=channel->session;
-    struct channel_table_s *table=&session->channel_table;
-    struct osns_lock_s wlock;
+    if (flags & (SSH_CHANNEL_FLAG_CLIENT_CLOSE | SSH_CHANNEL_FLAG_SERVER_CLOSE)) (* channel->close)(channel, flags);
+    table_remove_ssh_channel(channel, locked);
+}
 
-    /* protect the handling of adding/removing channels */
+unsigned int get_ssh_channels_tablesize()
+{
+    return SSH_CHANNELS_TABLE_SIZE;
+}
 
-    if (flags & (CHANNEL_FLAG_CLIENT_CLOSE | CHANNEL_FLAG_SERVER_CLOSE)) {
+struct ssh_channel_s *walk_ssh_channels(int (* cb)(struct ssh_channel_s *c, void *ptr), void *ptr)
+{
+    unsigned int hashvalue=0;
+    struct ssh_channel_s *channel=NULL;
 
-	(* channel->close)(channel, flags);
+    while (hashvalue < get_ssh_channels_tablesize()) {
+
+        ssh_channel_table_writelock(hashvalue);
+
+        channel=get_next_ssh_channel(NULL, hashvalue);
+
+	while (channel) {
+	    struct ssh_channel_s *next=get_next_ssh_channel(channel, hashvalue);
+
+            if ((* cb)(channel, ptr)) break;
+	    channel=next;
+
+	}
+
+	ssh_channel_table_writeunlock(hashvalue);
+	if (channel) break;
+	hashvalue++;
 
     }
 
-    channeltable_writelock(table, &wlock);
-    table_remove_channel(channel);
-    channeltable_unlock(table, &wlock);
+    return channel;
 
 }

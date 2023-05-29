@@ -26,6 +26,18 @@
 #include "libosns-lock.h"
 
 #include "osns-protocol.h"
+#include "record.h"
+
+struct read_uint16_hlpr_s {
+    uint16_t		len;
+};
+
+struct read_uint32_hlpr_s {
+    uint32_t		count;
+};
+
+static unsigned int read_size_uint16=sizeof(struct read_uint16_hlpr_s);
+static unsigned int read_size_uint32=sizeof(struct read_uint32_hlpr_s);
 
 unsigned int read_osns_record(char *buffer, unsigned int size, struct osns_record_s *r)
 {
@@ -36,16 +48,23 @@ unsigned int read_osns_record(char *buffer, unsigned int size, struct osns_recor
     r->len=0;
     r->data=NULL;
 
-    if (size >= 2) {
+    if (size >= read_size_uint16) {
+	struct read_uint16_hlpr_s *hlpr=(struct read_uint16_hlpr_s *) buffer;
 
-	r->len=get_uint16(buffer);
+	r->len=hlpr->len;
 
-	if (size >= 2 + r->len) {
+	if (r->len>0) {
 
-	    r->data=(char *) (buffer + 2);
-	    return (2 + r->len);
+	    if (size >= read_size_uint16 + r->len) {
+
+		r->data=(char *) (buffer + read_size_uint16);
+		return (read_size_uint16 + r->len);
+
+	    }
 
 	}
+
+	return (read_size_uint16);
 
     }
 
@@ -53,52 +72,43 @@ unsigned int read_osns_record(char *buffer, unsigned int size, struct osns_recor
 
 }
 
+static void write_osns_record_hlpr(char *buffer, unsigned int size, char *data, unsigned int len)
+{
+    struct read_uint16_hlpr_s *hlpr=(struct read_uint16_hlpr_s *)buffer;
+
+    hlpr->len=len;
+    if (len>0) memcpy((char *)(buffer + read_size_uint16), data, len);
+}
+
 unsigned int write_osns_record(char *buffer, unsigned int size, const unsigned char type, void *ptr)
 {
-    char *pos=NULL;
+    unsigned int bytes=0;
 
     switch (type) {
 
 	case 'c' : {
 	    char *data=(char *) ptr;
-	    unsigned int len=strlen(data);
+	    unsigned int len=((data) ? strlen(data) : 0);
 
-	    if (buffer) {
-		char *pos=buffer;
-
-		store_uint16(pos, len);
-		pos+=2;
-		memcpy(pos, data, len);
-
-	    }
-
-	    return (2 + len);
-	    break;
+	    if (buffer) write_osns_record_hlpr(buffer, size, data, len);
+	    bytes=(read_size_uint16 + len);
 	}
 
 	case 'r' : {
-	    struct osns_record_s *r=(struct osns_record_s *) ptr;
+	    struct osns_record_s tmp={0, NULL};
+	    struct osns_record_s *r=((ptr) ? (struct osns_record_s *) ptr : &tmp);
 
-	    if (buffer) {
-		char *pos=buffer;
+	    if (buffer) write_osns_record_hlpr(buffer, size, r->data, r->len);
+	    bytes=(read_size_uint16 + r->len);
 
-		store_uint16(pos, r->len);
-		pos+=2;
-		memcpy(pos, r->data, r->len);
-
-
-	    }
-
-	    return (2 + r->len);
-	    break;
 	}
 
     }
 
-    return 0;
+    // logoutput_debug("write_osns_record: bytes %u", bytes);
+    return bytes;
 
 }
-
 
 int compare_osns_record(struct osns_record_s *r, const unsigned char type, void *ptr)
 {
@@ -124,37 +134,49 @@ int compare_osns_record(struct osns_record_s *r, const unsigned char type, void 
 
 int process_osns_records(char *data, unsigned int size, int (* cb)(struct osns_record_s *r, unsigned int count, unsigned int index, void *ptr), void *ptr)
 {
-    unsigned int count=0;
-    unsigned int pos=0;
+    int result=-1;
 
-    if (size<4) goto errorout;
-    count=get_uint32(&data[pos]);
-    pos+=4;
+    logoutput_debug("process_osns_records: size %u osns_records_hlpr size %u", size, sizeof(struct osns_records_hlpr_s));
 
-    if (pos + (2 * count) > size) goto errorout;
+    if (size >= sizeof(struct osns_records_hlpr_s)) {
+	struct osns_records_hlpr_s *hlpr=(struct osns_records_hlpr_s *) data;
+	unsigned int pos = sizeof(struct osns_records_hlpr_s);
 
-    for (unsigned int i=0; i<count; i++) {
-	struct osns_record_s r;
-	unsigned int tmp=read_osns_record(&data[pos], (size-pos), &r);
+	logoutput_debug("process_osns_records: hlpr size %u count %u", hlpr->size, hlpr->count);
 
-	if (tmp>0) {
+	logoutput_base64encoded(NULL, data, size, 1);
 
-	    if ((* cb)(&r, count, i, ptr)==-1) goto errorout;
-	    pos+=tmp;
+	if ((hlpr->size + sizeof(struct osns_records_hlpr_s)) <= size) {
 
-	} else {
+	    for (unsigned int i=0; i<hlpr->count; i++) {
+		struct osns_record_s r;
+		unsigned int tmp=read_osns_record(&data[pos], (size-pos), &r);
 
-	    goto errorout;
+		logoutput_debug("process_osns_records: read %u rec len %u", tmp, r.len);
+
+		if (tmp>0 && r.len<(size-pos)) {
+
+		    if ((* cb)(&r, hlpr->count, i, ptr)==-1) goto errorout;
+		    pos+=tmp;
+
+		} else {
+
+		    goto errorout;
+
+		}
+
+	    }
 
 	}
 
+	result=(int) hlpr->count;
+
     }
 
-    return (int) count;
+    return result;
 
     errorout:
-
     logoutput_debug("process_osns_records: failed to read osns records");
-    return 0;
+    return -1;
 
 }

@@ -43,7 +43,7 @@ static int signal_wait_flag_common(struct shared_signal_s *signal, unsigned int 
 
 	if (expire) {
 
-	    result=signal_condtimedwait(signal , expire);
+	    result=signal_condtimedwait(signal, expire);
 	    if (result==ETIMEDOUT) break;
 
 	} else {

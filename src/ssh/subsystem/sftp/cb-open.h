@@ -22,8 +22,8 @@
 
 /* prototypes */
 
-void sftp_op_open(struct sftp_payload_s *payload);
-void sftp_op_read(struct sftp_payload_s *payload);
-void sftp_op_write(struct sftp_payload_s *payload);
+void sftp_op_open(struct sftp_subsystem_s *sftp, struct sftp_in_header_s *inh, char *data);
+void sftp_op_read(struct sftp_subsystem_s *sftp, struct sftp_in_header_s *inh, char *data);
+void sftp_op_write(struct sftp_subsystem_s *sftp, struct sftp_in_header_s *inh, char *data);
 
 #endif

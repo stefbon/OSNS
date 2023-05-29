@@ -96,13 +96,11 @@ static unsigned char find_free_sftp_code(struct sftp_subsystem_s *sftp)
 
 }
 
-void cb_ext_mapextension(struct sftp_payload_s *payload, unsigned int pos)
+void cb_ext_mapextension(struct sftp_subsystem_s *sftp, struct sftp_in_header_s *inh, char *data, unsigned int pos)
 {
-    struct sftp_subsystem_s *sftp=payload->sftp;
     unsigned int status=SSH_FX_BAD_MESSAGE;
 
-    if (payload->len > pos + 4 + 1) {
-	char *data=payload->data;
+    if (inh->len > pos + 4 + 1) {
 	struct ssh_string_s name=SSH_STRING_INIT;
 
 	name.len=get_uint32(&data[pos]);
@@ -110,7 +108,7 @@ void cb_ext_mapextension(struct sftp_payload_s *payload, unsigned int pos)
 	name.ptr=&data[pos];
 	pos+=name.len;
 
-	if (pos + name.len + 4 + 1 <= payload->len) {
+	if (pos + name.len + 4 + 1 <= inh->len) {
 	    struct sftp_extensions_s *extensions=&sftp->extensions;
 	    struct sftp_protocol_extension_s *ext=find_sftp_protocol_extension(&name, extensions->mask);
 
@@ -132,11 +130,10 @@ void cb_ext_mapextension(struct sftp_payload_s *payload, unsigned int pos)
 
 			    logoutput("cb_ext_mapextension: giving extension %.*s code ", name.len, name.ptr, code);
 			    tmp[0]=code;
-			    reply_sftp_extension(sftp, payload->id, tmp, 1);
+			    reply_sftp_extension(sftp, inh->id, tmp, 1);
 
 			    set_sftp_cb(sftp, code, ext->op);
 			    ext->code=code;
-
 			    return;
 
 			} else {
@@ -163,7 +160,7 @@ void cb_ext_mapextension(struct sftp_payload_s *payload, unsigned int pos)
 
 			set_sftp_cb(sftp, ext->code, NULL);
 			ext->code=0;
-			reply_sftp_status_simple(sftp, payload->id, SSH_FX_OK);
+			reply_sftp_status_simple(sftp, inh->id, SSH_FX_OK);
 			return;
 
 		    } else {
@@ -194,7 +191,7 @@ void cb_ext_mapextension(struct sftp_payload_s *payload, unsigned int pos)
     out:
 
     logoutput("cb_ext_mapextension: status %i", status);
-    reply_sftp_status_simple(sftp, payload->id, status);
+    reply_sftp_status_simple(sftp, inh->id, status);
 
 }
 
@@ -209,8 +206,8 @@ void cb_ext_mapextension(struct sftp_payload_s *payload, unsigned int pos)
 
 */
 
-void sftp_op_mapextension(struct sftp_payload_s *payload)
+void sftp_op_mapextension(struct sftp_subsystem_s *sftp, struct sftp_in_header_s *inh, char *data)
 {
-    cb_ext_mapextension(payload, 0);
+    cb_ext_mapextension(sftp, inh, data, 0);
 }
 

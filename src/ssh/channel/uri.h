@@ -22,7 +22,10 @@
 
 /* prototypes */
 
-int translate_channel_uri(struct ssh_channel_s *channel, char *uri);
+int check_ssh_channel_uri(char *uri);
+int translate_ssh_channel_uri(struct ssh_channel_s *channel, char *uri);
+int match_ssh_channel_uri(struct ssh_channel_s *channel, char *uri);
+
 void set_orig_address_ssh_channel_direct_tcpip(struct ssh_channel_s *channel, struct ip_address_s *ip, unsigned int portnr);
 
 #endif

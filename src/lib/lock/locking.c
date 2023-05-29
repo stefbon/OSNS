@@ -97,23 +97,23 @@ void clear_osns_locking(struct osns_locking_s *locking)
 
     locking->cond=NULL;
 
-    list=get_list_head(&locking->readlocks, SIMPLE_LIST_FLAG_REMOVE);
+    list=remove_list_head(&locking->readlocks);
 
     while (list) {
 	struct osns_lock_s *lock=(struct osns_lock_s *) (((char *) list) - offsetof(struct osns_lock_s, list));
 
 	free(lock);
-	list=get_list_head(&locking->readlocks, SIMPLE_LIST_FLAG_REMOVE);
+	list=remove_list_head(&locking->readlocks);
 
     }
 
-    list=get_list_head(&locking->writelocks, SIMPLE_LIST_FLAG_REMOVE);
+    list=remove_list_head(&locking->writelocks);
 
     while (list) {
 	struct osns_lock_s *lock=(struct osns_lock_s *) (((char *) list) - offsetof(struct osns_lock_s, list));
 
 	free(lock);
-	list=get_list_head(&locking->writelocks, SIMPLE_LIST_FLAG_REMOVE);
+	list=remove_list_head(&locking->writelocks);
 
     }
 

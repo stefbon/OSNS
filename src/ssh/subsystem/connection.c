@@ -28,60 +28,53 @@
 #include "connection.h"
 #include "std.h"
 
-int init_ssh_subsystem_connection(struct ssh_subsystem_connection_s *connection, unsigned char type, struct shared_signal_s *signal, void (* read_cb)(struct ssh_subsystem_connection_s *c, struct osns_socket_s *sock))
+static int open_default(struct ssh_subsystem_connection_s *connection, int (* cb)(struct ssh_subsystem_connection_s *connection, struct osns_socket_s *sock, unsigned int type, unsigned int flags))
+{
+    return -1;
+}
+
+static void close_default(struct ssh_subsystem_connection_s *connection, unsigned int type)
+{
+}
+
+static int write_default(struct ssh_subsystem_connection_s *connection, char *data, unsigned int size)
+{
+    return -1;
+}
+
+int init_ssh_subsystem_connection(struct ssh_subsystem_connection_s *connection, unsigned char type, struct shared_signal_s *signal, void (* init_socket)(struct ssh_subsystem_connection_s *connection, struct osns_socket_s *sock, unsigned int type, unsigned int flags))
 {
     int result=-1;
 
     connection->flags=0;
-    connection->error=0;
+    connection->errcode=0;
     connection->signal=signal;
 
-    init_osns_locking(&connection->locking, 0);
-    connection->read=read_cb;
+    connection->open=open_default;
+    connection->close=close_default;
+    connection->write=write_default;
 
-    /* default */
+    /* default is std io */
 
     if (type==0) type=SSH_SUBSYSTEM_CONNECTION_TYPE_STD;
 
-    /* depending type make connection */
+    /* depending type init connection */
 
     if (type==SSH_SUBSYSTEM_CONNECTION_TYPE_STD) {
 
-	result=init_ssh_subsystem_std(connection);
+	result=init_ssh_subsystem_std(connection, init_socket);
 
     } else {
 
 	logoutput_warning("connect_ssh_subsystem_connection: type %i not reckognized: cannot continue", type);
-	return -1;
 
     }
 
-    return 0;
+    return result;
 
 }
 
-int connect_ssh_subsystem_connection(struct ssh_subsystem_connection_s *connection)
+int open_ssh_subsystem_connection(struct ssh_subsystem_connection_s *connection, int (* open_socket)(struct ssh_subsystem_connection_s *connection, struct osns_socket_s *sock, unsigned int type, unsigned int flags))
 {
-
-    if ((* connection->open)(connection)>=0) {
-
-	logoutput_info("connect_ssh_subsystem_connection: connected");
-	return 0;
-
-    }
-
-    logoutput_warning("connect_ssh_subsystem_connection: failed to connect");
-    return -1;
-
-}
-
-void clear_ssh_subsystem_connection(struct ssh_subsystem_connection_s *connection)
-{
-
-    if (connection->flags & SSH_SUBSYSTEM_CONNECTION_FLAG_STD) {
-
-	clear_ssh_subsystem_std(connection);
-
-    }
-
+    return (connection->open)(connection, open_socket);
 }

@@ -27,174 +27,80 @@
 
 #include "connection.h"
 #include "std.h"
-#include "utils.h"
 
-static void handle_std_connection_event_errorclose(struct bevent_s *bevent, unsigned int flag, struct bevent_argument_s *arg)
-{
-    struct ssh_subsystem_connection_s *connection=(struct ssh_subsystem_connection_s *) bevent->ptr;
-    struct osns_socket_s *sock=get_bevent_osns_socket(bevent);
-
-    if (flag & BEVENT_FLAG_CB_CLOSE) {
-
-	logoutput_debug("handle_std_connection_event_errorclose: close");
-
-	if ((&connection->type.std.stdin==sock) || (&connection->type.std.stdout==sock) || (&connection->type.std.stderr==sock)) {
-
-	    (* connection->close)(connection, sock, 1);
-
-	} else {
-
-	    /* HUH ?? */
-
-	}
-
-    }
-
-}
-
-static void handle_stdin_connection_event_data(struct bevent_s *bevent, unsigned int flag, struct bevent_argument_s *arg)
-{
-    struct ssh_subsystem_connection_s *connection=(struct ssh_subsystem_connection_s *) bevent->ptr;
-    struct osns_socket_s *sock=get_bevent_osns_socket(bevent);
-
-    (* connection->read)(connection, sock);
-}
-
-static void handle_stderr_connection_event_data(struct bevent_s *bevent, unsigned int flag, struct bevent_argument_s *arg)
-{
-    struct ssh_subsystem_connection_s *connection=(struct ssh_subsystem_connection_s *) bevent->ptr;
-    struct osns_socket_s *sock=get_bevent_osns_socket(bevent);
-
-    (* connection->read_error)(connection, sock);
-}
-
-static int open_ssh_subsystem_std(struct ssh_subsystem_connection_s *connection)
+static int open_ssh_subsystem_std(struct ssh_subsystem_connection_s *connection, int (* open_socket)(struct ssh_subsystem_connection_s *connection, struct osns_socket_s *sock, unsigned int type, unsigned int flags))
 {
     struct osns_socket_s *sock=NULL;
-    struct bevent_s *bevent=NULL;
 
     /* STDIN */
 
     sock=&connection->type.std.stdin;
     (* sock->set_unix_fd)(sock, fileno(stdin));
-    bevent=create_fd_bevent(NULL, (void *) connection);
-
-    if (bevent) {
-
-	set_bevent_cb(bevent, (BEVENT_FLAG_CB_ERROR | BEVENT_FLAG_CB_CLOSE), handle_std_connection_event_errorclose);
-	set_bevent_cb(bevent, (BEVENT_FLAG_CB_DATAAVAIL), handle_stdin_connection_event_data);
-	set_bevent_osns_socket(bevent, sock);
-
-	add_bevent_watch(bevent);
-
-    } else {
-
-	logoutput_debug("open_std_connection: unable to create bevent stdin");
-	goto errorstdin;
-
-    }
+    if ((* open_socket)(connection, sock, SSH_SUBSYSTEM_SOCKET_TYPE_IN, SSH_SUBSYSTEM_SOCKET_FLAG_IN)<0) goto errorstdin;
 
     /* STDOUT */
 
     sock=&connection->type.std.stdout;
     (* sock->set_unix_fd)(sock, fileno(stdout));
-    bevent=create_fd_bevent(NULL, (void *) connection);
-
-    if (bevent) {
-
-	set_bevent_cb(bevent, (BEVENT_FLAG_CB_ERROR | BEVENT_FLAG_CB_CLOSE), handle_std_connection_event_errorclose);
-
-	if (bevent_set_property(bevent, "edge-triggered", 1)==1) {
-
-	    logoutput_debug("open_std_connection: edge triggering available: enable watched writes for stdout");
-	    enable_bevent_write_watch(bevent);
-	}
-
-	set_bevent_osns_socket(bevent, sock);
-	add_bevent_watch(bevent);
-
-    } else {
-
-	logoutput_debug("open_std_connection: unable to create bevent stdout");
-	goto errorstdout;
-
-    }
+    if ((* open_socket)(connection, sock, SSH_SUBSYSTEM_SOCKET_TYPE_OUT, SSH_SUBSYSTEM_SOCKET_FLAG_OUT)<0) goto errorstdout;
 
     /* STDERR */
 
     sock=&connection->type.std.stderr;
     (* sock->set_unix_fd)(sock, fileno(stderr));
-    bevent=create_fd_bevent(NULL, (void *) connection);
-
-    if (bevent) {
-
-	set_bevent_cb(bevent, (BEVENT_FLAG_CB_ERROR | BEVENT_FLAG_CB_CLOSE), handle_std_connection_event_errorclose);
-	set_bevent_cb(bevent, (BEVENT_FLAG_CB_DATAAVAIL), handle_stderr_connection_event_data);
-
-	if (bevent_set_property(bevent, "edge-triggered", 1)==1) {
-
-	    logoutput_debug("open_std_connection: edge triggering available: enable watched writes for stderr");
-	    enable_bevent_write_watch(bevent); /* stderr is in- and output */
-
-	}
-
-	set_bevent_osns_socket(bevent, sock);
-	add_bevent_watch(bevent);
-
-    } else {
-
-	logoutput_debug("open_std_connection: unable to create bevent stderr");
-	goto errorstderr;
-
-    }
+    if ((* open_socket)(connection, sock, SSH_SUBSYSTEM_SOCKET_TYPE_ERROR, (SSH_SUBSYSTEM_SOCKET_FLAG_ERROR | SSH_SUBSYSTEM_SOCKET_FLAG_IN | SSH_SUBSYSTEM_SOCKET_FLAG_OUT))<0) goto errorstderr;
 
     return 0;
 
     errorstderr:
-    free_bevent_hlpr(&connection->type.std.stderr);
+    process_socket_close_default(&connection->type.std.stderr, SOCKET_LEVEL_LOCAL, NULL);
 
     errorstdout:
-    free_bevent_hlpr(&connection->type.std.stdout);
+    process_socket_close_default(&connection->type.std.stdout, SOCKET_LEVEL_LOCAL, NULL);
 
     errorstdin:
-    free_bevent_hlpr(&connection->type.std.stdin);
+    process_socket_close_default(&connection->type.std.stdin, SOCKET_LEVEL_LOCAL, NULL);
 
     return -1;
 
 }
 
-
-static int send_data_cb_default(struct osns_socket_s *sock, char *data, unsigned int size, void *ptr)
+static void close_ssh_subsystem_std(struct ssh_subsystem_connection_s *connection, unsigned int type)
 {
-    return socket_write(sock, data, size);
+
+    /* STDIN */
+
+    if ((type==0) || (type == SSH_SUBSYSTEM_SOCKET_TYPE_IN)) process_socket_close_default(&connection->type.std.stdin, SOCKET_LEVEL_LOCAL, NULL);
+
+    /* STDOUT */
+
+    if ((type==0) || (type == SSH_SUBSYSTEM_SOCKET_TYPE_OUT)) process_socket_close_default(&connection->type.std.stdout, SOCKET_LEVEL_LOCAL, NULL);
+
+    /* STDERR */
+
+    if ((type==0) || (type == SSH_SUBSYSTEM_SOCKET_TYPE_ERROR)) process_socket_close_default(&connection->type.std.stderr, SOCKET_LEVEL_LOCAL, NULL);
+
 }
 
-int write_ssh_subsystem_std(struct ssh_subsystem_connection_s *connection, char *data, unsigned int size)
+static int write_ssh_subsystem_std(struct ssh_subsystem_connection_s *connection, char *data, unsigned int size)
 {
-    int byteswritten=-1;
-    struct bevent_write_data_s wdata;
-    struct osns_socket_s *sock=&connection->type.std.stdout; /* use stdout for writing */
-    struct bevent_s *bevent=sock->event.link.bevent;
-
-    wdata.flags=0;
-    wdata.data=data;
-    wdata.size=size;
-    wdata.byteswritten=0;
-    set_system_time(&wdata.timeout, 4, 0);
-    wdata.ptr=NULL;
-    init_generic_error(&wdata.error);
-
-    return write_socket_signalled(bevent, &wdata, send_data_cb_default);
+    struct osns_socket_s *sock=&connection->type.std.stdout;
+    return (* sock->sops.device.write)(sock, data, size);
 }
 
-int init_ssh_subsystem_std(struct ssh_subsystem_connection_s *connection)
+int init_ssh_subsystem_std(struct ssh_subsystem_connection_s *connection, void (* init_socket)(struct ssh_subsystem_connection_s *connection, struct osns_socket_s *sock, unsigned int type, unsigned int flags))
 {
 
     connection->flags |= SSH_SUBSYSTEM_CONNECTION_FLAG_STD;
 
     init_osns_socket(&connection->type.std.stdin, OSNS_SOCKET_TYPE_DEVICE, 0);
+    (* init_socket)(connection, &connection->type.std.stdin, SSH_SUBSYSTEM_SOCKET_TYPE_IN, SSH_SUBSYSTEM_SOCKET_FLAG_IN);
+
     init_osns_socket(&connection->type.std.stdout, OSNS_SOCKET_TYPE_DEVICE, OSNS_SOCKET_FLAG_WRONLY);
+    (* init_socket)(connection, &connection->type.std.stdout, SSH_SUBSYSTEM_SOCKET_TYPE_OUT, SSH_SUBSYSTEM_SOCKET_FLAG_OUT);
+
     init_osns_socket(&connection->type.std.stderr, OSNS_SOCKET_TYPE_DEVICE, OSNS_SOCKET_FLAG_RDWR);
+    (* init_socket)(connection, &connection->type.std.stderr, SSH_SUBSYSTEM_SOCKET_TYPE_ERROR, (SSH_SUBSYSTEM_SOCKET_FLAG_ERROR | SSH_SUBSYSTEM_SOCKET_FLAG_IN | SSH_SUBSYSTEM_SOCKET_FLAG_OUT));
 
     connection->open=open_ssh_subsystem_std;
     connection->close=close_ssh_subsystem_std;
@@ -204,24 +110,3 @@ int init_ssh_subsystem_std(struct ssh_subsystem_connection_s *connection)
 
 }
 
-void close_ssh_subsystem_std(struct ssh_subsystem_connection_s *connection, struct osns_socket_s *sock, unsigned char free)
-{
-
-    /* STDIN */
-
-    if ((sock==NULL) || (sock==&connection->type.std.stdin)) close_socket_hlpr(&connection->type.std.stdin, free);
-
-    /* STDOUT */
-
-    if ((sock==NULL) || (sock==&connection->type.std.stdout)) close_socket_hlpr(&connection->type.std.stdout, free);
-
-    /* STDERR */
-
-    if ((sock==NULL) || (sock==&connection->type.std.stderr)) close_socket_hlpr(&connection->type.std.stderr, free);
-
-}
-
-void clear_ssh_subsystem_std(struct ssh_subsystem_connection_s *connection)
-{
-    close_ssh_subsystem_std(connection, NULL, 1);
-}

@@ -23,47 +23,46 @@
 #include "libosns-network.h"
 #include "libosns-datatypes.h"
 
-#define RESOURCE_STATUS_BLOCK_DELETE		1
-#define RESOURCE_STATUS_USE			2
-#define RESOURCE_STATUS_CHANGE_TIME		4
+#define NETWORK_RESOURCE_FLAG_NODOMAIN                          (1 << 0)
+#define NETWORK_RESOURCE_FLAG_SERVICE_GUESSED                   (1 << 1)
+#define NETWORK_RESOURCE_FLAG_DNSSD                             (1 << 2)
+#define NETWORK_RESOURCE_FLAG_LOCALHOST                         (1 << 3)
+#define NETWORK_RESOURCE_FLAG_PRIVATE                           (1 << 4)
+#define NETWORK_RESOURCE_FLAG_HOSTNAME_DNS                      (1 << 5)
+#define NETWORK_RESOURCE_FLAG_HOSTNAME_ADDRINFO                 (1 << 6)
+#define NETWORK_RESOURCE_FLAG_IPv4                              (1 << 7)
+#define NETWORK_RESOURCE_FLAG_IPv6                              (1 << 8)
+#define NETWORK_RESOURCE_FLAG_UDP                               (1 << 9)
+#define NETWORK_RESOURCE_FLAG_TCP                               (1 << 10)
+#define NETWORK_RESOURCE_FLAG_DOMAIN_FQDN                       (1 << 11)
+#define NETWORK_RESOURCE_FLAG_REMOVED                           (1 << 12)
 
-#define RESOURCE_METHOD_DNSSD			(1 << 0)
-#define RESOURCE_METHOD_STATICFILE		(1 << 1)
+#define NETWORK_GROUP_FLAGS_ALL                                 ( NETWORK_RESOURCE_FLAG_NODOMAIN | NETWORK_RESOURCE_FLAG_DNSSD | NETWORK_RESOURCE_FLAG_DOMAIN_FQDN | NETWORK_RESOURCE_FLAG_REMOVED)
+#define NETWORK_HOST_FLAGS_ALL                                  ( NETWORK_RESOURCE_FLAG_DNSSD | NETWORK_RESOURCE_FLAG_LOCALHOST | NETWORK_RESOURCE_FLAG_PRIVATE | NETWORK_RESOURCE_FLAG_HOSTNAME_DNS | NETWORK_RESOURCE_FLAG_HOSTNAME_ADDRINFO | NETWORK_RESOURCE_FLAG_REMOVED)
+#define NETWORK_ADDRESS_FLAGS_ALL                               ( NETWORK_RESOURCE_FLAG_DNSSD | NETWORK_RESOURCE_FLAG_IPv4 | NETWORK_RESOURCE_FLAG_IPv6 | NETWORK_RESOURCE_FLAG_REMOVED)
+#define NETWORK_SERVICE_FLAGS_ALL                               ( NETWORK_RESOURCE_FLAG_DNSSD | NETWORK_RESOURCE_FLAG_UDP | NETWORK_RESOURCE_FLAG_TCP | NETWORK_RESOURCE_FLAG_REMOVED)
 
-#define RESOURCE_FLAG_ALLOC			(1 << 0)
-#define RESOURCE_FLAG_PRIVATE			(1 << 1)
+#define NETWORK_RESOURCE_TYPE_GROUP                             1
+#define NETWORK_RESOURCE_TYPE_HOST                              2
+#define NETWORK_RESOURCE_TYPE_ADDRESS                           3
+#define NETWORK_RESOURCE_TYPE_SERVICE                           4
 
-#define RESOURCE_ACTION_ADD				1
-#define RESOURCE_ACTION_RM				2
-#define RESOURCE_ACTION_CHANGE				3
-#define RESOURCE_ACTION_NEW				4
-
-struct resource_s;
-
-struct resource_subsys_s {
-    char						*name;
-    unsigned int					status;
-    unsigned int					(* get_size)(struct resource_subsys_s *rss, const char *name);
-    void						(* init)(struct resource_s *r);
-    void						(* free)(struct resource_s *r);
-    void						(* process_action)(struct resource_s *r, unsigned char what, void *ptr);
-    void						*ptr;
-};
-
-struct resource_s {
-    uint32_t						unique;
-    struct resource_subsys_s				*subsys;
-    const char						*name;
-    unsigned int					status;
-    unsigned int					flags;
-    unsigned int					users;
-    unsigned int					refcount;
-    struct list_element_s				list;
-    struct system_timespec_s				found;
-    struct system_timespec_s				changed;
-    unsigned int					size;
-    char						buffer[];
+struct network_resource_s {
+    uint64_t                                                    id;
+    uint64_t                                                    pid;
+    uint32_t                                                    type;
+    uint32_t                                                    flags;
+    uint64_t                                                    createdate;
+    uint64_t                                                    changedate;
+    uint64_t                                                    processdate;
+    union _network_type_u {
+        char							name[HOST_HOSTNAME_FQDN_MAX_LENGTH + 1];
+	char					                ipv4[INET_ADDRSTRLEN + 1];
+	char					                ipv6[INET6_ADDRSTRLEN + 1];
+        struct network_service_s			        service;
+    } data;
 };
 
 /* Prototypes */
+
 #endif

@@ -25,22 +25,27 @@
 #include "libosns-interface.h"
 
 #include "mapping.h"
+#include "cache.h"
 
-/* callbacks for users / groups */
+/* shared code */
 
-int compare_ent2local(struct list_element_s *l, void *b)
+void find_ent2local_batch_shared(struct sl_skiplist_s *sl, void *ptr, struct net_entity_s *ent, unsigned int *error)
 {
-    struct name_s *name=(struct name_s *) b;
-    struct net_ent2local_s *ent2local=(struct net_ent2local_s *) ((char *) l - offsetof(struct net_ent2local_s, list));
+    struct sl_searchresult_s result;
 
-    return compare_names(&ent2local->name, name);
-}
+    init_sl_searchresult(&result, ptr, SL_SEARCHRESULT_FLAG_EXCLUSIVE);
+    sl_find(sl, &result);
 
-struct list_element_s *get_list_element_ent2local(void *b, struct sl_skiplist_s *sl)
-{
-    struct name_s *name=(struct name_s *) b;
-    struct net_ent2local_s *ent2local=(struct net_ent2local_s *)((char *) name - offsetof(struct net_ent2local_s, name));
-    return &ent2local->list;
+    if (result.flags & SL_SEARCHRESULT_FLAG_EXACT) {
+	struct net_ent2local_s *el=(struct net_ent2local_s *)((char *) result.found - offsetof(struct net_ent2local_s, list));
+
+	ent->localid=el->localid;
+	return;
+
+    }
+
+    *error=(result.flags & SL_SEARCHRESULT_FLAG_ERROR) ? EIO : ENOENT;
+    return NULL;
 }
 
 char *get_logname_ent2local(struct list_element_s *l)
@@ -49,41 +54,11 @@ char *get_logname_ent2local(struct list_element_s *l)
     return ent2local->name.name;
 }
 
-struct net_ent2local_s *get_next_ent2local(struct net_ent2local_s *ent2local)
-{
-    struct list_element_s *next=_get_next_element(&ent2local->list);
-    return (next) ? ((struct net_ent2local_s *)((char *) next - offsetof(struct net_ent2local_s, list))) : NULL;
-}
-
-struct net_ent2local_s *get_prev_ent2local(struct net_ent2local_s *ent2local)
-{
-    struct list_element_s *prev=_get_prev_element(&ent2local->list);
-    return (prev) ? ((struct net_ent2local_s *)((char *) prev - offsetof(struct net_ent2local_s, list))) : NULL;
-}
-
-struct net_ent2local_s *find_ent2local_batch(struct sl_skiplist_s *sl, struct name_s *lookupname, unsigned int *error)
+static struct net_ent2local_s *insert_ent2local_batch_shared(struct sl_skiplist_s *sl , void *ptr, unsigned int *error)
 {
     struct sl_searchresult_s result;
 
-    init_sl_searchresult(&result, (void *) lookupname, SL_SEARCHRESULT_FLAG_EXCLUSIVE);
-    sl_find(sl, &result);
-
-    if (result.flags & SL_SEARCHRESULT_FLAG_EXACT) {
-
-	*error=0;
-	return (struct net_ent2local_s *)((char *) result.found - offsetof(struct net_ent2local_s, list));
-
-    }
-
-    *error=(result.flags & SL_SEARCHRESULT_FLAG_ERROR) ? EIO : ENOENT;
-    return NULL;
-}
-
-struct net_ent2local_s *insert_ent2local_batch(struct sl_skiplist_s *sl , struct net_ent2local_s *ent2local, unsigned int *error)
-{
-    struct sl_searchresult_s result;
-
-    init_sl_searchresult(&result, (void *) &ent2local->name, SL_SEARCHRESULT_FLAG_EXCLUSIVE);
+    init_sl_searchresult(&result, ptr, SL_SEARCHRESULT_FLAG_EXCLUSIVE);
     sl_insert(sl, &result);
 
     if (result.flags & SL_SEARCHRESULT_FLAG_OK) {
@@ -105,31 +80,37 @@ struct net_ent2local_s *insert_ent2local_batch(struct sl_skiplist_s *sl , struct
     return NULL;
 }
 
+static void init_ent2local(struct net_ent2local_s *ent2local, unsigned int size, struct net_entity_s *entity)
+{
+
+    memset(ent2local, 0, sizeof(struct net_ent2local_s) + size);
+
+    init_list_element(&ent2local->list, NULL);
+    ent2local->remoteid=entity->net.id;
+    ent2local->localid = entity->localid;
+
+    if (entity->flags & NET_ENTITY_FLAG_USER) {
+
+	ent2local->flags = NET_ENT2LOCAL_FLAG_USER;
+
+    } else if (entity->flags & NET_ENTITY_FLAG_GROUP) {
+
+	ent2local->flags = NET_ENT2LOCAL_FLAG_GROUP;
+
+    }
+
+    ent2local->size=size;
+
+}
+
 struct net_ent2local_s *create_ent2local(struct net_entity_s *entity)
 {
-    struct net_ent2local_s *ent2local=malloc(sizeof(struct net_ent2local_s) + entity->remote.name.len);
+    struct net_ent2local_s *ent2local=malloc(sizeof(struct net_ent2local_s) + entity->net.name.len);
 
     if (ent2local) {
 
-	memset(ent2local, 0, sizeof(struct net_ent2local_s) + entity->remote.name.len);
-
-	init_list_element(&ent2local->list, NULL);
-	ent2local->remoteid=entity->remote.id;
-
-	if (entity->flags & NET_ENTITY_FLAG_USER) {
-
-	    ent2local->localid.uid=entity->local.uid;
-	    ent2local->flags = NET_ENT2LOCAL_FLAG_USER;
-
-	} else if (entity->flags & NET_ENTITY_FLAG_GROUP) {
-
-	    ent2local->localid.gid=entity->local.gid;
-	    ent2local->flags = NET_ENT2LOCAL_FLAG_GROUP;
-
-	}
-
-	memcpy(ent2local->buffer, entity->remote.name.ptr, entity->remote.name.len);
-	ent2local->size=entity->remote.name.len;
+	init_ent2local(ent2local, entity->net.name.len, entity);
+	memcpy(ent2local->buffer, entity->net.name.ptr, entity->net.name.len);
 	set_name(&ent2local->name, ent2local->buffer, ent2local->size);
 
     }
@@ -151,3 +132,57 @@ void free_ent2local(struct net_ent2local_s **p_ent2local)
 
 }
 
+struct net_ent2local_s *get_next_ent2local(struct net_ent2local_s *ent2local)
+{
+    struct list_element_s *next=get_next_element(&ent2local->list);
+    return (next) ? ((struct net_ent2local_s *)((char *) next - offsetof(struct net_ent2local_s, list))) : NULL;
+}
+
+struct net_ent2local_s *get_prev_ent2local(struct net_ent2local_s *ent2local)
+{
+    struct list_element_s *prev=get_prev_element(&ent2local->list);
+    return (prev) ? ((struct net_ent2local_s *)((char *) prev - offsetof(struct net_ent2local_s, list))) : NULL;
+}
+
+/* callbacks for users / groups using names */
+
+int compare_ent2local_byname(struct list_element_s *l, void *b)
+{
+    struct name_s *name=(struct name_s *) b;
+    struct net_ent2local_s *ent2local=(struct net_ent2local_s *) ((char *) l - offsetof(struct net_ent2local_s, list));
+    return compare_names(&ent2local->name, name);
+}
+
+struct list_element_s *get_list_element_ent2local_byname(void *b, struct sl_skiplist_s *sl)
+{
+    struct name_s *name=(struct name_s *) b;
+    struct net_ent2local_s *ent2local=(struct net_ent2local_s *)((char *) name - offsetof(struct net_ent2local_s, name));
+    return &ent2local->list;
+}
+
+struct net_ent2local_s *insert_ent2local_batch_byname(struct sl_skiplist_s *sl , struct net_ent2local_s *ent2local, unsigned int *errcode)
+{
+    return insert_ent2local_batch_shared(sl , (void *) &ent2local->name, errcode);
+}
+
+/* callbacks for users / groups using ids */
+
+int compare_ent2local_byid(struct list_element_s *l, void *b)
+{
+    unsigned int *p_id=(unsigned int *) b;
+    struct net_ent2local_s *ent2local=(struct net_ent2local_s *) ((char *) l - offsetof(struct net_ent2local_s, list));
+
+    return compare_unsigned(ent2local->remoteid, *p_id);
+}
+
+struct list_element_s *get_list_element_ent2local_byid(void *b, struct sl_skiplist_s *sl)
+{
+    unsigned int *p_id=(unsigned int *) b;
+    struct net_ent2local_s *ent2local=(struct net_ent2local_s *)((char *) p_id - offsetof(struct net_ent2local_s, remoteid));
+    return &ent2local->list;
+}
+
+struct net_ent2local_s *insert_ent2local_batch_byid(struct sl_skiplist_s *sl , struct net_ent2local_s *ent2local, unsigned int *errcode)
+{
+    return insert_ent2local_batch_shared(sl , (void *) &ent2local->remoteid, errcode);
+}

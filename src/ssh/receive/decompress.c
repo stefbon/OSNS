@@ -48,15 +48,49 @@ struct decompress_ops_s *get_next_decompress_ops(struct decompress_ops_s *ops)
 
     } else {
 
-	list=get_list_head(&list_decompress_ops, 0);
+	list=get_list_head(&list_decompress_ops);
 
     }
 
     return (list) ? get_decompress_ops_container(list) : NULL;;
 }
 
+static void cb_lock_decompressors(struct list_header_s *h, unsigned char action)
+{
 
-void reset_decompress(struct ssh_connection_s *connection, struct algo_list_s *algo_compr)
+    /* signal the ssh receive system when a decrompressor is put on the list */
+
+    if ((action==SIMPLE_LIST_LOCK_ACTION_WUNLOCK)) {
+	struct ssh_receive_s *receive=(struct ssh_receive_s *)((char *)h - offsetof(struct ssh_receive_s, decompress.header));
+	struct shared_signal_s *signal=&receive->signal;
+
+	signal_lock(signal);
+	signal_broadcast(signal);
+	signal_unlock(signal);
+
+    }
+
+}
+
+void init_ssh_decompress(struct ssh_connection_s *connection)
+{
+    struct ssh_receive_s *receive=&connection->receive;
+    struct ssh_decompress_s *decompress=&receive->decompress;
+
+    decompress->flags=0;
+    decompress->count=0;
+    decompress->max_count=0;
+    decompress->ops=NULL;
+
+    memset(decompress->name, '\0', sizeof(decompress->name));
+    set_decompress_none(connection);
+
+    init_list_header(&decompress->header, SIMPLE_LIST_TYPE_EMPTY, NULL);
+    set_lock_cb_list_header(&decompress->header, cb_lock_decompressors);
+
+}
+
+void reset_ssh_decompress(struct ssh_connection_s *connection, struct algo_list_s *algo_compr)
 {
     struct ssh_receive_s *receive=&connection->receive;
     struct ssh_decompress_s *decompress=&receive->decompress;
@@ -64,7 +98,6 @@ void reset_decompress(struct ssh_connection_s *connection, struct algo_list_s *a
 
     remove_decompressors(decompress);
     memset(decompress->name, '\0', sizeof(decompress->name));
-
     decompress->ops=ops;
     strcpy(decompress->name, algo_compr->sshname);
 
@@ -89,5 +122,5 @@ unsigned int build_compress_list_s2c(struct ssh_connection_s *connection, struct
 
 void init_decompress_once()
 {
-    init_list_header(&list_decompress_ops, SIMPLE_LIST_TYPE_EMPTY, 0);
+    init_list_header(&list_decompress_ops, SIMPLE_LIST_TYPE_EMPTY, NULL);
 }

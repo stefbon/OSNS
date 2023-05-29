@@ -82,7 +82,7 @@ struct fswatch_s *add_watch_fsnotify(struct bevent_subsystem_s *subsys, struct f
 	fsws=add_watch_subscription(watch, subscriber, mask);
 
     } else {
-	struct list_element_s *list=get_list_head(&watch->subscriptions, 0);
+	struct list_element_s *list=get_list_head(&watch->subscriptions);
 
 	while (list) {
 
@@ -206,13 +206,13 @@ static void clear_btimer_backend(struct bevent_subsystem_s *subsys)
 
     signal_set_flag(signal, &backend->flags, BTIMER_BACKEND_FLAG_LOCK);
 
-    list=get_list_head(&backend->timers, SIMPLE_LIST_FLAG_REMOVE);
+    list=remove_list_head(&backend->timers);
     while (list) {
 	struct btimer_s *timer=(struct btimer_s *)((char *) list - offsetof(struct btimer_s, list));
 
 	(* timer->cb)(timer->id, timer->ptr, BTIMER_FLAG_REMOVED);
 	free(timer);
-	list=get_list_head(&backend->timers, SIMPLE_LIST_FLAG_REMOVE);
+	list=remove_list_head(&backend->timers);
 
     }
 

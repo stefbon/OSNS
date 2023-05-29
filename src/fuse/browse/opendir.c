@@ -37,14 +37,13 @@ static unsigned int get_name_dummy(struct service_context_s *ctx, char *b, unsig
 
 void populate_browse_entries(struct fuse_opendir_s *opendir)
 {
-    struct workspace_mount_s *workspace=get_workspace_mount_ctx(opendir->context);
-    struct service_context_s *parent=opendir->context;
-    struct directory_s *directory=get_directory(workspace, opendir->inode, 0);
+    struct service_context_s *parent=opendir->header.ctx;
+    struct inode_s *inode=opendir->header.inode;
+    struct directory_s *pdirectory=get_directory(parent, inode, 0);
     struct list_header_s *h=get_list_header_context(parent);
-    struct inode_s *inode=opendir->inode;
     struct service_context_s *ctx=get_next_service_context(parent, NULL, "tree");
 
-    /* here build the list of direntries */
+    /* look for the service ctx's available in the ctx tree */
 
     read_lock_list_header(h);
     ctx=get_next_service_context(parent, NULL, "tree");
@@ -95,14 +94,14 @@ void populate_browse_entries(struct fuse_opendir_s *opendir)
 	    memset(buffer, 0, len+1);
 	    len=(* get_name_cb)(ctx, buffer, len);
 
-	    entry=install_virtualnetwork_map(ctx, inode->alias, buffer, what, &action);
+	    entry=install_virtualnetwork_map(ctx, pdirectory, buffer, what, &action);
 
 	    if (entry) {
 
 		logoutput_debug("populate_browse_entries: name %s action %u ctx type %u", buffer, action, ctx->type);
 
 		if (action==FUSE_NETWORK_ACTION_FLAG_ADDED) {
-		    struct directory_s *directory=get_directory(workspace, entry->inode, 0);
+		    struct directory_s *directory=get_directory(ctx, entry->inode, 0);
 
 		    if (directory) directory->ptr=&ctx->link;
 
@@ -119,23 +118,24 @@ void populate_browse_entries(struct fuse_opendir_s *opendir)
     }
 
     read_unlock_list_header(h);
-
-    finish_get_fuse_direntry(opendir);
+    set_flag_fuse_opendir(opendir, FUSE_OPENDIR_FLAG_EOD);
 
 }
 
 void _fs_browse_opendir(struct fuse_opendir_s *opendir, struct fuse_request_s *request, unsigned int flags)
 {
+    struct service_context_s *ctx=opendir->header.ctx;
     struct fuse_open_out open_out;
 
-    logoutput("_fs_browse_opendir: ino %li", get_ino_system_stat(&opendir->inode->stat));
+    logoutput("_fs_browse_opendir: ino %li", get_ino_system_stat(&opendir->header.inode->stat));
+
+    refresh_network_host_opendir(ctx);                          /* get/refresh context services */
+    populate_browse_entries(opendir);                           /* translate context services to fuse entries */
 
     opendir->readdir=_fs_common_readdir;
 
     open_out.fh=(uint64_t) opendir;
     open_out.open_flags=0;
     reply_VFS_data(request, (char *) &open_out, sizeof(open_out));
-
-    populate_browse_entries(opendir);
 
 }

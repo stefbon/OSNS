@@ -103,69 +103,15 @@ int init_ssh_session_client(struct ssh_session_s *session, uid_t uid, void *ctx,
     error:
     free_ssh_hostinfo(session);
     free_ssh_session_data(session);
-    free_ssh_channels_table(session);
     free_ssh_identity(session);
-    free_ssh_connections(session);
     return -1;
 
 }
 
-static void disconnect_ssh_connection_cb(struct connection_s *c, unsigned char remote)
-{
-
-    disconnect_cb_default(c, remote);
-
-    if (remote) {
-	struct ssh_connection_s *sshc=(struct ssh_connection_s *)((char *)c - offsetof(struct ssh_connection_s, connection));
-
-	/* when initiated by remote side signal the context (==workspace)
-	    here the context == the channels using this connection */
-
-	struct ssh_session_s *session=get_ssh_connection_session(sshc);
-
-	if (session) {
-	    struct channel_table_s *table=&session->channel_table;
-	    struct osns_lock_s lock;
-
-	    if (channeltable_readlock(table, &lock)==0) {
-		struct ssh_channel_s *channel=get_next_channel(session, NULL);
-
-		if (channel->connection==sshc) (* channel->context.signal_channel2ctx)(channel, "event:disconnect:", NULL, INTERFACE_CTX_SIGNAL_TYPE_SSH_CHANNEL);
-		channel=get_next_channel(session, channel);
-
-		channeltable_unlock(table, &lock);
-
-	    }
-
-	}
-
-    }
-
-}
-
-int connect_ssh_session_client(struct ssh_session_s *session, struct host_address_s *target, struct network_port_s *port, struct beventloop_s *loop)
+int connect_ssh_session_client(struct ssh_session_s *session, struct ip_address_s *ip, struct network_port_s *port, struct beventloop_s *loop)
 {
     struct ssh_connection_s *connection=NULL;
-    struct io_option_s option;
     int fd=-1;
-    struct shared_signal_s *signal=NULL;
-
-    /* get the ctx for values like:
-	- shared mutex and cond for shared event signalling when for example the connection and/or
-	is disconnected and the waiting thread wants to be informed about that (while waiting for a response)
-	- timeout
-    */
-
-    init_io_option(&option, _IO_OPTION_TYPE_PVOID);
-
-    if (set_ssh_connections_signal(session, session->signal)==-1) {
-
-	logoutput("connect_ssh_session_client: error setting shared signal");
-	goto out;
-
-    }
-
-    init_io_option(&option, _IO_OPTION_TYPE_INT);
 
     if (add_main_ssh_connection(session)==0) {
 
@@ -179,10 +125,7 @@ int connect_ssh_session_client(struct ssh_session_s *session, struct host_addres
     }
 
     connection=session->connections.main;
-    connection->connection.ops.client.disconnect=disconnect_ssh_connection_cb;
-    connection->connection.ops.client.dataavail=read_ssh_connection_socket;
-
-    fd=connect_ssh_connection(connection, target, port, loop);
+    fd=connect_ssh_connection(connection, ip, port, loop);
 
     if (fd>0) {
 

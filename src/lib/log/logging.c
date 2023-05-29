@@ -269,7 +269,7 @@ void logoutput_base64encoded(char *prefix, char *buffer, unsigned int size, unsi
 	    if (fp) {
 		unsigned int count=(size<40) ? size : 40;
 		size_t written=0;
-		written=fwrite(buffer, count, 1, fp);
+		written=fwrite(buffer, size, 1, fp);
 		written=fwrite("\n", 1, 1, fp);
 		fclose(fp);
 

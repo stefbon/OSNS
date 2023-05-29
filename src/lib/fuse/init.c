@@ -244,7 +244,7 @@ int fuse_fs_init(struct fuse_receive_s *r, struct fuse_in_header *inh, char *dat
 	if ((init->flags & osns_fuse_flags[i].flag) && (osns_fuse_flags[i].avail <= versionnumber) && (supported & osns_fuse_flags[i].supported)) {
 
 	    out.flags |= osns_fuse_flags[i].flag;
-	    logoutput_debug("fuse_fs_init: enabled flag %u:%s", osns_fuse_flags[i].flag, osns_fuse_flags[i].name);
+	    logoutput_debug("fuse_fs_init: %s", osns_fuse_flags[i].name);
 
 	}
 
@@ -261,7 +261,7 @@ int fuse_fs_init(struct fuse_receive_s *r, struct fuse_in_header *inh, char *dat
     logoutput("fuse_fs_init: max write %u", out.max_write);
 
     result=(* r->reply_VFS)(r, inh->unique, (char *) &out, sizeof(struct fuse_init_out));
-    signal_set_flag(r->loop->signal, &r->flags, ((result>=0) ? FUSE_RECEIVE_FLAG_INIT : FUSE_RECEIVE_FLAG_ERROR));
+    signal_set_flag(r->signal, &r->flags, ((result>=0) ? FUSE_RECEIVE_FLAG_INIT : FUSE_RECEIVE_FLAG_ERROR));
     return result;
 
 }

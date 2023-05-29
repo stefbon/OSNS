@@ -22,7 +22,7 @@
 
 /* prototypes */
 
-void sftp_op_remove(struct sftp_payload_s *p);
-void sftp_op_rmdir(struct sftp_payload_s *p);
+void sftp_op_remove(struct sftp_subsystem_s *sftp, struct sftp_in_header_s *inh, char *data);
+void sftp_op_rmdir(struct sftp_subsystem_s *sftp, struct sftp_in_header_s *inh, char *data);
 
 #endif

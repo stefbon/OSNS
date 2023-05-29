@@ -30,6 +30,7 @@ unsigned int get_status_osns_socket(struct osns_socket_s *sock);
 
 void set_osns_socket_nonblocking(struct osns_socket_s *sock);
 void unset_osns_socket_nonblocking(struct osns_socket_s *sock);
+void osns_socket_enable_reuseport(struct osns_socket_s *sock);
 
 unsigned char socket_connection_error(unsigned int error);
 unsigned char socket_blocking_error(unsigned int error);
@@ -39,9 +40,10 @@ int set_socket_properties(struct osns_socket_s *sock, struct socket_properties_s
 int get_local_peer_properties(struct osns_socket_s *sock, struct local_peer_s *peer);
 int get_network_peer_properties(struct osns_socket_s *sock, struct network_peer_s *peer, const char *what);
 
-int set_path_osns_sockaddr(struct osns_socket_s *sock, struct fs_location_path_s *path);
-unsigned int get_path_osns_sockaddr(struct osns_socket_s *sock, struct fs_location_path_s *path);
-
+int set_path_osns_sockaddr(struct osns_socket_s *sock, struct fs_path_s *path);
+unsigned int get_path_osns_sockaddr(struct osns_socket_s *sock, struct fs_path_s *path);
 int set_address_osns_sockaddr(struct osns_socket_s *sock, struct ip_address_s *address, unsigned int port);
+
+int osns_socketpair(struct osns_socket_s sock[2]);
 
 #endif

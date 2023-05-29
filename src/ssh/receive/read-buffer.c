@@ -29,445 +29,396 @@
 #include "ssh-utils.h"
 #include "ssh-connections.h"
 
-void process_ssh_packet_nodecompress(struct ssh_connection_s *connection, struct ssh_packet_s *packet)
+void cb_read_socket_ssh(struct osns_socket_s *sock, uint64_t ctr, void *ptr);
+
+static void cb_read_socket_ssh_thread(void *ptr)
 {
-    struct ssh_payload_s *payload=NULL;
-    unsigned int len = packet->len - 1 - packet->padding;
+    struct ssh_connection_s *sshc=(struct ssh_connection_s *) ptr;
+    struct osns_socket_s *sock=&sshc->connection.sock;
 
-    logoutput_debug("process_ssh_packet_nodecompress: type %i", packet->buffer[5]);
-
-    payload=malloc(sizeof(struct ssh_payload_s) + len);
-
-    if (payload) {
-
-	memset(payload, '\0', sizeof(struct ssh_payload_s) + len);
-
-	payload->flags=SSH_PAYLOAD_FLAG_ALLOCATED;
-	payload->len=len;
-	payload->sequence=packet->sequence;
-	init_list_element(&payload->list, NULL);
-	memcpy(payload->buffer, &packet->buffer[5], len);
-	payload->type=(unsigned char) payload->buffer[0];
-	set_alloc_payload_dynamic(payload);
-	process_cb_ssh_payload(connection, payload);
-
-	return;
-
-    }
-
-    disconnect_ssh_connection(connection);
-
+    (* sock->ctx.read)(sock, 1, ptr);
 }
 
-void process_ssh_packet_decompress(struct ssh_connection_s *connection, struct ssh_packet_s *packet)
+/*
+    pre process:
+    function to be called after enough data is present/arrived to begin decrypting the whole packet
+*/
+
+/* default pre action:
+    - start reading next message when there is one
+    this happens when:
+    a. decryptor is able to process messages parallel and
+    b. not in kexinit/rekey phase
+*/
+
+static void cb_post_read_header_parallel(struct ssh_connection_s *sshc)
 {
-    unsigned int error=0;
-    struct ssh_decompressor_s *decompressor=get_decompressor(&connection->receive, &error);
-    struct ssh_payload_s *payload=NULL;
+    if (sshc->connection.sock.rd.pos>0) work_workerthread(NULL, 0, cb_read_socket_ssh_thread, (void *) sshc);
+}
 
-    if ((* decompressor->decompress_packet)(decompressor, packet, &payload, &error)==0) {
+/* serial pre action
+    - do nothing, do not look for the next message cause:
+    a. decryptor in not able to process messages in parallel or
+    b. in kexinit/rekey phase */
 
-	payload->type=(unsigned char) payload->buffer[0];
-	(* decompressor->queue)(decompressor);
-	process_cb_ssh_payload(connection, payload);
-	return;
+static void cb_post_read_header_ignore(struct ssh_connection_s *sshc)
+{
+}
+
+/*
+    cb pre process message
+    function to be called after the whole packet is decrypted
+	but before the payload is processed */
+
+static void cb_pre_process_ignore(struct ssh_connection_s *sshc)
+{
+}
+
+static void cb_pre_process_serial(struct ssh_connection_s *sshc)
+{
+    if (sshc->connection.sock.rd.pos>0) work_workerthread(NULL, 0, cb_read_socket_ssh_thread, (void *) sshc);
+}
+
+/*
+    cb post process message
+    function to be called after the whole packet is decrypted
+	and after the payload is processed */
+
+static unsigned int cb_post_process_ignore(struct ssh_connection_s *sshc, unsigned char type)
+{
+    return 0;
+}
+
+static unsigned int cb_post_process_kex(struct ssh_connection_s *sshc, unsigned char type)
+{
+    struct osns_socket_s *sock=&sshc->connection.sock;
+    struct ssh_receive_s *r=&sshc->receive;
+    struct shared_signal_s *signal=&r->signal;
+    struct system_timespec_s expire=SYSTEM_TIME_INIT;
+    unsigned int errcode=EIO;
+
+    if (type != SSH_MSG_NEWKEYS) return 0;
+
+    get_ssh_connection_expire_init(sshc, &expire);
+
+    if (signal_lock(signal)==0) {
+
+        while (errcode==EIO) {
+
+            if (system_time_test_earlier(&r->kexinit, &r->newkeys)==1) {
+
+                errcode=0;
+                break;
+
+            }
+
+	    int result=signal_condtimedwait(signal, &expire);
+
+	    if (result==ETIMEDOUT) {
+
+	        errcode=ETIMEDOUT;
+	        break;
+
+	    } else if (sock->status & (SOCKET_STATUS_ERROR | SOCKET_STATUS_CLOSING)) {
+
+	        errcode=ENOTCONN;
+	        break;
+
+	    }
+
+        }
+
+        unlockout:
+	signal_unlock(signal);
 
     }
 
-    (* decompressor->queue)(decompressor);
-    if (error==0) error=EIO;
-    disconnect_ssh_connection(connection);
+    if (errcode==0) {
 
+        /* go back to the normal mode */
+
+        if (r->decrypt.flags & SSH_DECRYPT_FLAG_PARALLEL) {
+
+	    sshc->pre_process=cb_post_read_header_parallel;
+	    sshc->post_process_01=cb_pre_process_ignore;
+
+        } else {
+
+	    sshc->pre_process=cb_post_read_header_ignore;
+	    sshc->post_process_01=cb_pre_process_serial;
+
+        }
+
+        sshc->post_process_02=cb_post_process_ignore;
+        return 0;
+
+    }
+
+    errorout:
+    logoutput_debug("cb_post_process_kex: errcode %u : %s", errcode, strerror(errcode));
+    return errcode;
 }
 
 /* read data from buffer, decrypt, check mac, and process the packet
     it does this by getting a decryptor; depending the cipher it's possible that more decryptor are in "flight"
 */
 
-static void read_ssh_buffer_packet(void *ptr)
+void cb_read_socket_ssh(struct osns_socket_s *sock, uint64_t ctr, void *ptr)
 {
-    struct ssh_connection_s *connection=(struct ssh_connection_s *) ptr;
-    struct ssh_receive_s *receive=&connection->receive;
-    struct ssh_decrypt_s *decrypt=&receive->decrypt;
+    struct read_socket_data_s *rd=&sock->rd;
+    struct ssh_connection_s *sshc=(struct ssh_connection_s *) ptr;
+    struct ssh_session_s *session=get_ssh_connection_session(sshc);
+    struct ssh_receive_s *r=&sshc->receive;
+    unsigned int errcode=0;
     struct ssh_packet_s packet;
-    unsigned int error=0;
-    struct ssh_decryptor_s *decryptor=NULL;
-    unsigned int cipher_headersize=0;
-    char cipher_header[32]; /* 32 is a safe bet, the actual header size is less than that */
 
-    logoutput("read_ssh_buffer_packet: tid %i read %i", gettid(), receive->read);
+    memset(&packet, 0, sizeof(struct ssh_packet_s));
 
-    pthread_mutex_lock(&receive->mutex);
+    while (errcode==0) {
+        struct system_timespec_s expire;
+        struct ssh_decryptor_s *decryptor=get_decryptor(r, &errcode);
+        unsigned int headersize=decryptor->cipher_headersize;
+        char tmpheader[headersize];
 
-    if (receive->read==0 || (receive->status & SSH_RECEIVE_STATUS_WAIT) || receive->threads>1) {
+        get_ssh_connection_expire_init(sshc, &expire);
 
-	pthread_mutex_unlock(&receive->mutex);
-	return;
+        signal_lock_flag(&r->signal, &r->status, SSH_RECEIVE_STATUS_THREAD);
 
-    }
+        if ((r->threads>0) || (sock->rd.pos==0)) {
 
-    decryptor=get_decryptor_unlock(receive, &error);
-    cipher_headersize=decryptor->cipher_headersize;
-    receive->status|=((receive->read < cipher_headersize) ? SSH_RECEIVE_STATUS_WAITING1 : 0);
-    receive->threads++;
+            signal_unlock_flag(&r->signal, &r->status, SSH_RECEIVE_STATUS_THREAD);
+            (* decryptor->common.queue)(&decryptor->common);
+            return;
 
-    /* enough data in buffer and is the buffer free to process a packet ? */
+        }
 
-    while (receive->status & (SSH_RECEIVE_STATUS_WAITING1 | SSH_RECEIVE_STATUS_PACKET)) {
+        r->threads++;
+        disable_ssh_socket_read_data(sock);
+        signal_unlock_flag(&r->signal, &r->status, SSH_RECEIVE_STATUS_THREAD);
 
-	int result=pthread_cond_wait(&receive->cond, &receive->mutex);
+        /* there must be at least a headersize of bytes available to read the length/first block
+            if there is not wait for it */
 
-	if (receive->read >= cipher_headersize && (receive->status & SSH_RECEIVE_STATUS_WAITING1)) {
+        logoutput_debug("cb_read_socket_ssh: tid %u headersize %u received %u", gettid(), headersize, sock->rd.pos);
 
-	    receive->status -= SSH_RECEIVE_STATUS_WAITING1;
+        signal_lock(sock->signal);
 
-	} else if (receive->read==0) {
+        while (sock->rd.pos < headersize) {
 
-	    if (receive->status & SSH_RECEIVE_STATUS_WAITING1) receive->status -= SSH_RECEIVE_STATUS_WAITING1;
-	    receive->threads--;
-	    pthread_mutex_unlock(&receive->mutex);
-	    goto finish;
+            int result=signal_condtimedwait(sock->signal, &expire);
 
-	} else if (result>0 || (receive->status & SSH_RECEIVE_STATUS_DISCONNECT)) {
+            if (result==ETIMEDOUT) {
 
-	    pthread_mutex_unlock(&receive->mutex);
-	    goto disconnect;
+                signal_unlock(sock->signal);
+                errcode=ETIMEDOUT;
+                signal_unset_flag(&r->signal, &r->status, SSH_RECEIVE_STATUS_THREAD);
+                goto dooutbreak;
 
-	}
+            } else if (sock->status & (SOCKET_STATUS_ERROR | SOCKET_STATUS_CLOSING)) {
 
-    }
+                signal_unlock(sock->signal);
+                errcode=ENOTCONN;
+                signal_unset_flag(&r->signal, &r->status, SSH_RECEIVE_STATUS_THREAD);
+                goto dooutbreak;
 
-    /* there is no other thread creating and reading a packet from the buffer */
+            }
 
-    receive->status |= SSH_RECEIVE_STATUS_PACKET;
-    pthread_mutex_unlock(&receive->mutex);
+        }
 
-    readpacket:
+        signal_unlock(sock->signal);
 
-    packet.len=0;
-    packet.size=0;
-    packet.padding=0;
-    packet.error=0;
-    packet.sequence=receive->sequence_number;
-    packet.type=0;
-    packet.decrypted=0;
-    packet.buffer=receive->buffer;
+        readpacket:
 
-    receive->sequence_number++; /* move this ? */
+        packet.len=0;
+        packet.size=0;
+        packet.padding=0;
+        packet.error=0;
+        packet.type=0;
+        packet.decrypted=0;
+        packet.sequence=r->sequence_number;
+        packet.buffer=sock->rd.buffer;
 
-    /* decrypt first block to know the packet length
-	don't decrypt inplace cause it's possible that hmac is verified over the encrypted text
-	in stead store the decrypted header in a seperate buffer
-	and copy that buffer later back when the whole packet is decrypted */
+        r->sequence_number++;
+        logoutput_debug("cb_read_socket_ssh: tid %u seq %u rawdata pos %u", gettid(), packet.sequence, sock->rd.pos);
 
-    if ((* decryptor->decrypt_length)(decryptor, &packet, cipher_header, cipher_headersize)==0) {
+        /* decrypt first block to get the packet length
+	    don't decrypt inplace cause it's possible that hmac is verified over the encrypted text
+	    in stead store the decrypted header in a seperate temporary buffer
+	    and copy that buffer later back when the whole packet is decrypted */
 
-	packet.len=get_uint32(cipher_header);
-	packet.size=packet.len + 4 + decryptor->hmac_maclen; /* total number of bytes to expect */
+        if ((* decryptor->decrypt_length)(decryptor, &packet, tmpheader, headersize)==0) {
+	    unsigned int msgsize=0;
 
-	if (packet.size > receive->size) {
+	    packet.len=get_uint32(tmpheader);
+	    msgsize=packet.len + 4 + decryptor->hmac_maclen; /* total number of bytes to expect of binary ssh message ... here some check for range ? */
 
-	    logoutput_warning("read_ssh_buffer_packet: tid %i packet size %i too big (max %i)", gettid(), packet.size, receive->size);
-	    pthread_mutex_lock(&receive->mutex);
-	    receive->status -= SSH_RECEIVE_STATUS_PACKET;
-	    receive->threads--;
-	    goto disconnect;
+            if (msgsize >= session->config.max_packet_size) {
 
-	} else {
-	    char data[packet.size];
+                logoutput_debug("cb_read_socket_ssh: tid %u seq %u packet size %u received %u ... packet size (%u) too large (hmaclen %u)", gettid(), packet.sequence, msgsize, sock->rd.pos, packet.len, decryptor->hmac_maclen);
+                errcode=EIO;
+                signal_unset_flag(&r->signal, &r->status, SSH_RECEIVE_STATUS_THREAD);
+                goto dooutbreak;
 
-	    pthread_mutex_lock(&receive->mutex);
+            }
 
-	    logoutput_debug("read_ssh_buffer_packet: tid %i packet size %i, received %i", gettid(), packet.size, receive->read);
+	    logoutput_debug("cb_read_socket_ssh: tid %u seq %u packet size %u received %u (hmaclen %u)", gettid(), packet.sequence, msgsize, sock->rd.pos, decryptor->hmac_maclen);
+            char data[msgsize];
 
-	    while (receive->read < packet.size) {
+	    /* if not read enough wait for more ... at least size bytes have to in the buffer */
 
-		/* length of the packet is bigger than size of received data
-		    wait for data to arrive: signalled when data is received */
+            signal_lock(sock->signal);
 
-		receive->status |= SSH_RECEIVE_STATUS_WAITING2;
+            r->msgsize=msgsize;
 
-		int result=pthread_cond_wait(&receive->cond, &receive->mutex);
+            while (sock->rd.pos < msgsize) {
 
-		if (receive->read >= packet.size) {
+                int result=signal_condtimedwait(sock->signal, &expire);
 
-		    receive->status -= SSH_RECEIVE_STATUS_WAITING2;
-		    break;
+                if (result==ETIMEDOUT) {
 
-		} else if (result>0 || (receive->status & SSH_RECEIVE_STATUS_DISCONNECT)) {
+                    signal_unlock(sock->signal);
+                    errcode=ETIMEDOUT;
+                    signal_unset_flag(&r->signal, &r->status, SSH_RECEIVE_STATUS_THREAD);
+                    goto dooutbreak;
 
-		    receive->status -= (SSH_RECEIVE_STATUS_PACKET | SSH_RECEIVE_STATUS_WAITING2);
-		    receive->threads--;
-		    pthread_mutex_unlock(&receive->mutex);
-		    goto disconnect;
+                } else if (sock->status & (SOCKET_STATUS_ERROR | SOCKET_STATUS_CLOSING)) {
 
-		}
+                    signal_unlock(sock->signal);
+                    errcode=ENOTCONN;
+                    signal_unset_flag(&r->signal, &r->status, SSH_RECEIVE_STATUS_THREAD);
+                    goto dooutbreak;
 
-	    }
+                }
 
-	    /* copy encrypted data and mac to packet data and reset receive read cause ready with buffer */
+            }
 
-	    memcpy(data, receive->buffer, packet.size);
-	    receive->read-=packet.size;
-	    receive->status -= SSH_RECEIVE_STATUS_PACKET;
-	    receive->threads--;
+            memcpy(data, sock->rd.buffer, msgsize);
+            packet.buffer=data;
 
-	    if (receive->read > 0) {
+            r->msgsize=0;
 
-		/* stil data in buffer */
+            if (sock->rd.pos == msgsize) {
 
-		logoutput_debug("read_ssh_buffer_packet: tid %i still %i bytes in buffer", gettid(), receive->read);
+                sock->rd.pos=0;
 
-		memmove(receive->buffer, (char *) (receive->buffer + packet.size), receive->read);
+            } else {
+                char *buffer=sock->rd.buffer;
+                unsigned int bytesleft=(sock->rd.pos - msgsize);
 
-		if ((receive->status & SSH_RECEIVE_STATUS_SERIAL)==0) {
+                /* more data received than the current message */
 
-		    if (receive->threads==0) read_ssh_connection_buffer(connection);
+                logoutput_debug("cb_read_socket_ssh: tid %u seq %u packet size %u bytesleft %u", gettid(), packet.sequence, msgsize, bytesleft);
+                memmove(buffer, &buffer[msgsize], bytesleft);
+                sock->rd.pos=bytesleft;
 
-		}
+            }
 
-	    }
+            signal_unlock(sock->signal);
+            enable_ssh_socket_read_data(sock);
+            r->threads--;
+            signal_unset_flag(&r->signal, &r->status, SSH_RECEIVE_STATUS_THREAD);
 
-	    pthread_cond_broadcast(&receive->cond);
-	    pthread_mutex_unlock(&receive->mutex);
-	    packet.buffer=data;
+            (* sshc->pre_process)(sshc);
 
-	    /* do mac/tag checking when "before decrypting" is used: use the encrypted data
-		in other cases ("do mac checking after decryption") this does nothing */
+	    /* now enough data to call it a packet ... */
+
+	    /* do mac checking when "before decrypting" is used: use the encrypted data
+	    in other cases ("do mac checking after decryption") this does nothing
+	    the "after decryption" mode is the default, and described in
+	    RFC 4253 The Secure Shell (SSH) Transport Layer Transport Protocol 6.4 Data Intergrity */
+
+            errcode=EPROTO;
 
 	    if ((* decryptor->verify_hmac_pre)(decryptor, &packet)==0) {
 
-		memcpy(data, cipher_header, cipher_headersize);
+	        memcpy(packet.buffer, tmpheader, headersize);
 
-		/* decrypt rest */
+	        /* decrypt rest */
 
-		if ((* decryptor->decrypt_packet)(decryptor, &packet)==0) {
+	        if ((* decryptor->decrypt_packet)(decryptor, &packet)==0) {
 
 		    packet.padding=(unsigned char) *(packet.buffer + 4);
 
 		    /* do mac checking when "after decryption" is used */
 
 		    if ((* decryptor->verify_hmac_post)(decryptor, &packet)==0) {
+		        struct ssh_decompressor_s *decompressor=NULL;
+		        struct ssh_payload_s *payload=NULL;
 
-			/* ready with decryptor */
-			(* decryptor->queue)(decryptor);
-			decryptor=NULL;
+		        /* ready with decryptor */
+		        (* decryptor->common.queue)(&decryptor->common);
+		        decryptor=NULL;
+		        (* sshc->post_process_01)(sshc);
 
-			(* receive->process_ssh_packet)(connection, &packet);
+                        decompressor=get_decompressor(r, &errcode);
+                        payload=(* decompressor->decompress_packet)(decompressor, &packet, &errcode);
+                        packet.buffer=NULL;
 
-			pthread_mutex_lock(&receive->mutex);
+                        if (payload) {
+                            unsigned char type=payload->type;
 
-			if (receive->status & SSH_RECEIVE_STATUS_SERIAL) {
-			    struct system_timespec_s expire=SYSTEM_TIME_INIT;
+                            process_cb_ssh_payload(sshc, payload);
+                            (* decompressor->common.queue)(&decompressor->common);
+		            errcode=(* sshc->post_process_02)(sshc, type);
 
-			    get_ssh_connection_expire_init(connection, &expire);
+                        } else {
 
-			    /* after receiving the newkeys message wait for the kexinit phase to end:
-				that's when the new keys are ready to be used */
+                            logoutput_warning("cb_read_socket_ssh: unable to allocate payload");
+                            (* decompressor->common.queue)(&decompressor->common);
+                            if (errcode==0) errcode=ENOMEM;
 
-			    while ((receive->status & SSH_RECEIVE_STATUS_NEWKEYS) && (receive->status & SSH_RECEIVE_STATUS_KEXINIT)) {
-				struct timespec tmp={.tv_sec=expire.st_sec, .tv_nsec=expire.st_nsec};
-
-				/* wait for the calculation of the new keys before proceed */
-
-				int result=pthread_cond_timedwait(&receive->cond, &receive->mutex, &tmp);
-
-				if ((receive->status & SSH_RECEIVE_STATUS_DISCONNECT) || result==ETIMEDOUT) {
-
-				    pthread_mutex_unlock(&receive->mutex);
-				    goto disconnect;
-
-				}
-
-			    }
-
-			}
-
-			if (receive->read>0) {
-
-			    if (receive->threads==0) {
-
-				read_ssh_connection_buffer(connection);
-
-			    } else {
-
-				pthread_cond_broadcast(&receive->cond);
-
-			    }
-
-			}
-
-			pthread_mutex_unlock(&receive->mutex);
-
-		    } else {
-
-			logoutput_warning("read_ssh_buffer_packet: error verify mac post");
-			goto disconnect;
+                        }
 
 		    }
 
-		} else {
-
-		    logoutput_warning("read_ssh_buffer_packet: error decrypt packet");
-		    goto disconnect;
-
-		}
-
-	    } else {
-
-		logoutput_warning("read_ssh_buffer_packet: error verify mac pre");
-		goto disconnect;
+	        }
 
 	    }
 
-	}
+        }
 
-    } else {
-
-	logoutput_warning("read_ssh_buffer_packet: error decrypt header");
-	goto disconnect;
+        dooutbreak:
+        if (decryptor) (* decryptor->common.queue)(&decryptor->common);
 
     }
 
-    finish:
+    outcheck:
 
-    if (decryptor) (* decryptor->queue)(decryptor);
-    return;
+    if (errcode==EIO || errcode==ENOTCONN || errcode==ETIMEDOUT || errcode==ENOMEM) {
 
-    disconnect:
-
-    if (decryptor) (* decryptor->queue)(decryptor);
-    logoutput_warning("read_ssh_buffer_packet: ignoring received data");
-    disconnect_ssh_connection(connection);
-
-}
-
-static int setup_cb_greeter_finished(struct ssh_connection_s *connection, void *data)
-{
-    /* after greeter (=text) switch the reading of the buffer expecting packets */
-    set_ssh_receive_behaviour(connection, "session");
-    return 0;
-}
-
-/*
-    read the first data from server
-    this is the greeter
-    take in account the second ssh message can be attached
-*/
-
-static void read_ssh_buffer_greeter(void *ptr)
-{
-    struct ssh_connection_s *connection=(struct ssh_connection_s *) ptr;
-    struct ssh_receive_s *receive=&connection->receive;
-    struct ssh_setup_s *setup=&connection->setup;
-    int result=0;
-
-    pthread_mutex_lock(&receive->mutex);
-
-    if (receive->threads>0) {
-
-	pthread_mutex_unlock(&receive->mutex);
-	return;
+        logoutput_warning("cb_read_socket_ssh: tid %u ignoring received data errcode %u (%s)", gettid(), errcode, strerror(errcode));
+        disconnect_ssh_connection(sshc);
 
     }
 
-    receive->threads=1;
-    receive->status|=SSH_RECEIVE_STATUS_PACKET;
-    pthread_mutex_unlock(&receive->mutex);
-
-    /* when receiving the first data switch immediatly the function to process the incoming data */
-
-    result=read_server_greeter(connection);
-    if (result==0) change_ssh_connection_setup(connection, "transport", SSH_TRANSPORT_TYPE_GREETER, SSH_GREETER_FLAG_S2C, 0, setup_cb_greeter_finished, NULL);
-
-    /* first packet included? */
-
-    pthread_mutex_lock(&receive->mutex);
-
-    receive->threads=0;
-    receive->status-=SSH_RECEIVE_STATUS_PACKET;
-    if (result==0 && receive->read>0) read_ssh_connection_buffer(connection);
-
-    pthread_mutex_unlock(&receive->mutex);
-
-    if (result==-1) logoutput("read_ssh_buffer_greeter: failed to read server greeter");
-
-    return;
-
 }
 
-static void read_ssh_buffer_none(void *ptr)
+void set_ssh_receive_behaviour(struct ssh_connection_s *sshc, const char *phase)
 {
-    struct ssh_connection_s *connection=(struct ssh_connection_s *) ptr;
-    struct ssh_receive_s *receive=&connection->receive;
 
-    pthread_mutex_lock(&receive->mutex);
-    receive->read=0;
-    pthread_mutex_unlock(&receive->mutex);
+    logoutput_debug("set_ssh_receive_behaviour: set phase %s", phase);
 
-}
+    if ((strcmp(phase, "greeter")==0) || (strcmp(phase, "session")==0)) {
 
-void read_ssh_connection_buffer(struct ssh_connection_s *connection)
-{
-    struct ssh_receive_s *receive=&connection->receive;
-    // logoutput("read_ssh_connection_buffer: start thread");
-    work_workerthread(NULL, 0, receive->read_ssh_buffer, (void *) connection, NULL);
-}
-
-void set_ssh_receive_behaviour(struct ssh_connection_s *connection, const char *phase)
-{
-    struct ssh_receive_s *receive=&connection->receive;
-
-    logoutput("set_ssh_receive_behaviour: set phase %s", phase);
-
-    pthread_mutex_lock(&receive->mutex);
-
-    if (strcmp(phase, "init")==0) {
-
-	receive->status=SSH_RECEIVE_STATUS_INIT;
-
-    } else if (strcmp(phase, "greeter")==0) {
-
-	receive->read_ssh_buffer=read_ssh_buffer_greeter;
-
-    } else if (strcmp(phase, "session")==0) {
-
-	receive->read_ssh_buffer=read_ssh_buffer_packet;
-	receive->process_ssh_packet=process_ssh_packet_nodecompress;
+	sshc->pre_process=cb_post_read_header_ignore;
+	sshc->post_process_01=cb_pre_process_serial;
+	sshc->post_process_02=cb_post_process_ignore;
 
     } else if (strcmp(phase, "kexinit")==0) {
 
-	/* when doing kex go into serial mode */
-
-	receive->status |= SSH_RECEIVE_STATUS_SERIAL;
-	receive->status |= SSH_RECEIVE_STATUS_KEXINIT;
-	if (receive->status & SSH_RECEIVE_STATUS_NEWKEYS) receive->status -= SSH_RECEIVE_STATUS_NEWKEYS;
+	sshc->receive.status |= SSH_RECEIVE_STATUS_KEXINIT;
+	sshc->receive.status &= ~SSH_RECEIVE_STATUS_NEWKEYS;
+	get_current_time_system_time(&sshc->receive.kexinit);
+	sshc->pre_process=cb_post_read_header_ignore;
+	sshc->post_process_01=cb_pre_process_ignore;
+	sshc->post_process_02=cb_post_process_kex;
 
     } else if (strcmp(phase, "newkeys")==0) {
 
-	receive->status |= SSH_RECEIVE_STATUS_NEWKEYS;
-	get_current_time_system_time(&receive->newkeys);
-
-    } else if (strcmp(phase, "kexfinish")==0) {
-
-	if (receive->status & SSH_RECEIVE_STATUS_KEXINIT) receive->status -= SSH_RECEIVE_STATUS_KEXINIT;
-	if (receive->status & SSH_RECEIVE_STATUS_SERIAL) receive->status -= SSH_RECEIVE_STATUS_SERIAL;
-
-    } else if (strcmp(phase, "none")==0) {
-
-	receive->read_ssh_buffer=read_ssh_buffer_none;
-
-    } else if (strcmp(phase, "error")==0) {
-
-	receive->status|=SSH_RECEIVE_STATUS_ERROR;
-
-    } else if (strcmp(phase, "disconnect")==0) {
-
-	receive->status|=SSH_RECEIVE_STATUS_DISCONNECT;
+	sshc->receive.status &= ~SSH_RECEIVE_STATUS_KEXINIT;
+	sshc->receive.status |= SSH_RECEIVE_STATUS_NEWKEYS;
+	get_current_time_system_time(&sshc->receive.newkeys);
 
     }
-
-    pthread_cond_broadcast(&receive->cond);
-    pthread_mutex_unlock(&receive->mutex);
 
 }

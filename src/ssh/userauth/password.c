@@ -62,7 +62,6 @@ int send_userauth_password_request(struct ssh_connection_s *connection, struct s
     struct ssh_auth_s *auth=&setup->phase.service.type.auth;
     struct pw_list_s *list=NULL;
     int result=-1;
-    unsigned int seq=0;
 
     logoutput("ssh_auth_password");
 
@@ -72,10 +71,10 @@ int send_userauth_password_request(struct ssh_connection_s *connection, struct s
 
 	logoutput("ssh_auth_password: send user and password for %s (scope: %s)", list->pword.user, get_credentials_scope(list->type));
 
-	if (send_userauth_password_message(connection, list->pword.user, list->pword.pw, service, &seq)>0) {
+	if (send_userauth_password_message(connection, list->pword.user, list->pword.pw, service)>0) {
 	    struct ssh_payload_s *payload=NULL;
 
-	    payload=receive_message_common(connection, select_userauth_reply, NULL, NULL);
+	    payload=receive_message_common(connection, select_userauth_reply, NULL);
 	    if (payload==NULL) goto out;
 
 	    if (payload->type == SSH_MSG_USERAUTH_SUCCESS) {

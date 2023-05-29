@@ -28,7 +28,7 @@
 #include "ssh-send.h"
 #include "ssh-utils.h"
 
-int write_socket(struct ssh_connection_s *connection, struct ssh_packet_s *packet, unsigned int *error)
+int write_ssh_socket(struct ssh_connection_s *connection, struct ssh_packet_s *packet, unsigned int *error)
 {
     struct osns_socket_s *sock=&connection->connection.sock;
     ssize_t written=0;
@@ -37,9 +37,8 @@ int write_socket(struct ssh_connection_s *connection, struct ssh_packet_s *packe
 
     writesocket:
 
-    logoutput("write_socket: seq %i len %i", packet->sequence, left);
-
     written=(* sock->sops.connection.send)(sock, pos, left, 0);
+    logoutput_debug("write_ssh_socket: seq %i len %i written %i", packet->sequence, left, written);
 
     if (written==-1) {
 

@@ -31,7 +31,6 @@
 #include "ssh-send.h"
 #include "ssh-keyexchange.h"
 #include "ssh-extensions.h"
-#include "ssh-signal.h"
 
 /* various callbacks for SSH transport */
 
@@ -111,26 +110,31 @@ static void receive_msg_disconnect(struct ssh_connection_s *connection, struct s
 static void receive_msg_ignore(struct ssh_connection_s *c, struct ssh_payload_s *payload)
 {
     free_payload(&payload);
+    logoutput_debug("receive_msg_ignore: seq %u", payload->sequence);
 }
 
-/* not implemented */
+/* reply to a request which is not implemented
+    byte		SSH_MSG_UNIMPLEMENTED
+    uint32		sequence number of rejected message
+*/
 
 static void receive_msg_unimplemented(struct ssh_connection_s *connection, struct ssh_payload_s *payload)
 {
 
     if (payload->len >= 5) {
-	struct ssh_signal_s *signal=&connection->receive.signal;
+	struct ssh_receive_s *receive=&connection->receive;
+	struct shared_signal_s *signal=&receive->signal;
 	unsigned int sequence=get_uint32(&payload->buffer[1]);
 
 	logoutput_info("receive_msg_unimplemented: received a unimplemented message for number %i", sequence);
 
 	/* signal any waiting thread */
 
-	ssh_signal_lock(signal);
-	signal->sequence_number_error=sequence;
-	signal->error=EOPNOTSUPP;
-	ssh_signal_broadcast(signal);
-	ssh_signal_unlock(signal);
+	signal_lock(signal);
+	receive->sequence_error.sequence_number_error=sequence;
+	receive->sequence_error.errcode=EOPNOTSUPP;
+	signal_broadcast(signal);
+	signal_unlock(signal);
 
 	free_payload(&payload);
 	payload=NULL;
@@ -190,27 +194,29 @@ static void receive_msg_debug(struct ssh_connection_s *connection, struct ssh_pa
 
 /* service request */
 
-static void receive_msg_service_request(struct ssh_connection_s *connection, struct ssh_payload_s *payload)
+static void receive_msg_service_request(struct ssh_connection_s *sshc, struct ssh_payload_s *payload)
 {
-    struct ssh_session_s *session=get_ssh_connection_session(connection);
+    struct ssh_session_s *session=get_ssh_connection_session(sshc);
 
     if (session->flags & SSH_SESSION_FLAG_SERVER) {
+	struct shared_signal_s *signal=sshc->setup.signal;
 
-	signal_lock(connection->setup.signal);
+	signal_lock(signal);
 
-	if (connection->setup.flags & SSH_SETUP_FLAG_DISCONNECT) {
+	if (sshc->setup.flags & SSH_SETUP_FLAG_DISCONNECT) {
 
+            signal_unlock(signal);
 	    free_payload(&payload);
 	    payload=NULL;
 
-	} else if (connection->setup.flags & SSH_SETUP_FLAG_TRANSPORT) {
+	} else if (sshc->setup.flags & SSH_SETUP_FLAG_TRANSPORT) {
 
-	    queue_ssh_payload_locked(&connection->setup.queue, payload);
+            signal_unlock(signal);
+	    queue_ssh_payload(&sshc->setup.queue, payload);
+	    queue_ssh_broadcast(&sshc->setup.queue);
 	    payload=NULL;
 
 	}
-
-	signal_unlock(connection->setup.signal);
 
     } else {
 
@@ -218,7 +224,7 @@ static void receive_msg_service_request(struct ssh_connection_s *connection, str
 
 	logoutput_info("receive_msg_service_request: error: received a service request from server....");
 	free_payload(&payload);
-	disconnect_ssh_connection(connection);
+	disconnect_ssh_connection(sshc);
 
     }
 
@@ -228,23 +234,26 @@ static void receive_msg_service_request(struct ssh_connection_s *connection, str
 
 static void receive_msg_service_accept(struct ssh_connection_s *connection, struct ssh_payload_s *payload)
 {
+    struct shared_signal_s *signal=connection->setup.signal;
+
     logoutput("receive_msg_service_accept");
 
-    signal_lock(connection->setup.signal);
+    signal_lock(signal);
 
     if (connection->setup.flags & SSH_SETUP_FLAG_DISCONNECT) {
 
+        signal_unlock(signal);
 	free_payload(&payload);
 	payload=NULL;
 
     } else if (connection->setup.flags & SSH_SETUP_FLAG_TRANSPORT) {
 
-	queue_ssh_payload_locked(&connection->setup.queue, payload);
+        signal_unlock(signal);
+	queue_ssh_payload(&connection->setup.queue, payload);
+	queue_ssh_broadcast(&connection->setup.queue);
 	payload=NULL;
 
     }
-
-    signal_unlock(connection->setup.signal);
 
     if (payload) {
 
@@ -257,10 +266,11 @@ static void receive_msg_service_accept(struct ssh_connection_s *connection, stru
 
 static void receive_msg_ext_info(struct ssh_connection_s *connection, struct ssh_payload_s *payload)
 {
+    struct shared_signal_s *signal=connection->setup.signal;
 
     logoutput("receive_msg_ext_info");
 
-    signal_lock(connection->setup.signal);
+    signal_lock(signal);
 
     if (connection->setup.flags & SSH_SETUP_FLAG_DISCONNECT) {
 
@@ -269,7 +279,7 @@ static void receive_msg_ext_info(struct ssh_connection_s *connection, struct ssh
 
     }
 
-    signal_unlock(connection->setup.signal);
+    signal_unlock(signal);
 
     if (payload) {
 
@@ -292,20 +302,22 @@ static void receive_msg_ext_info(struct ssh_connection_s *connection, struct ssh
     to initiate the rekeyexchange by the server
 */
 
-static void receive_msg_kexinit(struct ssh_connection_s *connection, struct ssh_payload_s *payload)
+static void receive_msg_kexinit(struct ssh_connection_s *sshc, struct ssh_payload_s *payload)
 {
-    struct ssh_setup_s *setup=&connection->setup;
+    struct ssh_setup_s *setup=&sshc->setup;
+    struct shared_signal_s *signal=setup->signal;
     unsigned int error=0;
     int result=-1;
 
     /* start (re)exchange. See: https://tools.ietf.org/html/rfc4253#section-9 */
 
-    logoutput("receive_msg_kexinit");
+    logoutput_debug("receive_msg_kexinit: setup status %u", setup->status);
 
-    signal_lock(setup->signal);
+    signal_lock(signal);
 
     if (setup->flags & SSH_SETUP_FLAG_DISCONNECT)  {
 
+        signal_unlock(signal);
 	free_payload(&payload);
 	payload=NULL;
 
@@ -318,15 +330,21 @@ static void receive_msg_kexinit(struct ssh_connection_s *connection, struct ssh_
 
 	    if ((setup->phase.transport.status==SSH_TRANSPORT_TYPE_KEX) && (setup->phase.transport.type.kex.flags & SSH_KEX_FLAG_KEXINIT_S2C)) {
 
-		signal_unlock(setup->signal);
+		signal_unlock(signal);
 		goto disconnect;
 
 	    }
 
 	    /* transport is being setup: in kex or greeter, queue it anyway */
 
-	    queue_ssh_payload_locked(&setup->queue, payload);
+	    logoutput_debug("receive_msg_kexinit: queue");
+	    signal_unlock(signal);
+
+	    queue_ssh_payload(&setup->queue, payload);
+	    queue_ssh_broadcast(&setup->queue);
 	    payload=NULL;
+
+	    return;
 
 	}
 
@@ -339,70 +357,54 @@ static void receive_msg_kexinit(struct ssh_connection_s *connection, struct ssh_
 
 	    setup->thread=pthread_self();
 	    setup->flags |= SSH_SETUP_FLAG_SETUPTHREAD;
-	    init_ssh_connection_setup(connection, "transport", SSH_TRANSPORT_TYPE_KEX);
-	    queue_ssh_payload_locked(&setup->queue, payload);
+	    signal_unlock(signal);
+	    init_ssh_connection_setup(sshc, "transport", SSH_TRANSPORT_TYPE_KEX);
+	    queue_ssh_payload(&setup->queue, payload);
 	    payload=NULL;
-	    signal_broadcast(setup->signal);
-	    signal_unlock(setup->signal);
 
-	    result=key_exchange(connection);
+            queue_ssh_broadcast(&setup->queue);
+
+	    result=key_exchange(sshc);
 	    logoutput("receive_msg_kexinit: rekey exchange %s", (result==0) ? "success" : "failed");
 
-	    finish_ssh_connection_setup(connection, "transport", SSH_TRANSPORT_TYPE_KEX);
-	    finish_ssh_connection_setup(connection, "transport", 0);
-	    finish_ssh_connection_setup(connection, "setup", 0);
+	    finish_ssh_connection_setup(sshc, "transport", SSH_TRANSPORT_TYPE_KEX);
+	    finish_ssh_connection_setup(sshc, "transport", 0);
+	    finish_ssh_connection_setup(sshc, "setup", 0);
 	    if (result==-1) goto disconnect;
 
 	    return;
 
 	} else {
 
+            signal_unlock(signal);
     	    queue_ssh_payload(&setup->queue, payload);
+    	    queue_ssh_broadcast(&setup->queue);
 	    payload=NULL;
 
 	}
 
     }
 
-    signal_unlock(setup->signal);
     if (payload) free_payload(&payload);
     return;
 
     disconnect:
 
     if (payload) free_payload(&payload);
-    disconnect_ssh_connection(connection);
+    disconnect_ssh_connection(sshc);
 
 }
 
-static int setup_cb_newkeys(struct ssh_connection_s *connection, void *data)
-{
-    set_ssh_receive_behaviour(connection, "newkeys");
-    return 0;
-}
-
-static void receive_msg_newkeys(struct ssh_connection_s *connection, struct ssh_payload_s *payload)
-{
-    logoutput("receive_msg_newkeys");
-
-    free_payload(&payload);
-    payload=NULL;
-
-    if (change_ssh_connection_setup(connection, "transport", SSH_TRANSPORT_TYPE_KEX, SSH_KEX_FLAG_NEWKEYS_S2C, 0, setup_cb_newkeys, NULL)==-1)
-	disconnect_ssh_connection(connection);
-
-}
-
-static void receive_msg_kexdh_reply(struct ssh_connection_s *connection, struct ssh_payload_s *payload)
+static void receive_msg_queue_shared(struct ssh_connection_s *connection, struct ssh_payload_s *payload)
 {
     struct ssh_setup_s *setup=&connection->setup;
+    struct shared_signal_s *signal=setup->signal;
 
-    logoutput("receive_msg_kexdh_reply");
-
-    signal_lock(setup->signal);
+    signal_lock(signal);
 
     if (setup->flags & SSH_SETUP_FLAG_DISCONNECT) {
 
+        signal_unlock(signal);
 	free_payload(&payload);
 	payload=NULL;
 
@@ -410,16 +412,18 @@ static void receive_msg_kexdh_reply(struct ssh_connection_s *connection, struct 
 
 	if (setup->phase.transport.status==SSH_TRANSPORT_TYPE_KEX) {
 
-	    /* keyexchange in setup or connection phase */
-
-	    queue_ssh_payload_locked(&setup->queue, payload);
+            signal_unlock(signal);
+	    queue_ssh_payload(&setup->queue, payload);
+	    queue_ssh_broadcast(&setup->queue);
 	    payload=NULL;
 
-	}
+	} else {
+
+            signal_unlock(signal);
+
+        }
 
     }
-
-    signal_unlock(setup->signal);
 
     if (payload) {
 
@@ -428,6 +432,27 @@ static void receive_msg_kexdh_reply(struct ssh_connection_s *connection, struct 
 
     }
 
+}
+
+static void receive_msg_newkeys(struct ssh_connection_s *connection, struct ssh_payload_s *payload)
+{
+    logoutput_debug("receive_msg_newkeys");
+    receive_msg_queue_shared(connection, payload);
+}
+
+/*
+    free_payload(&payload);
+    payload=NULL;
+
+    if (change_ssh_connection_setup(connection, "transport", SSH_TRANSPORT_TYPE_KEX, SSH_KEX_FLAG_NEWKEYS_S2C, 0, setup_cb_newkeys, NULL)==-1)
+	disconnect_ssh_connection(connection);
+*/
+
+
+static void receive_msg_kexdh_reply(struct ssh_connection_s *connection, struct ssh_payload_s *payload)
+{
+    logoutput_debug("receive_msg_kexdh_reply");
+    receive_msg_queue_shared(connection, payload);
 }
 
 /*
@@ -441,6 +466,7 @@ static void receive_msg_kexdh_reply(struct ssh_connection_s *connection, struct 
 
 static void receive_msg_global_request(struct ssh_connection_s *connection, struct ssh_payload_s *payload)
 {
+    struct shared_signal_s *signal=connection->setup.signal;
     struct ssh_string_s name=SSH_STRING_INIT;
 
     if (read_ssh_string(&payload->buffer[1], payload->len - 1, &name) > 3) {
@@ -453,40 +479,38 @@ static void receive_msg_global_request(struct ssh_connection_s *connection, stru
 
     }
 
-    signal_lock(connection->setup.signal);
+    signal_lock(signal);
 
     if (connection->setup.flags & SSH_SETUP_FLAG_DISCONNECT) {
 
+        signal_unlock(signal);
 	free_payload(&payload);
 
     } else if (connection->setup.flags & SSH_SETUP_FLAG_SERVICE_CONNECTION) {
 	struct payload_queue_s *queue = &connection->setup.queue;
 
-	queue_ssh_payload_locked(queue, payload);
+        signal_unlock(signal);
+	queue_ssh_payload(queue, payload);
+	queue_ssh_broadcast(queue);
 	payload=NULL;
 
     }
 
-    signal_unlock(connection->setup.signal);
-
-    if (payload) {
-
-	logoutput("receive_msg_global_request: disconnect");
-	free_payload(&payload);
-	disconnect_ssh_connection(connection);
-
-    }
+    if (payload) free_payload(&payload);
 
 }
 
 static void receive_msg_request_common(struct ssh_connection_s *connection, struct ssh_payload_s *payload)
 {
+    struct shared_signal_s *signal=connection->setup.signal;
+
     logoutput("receive_msg_request_common");
 
-    signal_lock(connection->setup.signal);
+    signal_lock(signal);
 
     if (connection->setup.flags & SSH_SETUP_FLAG_DISCONNECT) {
 
+        signal_unlock(signal);
 	free_payload(&payload);
 
     } else if (connection->setup.flags & SSH_SETUP_FLAG_SERVICE_CONNECTION) {
@@ -494,15 +518,14 @@ static void receive_msg_request_common(struct ssh_connection_s *connection, stru
 
 	/* queue it in the general channel independant queue */
 
-	queue_ssh_payload_locked(queue, payload);
+        signal_unlock(signal);
+	queue_ssh_payload(queue, payload);
+	queue_ssh_broadcast(queue);
 	payload=NULL;
 
     }
 
     connection->flags &= ~SSH_CONNECTION_FLAG_GLOBAL_REQUEST;
-
-    signal_broadcast(connection->setup.signal);
-    signal_unlock(connection->setup.signal);
 
     if (payload) {
 

@@ -26,17 +26,17 @@
 
 #include "receive.h"
 #include "request.h"
+#include "handle.h"
 
 #define FUSE_HANDLE_HASHTABLE_SIZE			73
 static struct list_header_s hashtable[FUSE_HANDLE_HASHTABLE_SIZE];
-static pthread_mutex_t mutex=PTHREAD_MUTEX_INITIALIZER;
 
 void init_fuse_handle_hashtable()
 {
     for (unsigned int i=0; i<FUSE_HANDLE_HASHTABLE_SIZE; i++) init_list_header(&hashtable[i], SIMPLE_LIST_TYPE_EMPTY, NULL);
 }
 
-struct fuse_handle_s *get_fuse_handle(struct service_context_s *ctx, uint64_t ino)
+struct fuse_handle_s *get_fuse_handle(struct service_context_s *ctx, uint64_t ino, unsigned int flag)
 {
     unsigned int hashvalue=(ino % FUSE_HANDLE_HASHTABLE_SIZE);
     struct list_header_s *header=&hashtable[hashvalue];
@@ -44,17 +44,24 @@ struct fuse_handle_s *get_fuse_handle(struct service_context_s *ctx, uint64_t in
     struct fuse_handle_s *handle=NULL;
 
     read_lock_list_header(header);
-    list=get_list_head(header, 0);
+    list=get_list_head(header);
 
     while (list) {
 
 	handle=(struct fuse_handle_s *)((char *)list - offsetof(struct fuse_handle_s, list));
 
-	if (handle->ino==ino && handle->ctx==ctx && (handle->flags & FUSE_HANDLE_FLAG_RELEASE)==0) {
+	if (handle->ino==ino && (get_root_context(handle->ctx)==ctx)) {
 
-	    pthread_mutex_lock(&mutex);
-	    handle->refcount++;
-	    pthread_mutex_unlock(&mutex);
+	    if ((handle->flags & FUSE_HANDLE_FLAG_RELEASE)==0 && (handle->flags & flag)) {
+
+		handle->refcount++;
+
+	    } else {
+
+		handle=NULL;
+
+	    }
+
 	    break;
 
 	}
@@ -68,20 +75,26 @@ struct fuse_handle_s *get_fuse_handle(struct service_context_s *ctx, uint64_t in
     return handle;
 }
 
+void use_fuse_handle(struct fuse_handle_s *handle)
+{
+    unsigned int hashvalue=(handle->ino % FUSE_HANDLE_HASHTABLE_SIZE);
+    struct list_header_s *header=&hashtable[hashvalue];
+
+    write_lock_list_header(header);
+    handle->refcount++;
+    write_unlock_list_header(header);
+}
+
 void post_fuse_handle(struct fuse_handle_s *handle, unsigned int flag)
 {
     unsigned int hashvalue=(handle->ino % FUSE_HANDLE_HASHTABLE_SIZE);
     struct list_header_s *header=&hashtable[hashvalue];
     unsigned char dofree=0;
 
-    flag &= FUSE_HANDLE_FLAG_RELEASE;
-
     write_lock_list_header(header);
 
-    pthread_mutex_lock(&mutex);
-    handle->refcount--;
+    if (handle->refcount>0) handle->refcount--;
     handle->flags |= flag;
-    pthread_mutex_unlock(&mutex);
 
     if ((handle->flags & FUSE_HANDLE_FLAG_RELEASE) && (handle->refcount==0)) {
 
@@ -91,13 +104,104 @@ void post_fuse_handle(struct fuse_handle_s *handle, unsigned int flag)
     }
 
     write_unlock_list_header(header);
-    if (dofree) free(handle);
+
+    if (dofree) {
+
+	(* handle->cb.release)(handle);
+	if (handle->flags & FUSE_HANDLE_FLAG_ALLOC) free(handle);
+
+    }
 
 }
 
 void release_fuse_handle(struct fuse_handle_s *handle)
 {
     post_fuse_handle(handle, FUSE_HANDLE_FLAG_RELEASE);
+}
+
+/* shared cb for both file- and directory handles */
+
+/*  static int cb_fgetsetstat_default(struct fuse_handle_s *h, struct fuse_request_s *r, unsigned int mask, struct system_stat_s *stat)
+{
+    return -EOPNOTSUPP;
+}
+
+static int cb_fsyncflush_default(struct fuse_handle_s *h, struct fuse_request_s *r, unsigned int flags)
+{
+    return -EOPNOTSUPP;
+} */
+
+static void cb_release_default(struct fuse_handle_s *h)
+{
+}
+/* cb for a directory handle */
+
+/*static int cb_fstatat_default(struct fuse_handle_s *h, struct fuse_request_s *r, struct fuse_path_s *fpath, unsigned int mask, struct system_stat_s *stat, unsigned int flags)
+{
+    return -EOPNOTSUPP;
+}
+
+static int cb_unlinkat_default(struct fuse_handle_s *h, struct fuse_request_s *r, struct fuse_path_s *fpath, unsigned int flags)
+{
+    return -EOPNOTSUPP;
+}
+
+static int cb_readlinkat_default(struct fuse_handle_s *h, struct fuse_request_s *r, struct fuse_path_s *fpath, struct fs_location_path_s *target)
+{
+    return -EOPNOTSUPP;
+}*/
+
+/* cb for a file handle */
+
+/*static int cb_pread_default(struct fuse_handle_s *h, struct fuse_request_s *r, char *buffer, unsigned int size, off_t off)
+{
+    return -EOPNOTSUPP;
+}
+
+static int cb_pwrite_default(struct fuse_handle_s *h, struct fuse_request_s *r, char *buffer, unsigned int size, off_t off)
+{
+    return -EOPNOTSUPP;
+}
+
+static int cb_lseek_default(struct fuse_handle_s *h, struct fuse_request_s *r, off_t off, int whence)
+{
+    return -EOPNOTSUPP;
+} */
+
+void init_fuse_handle(struct fuse_handle_s *handle, unsigned int type, char *name, unsigned int len)
+{
+
+    handle->ctx=NULL;
+    handle->ino=0;
+    init_list_element(&handle->list, NULL);
+    handle->refcount=1; /* the creator is also the user */
+    handle->fh=0;
+    handle->len=len;
+    memcpy(handle->name, name, len);
+
+/*    handle->cb.fgetstat=cb_fgetsetstat_default;
+    handle->cb.fsetstat=cb_fgetsetstat_default;
+    handle->cb.fsync=cb_fsyncflush_default;
+    handle->cb.flush=cb_fsyncflush_default; */
+
+    handle->cb.release=cb_release_default;
+
+    /* if (type==FUSE_HANDLE_FLAG_OPENFILE) {
+
+	handle->flags |= FUSE_HANDLE_FLAG_OPENFILE;
+	handle->cb.type.file.pread=cb_pread_default;
+	handle->cb.type.file.pwrite=cb_pwrite_default;
+	handle->cb.type.file.lseek=cb_lseek_default;
+
+    } else if (handle->flags & FUSE_HANDLE_FLAG_OPENDIR) {
+
+	handle->flags |= FUSE_HANDLE_FLAG_OPENDIR;
+	handle->cb.type.dir.fstatat=cb_fstatat_default;
+	handle->cb.type.dir.unlinkat=cb_unlinkat_default;
+	handle->cb.type.dir.readlinkat=cb_readlinkat_default;
+
+    } */
+
 }
 
 struct fuse_handle_s *create_fuse_handle(struct service_context_s *ctx, uint64_t ino, unsigned int type, char *name, unsigned int len, uint64_t fh)
@@ -118,15 +222,12 @@ struct fuse_handle_s *create_fuse_handle(struct service_context_s *ctx, uint64_t
 	struct list_header_s *header=&hashtable[hashvalue];
 
 	memset(handle, 0, sizeof(struct fuse_handle_s) + len);
+	handle->flags=FUSE_HANDLE_FLAG_ALLOC;
 
+	init_fuse_handle(handle, type, name, len);
 	handle->ctx=ctx;
 	handle->ino=ino;
-	init_list_element(&handle->list, NULL);
-	handle->refcount=1;
-	handle->flags=((type==FUSE_HANDLE_FLAG_OPENFILE) ? FUSE_HANDLE_FLAG_OPENFILE : FUSE_HANDLE_FLAG_OPENDIR);
 	handle->fh=fh;
-	handle->len=len;
-	if (name) memcpy(handle->name, name, len);
 
 	write_lock_list_header(header);
 	add_list_element_first(header, &handle->list);

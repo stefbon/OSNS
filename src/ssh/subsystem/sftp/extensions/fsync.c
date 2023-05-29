@@ -36,25 +36,25 @@
     - string				handle
     */
 
-void cb_ext_fsync(struct sftp_payload_s *payload, unsigned int pos)
+void cb_ext_fsync(struct sftp_subsystem_s *sftp, struct sftp_in_header_s *inh, char *data, unsigned int pos)
 {
-    struct sftp_subsystem_s *sftp=payload->sftp; 
     unsigned int status=SSH_FX_BAD_MESSAGE;
 
     logoutput("sftp_op_fsync (%i)", (int) gettid());
 
-    if (payload->len >= pos + 4 + get_sftp_handle_size()) {
-	char *data=payload->data;
+    if (inh->len >= pos + 4 + get_fs_handle_buffer_size()) {
 	unsigned int len=0;
 
 	len=get_uint32(&data[pos]);
 	pos+=4;
 
-	if (len==get_sftp_handle_size()) {
-	    unsigned int error=0;
+	if (len==get_fs_handle_buffer_size()) {
 	    unsigned int count=0;
-	    struct commonhandle_s *handle=find_sftp_commonhandle(sftp, &data[pos], len, NULL);
-	    struct sftp_subsystem_s *tmp=NULL;
+	    struct fs_handle_s *handle=NULL;
+	    struct fs_socket_s *sock=NULL;
+	    int result=0;
+
+            handle=get_fs_handle(sftp->connection.unique, &data[pos], len, &count);
 
 	    if (handle==NULL) {
 
@@ -64,58 +64,32 @@ void cb_ext_fsync(struct sftp_payload_s *payload, unsigned int pos)
 
 	    }
 
-	    tmp=get_sftp_subsystem_commonhandle(handle);
+            pos+=count;
+            sock=&handle->socket;
 
-	    if (tmp==NULL) {
+            result=(* sock->ops.fsync)(sock, 0);
 
-		status=SSH_FX_INVALID_HANDLE;
-		logoutput_warning("sftp_op_fsync: handle is not a sftp handle");
-		goto error;
+	    if (result==0) {
 
-	    } else if (tmp != sftp) {
-
-		status=SSH_FX_INVALID_HANDLE;
-		logoutput_warning("sftp_op_fsync: handle does belong by other sftp server");
-		goto error;
+		reply_sftp_status_simple(sftp, inh->id, SSH_FX_OK);
+		return;
 
 	    } else {
-		int result=0;
 
-		if (handle->flags & COMMONHANDLE_FLAG_DIR) {
-		    struct dirhandle_s *dh=&handle->type.dir;
+		result=abs(result);
+		status=SSH_FX_FAILURE;
 
-		    result=(* dh->fsyncdir)(dh, 0);
+		if (result==EIO || result==EROFS || result==EINVAL) {
 
-		} else {
-		    struct filehandle_s *fh=&handle->type.file;
-
-		    result=(* fh->fsync)(fh, 0);
-
-		}
-
-		if (result==0) {
-
-		    reply_sftp_status_simple(sftp, payload->id, SSH_FX_OK);
-		    return;
-
-		} else {
-
-		    result=abs(result);
 		    status=SSH_FX_FAILURE;
 
-		    if (result==EIO || result==EROFS || result==EINVAL) {
+		} else if (result==ENOSPC) {
 
-			status=SSH_FX_FAILURE;
+		    status=SSH_FX_NO_SPACE_ON_FILESYSTEM;
 
-		    } else if (result==ENOSPC) {
+		} else if (result==EDQUOT) {
 
-			status=SSH_FX_NO_SPACE_ON_FILESYSTEM;
-
-		    } else if (result==EDQUOT) {
-
-			status=SSH_FX_QUOTA_EXCEEDED;
-
-		    }
+		    status=SSH_FX_QUOTA_EXCEEDED;
 
 		}
 
@@ -133,7 +107,7 @@ void cb_ext_fsync(struct sftp_payload_s *payload, unsigned int pos)
     error:
 
     logoutput("sftp_op_fsync: status %i", status);
-    reply_sftp_status_simple(sftp, payload->id, status);
+    reply_sftp_status_simple(sftp, inh->id, status);
     return;
 
     disconnect:
@@ -154,8 +128,8 @@ void cb_ext_fsync(struct sftp_payload_s *payload, unsigned int pos)
     NOTE: the fsync used here is the full sync: data and attributes
 */
 
-void sftp_op_fsync(struct sftp_payload_s *payload)
+void sftp_op_fsync(struct sftp_subsystem_s *sftp, struct sftp_in_header_s *inh, char *data)
 {
-    cb_ext_fsync(payload, 0);
+    cb_ext_fsync(sftp, inh, data, 0);
 }
 

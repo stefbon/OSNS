@@ -20,19 +20,17 @@
 #ifndef _LIB_FUSE_FS_COMMON_H
 #define _LIB_FUSE_FS_COMMON_H
 
-void _fs_common_cached_lookup(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode);
-void _fs_common_virtual_lookup(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, const char *name, unsigned int len);
+void _fs_common_cached_lookup(struct service_context_s *ctx, struct fuse_request_s *request, struct inode_s *inode);
+void _fs_common_virtual_lookup(struct service_context_s *ctx, struct fuse_request_s *request, struct inode_s *inode, const char *name, unsigned int len);
 
-void _fs_common_getattr(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode);
-void _fs_common_access(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, unsigned int mask);
+void _fs_common_getattr(struct fuse_request_s *request, struct system_stat_s *stat);
 
 void _fs_common_virtual_opendir(struct fuse_opendir_s *opendir, struct fuse_request_s *request, unsigned int flags);
-
 void _fs_common_virtual_readdir(struct fuse_opendir_s *opendir, struct fuse_request_s *request, size_t size, off_t offset);
 void _fs_common_readdir(struct fuse_opendir_s *opendir, struct fuse_request_s *request, size_t size, off_t offset);
 
-void _fs_common_virtual_releasedir(struct fuse_opendir_s *opendir, struct fuse_request_s *request);
-void _fs_common_virtual_fsyncdir(struct fuse_opendir_s *opendir, struct fuse_request_s *request, unsigned char datasync);
+void _fs_common_virtual_releasedir(struct fuse_open_header_s *oh, struct fuse_request_s *request, unsigned int flags, uint64_t lo);
+void _fs_common_virtual_fsyncdir(struct fuse_open_header_s *oh, struct fuse_request_s *request, unsigned int flags);
 
 void _fs_common_statfs(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode);
 

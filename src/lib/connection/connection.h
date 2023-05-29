@@ -29,8 +29,6 @@
 #include "libosns-list.h"
 #include "libosns-misc.h"
 #include "libosns-error.h"
-#include "lib/datatypes/ssh-string.h"
-
 #include "libosns-socket.h"
 
 #define LISTEN_BACKLOG							50
@@ -46,17 +44,12 @@
 #define CONNECTION_FLAG_IPv4						1
 #define CONNECTION_FLAG_IPv6						2
 #define CONNECTION_FLAG_UDP						4
+#define CONNECTION_FLAG_CTRL_DATA                                       8
 
 #define CONNECTION_STATUS_INIT						(1 << 0)
-#define CONNECTION_STATUS_CONNECTING					(1 << 1)
-#define CONNECTION_STATUS_CONNECTED					(1 << 2)
-#define CONNECTION_STATUS_EVENTLOOP					(1 << 3)
 #define CONNECTION_STATUS_SERVERLIST					(1 << 4)
-#define CONNECTION_STATUS_DISCONNECTING					(1 << 5)
-#define CONNECTION_STATUS_DISCONNECTED					(1 << 6)
-#define CONNECTION_STATUS_DISCONNECT					( CONNECTION_STATUS_DISCONNECTING | CONNECTION_STATUS_DISCONNECTED )
 
-#define CONNECTION_COMPARE_HOST					1
+#define CONNECTION_COMPARE_HOST					        1
 
 struct connection_s;
 
@@ -74,12 +67,14 @@ struct connection_address_s {
 
 struct connection_s {
     unsigned int				status;
+    unsigned int                                flags;
     unsigned int				error;
     unsigned int				expire;
     struct shared_signal_s			*signal;
     void 					*data;
     struct list_element_s			list;
     struct osns_socket_s			sock;
+    unsigned int				ctr;
     union {
 	struct server_ops_s {
 	    struct connection_s			*(* accept_peer)(struct connection_s *c_conn, struct connection_s *s_conn);
@@ -88,9 +83,6 @@ struct connection_s {
 	} server;
 	struct client_ops_s {
 	    union connection_peer_u		peer;
-	    void 				(* disconnect)(struct connection_s *conn, unsigned char remote);
-	    void				(* error)(struct connection_s *conn, struct generic_error_s *e);
-	    void				(* dataavail)(struct connection_s *conn);
 	    struct connection_s			*server;
 	    uint64_t				unique;
 	} client;
@@ -99,15 +91,17 @@ struct connection_s {
 
 /* Prototypes */
 
-void disconnect_cb_default(struct connection_s *conn, unsigned char remote);
+void disconnect_cb_default(struct connection_s *conn, unsigned int flags);
 
 void init_connection(struct connection_s *c, unsigned char type, unsigned char role, unsigned int flags);
 void clear_connection(struct connection_s *c);
 void set_connection_shared_signal(struct connection_s *c, struct shared_signal_s *signal);
 
 int create_serversocket(struct connection_s *server, struct beventloop_s *loop, struct connection_s *(* accept_cb)(struct connection_s *c_conn, struct connection_s *s_conn), struct connection_address_s *address, struct generic_error_s *error);
-int create_connection(struct connection_s *client, struct connection_address_s *address, struct beventloop_s *loop);
-int create_local_connection(struct connection_s *client, char *runpath, struct beventloop_s *loop);
+
+int set_address_osns_connection(struct connection_s *c, struct ip_address_s *ip, struct network_port_s *port);
+int set_path_osns_connection(struct connection_s *c, struct fs_location_path_s *path);
+int create_connection(struct connection_s *client, struct beventloop_s *loop, void *ptr);
 
 struct connection_s *get_next_connection(struct connection_s *s_conn, struct connection_s *c_conn);
 

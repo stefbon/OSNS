@@ -540,7 +540,7 @@ void set_ctx_service_ctx_lock(struct service_context_s *ctx, struct service_cont
 void set_workspace_ctx_lock(struct workspace_mount_s *w, struct service_context_lock_s *ctxlock)
 {
     struct list_header_s *h=&w->contexes;
-    struct list_element_s *list=get_list_head(h, 0);
+    struct list_element_s *list=get_list_head(h);
     struct service_context_s *root=NULL;
 
     if (list) {

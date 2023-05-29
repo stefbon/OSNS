@@ -28,7 +28,6 @@
 #include "sftp/attr-init.h"
 #include "sftp/attr-read.h"
 #include "sftp/attr-write.h"
-#include "sftp/attr-utils.h"
 
 #include "sftp/rw-attr-generic.h"
 

@@ -24,5 +24,6 @@
 
 int check_create_pid_file(char *rundir, char *progname, char **p_pidfile);
 void remove_pid_file(char *pidfile);
+unsigned int get_path_exe_pid(pid_t pid, struct fs_path_s *path);
 
 #endif

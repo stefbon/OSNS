@@ -20,6 +20,18 @@
 #ifndef OSNS_RECORD_H
 #define OSNS_RECORD_H
 
+struct osns_records_hlpr_s {
+    uint32_t					count;
+    uint16_t					size;
+    char					data[];
+};
+
+struct osns_record_hlpr_s {
+    uint16_t					size;
+    char					data[];
+};
+
+
 /* prototypes */
 
 unsigned int read_osns_record(char *buffer, unsigned int size, struct osns_record_s *r);

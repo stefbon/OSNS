@@ -21,6 +21,7 @@
 
 #include "libosns-log.h"
 #include "utils.h"
+#include "address.h"
 #include "services.h"
 
 struct tmp_service_s {
@@ -45,6 +46,9 @@ static struct tmp_service_s services[] = {
     {	.name 	= "webdav",
 	.type	= NETWORK_SERVICE_TYPE_WEBDAV,
 	.flags	= NETWORK_SERVICE_FLAG_FILESYSTEM},
+    {	.name 	= "ipp",
+	.type	= NETWORK_SERVICE_TYPE_IPP,
+	.flags	= 0},
     {	.name	= NULL, .type	= 0, .flags	= 0}};
 
 
@@ -89,6 +93,22 @@ char *get_network_service_name(unsigned int type)
 
 }
 
+const char *get_network_connection_type(unsigned int type)
+{
+
+    if (type==_NETWORK_PORT_TCP) {
+
+        return "tcp";
+
+    } else if (type==_NETWORK_PORT_UDP) {
+
+        return "udp";
+
+    }
+
+    return "-unknown-";
+}
+
 unsigned int get_network_service_type(char *name, unsigned int len, unsigned int *p_flags)
 {
     unsigned int type=0;
@@ -124,7 +144,7 @@ unsigned int get_network_service_type(char *name, unsigned int len, unsigned int
 
 unsigned int guess_network_service_from_port(unsigned int port)
 {
-    char *name=get_network_service_name(port);
+    char *name=get_system_network_service_name(port);
     unsigned int type=0;
 
     if (name==NULL) {
@@ -151,6 +171,10 @@ unsigned int guess_network_service_from_port(unsigned int port)
 
 	type = NETWORK_SERVICE_TYPE_WEBDAV;
 
+    } else if (strcmp(name, "ipp")==0) {
+
+        type = NETWORK_SERVICE_TYPE_IPP;
+
     } else {
 
 	logoutput_warning("guess_network_service_from_port: service %s (port=%u) not supported", name, port);
@@ -159,3 +183,4 @@ unsigned int guess_network_service_from_port(unsigned int port)
 
     return type;
 }
+

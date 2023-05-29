@@ -22,5 +22,8 @@
 
 struct client_session_s *get_client_session_workspace(struct workspace_mount_s *workspace);
 struct service_context_s *create_mount_context(struct client_session_s *session, unsigned int type, unsigned int maxread);
+void remove_workspaces(struct client_session_s *session);
+
+int walk_interfaces_workspace(struct workspace_mount_s *w, int (* cb)(struct context_interface_s *i, void *ptr), void *ptr);
 
 #endif

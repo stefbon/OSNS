@@ -24,6 +24,9 @@
 #define NETWORK_SERVICE_TYPE_SMB			3
 #define NETWORK_SERVICE_TYPE_NFS			4
 #define NETWORK_SERVICE_TYPE_WEBDAV			5
+#define NETWORK_SERVICE_TYPE_IPP                        6
+#define NETWORK_SERVICE_TYPE_HTTP                       7
+#define NETWORK_SERVICE_TYPE_HTTPS                      8
 
 #define NETWORK_SERVICE_FLAG_TRANSPORT			1
 #define NETWORK_SERVICE_FLAG_CRYPTO			2
@@ -34,6 +37,8 @@
 
 char *get_system_network_service_name(unsigned int port);
 char *get_network_service_name(unsigned int type);
+const char *get_network_connection_type(unsigned int type);
+
 unsigned int get_network_service_type(char *name, unsigned int len, unsigned int *p_flags);
 unsigned int guess_network_service_from_port(unsigned int port);
 

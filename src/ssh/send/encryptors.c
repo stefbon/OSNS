@@ -25,14 +25,10 @@
 #include "ssh-common.h"
 #include "ssh-utils.h"
 #include "ssh-send.h"
+#include "ssh-common-crypto.h"
 
 static char fallback_buffer[sizeof(struct ssh_encryptor_s)];
 static struct ssh_encryptor_s *fallback=(struct ssh_encryptor_s *) fallback_buffer;
-
-struct ssh_encryptor_s *get_encryptor_container(struct list_element_s *list)
-{
-    return (struct ssh_encryptor_s *) (((char *) list) - offsetof(struct ssh_encryptor_s, list));
-}
 
 static int write_hmac_error(struct ssh_encryptor_s *e, struct ssh_packet_s *packet)
 {
@@ -52,116 +48,16 @@ static unsigned char get_message_padding_error(struct ssh_encryptor_s *e, unsign
 static void dummy_encryptor(struct ssh_encryptor_s *e)
 {
 }
-static void init_encryptor(struct ssh_encryptor_s *encryptor, struct ssh_encrypt_s *encrypt, unsigned int size)
+
+static void queue_ssh_encryptor(struct ssh_cryptoactor_s *ca)
 {
-
-    memset(encryptor, 0, sizeof(struct ssh_encryptor_s) + size);
-    encryptor->encrypt=encrypt;
-    get_current_time_system_time(&encryptor->created);
-    encryptor->nr=(encrypt) ? encrypt->count : 0;
-    init_list_element(&encryptor->list, NULL);
-    encryptor->size=size;
-    encryptor->cipher_blocksize=8;
-    encryptor->cipher_headersize=8;
-    encryptor->hmac_maclen=0;
-
-    encryptor->write_hmac_pre=write_hmac_error;
-    encryptor->write_hmac_post=write_hmac_error;
-    encryptor->encrypt_packet=encrypt_packet_error;
-    encryptor->get_message_padding=get_message_padding_error;
-    encryptor->clear=dummy_encryptor;
-    encryptor->queue=dummy_encryptor;
-}
-
-static struct ssh_encryptor_s *create_encryptor(struct ssh_encrypt_s *encrypt)
-{
-    struct encrypt_ops_s *ops=encrypt->ops;
-    unsigned int size=(* ops->get_handle_size)(encrypt);
-    struct ssh_encryptor_s *encryptor=malloc(sizeof(struct ssh_encryptor_s) + size);
-
-    if (encryptor==NULL) goto fallback;
-    init_encryptor(encryptor, encrypt, size);
-    encryptor->queue=queue_encryptor;
-    if ((* ops->init_encryptor)(encryptor)==0) return encryptor;
-    free(encryptor);
-
-    fallback:
-
-    return fallback;
-
-}
-
-struct ssh_encryptor_s *get_encryptor(struct ssh_send_s *send, unsigned int *error)
-{
-    struct ssh_encrypt_s *encrypt=&send->encrypt;
-    struct ssh_encryptor_s *encryptor=fallback;
-    struct list_header_s *header=&encrypt->header;
-    struct list_element_s *list=NULL;
-
-    pthread_mutex_lock(&send->mutex);
-
-    /* wait for a encryptor to become available */
-
-    while (header->count==0 && encrypt->count == encrypt->max_count && encrypt->max_count>0) {
-
-	int result=pthread_cond_wait(&send->cond, &send->mutex);
-
-	if (header->count>0 || encrypt->count < encrypt->max_count) {
-
-	    break;
-
-	} else if (result>0 || (send->flags & (SSH_SEND_FLAG_DISCONNECT | SSH_SEND_FLAG_ERROR))) {
-
-	    goto finish;
-
-	}
-
-    }
-
-    while ((list=get_list_head(header, SIMPLE_LIST_FLAG_REMOVE))) {
-
-	encryptor=get_encryptor_container(list);
-
-	/* dealing with an "old" encryptor ?*/
-
-	if (system_time_test_earlier(&encryptor->created, &send->newkeys)<=0) goto finish;
-
-	(* encryptor->clear)(encryptor);
-	free(encryptor);
-	encrypt->count--;
-	encryptor=NULL;
-
-    }
-
-    if (encrypt->count < encrypt->max_count || encrypt->max_count==0) {
-
-	encryptor=create_encryptor(encrypt);
-	encrypt->count+=((encryptor->encrypt) ? 1 : 0);
-
-    }
-
-    finish:
-
-    // logoutput("get_encryptor (nr %i count %i)", (encryptor) ? encryptor->nr : -1, encrypt->count);
-    // logoutput("get_encryptor: finish (%li.%li - %li.%li)", encryptor->created.tv_sec, encryptor->created.tv_nsec, send->newkeys.tv_sec, send->newkeys.tv_nsec);
-
-    pthread_mutex_unlock(&send->mutex);
-    return encryptor;
-
-}
-
-void queue_encryptor(struct ssh_encryptor_s *encryptor)
-{
+    struct ssh_encryptor_s *encryptor=(struct ssh_encryptor_s *)((char *)ca - offsetof(struct ssh_encryptor_s, common));
     struct ssh_encrypt_s *encrypt=encryptor->encrypt;
     struct ssh_send_s *send=(struct ssh_send_s *) (((char *) encrypt) - offsetof(struct ssh_send_s, encrypt));
-    struct list_header_s *header=&encrypt->header;
 
-    pthread_mutex_lock(&send->mutex);
+    if (ca->kexctr==send->kexctr) {
 
-    if (system_time_test_earlier(&encryptor->created, &send->newkeys)<=0) {
-
-	add_list_element_last(header, &encryptor->list);
-	pthread_cond_broadcast(&send->cond);
+	add_ssh_cryptoactor_list(&encrypt->header, ca);
 
     } else {
 
@@ -170,36 +66,107 @@ void queue_encryptor(struct ssh_encryptor_s *encryptor)
 
 	(* encryptor->clear)(encryptor);
 	free(encryptor);
-	encrypt->count--;
+	change_count_cryptors(&send->signal, &encrypt->count, -1);
 
     }
-
-    pthread_mutex_unlock(&send->mutex);
 
 }
 
-void remove_encryptors(struct ssh_encrypt_s *encrypt)
+static void free_ssh_encryptor(struct list_element_s *list)
 {
-    struct list_element_s *list=NULL;
-    struct list_header_s *header=&encrypt->header;
+    struct ssh_encryptor_s *encryptor=(struct ssh_encryptor_s *) (((char *) list) - offsetof(struct ssh_encryptor_s, common.list));
+    struct ssh_encrypt_s *encrypt=encryptor->encrypt;
+    struct ssh_send_s *send=(struct ssh_send_s *) (((char *) encrypt) - offsetof(struct ssh_send_s, encrypt));
 
-    doremove:
+    (* encryptor->clear)(encryptor);
+    free(encryptor);
+    change_count_cryptors(&send->signal, &encrypt->count, -1);
+}
 
-    list=get_list_head(header, SIMPLE_LIST_FLAG_REMOVE);
+static void init_ssh_encryptor(struct ssh_encryptor_s *encryptor, struct ssh_encrypt_s *encrypt, unsigned int size, unsigned int kexctr)
+{
 
-    if (list) {
-	struct ssh_encryptor_s *encryptor=get_encryptor_container(list);
+    memset(encryptor, 0, sizeof(struct ssh_encryptor_s) + size);
+    init_ssh_cryptoactor(&encryptor->common, kexctr, ((encrypt) ? encrypt->count : 0));
+    encryptor->encrypt=encrypt;
+    encryptor->size=size;
 
-	(* encryptor->clear)(encryptor);
-	free(encryptor);
-	encrypt->count--;
-	goto doremove;
+    encryptor->cipher_blocksize=8;
+    encryptor->cipher_headersize=8;
+    encryptor->hmac_maclen=0;
+    encryptor->write_hmac_pre=write_hmac_error;
+    encryptor->write_hmac_post=write_hmac_error;
+    encryptor->encrypt_packet=encrypt_packet_error;
+    encryptor->get_message_padding=get_message_padding_error;
+    encryptor->clear=dummy_encryptor;
+
+}
+
+static struct ssh_encryptor_s *create_ssh_encryptor(struct ssh_encrypt_s *encrypt, unsigned int kexctr)
+{
+    struct encrypt_ops_s *ops=encrypt->ops;
+    unsigned int size=(* ops->get_handle_size)(encrypt);
+    struct ssh_encryptor_s *encryptor=NULL;
+
+    // logoutput_debug("create_ssh_encryptor: size %u", size);
+
+    encryptor=malloc(sizeof(struct ssh_encryptor_s) + size);
+    if (encryptor==NULL) return fallback;
+    init_ssh_encryptor(encryptor, encrypt, size, kexctr);
+    encryptor->common.queue=queue_ssh_encryptor;
+    encryptor->common.free=free_ssh_encryptor;
+
+    if ((* ops->init)(encryptor)==0) {
+        struct ssh_send_s *send=(struct ssh_send_s *) (((char *) encrypt) - offsetof(struct ssh_send_s, encrypt));
+
+        change_count_cryptors(&send->signal, &encrypt->count, 1);
+        return encryptor;
 
     }
 
+    free(encryptor);
+    outfallback:
+    return fallback;
+
+}
+
+static struct ssh_cryptoactor_s *create_ssh_cryptoactor(unsigned int kexctr, void *ptr)
+{
+    struct ssh_encrypt_s *encrypt=(struct ssh_encrypt_s *) ptr;
+    struct ssh_encryptor_s *encryptor=create_ssh_encryptor(encrypt, kexctr);
+    return &encryptor->common;
+}
+
+static unsigned int interrupt_get_cryptoactor(void *ptr)
+{
+    struct ssh_encrypt_s *encrypt=(struct ssh_encrypt_s *) ptr;
+    struct ssh_send_s *send=(struct ssh_send_s *) (((char *) encrypt) - offsetof(struct ssh_send_s, encrypt));
+
+    return ((send->flags & SSH_SEND_FLAG_DISCONNECT) ? ENOTCONN : 0);
+}
+
+static void error_get_cryptoactor(unsigned int errcode, void *ptr)
+{
+    /* 20221119: log for now */
+
+    logoutput_warning("error_get_cryptoactor: error %u - %s", errcode, strerror(errcode));
+}
+
+struct ssh_encryptor_s *get_encryptor(struct ssh_send_s *send, unsigned int *error)
+{
+    struct ssh_encrypt_s *encrypt=&send->encrypt;
+    struct ssh_cryptoactor_s *ca=get_cryptoactor(&encrypt->header, &send->signal, send->kexctr, &encrypt->max_count, &encrypt->count,
+                                                    create_ssh_cryptoactor, interrupt_get_cryptoactor, error_get_cryptoactor, &fallback->common, (void *) encrypt);
+    return (struct ssh_encryptor_s *) ((char *) ca - offsetof(struct ssh_encryptor_s, common));
+}
+
+
+void remove_encryptors(struct ssh_encrypt_s *encrypt)
+{
+    remove_ssh_cryptoactor_list(&encrypt->header);
 }
 
 void init_encryptors_once()
 {
-    init_encryptor(fallback, NULL, 0);
+    init_ssh_encryptor(fallback, NULL, 0, 0);
 }

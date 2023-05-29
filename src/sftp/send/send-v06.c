@@ -26,7 +26,6 @@
 #include "libosns-workspace.h"
 #include "libosns-context.h"
 #include "libosns-fuse-public.h"
-#include "libosns-resources.h"
 
 #include "sftp/common-protocol.h"
 #include "sftp/common.h"
@@ -253,7 +252,6 @@ static struct sftp_send_ops_s send_ops_v06 = {
     .version				= 6,
     .init				= send_sftp_init_v03,
     .open				= send_sftp_open_v05,
-    .create				= send_sftp_create_v05,
     .read				= send_sftp_read_v03,
     .write				= send_sftp_write_v03,
     .close				= send_sftp_close_v03,

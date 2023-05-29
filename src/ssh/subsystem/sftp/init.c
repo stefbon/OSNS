@@ -33,7 +33,6 @@
 #include "send.h"
 #include "init.h"
 #include "supported.h"
-#include "payload.h"
 #include "protocol.h"
 #include "attr.h"
 #include "path.h"
@@ -48,6 +47,9 @@
 #include "cb-readlink.h"
 
 #include "extensions.h"
+
+static char sftp_static_receive_buffer[SFTP_RECEIVE_BUFFER_SIZE_DEFAULT];
+static char sftp_static_error_buffer[SFTP_ERROR_BUFFER_SIZE_DEFAULT];
 
 /*
     for sftp init data looks like:
@@ -196,9 +198,9 @@ int send_sftp_init(struct sftp_subsystem_s *sftp)
 
 }
 
-static void reply_sftp_notsupported(struct sftp_payload_s *p)
+static void reply_sftp_notsupported(struct sftp_subsystem_s *sftp, struct sftp_in_header_s *inh, char *data)
 {
-    int result=reply_sftp_status_simple(p->sftp, p->id, SSH_FX_OP_UNSUPPORTED);
+    int result=reply_sftp_status_simple(sftp, inh->id, SSH_FX_OP_UNSUPPORTED);
 }
 
 int check_sftp_cb_is_taken(struct sftp_subsystem_s *sftp, unsigned char code)
@@ -209,7 +211,7 @@ int check_sftp_cb_is_taken(struct sftp_subsystem_s *sftp, unsigned char code)
 /* use with care, this can override a default callback
     (there is no check here) */
 
-void set_sftp_cb(struct sftp_subsystem_s *sftp, unsigned char code, void (* cb)(struct sftp_payload_s *p))
+void set_sftp_cb(struct sftp_subsystem_s *sftp, unsigned char code, void (* cb)(struct sftp_subsystem_s *sftp, struct sftp_in_header_s *inh, char *data))
 {
     sftp->cb[code]=((cb) ? cb : reply_sftp_notsupported);
 }
@@ -281,22 +283,6 @@ static void free_sftp_identity(struct sftp_identity_s *user)
     user->size=0;
 }
 
-static void init_sftp_payload_queue(struct sftp_payload_queue_s *queue)
-{
-    memset(queue, 0, sizeof(struct sftp_payload_queue_s));
-    init_list_header(&queue->header, SIMPLE_LIST_TYPE_EMPTY, NULL);
-    queue->threads=0;
-    pthread_mutex_init(&queue->mutex, NULL);
-    pthread_cond_init(&queue->cond, NULL);
-}
-
-static void free_sftp_payload_queue(struct sftp_payload_queue_s *queue)
-{
-    pthread_mutex_destroy(&queue->mutex);
-    pthread_cond_destroy(&queue->cond);
-    memset(queue, 0, sizeof(struct sftp_payload_queue_s));
-}
-
 unsigned char get_sftp_protocol_version(struct sftp_subsystem_s *sftp)
 {
     unsigned char version = (sftp) ? sftp->protocol.version : 0;
@@ -342,27 +328,86 @@ void init_sftp_prefix(struct sftp_subsystem_s *sftp)
 
 }
 
+static void init_socket_sftp_cb(struct ssh_subsystem_connection_s *c, struct osns_socket_s *sock, unsigned int type, unsigned int flags)
+{
+}
+
+static int open_socket_sftp_cb(struct ssh_subsystem_connection_s *c, struct osns_socket_s *sock, unsigned int type, unsigned int flags)
+{
+    unsigned int socketeventflags=(type==SSH_SUBSYSTEM_SOCKET_TYPE_ERROR) ? OSNS_SOCKET_ENABLE_CUSTOM_READ : 0;
+    char *what="--notset--";
+    int result=-1;
+
+    if (type==SSH_SUBSYSTEM_SOCKET_TYPE_IN) {
+
+        init_sftp_socket_ops(sock, sftp_static_receive_buffer, SFTP_RECEIVE_BUFFER_SIZE_DEFAULT, 0);
+        what="incoming";
+
+    } else if (type==SSH_SUBSYSTEM_SOCKET_TYPE_OUT) {
+
+        /* TODO:
+            - enable watched writes (=blocked writing and handle POLLOUT and restart/retry writing) */
+        what="outgoing";
+
+    } else if (type==SSH_SUBSYSTEM_SOCKET_TYPE_ERROR) {
+
+        init_sftp_socket_ops(sock, sftp_static_error_buffer, SFTP_ERROR_BUFFER_SIZE_DEFAULT, 1);
+        what="error - in and out";
+
+    }
+
+    if (flags & SSH_SUBSYSTEM_SOCKET_FLAG_IN) {
+
+        if (add_osns_socket_eventloop(sock, NULL, c, socketeventflags)==0) {
+
+            logoutput_debug("open_socket_sftp_cb: %s socket added to eventloop");
+            result=0;
+
+        } else {
+
+            logoutput_debug("open_socket_sftp_cb: unable to add %s socket to eventloop");
+
+        }
+
+    } else {
+
+        result=0;
+
+    }
+
+    return result;
+
+}
+
+static void close_sftp_subsystem(struct sftp_subsystem_s *sftp, unsigned int level)
+{
+}
+
+static void error_sftp_subsystem(struct sftp_subsystem_s *sftp, unsigned int level, unsigned int errcode)
+{
+}
+
 int init_sftp_subsystem(struct sftp_subsystem_s *sftp)
 {
+    struct osns_socket_s *sock=NULL;
 
     init_hashattr_generic();
 
     memset(sftp, 0, sizeof(struct sftp_subsystem_s));
     sftp->flags = SFTP_SUBSYSTEM_FLAG_INIT;
+    sftp->signal=get_default_shared_signal();
 
     init_sftp_prefix(sftp);
     init_sftp_identity(&sftp->identity);
-    init_ssh_subsystem_connection(&sftp->connection, 0, sftp->signal, read_ssh_subsystem_connection_socket);
-    init_sftp_receive(&sftp->receive);
-    init_sftp_payload_queue(&sftp->queue);
-    sftp->signal=get_default_shared_signal();
+    init_ssh_subsystem_connection(&sftp->connection, 0, sftp->signal, init_socket_sftp_cb);
 
     set_sftp_protocol_version(sftp, 6);
     init_sftp_subsystem_attr_context(sftp);
     init_net_idmapping(&sftp->mapping, &sftp->identity.pwd);
     set_sftp_attr_context(&sftp->attrctx);
 
-    set_process_sftp_payload_notsupp(sftp);
+    /* init the sftp cb's */
+
     for (unsigned int i=0; i<256; i++) sftp->cb[i]=reply_sftp_notsupported;
 
     sftp->cb[SSH_FXP_OPENDIR]=sftp_op_opendir;
@@ -386,19 +431,25 @@ int init_sftp_subsystem(struct sftp_subsystem_s *sftp)
 
     sftp->cb[SSH_FXP_EXTENDED]=sftp_op_extension;
 
+    sftp->close=close_sftp_subsystem;
+    sftp->error=error_sftp_subsystem;
+
     return 0;
 
 }
 
-void free_sftp_subsystem(struct sftp_subsystem_s *sftp)
+int connect_sftp_subsystem(struct sftp_subsystem_s *sftp)
 {
+    return open_ssh_subsystem_connection(&sftp->connection, open_socket_sftp_cb);
+}
+
+void clear_sftp_subsystem(struct sftp_subsystem_s *sftp)
+{
+
     free_net_idmapping(&sftp->mapping);
     free_sftp_identity(&sftp->identity);
-    free_sftp_payload_queue(&sftp->queue);
-    free_sftp_receive(&sftp->receive);
-
-    clear_ssh_subsystem_connection(&sftp->connection);
     clear_hashattr_generic(0);
+
 }
 
 void finish_sftp_subsystem(struct sftp_subsystem_s *sftp)

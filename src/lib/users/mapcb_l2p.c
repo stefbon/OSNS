@@ -36,13 +36,13 @@
 void get_user_l2p_byid(struct net_idmapping_s *m, struct net_entity_s *user)
 {
     user->net.id=m->su.type.user.uid;
-    if (user->local.uid==0) user->net.id=0;
+    if (user->localid==0) user->net.id=0;
 }
 
 void get_group_l2p_byid(struct net_idmapping_s *m, struct net_entity_s *group)
 {
     group->net.id=m->sg.type.group.gid;
-    if (group->local.gid==0) group->net.id=0;
+    if (group->localid==0) group->net.id=0;
 }
 
 /* get protocol user by name
@@ -51,7 +51,7 @@ void get_group_l2p_byid(struct net_idmapping_s *m, struct net_entity_s *group)
 void get_user_l2p_byname_client(struct net_idmapping_s *m, struct net_entity_s *user)
 {
 
-    if (user->local.uid==0) {
+    if (user->localid==0) {
 
 	user->net.name.len=4;
 	if (user->net.name.ptr) memcpy(user->net.name.ptr, "root", 4);
@@ -68,7 +68,7 @@ void get_user_l2p_byname_client(struct net_idmapping_s *m, struct net_entity_s *
 void get_group_l2p_byname_client(struct net_idmapping_s *m, struct net_entity_s *group)
 {
 
-    if (group->local.gid==0) {
+    if (group->localid==0) {
 
 	group->net.name.len=4;
 	if (group->net.name.ptr) memcpy(group->net.name.ptr, "root", 4);
@@ -120,7 +120,7 @@ void get_user_l2p_byname_server(struct net_idmapping_s *m, struct net_entity_s *
 
     /* 20211104: just send the local user ... no domain ... no locking */
 
-    get_local_user_byuid(user->local.uid, _cb_id_found, _cb_id_notfound, (void *) &wiss);
+    get_local_user_byuid(user->localid, _cb_id_found, _cb_id_notfound, (void *) &wiss);
 
 }
 
@@ -133,6 +133,6 @@ void get_group_l2p_byname_server(struct net_idmapping_s *m, struct net_entity_s 
 
     /* 20211104: just send the local group ... no domain ... no locking */
 
-    get_local_group_bygid(group->local.gid, _cb_id_found, _cb_id_notfound, (void *) &wiss);
+    get_local_group_bygid(group->localid, _cb_id_found, _cb_id_notfound, (void *) &wiss);
 
 }

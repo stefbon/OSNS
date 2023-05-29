@@ -117,18 +117,25 @@ unsigned char name_found_namelist(struct commalist_s *clist, char *name)
     return 0;
 }
 
-void parse_ssh_commalist(char *list, unsigned int size, void (* cb)(char *entry, void *ptr), void *ptr)
+void parse_ssh_commalist(char *list, unsigned int size, void (* cb)(char *entry, unsigned int len, void *ptr), void *ptr)
 {
     int left = (size>0) ? size : strlen(list);
     char *sep=NULL;
     char *start=list;
+    unsigned int len=0;
 
     finditem:
 
     sep=memchr(start, ',', left);
-    if (sep) *sep='\0';
+    len=left;
+    if (sep) {
 
-    (* cb)(start, ptr);
+        *sep='\0';
+        len=(unsigned int)(sep - start);
+
+    }
+
+    (* cb)(start, len, ptr);
 
     if (sep) {
 

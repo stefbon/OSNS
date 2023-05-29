@@ -32,6 +32,7 @@ unsigned int add_name_to_commalist(const char *name, struct commalist_s *clist, 
 void free_list_commalist(struct commalist_s *clist);
 unsigned char string_found_commalist(char *list, char *name);
 unsigned char name_found_namelist(struct commalist_s *clist, char *name);
-void parse_ssh_commalist(char *list, unsigned int size, void (* cb)(char *entry, void *ptr), void *ptr);
+
+void parse_ssh_commalist(char *list, unsigned int size, void (* cb)(char *entry, unsigned int len, void *ptr), void *ptr);
 
 #endif

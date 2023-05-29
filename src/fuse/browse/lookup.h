@@ -22,7 +22,6 @@
 
 /* prototypes */
 
-void _fs_browse_lookup_new(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, struct name_s *xname);
-void _fs_browse_lookup_existing(struct service_context_s *context, struct fuse_request_s *request, struct entry_s *entry);
+void _fs_browse_lookup(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *pinode, struct name_s *xname);
 
 #endif

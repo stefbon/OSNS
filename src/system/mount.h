@@ -28,25 +28,30 @@
 #define OSNS_MOUNT_STATUS_OPEN			(1 << 1)
 #define OSNS_MOUNT_STATUS_MOUNTED		(1 << 2)
 #define OSNS_MOUNT_STATUS_NAMESPACE		(1 << 3)
+#define OSNS_MOUNT_STATUS_MOUNTINFO		(1 << 4)
 
 struct osns_mount_s {
     unsigned int				status;
     unsigned char				type;
     struct list_element_s			list;
     struct shared_signal_s			*signal;
-    struct system_socket_s			sock;
-    char					*buffer;
+    struct osns_socket_s			sock;
     struct fuse_receive_s			receive;
+    unsigned int                                major;
+    unsigned int                                minor;
+    unsigned int                                size;
+    char					*buffer;
 };
 
 /* prototypes */
 
-struct osns_mount_s *mount_fuse_filesystem(struct osns_systemconnection_s *sc, struct shared_signal_s *signal, unsigned char type, unsigned int maxread, unsigned int *p_status);
-int umount_fuse_filesystem(struct osns_systemconnection_s *sc, struct shared_signal_s *signal, unsigned char type);
-void umount_all_fuse_filesystems(struct osns_systemconnection_s *sc, struct shared_signal_s *signal);
+int umount_fuse_filesystem(struct osns_connection_s *oc, struct shared_signal_s *signal, unsigned char type);
+void umount_all_fuse_filesystems(struct osns_connection_s *oc, struct shared_signal_s *signal);
+void umount_one_fuse_fs(struct osns_connection_s *oc, struct osns_mount_s *om);
 
-void umount_one_fuse_fs(struct osns_systemconnection_s *sc, struct osns_mount_s *om);
+unsigned char test_mountpoint_is_osns_filesystem(struct fs_location_path_s *path, unsigned int major, unsigned int minor, uint64_t generation);
 
-unsigned char test_mountpoint_is_osns_filesystem(struct fs_location_path_s *path);
+void process_osns_mountcmd(struct osns_connection_s *oc, struct osns_in_header_s *h, struct osns_mountcmd_s *mountcmd);
+void process_osns_umountcmd(struct osns_connection_s *oc, struct osns_in_header_s *h, struct osns_umountcmd_s *umountcmd);
 
 #endif

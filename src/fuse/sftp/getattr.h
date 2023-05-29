@@ -20,10 +20,7 @@
 #ifndef _FUSE_SFTP_GETATTR_H
 #define _FUSE_SFTP_GETATTR_H
 
-void _fs_sftp_getattr(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, struct fuse_path_s *fpath);
-void _fs_sftp_fgetattr(struct fuse_openfile_s *openfile, struct fuse_request_s *request);
-
-void _fs_sftp_getattr_disconnected(struct service_context_s *context, struct fuse_request_s *f_request, struct inode_s *inode, struct fuse_path_s *fpath);
-void _fs_sftp_fgetattr_disconnected(struct fuse_openfile_s *openfile, struct fuse_request_s *f_request);
+void _fs_sftp_getattr(struct service_context_s *ctx, struct fuse_request_s *request, struct inode_s *inode, struct fuse_path_s *fpath);
+void _fs_sftp_fgetattr(struct fuse_open_header_s *oh, struct fuse_request_s *request);
 
 #endif

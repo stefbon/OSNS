@@ -31,7 +31,7 @@ struct sftp_init_extensions_s {
 /* prototypes */
 
 int check_sftp_cb_is_taken(struct sftp_subsystem_s *sftp, unsigned char code);
-void set_sftp_cb(struct sftp_subsystem_s *sftp, unsigned char code, void (* cb)(struct sftp_payload_s *p));
+void set_sftp_cb(struct sftp_subsystem_s *sftp, unsigned char code, void (* cb)(struct sftp_subsystem_s *sftp, struct sftp_in_header_s *inh, char *data));
 
 int send_sftp_init(struct sftp_subsystem_s *sftp);
 
@@ -41,7 +41,8 @@ void set_sftp_protocol_version(struct sftp_subsystem_s *sftp, unsigned char vers
 void setup_sftp_idmapping(struct sftp_subsystem_s *sftp);
 
 int init_sftp_subsystem(struct sftp_subsystem_s *sftp);
-void free_sftp_subsystem(struct sftp_subsystem_s *sftp);
+int connect_sftp_subsystem(struct sftp_subsystem_s *sftp);
+void clear_sftp_subsystem(struct sftp_subsystem_s *sftp);
 void finish_sftp_subsystem(struct sftp_subsystem_s *sftp);
 
 #endif

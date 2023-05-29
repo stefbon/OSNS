@@ -50,31 +50,27 @@ static unsigned int get_handle_size(struct ssh_decompress_s *d)
     return 0;
 }
 
-static int decompress_packet(struct ssh_decompressor_s *d, struct ssh_packet_s *packet, struct ssh_payload_s **p_payload, unsigned int *error)
+static struct ssh_payload_s *decompress_packet(struct ssh_decompressor_s *d, struct ssh_packet_s *packet, unsigned int *errcode)
 {
-    unsigned int len=packet->len - packet->padding - 1;
+    unsigned int len = packet->len - 1 - packet->padding; /* length of the payload */
     struct ssh_payload_s *payload=malloc(sizeof(struct ssh_payload_s) + len);
 
     if (payload) {
 
-	*p_payload=payload;
-
-	memset(payload, '\0', sizeof(struct ssh_payload_s) + len);
-
-	payload->flags=SSH_PAYLOAD_FLAG_ALLOCATED;
-	payload->len=len;
-	memcpy(payload->buffer, &packet->buffer[5], len);
-	payload->type=(unsigned char) payload->buffer[0];
-	payload->sequence=packet->sequence;
-	init_list_element(&payload->list, NULL);
-	set_alloc_payload_dynamic(payload);
-	return 0;
+        payload->sequence=packet->sequence;
+        init_list_element(&payload->list, NULL);
+        payload->size=len;
+        payload->len=len;
+        memcpy(payload->buffer, &packet->buffer[5], len);
+        payload->type=(unsigned char) payload->buffer[0];
+        logoutput_debug("decompress_packet_: allocated payload (sequence=%u type=%u)", packet->sequence, payload->type);
+        return payload;
 
     }
 
-    *error=ENOMEM;
-    *p_payload=NULL;
-    return -1;
+    logoutput_debug("decompress_packet_: unable to allocate payload (len=%u sequence=%u type=%u)", len, packet->sequence, packet->buffer[5]);
+    *errcode=ENOMEM;
+    return NULL;
 
 }
 
@@ -93,7 +89,7 @@ static struct decompress_ops_s none_d_ops = {
     .name			= "none",
     .populate			= populate_decompress,
     .get_handle_size		= get_handle_size,
-    .init_decompressor		= init_decompressor,
+    .init		        = init_decompressor,
     .list			= {NULL, NULL},
 };
 

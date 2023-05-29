@@ -127,6 +127,23 @@ void unset_osns_socket_nonblocking(struct osns_socket_s *sock)
 #endif
 }
 
+void osns_socket_enable_reuseport(struct osns_socket_s *sock)
+{
+
+#ifdef __linux__
+    int fd=(* sock->get_unix_fd)(sock);
+
+    if (fd>=0) {
+        int optval=1;
+
+        setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval));
+
+    }
+
+#endif
+}
+
+
 unsigned char socket_connection_error(unsigned int error)
 {
     unsigned char result=0;
@@ -182,7 +199,7 @@ int set_socket_properties(struct osns_socket_s *sock, struct socket_properties_s
 	/* check anything is to be set */
 	if ((prop->valid & (SOCKET_PROPERTY_FLAG_OWNER | SOCKET_PROPERTY_FLAG_GROUP))==0) return 0;
 
-	struct fs_location_path_s path;
+	struct fs_path_s path=FS_PATH_INIT;
 
 	if (get_path_osns_sockaddr(sock, &path)>0) {
 	    struct system_stat_s stat;
@@ -291,24 +308,23 @@ int get_local_peer_properties(struct osns_socket_s *sock, struct local_peer_s *p
 
 static unsigned int max_length_path_local_socket=(sizeof(struct sockaddr_un) - offsetof(struct sockaddr_un, sun_path));
 
-int set_path_osns_sockaddr(struct osns_socket_s *sock, struct fs_location_path_s *path)
+int set_path_osns_sockaddr(struct osns_socket_s *sock, struct fs_path_s *path)
 {
 
-    logoutput_debug("set_path_osns_sockaddr: max %u path %.*s", max_length_path_local_socket, path->len, path->ptr);
+    logoutput_debug("set_path_osns_sockaddr: max %u path %.*s", max_length_path_local_socket, fs_path_get_length(path), fs_path_get_start(path));
 
     if ((sock->type == OSNS_SOCKET_TYPE_CONNECTION) &&  (sock->flags & OSNS_SOCKET_FLAG_LOCAL)) {
-	struct sockaddr_un *sun=&sock->data.connection.sockaddr.data.local;
+	struct sockaddr_un *sun=&sock->sockaddr.data.local;
+	unsigned int len=fs_path_get_length(path);
 
 	memset(sun->sun_path, 0, max_length_path_local_socket);
 
-	if (path->len==0) {
+	if (len==0) return 0;
 
-	    return 0;
+	if (len<max_length_path_local_socket) {
 
-	} else if (path->len<max_length_path_local_socket) {
-
-	    memcpy(sun->sun_path, path->ptr, path->len);
-	    return path->len;
+	    memcpy(sun->sun_path, fs_path_get_start(path), len);
+	    return len;
 
 	}
 
@@ -316,24 +332,17 @@ int set_path_osns_sockaddr(struct osns_socket_s *sock, struct fs_location_path_s
 
     /* no truncate ... too long path is error
 	or type is wrong */
+
     return -1;
 }
 
-unsigned int get_path_osns_sockaddr(struct osns_socket_s *sock, struct fs_location_path_s *path)
+unsigned int get_path_osns_sockaddr(struct osns_socket_s *sock, struct fs_path_s *path)
 {
 
-    path->ptr=NULL;
-    path->len=0;
-
     if ((sock->type == OSNS_SOCKET_TYPE_CONNECTION) && (sock->flags & OSNS_SOCKET_FLAG_LOCAL)) {
-	char *sep=NULL;
-	struct sockaddr_un *sun=&sock->data.connection.sockaddr.data.local;
+	struct sockaddr_un *sun=&sock->sockaddr.data.local;
 
-	path->ptr=sun->sun_path;
-	path->len=max_length_path_local_socket;
-
-	sep=memchr(sun->sun_path, '\0', max_length_path_local_socket);
-	if (sep) path->len=(unsigned int)(sep - path->ptr);
+	fs_path_assign_buffer(path, sun->sun_path, strnlen(sun->sun_path, max_length_path_local_socket));
 
     }
 
@@ -352,7 +361,7 @@ int set_address_osns_sockaddr(struct osns_socket_s *sock, struct ip_address_s *a
 
 	    if ((address->family!=IP_ADDRESS_FAMILY_IPv6) || check_family_ip_address(address->addr.v6, "ipv6")==0) goto out;
 
-	    sin6=&sock->data.connection.sockaddr.data.net6;
+	    sin6=&sock->sockaddr.data.net6;
 
 	    memset(sin6, 0, sizeof(struct sockaddr_in6));
 	    sin6->sin6_family=AF_INET6;
@@ -365,7 +374,7 @@ int set_address_osns_sockaddr(struct osns_socket_s *sock, struct ip_address_s *a
 
 	    if ((address->family!=IP_ADDRESS_FAMILY_IPv4) || check_family_ip_address(address->addr.v4, "ipv4")==0) goto out;
 
-	    sin=&sock->data.connection.sockaddr.data.net4;
+	    sin=&sock->sockaddr.data.net4;
 
 	    memset(sin, 0, sizeof(struct sockaddr_in));
 	    sin->sin_family=AF_INET;
@@ -541,4 +550,32 @@ int get_network_peer_properties(struct osns_socket_s *sock, struct network_peer_
 
     out:
     return result;
+}
+
+int osns_socketpair(struct osns_socket_s sock[2])
+{
+
+#ifdef __linux__
+
+    int sfd[2];
+
+    sfd[0]=-1;
+    sfd[1]=-1;
+
+    if (socketpair(AF_UNIX, (SOCK_STREAM | SOCK_NONBLOCK), 0, sfd)==0) {
+        struct osns_socket_s *tmp=&sock[0];
+
+        (* tmp->set_unix_fd)(tmp, sfd[0]);
+        (* tmp->sops.connection.open)(tmp);
+        tmp=&sock[1];
+        (* tmp->set_unix_fd)(tmp, sfd[1]);
+        (* tmp->sops.connection.open)(tmp);
+
+        return 0;
+
+    }
+
+#endif
+
+    return -1;
 }

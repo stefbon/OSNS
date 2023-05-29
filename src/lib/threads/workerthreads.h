@@ -24,15 +24,11 @@
 
 // Prototypes
 
-void work_workerthread(void *queue, int timeout, void (*cb) (void *data), void *data, struct generic_error_s *error);
-
+void work_workerthread(void *queue, int timeout, void (*cb)(void *ptr), void *ptr);
 void init_workerthreads(void *queue);
 void stop_workerthreads(void *queue);
 void terminate_workerthreads(void *queue, unsigned int timeout);
-
 void set_max_numberthreads(void *queue, unsigned int m);
-unsigned get_numberthreads(void *queue);
-unsigned get_max_numberthreads(void *queue);
 void start_default_workerthreads(void *ptr);
 
 #endif

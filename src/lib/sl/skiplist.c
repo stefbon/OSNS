@@ -134,7 +134,6 @@ struct sl_skiplist_s *create_sl_skiplist(struct sl_skiplist_s *sl, unsigned char
 
     }
 
-
     sl->maxlevel=nrlanes - 1;
     sl->prob=prob;
     pthread_mutex_init(&sl->mutex, NULL);
@@ -145,8 +144,6 @@ struct sl_skiplist_s *create_sl_skiplist(struct sl_skiplist_s *sl, unsigned char
 
     _init_sl_dirnode(sl, &sl->dirnode, size - sizeof(struct sl_skiplist_s), _DIRNODE_FLAG_START);
     sl->dirnode.level=0;
-
-    logoutput_debug("create_sl_skiplist: ready");
     return sl;
 
 }

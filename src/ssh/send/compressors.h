@@ -20,9 +20,7 @@
 #ifndef _SSH_SEND_COMPRESSORS_H
 #define _SSH_SEND_COMPRESSORS_H
 
-struct ssh_compressor_s *get_compressor_container(struct list_element_s *list);
 struct ssh_compressor_s *get_compressor(struct ssh_send_s *s, unsigned int *error);
-void queue_compressor(struct ssh_compressor_s *compressor);
 void remove_compressors(struct ssh_compress_s *compress);
 
 void init_compressors_once();

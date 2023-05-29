@@ -21,6 +21,7 @@
 
 #include "libosns-log.h"
 #include "libosns-misc.h"
+#include "libosns-ssh.h"
 
 #include "ssh-common-protocol.h"
 #include "ssh-common.h"
@@ -28,86 +29,158 @@
 #include "ssh-utils.h"
 #include "ssh-send.h"
 
-int start_channel(struct ssh_channel_s *channel, unsigned int *error)
+struct _cb_start_ssh_channel_hlpr_s {
+    struct ssh_channel_s 			*channel;
+};
+
+static unsigned char _cb_finish_start_ssh_channel(void *ptr)
 {
-    int result=-1;
-    unsigned int seq=0;
-    struct ssh_session_s *session=channel->session;
-    unsigned int dummy=0;
+    struct _cb_start_ssh_channel_hlpr_s *hlpr=(struct _cb_start_ssh_channel_hlpr_s *) ptr;
+    struct ssh_channel_s *channel=hlpr->channel;
+    return ((channel->flags & (SSH_CHANNEL_FLAG_SERVER_CLOSE | SSH_CHANNEL_FLAG_SERVER_EOF | SSH_CHANNEL_FLAG_OPENFAILURE)) ? 1 : 0);
+}
 
-    if (error==NULL) error=&dummy;
+static int read_ssh_channel_open_confirmation_msg(unsigned char type, struct ssh_payload_s *payload, union ssh_message_u *msg)
+{
+    char *buffer=payload->buffer;
+    unsigned int pos=5;
 
-    if (!(channel->flags & CHANNEL_FLAG_TABLE)) {
+    if (payload->len<13) {
 
-	*error=EINVAL;
-	return -1;
-
-    } else if (channel->flags & CHANNEL_FLAG_OPEN) {
-
-	*error=EINVAL;
-	return -1;
+        logoutput_debug("read_ssh_channel_open_confirmation_msg: unable to read received msg ... too short (len=%u)", payload->len);
+        return -1;
 
     }
 
-    logoutput("start_channel: send channel open message");
+    msg->channel.type.open.rcnr=get_uint32(&buffer[pos]);
+    pos+=4;
+    msg->channel.type.open.windowsize=get_uint32(&buffer[pos]);
+    pos+=4;
+    msg->channel.type.open.maxpacketsize=get_uint32(&buffer[pos]);
+    pos+=4;
 
-    if (send_channel_open_message(channel, &seq)>0) {
+    /* 20230123
+        TODO: are there ssh channel types where the confirmation has additional data ?
+        read this here */
+
+    return (int) pos;
+
+}
+
+static int read_ssh_channel_open_failure_msg(unsigned char type, struct ssh_payload_s *payload, union ssh_message_u *msg)
+{
+    char *buffer=payload->buffer;
+    unsigned int pos=5;
+    unsigned int tmp=0;
+
+    if (payload->len<13) {
+
+        logoutput_debug("read_ssh_channel_open_failure_msg: unable to read received msg ... too short (len=%u)", payload->len);
+        return -1;
+
+    }
+
+    msg->channel.type.open_failure.reason=get_uint32(&buffer[pos]);
+    pos+=4;
+    tmp=read_ssh_string(&buffer[pos], (payload->len - pos), &msg->channel.type.open_failure.description);
+
+    if (tmp<4) {
+
+        logoutput_debug("read_ssh_channel_open_failure_msg: unable to read failure description");
+        return -1;
+
+    }
+
+    pos+=tmp;
+    return (int) pos;
+
+}
+
+int start_ssh_channel(struct ssh_channel_s *channel, struct ssh_channel_open_data_s *data)
+{
+    struct ssh_session_s *session=channel->session;
+    struct ssh_connection_s *sshc=channel->connection;
+    unsigned char type=channel->type;
+    int result=-1;
+    unsigned int seq=0;
+    union ssh_message_u msg;
+
+    if (((type==SSH_CHANNEL_TYPE_DIRECT) || (type==SSH_CHANNEL_TYPE_FORWARDED)) && (data==NULL)) {
+
+        logoutput_debug("start_ssh_channel: cannot continue, open data must be specified for ssh channel type %u", type);
+        return -1;
+
+    }
+
+    memset(&msg, 0, sizeof(union ssh_message_u));
+    msg.channel.lcnr=channel->lcnr;
+    msg.channel.type.open.windowsize=get_window_size(session);
+    msg.channel.type.open.maxpacketsize=get_max_packet_size(session);
+    msg.channel.type.open.data=data;
+
+    if (send_ssh_channel_open_msg(sshc, type, &msg)>0) {
 	struct system_timespec_s expire=SYSTEM_TIME_INIT;
 	struct ssh_payload_s *payload=NULL;
+	struct _cb_start_ssh_channel_hlpr_s hlpr;
 
-	get_channel_expire_init(channel, &expire);
+	get_ssh_channel_expire_init(channel, &expire);
+	hlpr.channel=channel;
 
 	getpayload:
 
-	payload=get_ssh_payload_channel(channel, &expire, &seq, error);
+	payload=get_ssh_payload(&channel->queue, &expire, NULL, _cb_finish_start_ssh_channel, NULL, (void *) &hlpr);
 
 	if (! payload) {
 
-	    logoutput("start_channel: error %i waiting for packet (%s)", *error, strerror(*error));
+	    logoutput("start_ssh_channel: error waiting for packet");
 	    goto out;
 
 	}
 
 	if (payload->type==SSH_MSG_CHANNEL_OPEN_CONFIRMATION) {
-	    unsigned int window=0;
 
-	    channel->remote_channel=get_uint32(&payload->buffer[5]);
-	    channel->remote_window=get_uint32(&payload->buffer[9]);
-	    channel->max_packet_size=get_uint32(&payload->buffer[13]);
+            channel->lwindowsize=msg.channel.type.open.windowsize;
+            channel->maxpacketsize=msg.channel.type.open.maxpacketsize;
+            memset(&msg, 0, sizeof(union ssh_message_u));
 
-	    channel->flags |= CHANNEL_FLAG_OPEN;
+            result=read_ssh_channel_open_confirmation_msg(channel->type, payload, &msg);
 
-	    logoutput("start_channel: created a new channel local:remote %i:%i local window %u remote window %u max packet size %i", channel->local_channel, channel->remote_channel, channel->local_window, channel->remote_window, channel->max_packet_size);
-	    result=0;
+            if (result>0) {
+
+	        channel->rcnr=msg.channel.type.open.rcnr;
+	        channel->rwindowsize=msg.channel.type.open.windowsize;
+	        channel->maxpacketsize=msg.channel.type.open.maxpacketsize;
+	        channel->flags |= SSH_CHANNEL_FLAG_OPEN;
+	        logoutput("start_ssh_channel: created a new channel local:remote %i:%i local window %u remote window %u max packet size %i", channel->lcnr, channel->rcnr, channel->lwindowsize, channel->rwindowsize, channel->maxpacketsize);
+
+            }
+
 	    free_payload(&payload);
 
 	} else if (payload->type==SSH_MSG_CHANNEL_OPEN_FAILURE) {
-	    unsigned int reasoncode=0;
-	    unsigned int len=0;
+	    int tmp=0;
 
-	    reasoncode=get_uint32(&payload->buffer[5]);
-	    len=get_uint32(&payload->buffer[9]);
+            memset(&msg, 0, sizeof(union ssh_message_u));
+            tmp=read_ssh_channel_open_failure_msg(channel->type, payload, &msg);
 
-	    if (13 + len <= payload->len) {
-		unsigned char string[len+1];
+            if (tmp>0) {
+                unsigned int reason=msg.channel.type.open_failure.reason;
+                struct ssh_string_s *descr=&msg.channel.type.open_failure.description;
 
-		memcpy(string, &payload->buffer[13], len);
-		string[len]='\0';
-
-		logoutput("start_channel: failed by server: %s/%s", get_openfailure_reason(reasoncode), string);
-
-	    } else {
-
-		logoutput("start_channel: failed by server: %s", get_openfailure_reason(reasoncode));
+                logoutput("start_ssh_channel: failed by server reason=%u : %.*s", reason, descr->len, descr->ptr);
 
 	    }
 
-	    channel->flags |= CHANNEL_FLAG_OPENFAILURE;
+	    channel->flags |= SSH_CHANNEL_FLAG_OPENFAILURE;
 	    free_payload(&payload);
+
+        } else if (payload->type==SSH_MSG_CHANNEL_CLOSE) {
+
+            free_payload(&payload);
 
 	} else {
 
-	    logoutput("start_channel: unexpected reply from server: %i", payload->type);
+	    logoutput("start_ssh_channel: unexpected reply from server: %i", payload->type);
 	    free_payload(&payload);
 	    goto getpayload;
 
@@ -115,18 +188,18 @@ int start_channel(struct ssh_channel_s *channel, unsigned int *error)
 
     } else {
 
-	logoutput("start_channel: error sending open channel message");
+	logoutput("start_ssh_channel: error sending open channel message");
 
     }
 
     out:
 
-    if (result==0) {
-	struct ssh_signal_s *signal=channel->queue.signal;
+    if (result>=0) {
+	struct shared_signal_s *signal=channel->queue.signal;
 
-	signal_lock(signal->signal);
-	signal_broadcast(signal->signal);
-	signal_unlock(signal->signal);
+	signal_lock(signal);
+	signal_broadcast(signal);
+	signal_unlock(signal);
 
     }
 
@@ -134,54 +207,32 @@ int start_channel(struct ssh_channel_s *channel, unsigned int *error)
 
 }
 
-void close_channel(struct ssh_channel_s *channel, unsigned int flags)
+void close_ssh_channel(struct ssh_channel_s *channel, unsigned int flags)
 {
 
-    if (!(channel->flags & CHANNEL_FLAG_OPEN)) {
+    if (!(channel->flags & SSH_CHANNEL_FLAG_OPEN)) return;
 
-	return;
+    logoutput("close_ssh_channel: %u", channel->lcnr);
 
-    }
+    if ((flags & SSH_CHANNEL_FLAG_CLIENT_CLOSE) && (channel->flags & SSH_CHANNEL_FLAG_CLIENT_CLOSE)==0) {
+        union ssh_message_u msg;
 
-    logoutput("close_channel: %i", channel->local_channel);
+        memset(&msg, 0, sizeof(union ssh_message_u));
+        msg.channel.lcnr=channel->lcnr;
+        msg.channel.type.close.type=SSH_MSG_CHANNEL_CLOSE;
 
-    if ((flags & CHANNEL_FLAG_CLIENT_CLOSE) && (channel->flags & CHANNEL_FLAG_CLIENT_CLOSE)==0) {
-
-	channel->flags|=CHANNEL_FLAG_CLIENT_CLOSE;
-
-	if (send_channel_close_message(channel)==-1) {
-
-	    logoutput("close_channel: error sending close channel");
-
-	}
+	channel->flags |= SSH_CHANNEL_FLAG_CLIENT_CLOSE;
+	if (send_ssh_channel_eofclose_msg(channel, &msg)==-1) logoutput("close_ssh_channel: error sending close channel");
 
     }
 
-    if ((flags & CHANNEL_FLAG_SERVER_CLOSE) && (channel->flags & CHANNEL_FLAG_SERVER_CLOSE)==0) {
-	struct system_timespec_s expire=SYSTEM_TIME_INIT;
-	struct ssh_signal_s *signal=channel->queue.signal;
+    if ((flags & SSH_CHANNEL_FLAG_SERVER_CLOSE) && (channel->flags & SSH_CHANNEL_FLAG_SERVER_CLOSE)==0) {
 
-	/* TODO: do not wait when there are connection problems */
-
-	get_channel_expire_init(channel, &expire);
-
-	signal_lock(signal->signal);
-
-	while((channel->flags & CHANNEL_FLAG_SERVER_CLOSE)==0) {
-
-	    if (signal_condtimedwait(signal->signal, &expire)==ETIMEDOUT) {
-
-		logoutput("close_channel: timeout waiting for server close");
-		break;
-
-	    }
-
-	}
-
-	signal_unlock(signal->signal);
+        logoutput("close_ssh_channel: waiting for a server close ignored");
+        channel->flags |= SSH_CHANNEL_FLAG_SERVER_CLOSE;
 
     }
 
-    channel->flags -= CHANNEL_FLAG_OPEN;
+    channel->flags &= ~SSH_CHANNEL_FLAG_OPEN;
 
 }

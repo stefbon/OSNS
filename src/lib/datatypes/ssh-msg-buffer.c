@@ -18,10 +18,10 @@
 */
 
 #include "libosns-basic-system-headers.h"
+#include "libosns-ssh.h"
 
 #include "datatypes/ssh-uint.h"
-#include "datatypes/ssh-string.h"
-#include "ssh-payload.h"
+#include "lib/ssh/ssh-string.h"
 #include "ssh-msg-buffer.h"
 
 void nowrite_byte(struct msg_buffer_s *mb, unsigned char b)
@@ -71,7 +71,7 @@ void dowrite_bytes(struct msg_buffer_s *mb, unsigned char *bytes, unsigned int l
 unsigned int start_ssh_string(struct msg_buffer_s *mb)
 {
     unsigned int pos=mb->pos;
-    ( mb->write_ssh_string)(mb, 'l', NULL);
+    (* mb->write_ssh_string)(mb, 'l', NULL);
     return pos;
 }
 
@@ -346,11 +346,6 @@ void set_msg_buffer(struct msg_buffer_s *mb, char *data, unsigned int len)
 
     }
 
-}
-
-void set_msg_buffer_payload(struct msg_buffer_s *mb, struct ssh_payload_s *p)
-{
-    set_msg_buffer(mb, p->buffer, p->len);
 }
 
 void set_msg_buffer_string(struct msg_buffer_s *mb, struct ssh_string_s *s)

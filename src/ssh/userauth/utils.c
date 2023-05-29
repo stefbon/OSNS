@@ -294,19 +294,17 @@ struct pw_list_s *get_next_pwlist(struct pw_list_s *pwlist, struct pw_list_s *el
     return element->next;
 }
 
-int select_userauth_reply(struct ssh_connection_s *connection, struct ssh_payload_s *payload, void *ptr)
+int select_userauth_reply(struct ssh_payload_s *payload, void *ptr)
 {
-    if (payload->type == SSH_MSG_USERAUTH_SUCCESS || payload->type == SSH_MSG_USERAUTH_FAILURE) return 0;
-    return -1;
+    return (((payload->type == SSH_MSG_USERAUTH_SUCCESS) || (payload->type == SSH_MSG_USERAUTH_FAILURE)) ? 1 : 0);
 }
 
 int respond_userauth_request(struct ssh_connection_s *connection, unsigned char success)
 {
     struct ssh_setup_s *setup=&connection->setup;
     struct ssh_auth_s *auth=&setup->phase.service.type.auth;
-    uint32_t seq=0;
 
-    return send_userauth_request_reply(connection, auth->required, success, &seq);
+    return send_userauth_request_reply(connection, auth->required, success);
 }
 
 int test_algo_publickey(struct ssh_connection_s *connection, struct ssh_pkalgo_s *pkalgo)

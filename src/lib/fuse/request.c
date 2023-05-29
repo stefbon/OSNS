@@ -22,6 +22,8 @@
 #include <linux/fuse.h>
 
 #include "libosns-log.h"
+#include "libosns-list.h"
+#include "libosns-system.h"
 #include "libosns-interface.h"
 #include "libosns-workspace.h"
 #include "libosns-context.h"
@@ -38,6 +40,115 @@ extern int fuse_notify_VFS_delete(struct context_interface_s *interface, uint64_
 extern int fuse_reply_VFS_data(struct context_interface_s *i, uint64_t unique, char *data, unsigned int len);
 extern int fuse_reply_VFS_error(struct context_interface_s *i, uint64_t unique, unsigned int errcode);
 
+#define FUSE_OPEN_HASHTABLE_SIZE			64
+static struct list_header_s hashtable[FUSE_OPEN_HASHTABLE_SIZE];
+
+static void add_fuse_open_hashtable(struct fuse_open_header_s *oh)
+{
+    unsigned int hashvalue=(((uint64_t) oh) % FUSE_OPEN_HASHTABLE_SIZE);
+    struct list_header_s *h=&hashtable[hashvalue];
+
+    logoutput_debug("add_fuse_open_hashtable: add fh %lu", (uint64_t) oh);
+
+    write_lock_list_header(h);
+    add_list_element_first(h, &oh->list);
+    write_unlock_list_header(h);
+}
+
+static struct fuse_open_header_s *get_fuse_open_header(uint64_t fh)
+{
+    unsigned int hashvalue=(fh % FUSE_OPEN_HASHTABLE_SIZE);
+    struct list_header_s *h=&hashtable[hashvalue];
+    struct list_element_s *list=NULL;
+    struct fuse_open_header_s *oh=NULL;
+
+    read_lock_list_header(h);
+    list=get_list_head(h);
+
+    while (list) {
+
+	oh=(struct fuse_open_header_s *)((char *) list - offsetof(struct fuse_open_header_s, list));
+
+	if (((uint64_t) oh) == fh) break;
+	list=get_next_element(list);
+
+    }
+
+    read_unlock_list_header(h);
+    return oh;
+
+}
+
+static void remove_fuse_open_hashtable(struct fuse_open_header_s *oh)
+{
+    unsigned int hashvalue=(((uint64_t) oh) % FUSE_OPEN_HASHTABLE_SIZE);
+    struct list_header_s *h=&hashtable[hashvalue];
+
+    write_lock_list_header(h);
+    remove_list_element(&oh->list);
+    write_unlock_list_header(h);
+}
+
+static void oh_fgetattr_noop(struct fuse_open_header_s *oh, struct fuse_request_s *request)
+{
+    reply_VFS_error(request, EIO);
+}
+
+static void oh_fsetattr_noop(struct fuse_open_header_s *oh, struct fuse_request_s *request, struct system_stat_s *stat)
+{
+    reply_VFS_error(request, EIO);
+}
+
+static void oh_flush_noop(struct fuse_open_header_s *oh, struct fuse_request_s *request, uint64_t lo)
+{
+    reply_VFS_error(request, 0);
+}
+
+static void oh_fsync_noop(struct fuse_open_header_s *oh, struct fuse_request_s *request, unsigned int flags)
+{
+    reply_VFS_error(request, 0);
+}
+
+static void oh_release_noop(struct fuse_open_header_s *oh, struct fuse_request_s *request, unsigned int flags, uint64_t lo)
+{
+    reply_VFS_error(request, 0);
+}
+
+static void oh_getlock_noop(struct fuse_open_header_s *oh, struct fuse_request_s *request, struct flock *flock)
+{
+    reply_VFS_error(request, ENOSYS);
+}
+
+static void oh_setlock_noop(struct fuse_open_header_s *oh, struct fuse_request_s *request, struct flock *flock, uint64_t owner, unsigned int flags)
+{
+    reply_VFS_error(request, ENOSYS);
+}
+
+static void oh_flock_noop(struct fuse_open_header_s *oh, struct fuse_request_s *request, uint64_t owner, unsigned char type)
+{
+    reply_VFS_error(request, ENOSYS);
+}
+
+void init_fuse_open_header(struct fuse_open_header_s *oh, struct service_context_s *ctx, struct inode_s *inode)
+{
+    oh->ctx=ctx;
+    oh->inode=inode;
+    oh->type=0;
+
+    oh->fgetattr=oh_fgetattr_noop;
+    oh->fsetattr=oh_fsetattr_noop;
+    oh->flush=oh_flush_noop;
+    oh->fsync=oh_fsync_noop;
+    oh->release=oh_release_noop;
+    oh->getlock=oh_getlock_noop;
+    oh->setlock=oh_setlock_noop;
+    oh->flock=oh_flock_noop;
+
+    init_list_element(&oh->list, NULL);
+    oh->handle=NULL;
+}
+
+
 int reply_VFS_data(struct fuse_request_s *request, char *data, unsigned int size)
 {
     return fuse_reply_VFS_data(request->interface, request->unique, data, size);
@@ -53,22 +164,22 @@ int notify_VFS_delete(struct context_interface_s *interface, uint64_t pino, uint
     return fuse_notify_VFS_delete(interface, pino, ino, name, len);
 }
 
+/* shared FUSE function to do a cb on an inode */
+
 static void _fuse_fs_cb_common(struct fuse_request_s *request, char *data, void (* cb)(struct service_context_s *c, struct fuse_request_s *r, struct inode_s *i, char *d))
 {
-    struct context_interface_s *interface=request->interface;
-    struct service_context_s *context=get_service_context(interface);
-    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
+    struct service_context_s *ctx=get_service_context(request->interface);
 
     if (request->ino==FUSE_ROOT_ID) {
 
-	(* cb)(context, request, &workspace->inodes.rootinode, data);
+	(* cb)(ctx, request, &ctx->service.workspace.rootinode, data);
 
     } else {
-	struct inode_s *inode=lookup_workspace_inode(workspace, request->ino);
+	struct inode_s *inode=lookup_workspace_inode(request->ino);
 
 	if (inode) {
 
-	    (* cb)(context, request, inode, data);
+	    (* cb)(ctx, request, inode, data);
 
 	} else {
 
@@ -84,22 +195,18 @@ static void _fuse_fs_cb_common(struct fuse_request_s *request, char *data, void 
 static void fuse_fs_forget(struct fuse_request_s *request, char *data)
 {
     struct fuse_forget_in *in=(struct fuse_forget_in *) data;
-    struct context_interface_s *interface=request->interface;
-    struct service_context_s *context=get_service_context(interface);
-    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
+    struct service_context_s *ctx=get_service_context(request->interface);
 
     /*
     logoutput("FORGET (thread %i): ino %lli forget %i", (int) gettid(), (long long) request->ino, in->nlookup);
     */
 
-    queue_inode_2forget(workspace, request->ino, FORGET_INODE_FLAG_FORGET, in->nlookup);
+    queue_inode_2forget(ctx, request->ino, FORGET_INODE_FLAG_FORGET, in->nlookup);
 }
 
 static void fuse_fs_forget_multi(struct fuse_request_s *request, char *data)
 {
-    struct context_interface_s *interface=request->interface;
-    struct service_context_s *context=get_service_context(interface);
-    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
+    struct service_context_s *ctx=get_service_context(request->interface);
     struct fuse_batch_forget_in *in=(struct fuse_batch_forget_in *) data;
     struct fuse_forget_one *forgets=(struct fuse_forget_one *) (data + sizeof(struct fuse_batch_forget_in));
     unsigned int i=0;
@@ -107,55 +214,59 @@ static void fuse_fs_forget_multi(struct fuse_request_s *request, char *data)
     /* logoutput("FORGET_MULTI: (thread %i) count %i", (int) gettid(), batch_forget_in->count); */
 
     for (i=0; i<in->count; i++)
-	queue_inode_2forget(workspace, forgets[i].nodeid, FORGET_INODE_FLAG_FORGET, forgets[i].nlookup);
+	queue_inode_2forget(ctx, forgets[i].nodeid, FORGET_INODE_FLAG_FORGET, forgets[i].nlookup);
 
 }
 
 static void _fuse_fs_lookup(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, char *data)
 {
-    (* inode->fs->type.dir.lookup)(context, request, inode, data, request->size - 1);
+    (* inode->fs->type.dir.lookup)(context, request, inode, data, strlen(data));
 }
 
 static void fuse_fs_lookup(struct fuse_request_s *request, char *data)
 {
-    logoutput("fuse_fs_lookup: ino %li", request->ino);
     _fuse_fs_cb_common(request, data, _fuse_fs_lookup);
 }
 
-static void _fuse_fs_access(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, char *data)
+static void _fuse_fs_access(struct service_context_s *ctx, struct fuse_request_s *request, struct inode_s *inode, char *data)
 {
     struct fuse_access_in *access_in=(struct fuse_access_in *) data;
-    (* inode->fs->access)(context, request, inode, access_in->mask);
+    (* inode->fs->access)(ctx, request, inode, access_in->mask);
 }
 
 static void fuse_fs_access(struct fuse_request_s *request, char *data)
 {
-    logoutput("fuse_fs_access: ino %li", request->ino);
     _fuse_fs_cb_common(request, data, _fuse_fs_access);
 }
 
-static void _fuse_fs_getattr(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, char *data)
+static void _fuse_fs_getattr(struct service_context_s *ctx, struct fuse_request_s *request, struct inode_s *inode, char *data)
 {
-    struct fuse_getattr_in *getattr_in=(struct fuse_getattr_in *) data;
-
-    if ((getattr_in->getattr_flags & FUSE_GETATTR_FH) && getattr_in->fh>0) {
-	struct fuse_openfile_s *openfile= (struct fuse_openfile_s *) getattr_in->fh;
-
-	(* openfile->fgetattr) (openfile, request);
-
-    } else {
-
-	(* inode->fs->getattr)(context, request, inode);
-
-    }
-
+    (* inode->fs->getattr)(ctx, request, inode);
 }
 
 static void fuse_fs_getattr(struct fuse_request_s *request, char *data)
 {
+    struct fuse_getattr_in *getattr_in=(struct fuse_getattr_in *) data;
 
-    logoutput("fuse_fs_getattr: ino %li", request->ino);
-    _fuse_fs_cb_common(request, data, _fuse_fs_getattr);
+    if ((getattr_in->getattr_flags & FUSE_GETATTR_FH) && getattr_in->fh>0) {
+	struct fuse_open_header_s *oh=get_fuse_open_header(getattr_in->fh);
+
+	if (oh && (get_ino_system_stat(&oh->inode->stat)==request->ino)) {
+
+	    (* oh->fgetattr)(oh, request);
+
+	} else {
+
+	    reply_VFS_error(request, EIO);
+
+	}
+
+    } else {
+
+	_fuse_fs_cb_common(request, NULL, _fuse_fs_getattr);
+
+    }
+
 }
 
 /*
@@ -251,125 +362,132 @@ static void set_stat_mask_from_fuse_setattr(struct fuse_setattr_in *attr, struct
 
 }
 
-static void _fuse_fs_setattr(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, char *data)
+/* SETATTR */
+
+static void _fuse_fs_setattr(struct service_context_s *ctx, struct fuse_request_s *request, struct inode_s *inode, char *data)
+{
+    (* inode->fs->setattr)(ctx, request, inode, (struct system_stat_s *) data);
+}
+
+static void fuse_fs_setattr(struct fuse_request_s *request, char *data)
 {
     struct fuse_setattr_in *setattr_in=(struct fuse_setattr_in *) data;
-    struct system_stat_s stat;
+    struct system_stat_s stat2set;
 
-    memset(&stat, 0, sizeof(struct system_stat_s));
-    set_stat_mask_from_fuse_setattr(setattr_in, &stat);
+    memset(&stat2set, 0, sizeof(struct system_stat_s));
+    set_stat_mask_from_fuse_setattr(setattr_in, &stat2set);
 
     if (setattr_in->valid & FATTR_FH) {
-	struct fuse_openfile_s *openfile=(struct fuse_openfile_s *) setattr_in->fh;
+	struct fuse_open_header_s *oh=get_fuse_open_header(setattr_in->fh); /* can be a file or a directory */
 
-	setattr_in->valid &= ~FATTR_FH;
-	(* openfile->fsetattr) (openfile, request, &stat);
+	if (oh && (get_ino_system_stat(&oh->inode->stat)==request->ino)) {
+
+	    (* oh->fsetattr)(oh, request, &stat2set);
+
+	} else {
+
+	    reply_VFS_error(request, EIO);
+
+	}
 
     } else {
 
-	(* inode->fs->setattr)(context, request, inode, &stat);
+	_fuse_fs_cb_common(request, (void *) &stat2set, _fuse_fs_setattr);
 
     }
 
 }
 
-static void fuse_fs_setattr(struct fuse_request_s *request, char *data)
-{
+/* READLINK */
 
-    logoutput("fuse_fs_setattr: ino %li", request->ino);
-    _fuse_fs_cb_common(request, data, _fuse_fs_setattr);
-}
-
-static void _fuse_fs_readlink(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, char *data)
+static void _fuse_fs_readlink(struct service_context_s *ctx, struct fuse_request_s *request, struct inode_s *inode, char *data)
 {
-    (* inode->fs->readlink)(context, request, inode);
+    (* inode->fs->readlink)(ctx, request, inode);
 }
 
 static void fuse_fs_readlink(struct fuse_request_s *request, char *data)
 {
-
-    logoutput("fuse_fs_readlink: ino %li", request->ino);
     _fuse_fs_cb_common(request, data, _fuse_fs_readlink);
 }
 
-static void _fuse_fs_mkdir(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, char *data)
+/* MKDIR */
+
+static void _fuse_fs_mkdir(struct service_context_s *ctx, struct fuse_request_s *request, struct inode_s *inode, char *data)
 {
     struct fuse_mkdir_in *mkdir_in=(struct fuse_mkdir_in *) data;
     char *name=(char *) (data + sizeof(struct fuse_mkdir_in));
     unsigned int len=strlen(name);
 
-    (* inode->fs->type.dir.mkdir)(context, request, inode, name, len, mkdir_in->mode, mkdir_in->umask);
+    (* inode->fs->type.dir.mkdir)(ctx, request, inode, name, len, mkdir_in->mode, mkdir_in->umask);
 }
 
 static void fuse_fs_mkdir(struct fuse_request_s *request, char *data)
 {
-
-    logoutput("fuse_fs_mkdir: ino %li", request->ino);
     _fuse_fs_cb_common(request, data, _fuse_fs_mkdir);
 }
 
-static void _fuse_fs_mknod(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, char *data)
+/* MKNOD */
+
+static void _fuse_fs_mknod(struct service_context_s *ctx, struct fuse_request_s *request, struct inode_s *inode, char *data)
 {
     struct fuse_mknod_in *mknod_in=(struct fuse_mknod_in *) data;
     char *name=(char *) (data + sizeof(struct fuse_mknod_in));
     unsigned int len=strlen(name);
 
-    (* inode->fs->type.dir.mknod)(context, request, inode, name, len, mknod_in->mode, mknod_in->rdev, mknod_in->umask);
+    (* inode->fs->type.dir.mknod)(ctx, request, inode, name, len, mknod_in->mode, mknod_in->rdev, mknod_in->umask);
 }
 
 static void fuse_fs_mknod(struct fuse_request_s *request, char *data)
 {
-
-    logoutput("fuse_fs_mknod: ino %li", request->ino);
     _fuse_fs_cb_common(request, data, _fuse_fs_mknod);
 }
 
-static void _fuse_fs_symlink(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, char *data)
+/* SYMLINK */
+
+static void _fuse_fs_symlink(struct service_context_s *ctx, struct fuse_request_s *request, struct inode_s *inode, char *data)
 {
     char *name=(char *) data;
     unsigned int len0=strlen(name);
     char *target=(char *) (data + len0);
     unsigned int len1=strlen(target);
 
-    (* inode->fs->type.dir.symlink)(context, request, inode, name, len0, target, len1);
+    (* inode->fs->type.dir.symlink)(ctx, request, inode, name, len0, target, len1);
 }
 
 static void fuse_fs_symlink(struct fuse_request_s *request, char *data)
 {
-
-    logoutput("fuse_fs_symlink: ino %li", request->ino);
     _fuse_fs_cb_common(request, data, _fuse_fs_symlink);
 }
 
-static void _fuse_fs_unlink(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, char *data)
+/* UNLINK */
+
+static void _fuse_fs_unlink(struct service_context_s *ctx, struct fuse_request_s *request, struct inode_s *inode, char *data)
 {
-    (* inode->fs->type.dir.unlink)(context, request, inode, data, strlen(data));
+    (* inode->fs->type.dir.unlink)(ctx, request, inode, data, strlen(data));
 }
 
 static void fuse_fs_unlink(struct fuse_request_s *request, char *data)
 {
-
-    logoutput("fuse_fs_unlink: ino %li", request->ino);
     _fuse_fs_cb_common(request, data, _fuse_fs_unlink);
 }
 
-static void _fuse_fs_rmdir(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, char *data)
+/* RMDIR */
+
+static void _fuse_fs_rmdir(struct service_context_s *ctx, struct fuse_request_s *request, struct inode_s *inode, char *data)
 {
-    (* inode->fs->type.dir.rmdir)(context, request, inode, data, strlen(data));
+    (* inode->fs->type.dir.rmdir)(ctx, request, inode, data, strlen(data));
 }
 
 static void fuse_fs_rmdir(struct fuse_request_s *request, char *data)
 {
-
-    logoutput("fuse_fs_rmdir: ino %li", request->ino);
     _fuse_fs_cb_common(request, data, _fuse_fs_rmdir);
 }
 
+/* RENAME */
+
 static void fuse_fs_rename(struct fuse_request_s *request, char *data)
 {
-    struct context_interface_s *interface=request->interface;
-    struct service_context_s *context=get_service_context(interface);
-    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
+    struct service_context_s *ctx=get_service_context(request->interface);
     uint64_t ino=request->ino;
     struct fuse_rename_in *rename_in=(struct fuse_rename_in *) data;
     char *oldname=(char *) (data + sizeof(struct fuse_rename_in));
@@ -377,19 +495,19 @@ static void fuse_fs_rename(struct fuse_request_s *request, char *data)
     char *newname=(char *) (data + sizeof(struct fuse_rename_in) + strlen(oldname));
 
     if (ino==FUSE_ROOT_ID) {
-	struct inode_s *inode=&workspace->inodes.rootinode;
+	struct inode_s *inode=&ctx->service.workspace.rootinode;
 
 	if (newino==FUSE_ROOT_ID) {
-	    struct inode_s *newinode=&workspace->inodes.rootinode;
+	    struct inode_s *newinode=&ctx->service.workspace.rootinode;
 
-	    (* inode->fs->type.dir.rename)(context, request, inode, oldname, newinode, newname, 0);
+	    (* inode->fs->type.dir.rename)(ctx, request, inode, oldname, newinode, newname, 0);
 
 	} else {
-	    struct inode_s *newinode=lookup_workspace_inode(workspace, newino);
+	    struct inode_s *newinode=lookup_workspace_inode(newino);
 
 	    if (newinode) {
 
-		(* inode->fs->type.dir.rename)(context, request, inode, oldname, newinode, newname, 0);
+		(* inode->fs->type.dir.rename)(ctx, request, inode, oldname, newinode, newname, 0);
 
 	    } else {
 
@@ -400,21 +518,21 @@ static void fuse_fs_rename(struct fuse_request_s *request, char *data)
 	}
 
     } else {
-	struct inode_s *inode=lookup_workspace_inode(workspace, ino);
+	struct inode_s *inode=lookup_workspace_inode(ino);
 
 	if (inode) {
 
 	    if (newino==FUSE_ROOT_ID) {
-		struct inode_s *newinode=&workspace->inodes.rootinode;
+		struct inode_s *newinode=&ctx->service.workspace.rootinode;
 
-		(* inode->fs->type.dir.rename)(context, request, inode, oldname, newinode, newname, 0);
+		(* inode->fs->type.dir.rename)(ctx, request, inode, oldname, newinode, newname, 0);
 
 	    } else {
-		struct inode_s *newinode=lookup_workspace_inode(workspace, newino);
+		struct inode_s *newinode=lookup_workspace_inode(newino);
 
 		if (newinode) {
 
-		    (* inode->fs->type.dir.rename)(context, request, inode, oldname, newinode, newname, 0);
+		    (* inode->fs->type.dir.rename)(ctx, request, inode, oldname, newinode, newname, 0);
 
 		} else {
 
@@ -434,70 +552,47 @@ static void fuse_fs_rename(struct fuse_request_s *request, char *data)
 
 }
 
+/* (HARD) LINK (not supported) */
+
 static void fuse_fs_link(struct fuse_request_s *request, char *data)
 {
     reply_VFS_error(request, ENOSYS);
 }
 
-/*
-    get information about a lock
-    if this is the case it returns the same lock with type F_UNLCK
-    used for posix locks
-*/
+static void convert_fuse_lock2flock(struct fuse_file_lock *lock, struct flock *flock)
+{
+    flock->l_type=lock->type;
+    flock->l_whence=SEEK_SET;
+    flock->l_start=lock->start;
+    flock->l_len=(lock->end==OFFSET_MAX) ? 0 : lock->end - lock->start + 1;
+    flock->l_pid=lock->pid;
+}
+
+void convert_flock2fuse_lock(struct flock *flock, struct fuse_file_lock *lock)
+{
+    lock->type=flock->l_type;
+    lock->start=flock->l_start;
+    lock->end=((flock->l_len==0) ? OFFSET_MAX : (lock->start + flock->l_len - 1));
+    lock->pid=flock->l_pid;
+}
+
+/* LOCKS */
 
 static void fuse_fs_getlock(struct fuse_request_s *request, char *data)
 {
     struct fuse_lk_in *lk_in=(struct fuse_lk_in *) data;
+    struct fuse_open_header_s *oh=get_fuse_open_header(lk_in->fh);
 
-    if (lk_in->fh>0) {
-	struct fuse_openfile_s *openfile=(struct fuse_openfile_s *) (uintptr_t) lk_in->fh;
+    if (oh && (get_ino_system_stat(&oh->inode->stat)==request->ino)) {
 	struct flock flock;
 
-	flock.l_type=lk_in->lk.type;
-	flock.l_whence=SEEK_SET;
-	flock.l_start=lk_in->lk.start;
-	flock.l_len=(lk_in->lk.end==OFFSET_MAX) ? 0 : lk_in->lk.end - lk_in->lk.start + 1;
-	flock.l_pid=lk_in->lk.pid;
-
-	(* openfile->getlock) (openfile, request, &flock);
+	convert_fuse_lock2flock(&lk_in->lk, &flock);
+	(* oh->getlock) (oh, request, &flock);
 	return;
 
     }
 
     reply_VFS_error(request, EIO);
-}
-
-static void _fuse_fs_flock_lock(struct fuse_openfile_s *openfile, struct fuse_request_s *request, struct fuse_lk_in *lk_in, unsigned char type)
-{
-
-    switch (lk_in->lk.type) {
-	case F_RDLCK:
-	    type|=LOCK_SH;
-	    break;
-	case F_WRLCK:
-	    type|=LOCK_EX;
-	    break;
-	case F_UNLCK:
-	    type|=LOCK_UN;
-	    break;
-    }
-
-    (* openfile->flock) (openfile, request, type);
-
-}
-
-static void _fuse_fs_posix_lock(struct fuse_openfile_s *openfile, struct fuse_request_s *request, struct fuse_lk_in *lk_in, unsigned int flags)
-{
-    struct flock flock;
-
-    flock.l_type=lk_in->lk.type;
-    flock.l_whence=SEEK_SET;
-    flock.l_start=lk_in->lk.start;
-    flock.l_len=(lk_in->lk.end==OFFSET_MAX) ? 0 : lk_in->lk.end - lk_in->lk.start + 1;
-    flock.l_pid=lk_in->lk.pid;
-
-    (* openfile->setlock) (openfile, request, &flock, flags);
-
 }
 
 /*
@@ -507,20 +602,38 @@ static void _fuse_fs_posix_lock(struct fuse_openfile_s *openfile, struct fuse_re
     this function is used when both locks are used (set in the init phase)
 */
 
-static void fuse_fs_lock(struct fuse_request_s *request, char *data)
+static void _fuse_fs_setlock(struct fuse_request_s *request, char *data, unsigned char wait)
 {
     struct fuse_lk_in *lk_in=(struct fuse_lk_in *) data;
+    struct fuse_open_header_s *oh=get_fuse_open_header(lk_in->fh);
 
-    if (lk_in->fh) {
-	struct fuse_openfile_s *openfile=(struct fuse_openfile_s *) (uintptr_t) lk_in->fh;
+    if (oh && (get_ino_system_stat(&oh->inode->stat)==request->ino)) {
 
 	if (lk_in->lk_flags & FUSE_LK_FLOCK) {
+	    unsigned char type=((wait) ? 0 : LOCK_NB);
 
-	    _fuse_fs_flock_lock(openfile, request, lk_in, LOCK_NB);
+	    /* dealing with a BSD stype file lock */
+
+	    switch (lk_in->lk.type) {
+		case F_RDLCK:
+		    type|=LOCK_SH;
+		    break;
+		case F_WRLCK:
+		    type|=LOCK_EX;
+		    break;
+		case F_UNLCK:
+		    type|=LOCK_UN;
+		    break;
+	    }
+
+	    (* oh->flock) (oh, request, lk_in->owner, type);
 
 	} else {
+	    unsigned int flags=((wait) ? FUSE_OPEN_LOCK_FLAG_WAIT : 0);
+	    struct flock flock;
 
-	    _fuse_fs_posix_lock(openfile, request, lk_in, 0);
+	    convert_fuse_lock2flock(&lk_in->lk, &flock);
+	    (* oh->setlock)(oh, request, &flock, lk_in->owner, flags);
 
 	}
 
@@ -532,124 +645,25 @@ static void fuse_fs_lock(struct fuse_request_s *request, char *data)
 
 }
 
-/*
-    generic function to set a lock and wait for a release
-    it's called to set a posix lock and to set a flock lock
-    depending in the presence of FUSE_LK_FLOCK in the flags
-    this function is used when both locks are used (set in the init phase)
-*/
-
-static void fuse_fs_lock_wait(struct fuse_request_s *request, char *data)
+static void fuse_fs_setlock(struct fuse_request_s *request, char *data)
 {
-    struct fuse_lk_in *lk_in=(struct fuse_lk_in *) data;
-
-    if (lk_in->fh) {
-	struct fuse_openfile_s *openfile=(struct fuse_openfile_s *) (uintptr_t) lk_in->fh;
-
-	if (lk_in->lk_flags & FUSE_LK_FLOCK) {
-
-	    _fuse_fs_flock_lock(openfile, request, lk_in, 0);
-
-	} else {
-
-	    _fuse_fs_posix_lock(openfile, request, lk_in, FUSE_OPENFILE_LOCK_FLAG_WAIT);
-
-	}
-
-    } else {
-
-	reply_VFS_error(request, EIO);
-
-    }
-
+    _fuse_fs_setlock(request, data, 0);
 }
 
-/*
-    function to set a posix lock
-    called when only posix locks are used
-    (so every lock is a posix lock)
-*/
-
-static void fuse_fs_posix_lock(struct fuse_request_s *request, char *data)
+static void fuse_fs_setlockw(struct fuse_request_s *request, char *data)
 {
-    struct fuse_lk_in *lk_in=(struct fuse_lk_in *) data;
-
-    if (lk_in->fh) {
-	struct fuse_openfile_s *openfile=(struct fuse_openfile_s *) (uintptr_t) lk_in->fh;
-
-	_fuse_fs_posix_lock(openfile, request, lk_in, 0);
-
-    } else {
-
-	reply_VFS_error(request, EIO);
-
-    }
-
+    _fuse_fs_setlock(request, data, 1);
 }
 
-static void fuse_fs_posix_lock_wait(struct fuse_request_s *request, char *data)
-{
-    struct fuse_lk_in *lk_in=(struct fuse_lk_in *) data;
-
-    if (lk_in->fh) {
-	struct fuse_openfile_s *openfile=(struct fuse_openfile_s *) (uintptr_t) lk_in->fh;
-
-	_fuse_fs_posix_lock(openfile, request, lk_in, FUSE_OPENFILE_LOCK_FLAG_WAIT);
-
-    } else {
-
-	reply_VFS_error(request, EIO);
-
-    }
-
-}
-
-/*
-    function to set a flock lock
-    called when only flock locks are used
-    (so every lock is a flock lock)
-*/
-
-static void fuse_fs_flock_lock(struct fuse_request_s *request, char *data)
-{
-    struct fuse_lk_in *lk_in=(struct fuse_lk_in *) data;
-
-    if (lk_in->fh) {
-	struct fuse_openfile_s *openfile=(struct fuse_openfile_s *) (uintptr_t) lk_in->fh;
-
-	_fuse_fs_flock_lock(openfile, request, lk_in, LOCK_NB);
-
-    } else {
-
-	reply_VFS_error(request, EIO);
-
-    }
-
-}
-
-static void fuse_fs_flock_lock_wait(struct fuse_request_s *request, char *data)
-{
-    struct fuse_lk_in *lk_in=(struct fuse_lk_in *) data;
-    struct fuse_openfile_s *openfile=(struct fuse_openfile_s *) (uintptr_t) lk_in->fh;
-
-    if (openfile) {
-
-	_fuse_fs_flock_lock(openfile, request, lk_in, FUSE_OPENFILE_LOCK_FLAG_WAIT);
-
-    } else {
-
-	reply_VFS_error(request, EIO);
-
-    }
-
-}
+/* READ (from a file) */
 
 static void fuse_fs_read(struct fuse_request_s *request, char *data)
 {
     struct fuse_read_in *read_in=(struct fuse_read_in *) data;
+    struct fuse_open_header_s *oh=get_fuse_open_header(read_in->fh);
 
-    if (read_in->fh>0) {
-	struct fuse_openfile_s *openfile=(struct fuse_openfile_s *) (uintptr_t) read_in->fh;
+    if (oh && (oh->type==FUSE_OPEN_TYPE_FILE) && (get_ino_system_stat(&oh->inode->stat)==request->ino)) {
+	struct fuse_openfile_s *openfile=(struct fuse_openfile_s *) oh;
 	uint64_t lock_owner=(read_in->flags & FUSE_READ_LOCKOWNER) ? read_in->lock_owner : 0;
 
 	read_in->flags &= ~FUSE_READ_LOCKOWNER;
@@ -663,12 +677,15 @@ static void fuse_fs_read(struct fuse_request_s *request, char *data)
 
 }
 
+/* WRITE (to a file) */
+
 static void fuse_fs_write(struct fuse_request_s *request, char *data)
 {
     struct fuse_write_in *write_in=(struct fuse_write_in *) data;
+    struct fuse_open_header_s *oh=get_fuse_open_header(write_in->fh);
 
-    if (write_in->fh) {
-	struct fuse_openfile_s *openfile=(struct fuse_openfile_s *) (uintptr_t) write_in->fh;
+    if (oh && (oh->type==FUSE_OPEN_TYPE_FILE) && (get_ino_system_stat(&oh->inode->stat)==request->ino)) {
+	struct fuse_openfile_s *openfile=(struct fuse_openfile_s *) oh;
 	char *buffer=(char *) (data + sizeof(struct fuse_write_in));
 	uint64_t lock_owner=(write_in->flags & FUSE_WRITE_LOCKOWNER) ? write_in->lock_owner : 0;
 
@@ -683,14 +700,16 @@ static void fuse_fs_write(struct fuse_request_s *request, char *data)
 
 }
 
+/* FLUSH (a file) */
+
 static void fuse_fs_flush(struct fuse_request_s *request, char *data)
 {
     struct fuse_flush_in *flush_in=(struct fuse_flush_in *) data;
+    struct fuse_open_header_s *oh=get_fuse_open_header(flush_in->fh);
 
-    if (flush_in->fh) {
-	struct fuse_openfile_s *openfile=(struct fuse_openfile_s *) (uintptr_t) flush_in->fh;
+    if (oh && (oh->type==FUSE_OPEN_TYPE_FILE) && (get_ino_system_stat(&oh->inode->stat)==request->ino)) {
 
-	(* openfile->flush) (openfile, request, flush_in->lock_owner);
+	(* oh->flush)(oh, request, flush_in->lock_owner);
 
     } else {
 
@@ -699,15 +718,19 @@ static void fuse_fs_flush(struct fuse_request_s *request, char *data)
     }
 
 }
+
+/* FSYNC (a file) */
 
 static void fuse_fs_fsync(struct fuse_request_s *request, char *data)
 {
     struct fuse_fsync_in *fsync_in=(struct fuse_fsync_in *) data;
+    struct fuse_open_header_s *oh=get_fuse_open_header(fsync_in->fh);
 
-    if (fsync_in->fh) {
-	struct fuse_openfile_s *openfile=(struct fuse_openfile_s *) (uintptr_t) fsync_in->fh;
+    if (oh && (oh->type==FUSE_OPEN_TYPE_FILE) && (get_ino_system_stat(&oh->inode->stat)==request->ino)) {
+	unsigned int flags=0;
 
-	(* openfile->fsync) (openfile, request, (fsync_in->fsync_flags & FUSE_FSYNC_FDATASYNC));
+	if (fsync_in->fsync_flags & FUSE_FSYNC_FDATASYNC) flags |= FUSE_OPEN_FSYNC_DATASYNC;
+	(* oh->fsync)(oh, request, flags);
 
     } else {
 
@@ -716,21 +739,25 @@ static void fuse_fs_fsync(struct fuse_request_s *request, char *data)
     }
 
 }
+
+/* RELEASE (a file handle) */
 
 static void fuse_fs_release(struct fuse_request_s *request, char *data)
 {
     struct fuse_release_in *release_in=(struct fuse_release_in *) data;
+    struct fuse_open_header_s *oh=get_fuse_open_header(release_in->fh);
 
-    if (release_in->fh) {
-        struct fuse_openfile_s *openfile=(struct fuse_openfile_s *) (uintptr_t) release_in->fh;
-	struct inode_s *inode=openfile->inode;
+    if (oh && (oh->type==FUSE_OPEN_TYPE_FILE) && (get_ino_system_stat(&oh->inode->stat)==request->ino)) {
+	struct inode_s *inode=oh->inode;
 	uint64_t lock_owner=(release_in->release_flags & FUSE_RELEASE_FLOCK_UNLOCK) ? release_in->lock_owner : 0;
+	unsigned int flags=0;
 
-	release_in->release_flags &= ~FUSE_RELEASE_FLOCK_UNLOCK;
-	(* openfile->release) (openfile, request, release_in->release_flags, lock_owner);
+	if (release_in->flags & FUSE_RELEASE_FLUSH) flags |= FUSE_OPEN_RELEASE_FLUSH;
+	if (release_in->flags & FUSE_RELEASE_FLOCK_UNLOCK) flags |= FUSE_OPEN_RELEASE_FLOCK_UNLOCK;
+	(* oh->release)(oh, request, flags, lock_owner);
 
-	free(openfile);
-	openfile=NULL;
+	remove_fuse_open_hashtable(oh);
+	free((void *) oh);
 
     } else {
 
@@ -740,13 +767,12 @@ static void fuse_fs_release(struct fuse_request_s *request, char *data)
 
 }
 
+/* CREATE (a file) */
+
 static void fuse_fs_create(struct fuse_request_s *request, char *data)
 {
-    struct context_interface_s *interface=request->interface;
-    struct service_context_s *context=get_service_context(interface);
-    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
-    uint64_t ino=request->ino;
-    struct inode_s *inode=lookup_workspace_inode(workspace, ino);
+    struct service_context_s *context=get_service_context(request->interface);
+    struct inode_s *inode=lookup_workspace_inode(request->ino);
 
     if (inode) {
 	struct fuse_create_in *create_in=(struct fuse_create_in *) data;
@@ -759,15 +785,18 @@ static void fuse_fs_create(struct fuse_request_s *request, char *data)
 	if (openfile) {
 
 	    init_fuse_openfile(openfile, context, inode);
-	    openfile->flags |= FUSE_OPENFILE_FLAG_CREATE;
+	    create_in->flags |= O_CREAT;
 	    (* inode->fs->type.dir.create)(openfile, request, name, len, create_in->flags, create_in->mode, create_in->umask);
 
-	    if (openfile->error>0) {
+	    if (openfile->error==0) {
+
+		add_fuse_open_hashtable(&openfile->header);
+
+	    } else {
 
 		/* subcall has send a reply to VFS already, here only free */
 
 		free(openfile);
-		openfile=NULL;
 
 	    }
 
@@ -780,6 +809,39 @@ static void fuse_fs_create(struct fuse_request_s *request, char *data)
     } else {
 
 	reply_VFS_error(request, ENOENT);
+
+    }
+
+}
+
+/* OPEN (a file) */
+
+static void _fuse_fs_open(struct service_context_s *ctx, struct fuse_request_s *request, struct inode_s *inode, char *data)
+{
+    struct fuse_open_in *open_in=(struct fuse_open_in *) data;
+    struct fuse_openfile_s *openfile=NULL;
+
+    openfile=malloc(sizeof(struct fuse_openfile_s));
+
+    if (openfile) {
+
+	init_fuse_openfile(openfile, ctx, inode);
+	(* inode->fs->type.nondir.open)(openfile, request, (open_in->flags & (O_ACCMODE | O_APPEND | O_TRUNC)));
+
+	if (openfile->error==0) {
+
+	    add_fuse_open_hashtable(&openfile->header);
+
+	} else {
+
+	    /* subcall has send a reply to VFS already, here only free */
+	    free(openfile);
+
+	}
+
+    } else {
+
+	reply_VFS_error(request, ENOMEM);
 
     }
 
@@ -787,47 +849,12 @@ static void fuse_fs_create(struct fuse_request_s *request, char *data)
 
 static void fuse_fs_open(struct fuse_request_s *request, char *data)
 {
-    struct context_interface_s *interface=request->interface;
-    struct service_context_s *context=get_service_context(interface);
-    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
-    uint64_t ino=request->ino;
-    struct inode_s *inode=lookup_workspace_inode(workspace, ino);
-
-    if (inode) {
-	struct fuse_open_in *open_in=(struct fuse_open_in *) data;
-	struct fuse_openfile_s *openfile=NULL;
-
-	openfile=malloc(sizeof(struct fuse_openfile_s));
-
-	if (openfile) {
-
-	    init_fuse_openfile(openfile, context, inode);
-	    (* inode->fs->type.nondir.open)(openfile, request, open_in->flags & (O_ACCMODE | O_APPEND | O_TRUNC));
-
-	    if (openfile->error>0) {
-
-		/* subcall has send a reply to VFS already, here only free */
-
-		free(openfile);
-		openfile=NULL;
-
-	    }
-
-	} else {
-
-	    reply_VFS_error(request, ENOMEM);
-
-	}
-
-    } else {
-
-	reply_VFS_error(request, ENOENT);
-
-    }
-
+    _fuse_fs_cb_common(request, data, _fuse_fs_open);
 }
 
-static void _fuse_fs_opendir(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, char *data)
+/* OPEN (a directory) */
+
+static void _fuse_fs_opendir(struct service_context_s *ctx, struct fuse_request_s *request, struct inode_s *inode, char *data)
 {
     struct fuse_open_in *open_in=(struct fuse_open_in *) data;
     struct fuse_opendir_s *opendir=NULL;
@@ -836,15 +863,15 @@ static void _fuse_fs_opendir(struct service_context_s *context, struct fuse_requ
 
     if (opendir) {
 
-	init_fuse_opendir(opendir, context, inode);
-
-	logoutput("_fuse_fs_opendir: ino %li", get_ino_system_stat(&inode->stat));
+	init_fuse_opendir(opendir, ctx, inode);
+	add_fuse_open_hashtable(&opendir->header);
 	(* inode->fs->type.dir.opendir)(opendir, request, open_in->flags);
 
 	if (opendir->error>0) {
 
 	    /* subcall has send a reply to VFS already, here only free */
-
+	    remove_fuse_open_hashtable(&opendir->header);
+	    clear_opendir(opendir);
 	    free(opendir);
 	    opendir=NULL;
 
@@ -860,93 +887,85 @@ static void _fuse_fs_opendir(struct service_context_s *context, struct fuse_requ
 
 static void fuse_fs_opendir(struct fuse_request_s *request, char *data)
 {
-    logoutput("fuse_fs_opendir: ino %li", request->ino);
     _fuse_fs_cb_common(request, data, _fuse_fs_opendir);
+}
+
+/* READ (a directory) */
+
+static void _fuse_fs_readdir(struct fuse_request_s *request, char *data, unsigned int flag)
+{
+    struct fuse_read_in *read_in=(struct fuse_read_in *) data;
+    struct fuse_open_header_s *oh=get_fuse_open_header(read_in->fh);
+
+    if (oh && (oh->type==FUSE_OPEN_TYPE_DIR) && (get_ino_system_stat(&oh->inode->stat)==request->ino)) {
+	struct fuse_opendir_s *opendir=(struct fuse_opendir_s *) oh; /* fuse_open_header_s is first struct in fuse_opendir_s*/
+
+	logoutput_debug("fuse_fs_readdir: ino %li", request->ino);
+
+	opendir->flags |= flag;
+	(* opendir->readdir)(opendir, request, read_in->size, read_in->offset);
+
+    } else {
+
+	logoutput_debug("fuse_fs_readdir: ino %li open header not found (fh=%lu)", request->ino, read_in->fh);
+	reply_VFS_error(request, EIO);
+
+    }
+
 }
 
 static void fuse_fs_readdir(struct fuse_request_s *request, char *data)
 {
-    struct fuse_read_in *read_in=(struct fuse_read_in *) data;
-
-    logoutput("fuse_fs_readdir");
-
-    if (read_in->fh) {
-	struct fuse_opendir_s *opendir=(struct fuse_opendir_s *) (uintptr_t) read_in->fh;
-
-	(* opendir->readdir)(opendir, request, read_in->size, read_in->offset);
-
-    } else {
-
-	reply_VFS_error(request, EIO);
-
-    }
-
+    _fuse_fs_readdir(request, data, 0);
 }
 
 static void fuse_fs_readdirplus(struct fuse_request_s *request, char *data)
 {
-    struct fuse_read_in *read_in=(struct fuse_read_in *) data;
-
-    logoutput("fuse_fs_readdirplus");
-
-    if (read_in->fh) {
-        struct fuse_opendir_s *opendir=(struct fuse_opendir_s *) (uintptr_t) read_in->fh;
-
-	opendir->flags |= FUSE_OPENDIR_FLAG_READDIRPLUS;
-	(* opendir->readdir)(opendir, request, read_in->size, read_in->offset);
-
-    } else {
-
-	reply_VFS_error(request, EIO);
-
-    }
-
+    _fuse_fs_readdir(request, data, FUSE_OPENDIR_FLAG_READDIRPLUS);
 }
+
+/* RELEASE (a directory) */
 
 static void fuse_fs_releasedir(struct fuse_request_s *request, char *data)
 {
     struct fuse_release_in *release_in=(struct fuse_release_in *) data;
+    struct fuse_open_header_s *oh=get_fuse_open_header(release_in->fh);
 
-    logoutput("fuse_fs_releasedir");
+    if (oh && (oh->type==FUSE_OPEN_TYPE_DIR) && (get_ino_system_stat(&oh->inode->stat)==request->ino)) {
+	struct fuse_opendir_s *opendir=(struct fuse_opendir_s *) oh;
+	unsigned int flags=0;
 
-    if (release_in->fh) {
-	struct fuse_opendir_s *opendir=(struct fuse_opendir_s *) (uintptr_t) release_in->fh;
-	struct shared_signal_s *signal=opendir->signal;
-	unsigned char dofree=1;
+	logoutput_debug("fuse_fs_releasedir: ino %li", request->ino);
 
-	(* opendir->releasedir)(opendir, request);
-	release_in->fh=0;
+	if (release_in->flags & FUSE_RELEASE_FLUSH) flags |= FUSE_OPEN_RELEASE_FLUSH;
+	if (release_in->flags & FUSE_RELEASE_FLOCK_UNLOCK) flags |= FUSE_OPEN_RELEASE_FLOCK_UNLOCK;
+	(* oh->release)(oh, request, flags, release_in->lock_owner);
 
-	signal_lock(signal);
-	opendir->flags |= (FUSE_OPENDIR_FLAG_RELEASE | FUSE_OPENDIR_FLAG_FINISH | FUSE_OPENDIR_FLAG_QUEUE_READY);
-	if (opendir->flags & FUSE_OPENDIR_FLAG_THREAD) dofree=0;
-	signal_unlock(signal);
-
-	if (dofree) {
-
-	    free(opendir);
-	    opendir=NULL;
-
-	}
+	remove_fuse_open_hashtable(oh);
+	clear_opendir(opendir);
+	free(opendir);
 
     } else {
 
+	logoutput_debug("fuse_fs_releasedir: ino %li open header not found (fh=%lu)", request->ino, release_in->fh);
 	reply_VFS_error(request, EIO);
 
     }
 
 }
+
+/* FSYNC (a directory) */
 
 static void fuse_fs_fsyncdir(struct fuse_request_s *request, char *data)
 {
     struct fuse_fsync_in *fsync_in=(struct fuse_fsync_in *) data;
+    struct fuse_open_header_s *oh=get_fuse_open_header(fsync_in->fh);
 
-    logoutput("fuse_fs_fsyncdir");
+    if (oh && (oh->type==FUSE_OPEN_TYPE_DIR) && (get_ino_system_stat(&oh->inode->stat)==request->ino)) {
+	unsigned int flags=0;
 
-    if (fsync_in->fh) {
-	struct fuse_opendir_s *opendir=(struct fuse_opendir_s *) (uintptr_t) fsync_in->fh;
-
-	(* opendir->fsyncdir)(opendir, request, fsync_in->fsync_flags & 1);
+	if (fsync_in->fsync_flags & FUSE_FSYNC_FDATASYNC) flags |= FUSE_OPEN_FSYNC_DATASYNC;
+	(* oh->fsync)(oh, request, flags);
 
     } else {
 
@@ -956,14 +975,15 @@ static void fuse_fs_fsyncdir(struct fuse_request_s *request, char *data)
 
 }
 
-static void _fuse_fs_setxattr(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, char *data)
+/* XATTR */
+
+static void _fuse_fs_setxattr(struct service_context_s *ctx, struct fuse_request_s *request, struct inode_s *inode, char *data)
 {
     struct fuse_setxattr_in *setxattr_in=(struct fuse_setxattr_in *) data;
     char *name=(char *) ((char *) setxattr_in + sizeof(struct fuse_setxattr_in));
     char *value=(char *) (name + strlen(name) + 1);
 
-    logoutput("_fuse_fs_setxattr: ino %li name %s", request->ino, name);
-    (* inode->fs->setxattr)(context, request, inode, name, value, setxattr_in->size, setxattr_in->flags);
+    (* inode->fs->setxattr)(ctx, request, inode, name, value, setxattr_in->size, setxattr_in->flags);
 }
 
 static void fuse_fs_setxattr(struct fuse_request_s *request, char *data)
@@ -971,13 +991,12 @@ static void fuse_fs_setxattr(struct fuse_request_s *request, char *data)
     _fuse_fs_cb_common(request, data, _fuse_fs_setxattr);
 }
 
-static void _fuse_fs_getxattr(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, char *data)
+static void _fuse_fs_getxattr(struct service_context_s *ctx, struct fuse_request_s *request, struct inode_s *inode, char *data)
 {
     struct fuse_getxattr_in *getxattr_in=(struct fuse_getxattr_in *) data;
     char *name=(char *) ((char *) getxattr_in + sizeof(struct fuse_getxattr_in));
 
-    logoutput("_fuse_fs_getxattr: ino %li name %s", request->ino, name);
-    (* inode->fs->getxattr)(context, request, inode, name, getxattr_in->size);
+    (* inode->fs->getxattr)(ctx, request, inode, name, getxattr_in->size);
 }
 
 static void fuse_fs_getxattr(struct fuse_request_s *request, char *data)
@@ -985,12 +1004,10 @@ static void fuse_fs_getxattr(struct fuse_request_s *request, char *data)
     _fuse_fs_cb_common(request, data, _fuse_fs_getxattr);
 }
 
-static void _fuse_fs_listxattr(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, char *data)
+static void _fuse_fs_listxattr(struct service_context_s *ctx, struct fuse_request_s *request, struct inode_s *inode, char *data)
 {
     struct fuse_getxattr_in *getxattr_in=(struct fuse_getxattr_in *) data;
-
-    logoutput("_fuse_fs_listxattr: ino %li", request->ino);
-    (* inode->fs->listxattr)(context, request, inode, getxattr_in->size);
+    (* inode->fs->listxattr)(ctx, request, inode, getxattr_in->size);
 }
 
 static void fuse_fs_listxattr(struct fuse_request_s *request, char *data)
@@ -998,10 +1015,9 @@ static void fuse_fs_listxattr(struct fuse_request_s *request, char *data)
     _fuse_fs_cb_common(request, data, _fuse_fs_listxattr);
 }
 
-static void _fuse_fs_removexattr(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, char *data)
+static void _fuse_fs_removexattr(struct service_context_s *ctx, struct fuse_request_s *request, struct inode_s *inode, char *data)
 {
-    logoutput("fuse_fs_removexattr: ino %li", request->ino);
-    (* inode->fs->removexattr)(context, request, inode, data);
+    (* inode->fs->removexattr)(ctx, request, inode, data);
 }
 
 static void fuse_fs_removexattr(struct fuse_request_s *request, char *data)
@@ -1011,24 +1027,22 @@ static void fuse_fs_removexattr(struct fuse_request_s *request, char *data)
 
 static void fuse_fs_statfs(struct fuse_request_s *request, char *data)
 {
-    struct context_interface_s *interface=request->interface;
-    struct service_context_s *context=get_service_context(interface);
-    struct workspace_mount_s *workspace=get_workspace_mount_ctx(context);
+    struct service_context_s *ctx=get_service_context(request->interface);
     uint64_t ino=request->ino;
 
     logoutput("fuse_fs_statfs: ino %li", ino);
 
     if (ino==FUSE_ROOT_ID || ino==0) {
-	struct inode_s *inode=&workspace->inodes.rootinode;
+	struct inode_s *inode=&ctx->service.workspace.rootinode;
 
-	(* inode->fs->statfs)(context, request, inode);
+	(* inode->fs->statfs)(ctx, request, inode);
 
     } else {
-	struct inode_s *inode=lookup_workspace_inode(workspace, ino);
+	struct inode_s *inode=lookup_workspace_inode(ino);
 
 	if (inode) {
 
-	    (* inode->fs->statfs)(context, request, inode);
+	    (* inode->fs->statfs)(ctx, request, inode);
 
 	} else {
 
@@ -1050,9 +1064,10 @@ static void fuse_fs_interrupt(struct fuse_request_s *request, char *data)
 static void fuse_fs_lseek(struct fuse_request_s *request, char *data)
 {
     struct fuse_lseek_in *lseek_in=(struct fuse_lseek_in *) data;
+    struct fuse_open_header_s *oh=get_fuse_open_header(lseek_in->fh);
 
-    if (lseek_in->fh) {
-	struct fuse_openfile_s *openfile=(struct fuse_openfile_s *) (uintptr_t) lseek_in->fh;
+    if (oh && (oh->type==FUSE_OPEN_TYPE_FILE) && (get_ino_system_stat(&oh->inode->stat)==request->ino)) {
+	struct fuse_openfile_s *openfile=(struct fuse_openfile_s *) oh;
 
 	(* openfile->lseek) (openfile, request, lseek_in->offset, lseek_in->whence);
 
@@ -1116,8 +1131,8 @@ static struct fuse_cb_mapping_s mapping[] = {
     {.code=FUSE_RELEASE, .cb=fuse_fs_release},
 
     {.code=FUSE_GETLK, .cb=fuse_fs_getlock},
-    {.code=FUSE_SETLK, .cb=fuse_fs_lock},
-    {.code=FUSE_SETLKW, .cb=fuse_fs_lock_wait},
+    {.code=FUSE_SETLK, .cb=fuse_fs_setlock},
+    {.code=FUSE_SETLKW, .cb=fuse_fs_setlockw},
 
     {.code=FUSE_STATFS, .cb=fuse_fs_statfs},
 
@@ -1149,4 +1164,9 @@ void register_fuse_functions(struct context_interface_s *interface, void (* add)
 
     }
 
+}
+
+void init_fuse_open_hashtable()
+{
+    for (unsigned int i=0; i<FUSE_OPEN_HASHTABLE_SIZE; i++) init_list_header(&hashtable[i], SIMPLE_LIST_TYPE_EMPTY, NULL);
 }

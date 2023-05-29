@@ -32,7 +32,7 @@ int add_mountentry(struct mount_monitor_s *monitor, struct mountentry_s *me)
 {
     struct list_header_s *header=&monitor->mountentries;
     int diff=1;
-    struct list_element_s *list=get_list_tail(header, 0);
+    struct list_element_s *list=get_list_tail(header);
 
     /* walk back starting at the last and compare */
 
@@ -78,7 +78,7 @@ int add_mountentry(struct mount_monitor_s *monitor, struct mountentry_s *me)
 struct mountentry_s *find_mountentry(struct mount_monitor_s *monitor, unsigned int offset, unsigned char flags)
 {
     struct list_header_s *header=&monitor->mountentries;
-    struct list_element_s *list=get_list_head(header, 0);
+    struct list_element_s *list=get_list_head(header);
     struct mountentry_s *me=NULL;
 
     signal_lock_flag(monitor->signal, &monitor->status, MOUNT_MONITOR_STATUS_MOUNTEVENT);
@@ -122,7 +122,7 @@ struct mountentry_s *find_mountentry(struct mount_monitor_s *monitor, unsigned i
 void process_mountentries(struct mount_monitor_s *monitor)
 {
     struct list_header_s *header=&monitor->mountentries;
-    struct list_element_s *list=get_list_head(header, 0);
+    struct list_element_s *list=get_list_head(header);
 
     while (list) {
 	struct mountentry_s *me=(struct mountentry_s *)((char *) list - offsetof(struct mountentry_s, list));
@@ -155,15 +155,15 @@ void process_mountentries(struct mount_monitor_s *monitor)
 
 }
 
-static void clear_mountentry_list(struct list_header_s *header)
+static void clear_mountentry_list(struct list_header_s *h)
 {
-    struct list_element_s *list=get_list_head(header, SIMPLE_LIST_FLAG_REMOVE);
+    struct list_element_s *list=remove_list_head(h);
 
     while (list) {
 	struct mountentry_s *me=(struct mountentry_s *)((char *) list - offsetof(struct mountentry_s, list));
 
 	(* me->free)(me);
-	list=get_list_head(header, SIMPLE_LIST_FLAG_REMOVE);
+	list=remove_list_head(h);
 
     }
 }
@@ -172,4 +172,21 @@ void clear_mountentry_lists(struct mount_monitor_s *monitor)
 {
     clear_mountentry_list(&monitor->mountentries);
     clear_mountentry_list(&monitor->removedentries);
+}
+
+void browse_mountentries(struct mount_monitor_s *monitor, void (* cb)(struct mountentry_s *me, void *ptr), void *ptr)
+{
+    struct list_element_s *list=NULL;
+
+    signal_lock_flag(monitor->signal, &monitor->status, MOUNT_MONITOR_STATUS_MOUNTEVENT);
+    list=get_list_head(&monitor->mountentries);
+
+    while (list) {
+        struct mountentry_s *me=(struct mountentry_s *)((char *) list - offsetof(struct mountentry_s, list));
+
+        (* cb)(me, ptr);
+        list=get_next_element(list);
+
+    }
+
 }

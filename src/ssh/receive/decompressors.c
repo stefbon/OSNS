@@ -24,119 +24,34 @@
 #include "libosns-list.h"
 
 #include "ssh-common.h"
+#include "ssh-common-crypto.h"
 #include "ssh-utils.h"
 #include "ssh-receive.h"
 
 static char fallback_buffer[sizeof(struct ssh_decompressor_s)];
 static struct ssh_decompressor_s *fallback=(struct ssh_decompressor_s *) fallback_buffer;
 
-struct ssh_decompressor_s *get_decompressor_container(struct list_element_s *list)
+static void clear_dummy(struct ssh_decompressor_s *d)
 {
-    return (struct ssh_decompressor_s *) (((char *) list) - offsetof(struct ssh_decompressor_s, list));
 }
 
-static int decompress_error(struct ssh_decompressor_s *d, struct ssh_packet_s *packet, struct ssh_payload_s **payload, unsigned int *error)
+static struct ssh_payload_s *decompress_error(struct ssh_decompressor_s *d, struct ssh_packet_s *packet, unsigned int *error)
 {
     *error=ENOMEM;
-    return -1;
-}
-
-static void dummy_call(struct ssh_decompressor_s *d)
-{
-}
-
-static void init_decompressor(struct ssh_decompressor_s *decompressor, struct ssh_decompress_s *decompress, unsigned int size)
-{
-    memset(decompressor, 0, sizeof(struct ssh_decompressor_s) + size);
-    decompressor->decompress=decompress;
-    get_current_time_system_time(&decompressor->created);
-    decompressor->nr=(decompress) ? decompress->count : 0;
-    init_list_element(&decompressor->list, NULL);
-    decompressor->size=size;
-    decompressor->clear=dummy_call;
-    decompressor->queue=dummy_call;
-    decompressor->decompress_packet=decompress_error;
-}
-
-static struct ssh_decompressor_s *create_decompressor(struct ssh_decompress_s *decompress)
-{
-    struct decompress_ops_s *ops=decompress->ops;
-    unsigned int size=(* ops->get_handle_size)(decompress);
-    struct ssh_decompressor_s *decompressor=malloc(sizeof(struct ssh_decompressor_s) + size);
-
-    if (decompressor==NULL) return fallback;
-    init_decompressor(decompressor, decompress, size);
-    decompressor->queue=queue_decompressor;
-    if ((* ops->init_decompressor)(decompressor)==0) return decompressor;
-    free(decompressor);
-
     return NULL;
-
 }
 
-/* get a decompressor from the decompressors list */
-
-struct ssh_decompressor_s *get_decompressor(struct ssh_receive_s *receive, unsigned int *error)
+static void queue_ssh_decompressor(struct ssh_cryptoactor_s *ca)
 {
-    struct ssh_decompress_s *decompress=&receive->decompress;
-    struct ssh_decompressor_s *decompressor=NULL;
-    struct list_header_s *header=&decompress->header;
-
-    pthread_mutex_lock(&receive->mutex);
-
-    /* wait for a decompressor to become available */
-
-    while (header->count==0 && decompress->count == decompress->max_count && decompress->max_count>0) {
-	int result=0;
-
-	result=pthread_cond_wait(&receive->cond, &receive->mutex);
-
-	if (header->count>0 || decompress->count < decompress->max_count) {
-
-	    break;
-
-	} else if (result>0 || (receive->status & SSH_RECEIVE_STATUS_DISCONNECT)) {
-
-	    *error=(result>0) ? result : EIO;
-	    goto finish;
-
-	}
-
-    }
-
-    if (header->count>0) {
-	struct list_element_s *list=get_list_head(header, SIMPLE_LIST_FLAG_REMOVE);
-
-	decompressor=get_decompressor_container(list);
-
-    } else if ((decompress->count < decompress->max_count) || decompress->max_count==0) {
-
-	decompressor=create_decompressor(decompress);
-	decompress->count++;
-
-    }
-
-    finish:
-
-    pthread_mutex_unlock(&receive->mutex);
-    return decompressor;
-
-}
-
-void queue_decompressor(struct ssh_decompressor_s *decompressor)
-{
+    struct ssh_decompressor_s *decompressor=(struct ssh_decompressor_s *) ((char *) ca - offsetof(struct ssh_decompressor_s, common));
     struct ssh_decompress_s *decompress=decompressor->decompress;
     struct ssh_receive_s *receive=(struct ssh_receive_s *) (((char *) decompress) - offsetof(struct ssh_receive_s, decompress));
-    struct list_header_s *header=&decompress->header;
 
-    pthread_mutex_lock(&receive->mutex);
-
-    if (system_time_test_earlier(&decompressor->created, &receive->newkeys)<=0) {
+    if (ca->kexctr==receive->kexctr) {
 
 	/* not earlier -> is later created than newkeys -> ok */
 
-	add_list_element_last(header, &decompressor->list);
-	pthread_cond_broadcast(&receive->cond);
+        add_ssh_cryptoactor_list(&decompress->header, ca);
 
     } else {
 
@@ -145,30 +60,94 @@ void queue_decompressor(struct ssh_decompressor_s *decompressor)
 
 	(* decompressor->clear)(decompressor);
 	free(decompressor);
-	decompress->count--;
+	change_count_cryptors(&receive->signal, &decompress->count, -1);
 
     }
 
-    pthread_mutex_unlock(&receive->mutex);
+}
 
+static void free_ssh_decompressor(struct list_element_s *list)
+{
+    struct ssh_decompressor_s *decompressor=(struct ssh_decompressor_s *) (((char *) list) - offsetof(struct ssh_decompressor_s, common.list));
+    struct ssh_decompress_s *decompress=decompressor->decompress;
+    struct ssh_receive_s *receive=(struct ssh_receive_s *) (((char *) decompress) - offsetof(struct ssh_receive_s, decompress));
+
+    (* decompressor->clear)(decompressor);
+    free(decompressor);
+    change_count_cryptors(&receive->signal, &decompress->count, -1);
+}
+
+static void init_ssh_decompressor(struct ssh_decompressor_s *decompressor, struct ssh_decompress_s *decompress, unsigned int size, unsigned int kexctr)
+{
+    memset(decompressor, 0, sizeof(struct ssh_decompressor_s) + size);
+    init_ssh_cryptoactor(&decompressor->common, kexctr, ((decompress) ? decompress->count : 0));
+    decompressor->decompress=decompress;
+    decompressor->clear=clear_dummy;
+    decompressor->decompress_packet=decompress_error;
+    decompressor->size=size;
+
+}
+
+static struct ssh_decompressor_s *create_ssh_decompressor(struct ssh_decompress_s *decompress, unsigned int kexctr)
+{
+    struct decompress_ops_s *ops=decompress->ops;
+    unsigned int size=(* ops->get_handle_size)(decompress);
+    struct ssh_decompressor_s *decompressor=malloc(sizeof(struct ssh_decompressor_s) + size);
+
+    if (decompressor==NULL) return fallback;
+    init_ssh_decompressor(decompressor, decompress, size, kexctr);
+    decompressor->common.queue=queue_ssh_decompressor;
+    decompressor->common.free=free_ssh_decompressor;
+
+    if ((* ops->init)(decompressor)==0) {
+        struct ssh_receive_s *receive=(struct ssh_receive_s *) (((char *) decompress) - offsetof(struct ssh_receive_s, decompress));
+
+        change_count_cryptors(&receive->signal, &decompress->count, 1);
+        return decompressor;
+
+    }
+
+    free(decompressor);
+    outfallback:
+    return fallback;
+
+}
+
+static struct ssh_cryptoactor_s *create_ssh_cryptoactor(unsigned int kexctr, void *ptr)
+{
+    struct ssh_decompress_s *decompress=(struct ssh_decompress_s *) ptr;
+    struct ssh_decompressor_s *decompressor=create_ssh_decompressor(decompress, kexctr);
+    return &decompressor->common;
+}
+
+static unsigned int interrupt_get_cryptoactor(void *ptr)
+{
+    struct ssh_decompress_s *decompress=(struct ssh_decompress_s *) ptr;
+    struct ssh_receive_s *receive=(struct ssh_receive_s *) (((char *) decompress) - offsetof(struct ssh_receive_s, decompress));
+    return ((receive->status & SSH_RECEIVE_STATUS_DISCONNECT) ? ENOTCONN : 0);
+}
+
+static void error_get_cryptoactor(unsigned int errcode, void *ptr)
+{
+    /* 20221119: log for now */
+
+    logoutput_warning("error_get_cryptoactor: error %u - %s", errcode, strerror(errcode));
+}
+
+struct ssh_decompressor_s *get_decompressor(struct ssh_receive_s *receive, unsigned int *error)
+{
+    struct ssh_decompress_s *decompress=&receive->decompress;
+    struct ssh_cryptoactor_s *ca=get_cryptoactor(&decompress->header, &receive->signal, receive->kexctr, &decompress->max_count, &decompress->count,
+                                                    create_ssh_cryptoactor, interrupt_get_cryptoactor, error_get_cryptoactor, &fallback->common, (void *) decompress);
+    return (struct ssh_decompressor_s *) ((char *) ca - offsetof(struct ssh_decompressor_s, common));
 }
 
 void remove_decompressors(struct ssh_decompress_s *decompress)
 {
-    struct list_element_s *list=NULL;
-    struct list_header_s *header=&decompress->header;
-
-    while ((list=get_list_head(header, SIMPLE_LIST_FLAG_REMOVE))) {
-	struct ssh_decompressor_s *decompressor=get_decompressor_container(list);
-	(* decompressor->clear)(decompressor);
-	free(decompressor);
-	decompress->count--;
-
-    }
-
+    remove_ssh_cryptoactor_list(&decompress->header);
 }
 
 void init_decompressors_once()
 {
-    init_decompressor(fallback, NULL, 0);
+    init_ssh_decompressor(fallback, NULL, 0, 0);
 }

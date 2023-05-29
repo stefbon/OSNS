@@ -22,7 +22,7 @@
 
 /* prototypes */
 
-int start_channel(struct ssh_channel_s *channel, unsigned int *error);
-void close_channel(struct ssh_channel_s *channel, unsigned int flags);
+int start_ssh_channel(struct ssh_channel_s *channel, struct ssh_channel_open_data_s *data);
+void close_ssh_channel(struct ssh_channel_s *channel, unsigned int flags);
 
 #endif

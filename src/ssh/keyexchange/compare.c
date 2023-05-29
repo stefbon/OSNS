@@ -192,7 +192,7 @@ int compare_msg_kexinit(struct ssh_connection_s *connection)
     } else {
 
 	logoutput("compare_msg_kexinit: found client keyexinit message (size=%i)", kexinit_client->len);
-	// logoutput_base64encoded("compare_msg_kexinit: client ", kexinit_client->ptr, kexinit_client->len);
+	logoutput_base64encoded("compare_msg_kexinit: client ", kexinit_client->ptr, kexinit_client->len, 1);
 
     }
 
@@ -209,7 +209,7 @@ int compare_msg_kexinit(struct ssh_connection_s *connection)
     } else {
 
 	logoutput("compare_msg_kexinit: found server keyexinit message (size=%i)", kexinit_server->len);
-	// logoutput_base64encoded("compare_msg_kexinit: server ", kexinit_server->ptr, kexinit_server->len);
+	logoutput_base64encoded("compare_msg_kexinit: server ", kexinit_server->ptr, kexinit_server->len, 1);
 
     }
 

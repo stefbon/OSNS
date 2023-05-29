@@ -71,21 +71,25 @@
 
 */
 
-static char *get_name_ssh_channel(unsigned char type)
+static char *get_name_ssh_channel(unsigned char type, unsigned char subtype)
 {
     char *name="";
 
-    if (type==_CHANNEL_TYPE_SESSION) {
+    if (type==SSH_CHANNEL_TYPE_SESSION) {
 
 	name="session";
 
-    } else if (type==_CHANNEL_TYPE_DIRECT_STREAMLOCAL) {
+    } else if (type==SSH_CHANNEL_TYPE_DIRECT) {
 
-	name="direct-streamlocal@openssh.com";
+	if (subtype==SSH_CHANNEL_SOCKET_TYPE_TCPIP) {
 
-    } else if (type==_CHANNEL_TYPE_DIRECT_TCPIP) {
+	    name="direct-tcpip";
 
-	name="direct-tcpip";
+	} else if (subtype==SSH_CHANNEL_SOCKET_TYPE_STREAMLOCAL) {
+
+	    name="direct-streamlocal@openssh.com";
+
+	}
 
     }
 
@@ -97,15 +101,15 @@ static char *get_subsys_name_session_channel(unsigned char type)
 {
     char *name="";
 
-    if (type==_CHANNEL_SESSION_TYPE_EXEC) {
+    if (type==SSH_CHANNEL_SESSION_TYPE_EXEC) {
 
 	name="exec";
 
-    } else if (type==_CHANNEL_SESSION_TYPE_SHELL) {
+    } else if (type==SSH_CHANNEL_SESSION_TYPE_SHELL) {
 
 	name="shell";
 
-    } else if (type==_CHANNEL_SESSION_TYPE_SUBSYSTEM) {
+    } else if (type==SSH_CHANNEL_SESSION_TYPE_SUBSYSTEM) {
 
 	name="subsystem";
 
@@ -114,39 +118,35 @@ static char *get_subsys_name_session_channel(unsigned char type)
     return name;
 }
 
-static int _send_channel_open_message(struct msg_buffer_s *mb, struct ssh_channel_s *channel)
+static int _send_ssh_channel_open_message(struct msg_buffer_s *mb, unsigned char type, unsigned int lcnr, struct ssh_channel_open_msg_s *openmsg)
 {
-    struct ssh_session_s *session=channel->session;
-
-    logoutput_debug("_send_channel_open_message");
+    struct ssh_channel_open_data_s *data=openmsg->data;
 
     msg_write_byte(mb, SSH_MSG_CHANNEL_OPEN);
-    msg_write_ssh_string(mb, 'c', (void *) get_name_ssh_channel(channel->type));
-    msg_store_uint32(mb, channel->local_channel);
-    msg_store_uint32(mb, channel->local_window);
-    msg_store_uint32(mb, get_max_packet_size(session));
+    msg_write_ssh_string(mb, 'c', (void *) get_name_ssh_channel(type, ((data) ? data->type : 0)));
+    msg_store_uint32(mb, lcnr);
+    msg_store_uint32(mb, openmsg->windowsize);
+    msg_store_uint32(mb, openmsg->maxpacketsize);
 
-    if (channel->type==_CHANNEL_TYPE_DIRECT_STREAMLOCAL) {
+    if ((type==SSH_CHANNEL_TYPE_DIRECT) || (type==SSH_CHANNEL_TYPE_FORWARDED)) {
 
-	msg_write_ssh_string(mb, 'c', (void *) channel->target.direct_streamlocal.path);
+	if (data->type==SSH_CHANNEL_SOCKET_TYPE_STREAMLOCAL) {
 
-	/* 20170528: string and uint32 for future use, now empty */
+	    msg_write_ssh_string(mb, 's', (void *) &data->data.local.path);
 
-	msg_store_uint32(mb, 0);
-	msg_store_uint32(mb, 0);
+	    /* 20170528: string and uint32 for future use, now empty */
 
-    } else if (channel->type==_CHANNEL_TYPE_DIRECT_TCPIP) {
-	char *target=NULL;
-	struct ip_address_s *orig_ip=&channel->target.direct_tcpip.orig_ip;
-	char *ip=NULL;
+	    msg_store_uint32(mb, 0);
+	    msg_store_uint32(mb, 0);
 
-	translate_context_host_address(&channel->target.direct_tcpip.address, &target, NULL);
-	ip=((orig_ip->family==IP_ADDRESS_FAMILY_IPv6) ? orig_ip->addr.v6 : orig_ip->addr.v4);
+	} else if (data->type==SSH_CHANNEL_SOCKET_TYPE_TCPIP) {
 
-	msg_write_ssh_string(mb, 'c', (void *) target);
-	msg_store_uint32(mb, channel->target.direct_tcpip.portnr);
-	msg_write_ssh_string(mb, 'c', (void *) ip);
-	msg_store_uint32(mb, channel->target.direct_tcpip.orig_portnr);
+	    msg_write_ssh_string(mb, 's', (void *) &data->data.tcpip.address);
+	    msg_store_uint32(mb, data->data.tcpip.portnr);
+	    msg_write_ssh_string(mb, 's', (void *) &data->data.tcpip.orig_ip);
+	    msg_store_uint32(mb, data->data.tcpip.orig_portnr);
+
+	}
 
     }
 
@@ -154,257 +154,381 @@ static int _send_channel_open_message(struct msg_buffer_s *mb, struct ssh_channe
 
 }
 
-int send_channel_open_message(struct ssh_channel_s *channel, uint32_t *seq)
+int send_ssh_channel_open_msg(struct ssh_connection_s *c, unsigned char type, union ssh_message_u *msg)
 {
+    struct ssh_channel_open_msg_s *openmsg=&msg->channel.type.open;
     struct msg_buffer_s mb=INIT_SSH_MSG_BUFFER;
-    unsigned int len=_send_channel_open_message(&mb, channel);
-    char buffer[sizeof(struct ssh_payload_s) + len];
+    unsigned int size=_send_ssh_channel_open_message(&mb, type, msg->channel.lcnr, openmsg);
+    char buffer[sizeof(struct ssh_payload_s) + size];
     struct ssh_payload_s *payload=(struct ssh_payload_s *) buffer;
 
-    logoutput_debug("send_channel_open_message");
-
-    init_ssh_payload(payload, len);
+    init_ssh_payload(payload, size);
     payload->type=SSH_MSG_CHANNEL_OPEN;
     set_msg_buffer_payload(&mb, payload);
-    payload->len=_send_channel_open_message(&mb, channel);
+    payload->len=_send_ssh_channel_open_message(&mb, type, msg->channel.lcnr, openmsg);
+    return write_ssh_packet(c, payload);
 
-    return write_ssh_packet(channel->connection, payload, seq);
+}
 
+/*  send a channel open confirmation (RFC4254 5.1. Opening a Channel)
+
+    - byte 	SSH_MSG_CHANNEL_OPEN_CONFIRMATION
+    - uint32    remote channel
+    - uint32	sender channel
+    - uint32	initial window size
+    - uint32    max packet size
+    - channel specific data
+
+    ------ +
+    1 + 4 + 4 + 4 + len = 13 + len
+*/
+
+unsigned int get_length_ssh_channel_open_confirmation_msg(struct ssh_channel_open_msg_s *msg)
+{
+    return (13);
+}
+
+unsigned int write_ssh_channel_open_comfirmation_msg(unsigned int lcnr, struct ssh_channel_open_msg_s *msg, char *buffer)
+{
+    char *pos=buffer;
+
+    *pos=(unsigned char) SSH_MSG_CHANNEL_OPEN_CONFIRMATION;
+    pos++;
+    store_uint32(pos, msg->rcnr);
+    pos+=4;
+    store_uint32(pos, lcnr);
+    pos+=4;
+    store_uint32(pos, msg->windowsize);
+    pos+=4;
+    store_uint32(pos, msg->maxpacketsize);
+    pos+=4;
+
+    /*    if ((msg->data) && (msg->len)) {
+
+	memcpy(pos, msg->data, msg->len);
+	pos+=msg->len;
+
+    }*/
+
+    return (unsigned int)(pos - buffer);
+}
+
+int send_ssh_channel_open_confirmation(struct ssh_channel_s *channel, union ssh_message_u *msg)
+{
+    struct ssh_channel_open_msg_s *confirm=&msg->channel.type.open;
+    unsigned int size=get_length_ssh_channel_open_confirmation_msg(confirm);
+    char buffer[sizeof(struct ssh_payload_s) + size];
+    struct ssh_payload_s *payload=(struct ssh_payload_s *) buffer;
+
+    init_ssh_payload(payload, size);
+    payload->type=SSH_MSG_CHANNEL_OPEN_CONFIRMATION;
+    payload->len=write_ssh_channel_open_comfirmation_msg(channel->lcnr, confirm, payload->buffer);
+
+    return write_ssh_packet(channel->connection, payload);
+}
+
+/*  send a channel open failure (RFC4254 5.1. Opening a Channel)
+
+    - byte 	SSH_MSG_CHANNEL_OPEN_FAILURE
+    - uint32    remote channel
+    - uint32	reason cose
+    - string    description
+    - string    language tag
+
+    ------ +
+    1 + 4 + 4 + strlen(description) + 4 + strlen(language)
+*/
+
+unsigned int get_length_ssh_channel_open_failure_msg(struct ssh_channel_open_failure_msg_s *msg)
+{
+    return 13 + msg->description.len + msg->language.len;
+}
+
+unsigned int write_ssh_channel_open_failure_msg(unsigned int rcnr, struct ssh_channel_open_failure_msg_s *msg, char *buffer)
+{
+    char *pos=buffer;
+
+    *pos=(unsigned char) SSH_MSG_CHANNEL_OPEN_FAILURE;
+    pos++;
+    store_uint32(pos, rcnr);
+    pos+=4;
+    store_uint32(pos, msg->reason);
+    pos+=4;
+    pos+=write_ssh_string(pos, 0, 's', (void *) &msg->description);
+    pos+=write_ssh_string(pos, 0, 's', (void *) &msg->language);
+
+    return (unsigned int)(pos - buffer);
+}
+
+int send_ssh_channel_open_failure_msg(struct ssh_connection_s *c, unsigned int rcnr, union ssh_message_u *msg)
+{
+    struct ssh_channel_open_failure_msg_s *failure=&msg->channel.type.open_failure;
+    unsigned int size=get_length_ssh_channel_open_failure_msg(failure);
+    char buffer[sizeof(struct ssh_payload_s) + size];
+    struct ssh_payload_s *payload=(struct ssh_payload_s *) buffer;
+
+    init_ssh_payload(payload, size);
+    payload->type=SSH_MSG_CHANNEL_OPEN_FAILURE;
+    payload->len=write_ssh_channel_open_failure_msg(rcnr, failure, payload->buffer);
+
+    return write_ssh_packet(c, payload);
 }
 
 /* close a channel */
 
-int send_channel_close_message(struct ssh_channel_s *channel)
+unsigned int get_length_ssh_channel_close_msg(struct ssh_channel_close_msg_s *close)
 {
+    return 5;
+}
+
+unsigned int write_ssh_channel_close_msg(unsigned int rcnr, struct ssh_channel_close_msg_s *close, char *buffer)
+{
+    char *pos=buffer;
+
+    *pos=(unsigned char) close->type;
+    pos++;
+    store_uint32(pos, rcnr);
+    pos+=4;
+
+    return (unsigned int)(pos - buffer);
+}
+
+int send_ssh_channel_eofclose_msg(struct ssh_channel_s *channel, union ssh_message_u *msg)
+{
+    struct ssh_channel_close_msg_s *close=&msg->channel.type.close;
+    unsigned int size=get_length_ssh_channel_close_msg(close);
     char buffer[sizeof(struct ssh_payload_s) + 5];
     struct ssh_payload_s *payload=(struct ssh_payload_s *) buffer;
-    uint32_t seq=0;
-    char *pos=payload->buffer;
-
-    logoutput_debug("send_channel_close_message");
 
     init_ssh_payload(payload, 5);
-    payload->type=SSH_MSG_CHANNEL_CLOSE;
+    payload->type=close->type;
+    payload->len=write_ssh_channel_close_msg(channel->rcnr, close, payload->buffer);
 
-    *pos=(unsigned char) SSH_MSG_CHANNEL_CLOSE;
-    pos++;
-    store_uint32(pos, channel->remote_channel);
-    pos+=4;
-    return write_ssh_packet(channel->connection, payload, &seq);
-
+    return write_ssh_packet(channel->connection, payload);
 }
 
 /* window adjust */
 
-int send_channel_window_adjust_message(struct ssh_channel_s *channel, unsigned int increase)
+unsigned int get_length_ssh_channel_windowadjust_msg(struct ssh_channel_windowadjust_msg_s *adjust)
 {
-    char buffer[sizeof(struct ssh_payload_s) + 9];
-    struct ssh_payload_s *payload=(struct ssh_payload_s *) buffer;
-    uint32_t seq=0;
-    char *pos=payload->buffer;
-
-    logoutput_debug("send_channel_window_adjust_message");
-
-    init_ssh_payload(payload, 9);
-    payload->type=SSH_MSG_CHANNEL_WINDOW_ADJUST;
-
-    *pos=(unsigned char) SSH_MSG_CHANNEL_WINDOW_ADJUST;
-    pos++;
-    store_uint32(pos, channel->remote_channel);
-    pos+=4;
-    store_uint32(pos, increase);
-    pos+=4;
-    return write_ssh_packet(channel->connection, payload, &seq);
-
+    return 9;
 }
 
-static unsigned int get_session_channel_data_len(struct ssh_channel_s *channel)
+unsigned int write_ssh_channel_windowadjust_msg(unsigned int rcnr, struct ssh_channel_windowadjust_msg_s *adjust, char *buffer)
 {
-    unsigned int len=5;
+    char *pos=buffer;
 
-    if (channel->type==_CHANNEL_TYPE_SESSION) {
+    *pos=SSH_MSG_CHANNEL_WINDOW_ADJUST;
+    pos++;
+    store_uint32(pos, rcnr);
+    pos+=4;
+    store_uint32(pos, adjust->increase);
+    pos+=4;
 
-	len += 4 + strlen(get_subsys_name_session_channel(channel->target.session.type)) +
-	    4 + ((channel->target.session.type==_CHANNEL_SESSION_TYPE_EXEC) || (channel->target.session.type==_CHANNEL_SESSION_TYPE_SUBSYSTEM) ? strlen(channel->target.session.buffer) : 0);
+    return (unsigned int)(pos - buffer);
+}
 
-    }
+int send_ssh_channel_window_adjust_msg(struct ssh_channel_s *channel, union ssh_message_u *msg)
+{
+    struct ssh_channel_windowadjust_msg_s *adjust=&msg->channel.type.windowadjust;
+    unsigned int size=get_length_ssh_channel_windowadjust_msg(adjust);
+    char buffer[sizeof(struct ssh_payload_s) + size];
+    struct ssh_payload_s *payload=(struct ssh_payload_s *) buffer;
 
-    len++;
-    return len;
-
+    init_ssh_payload(payload, size);
+    payload->type=SSH_MSG_CHANNEL_WINDOW_ADJUST;
+    payload->len=write_ssh_channel_windowadjust_msg(channel->rcnr, adjust, payload->buffer);
+    return write_ssh_packet(channel->connection, payload);
 }
 
 /*
-    want a subsystem or exec a command (RFC4254 6.5. Starting a Shell or a Command)
+    want a channel specific request 
 
-    - byte 	SSH_MSG_CHANNEL_REQUEST
-    - uint32    remote channel
-    - string	"subsystem"/"exec"/"shell"
-    - boolean	want reply
-    - string 	subsystem name/command
+    - byte 		SSH_MSG_CHANNEL_REQUEST
+    - uint32    	remote channel
+    - string		name
+    - boolean		want reply
+    - bytes[size] 	type-specific data
+
+    ------- +
+    1 + 4 + strlen(name) + 4 + 1 + size = 10 + strlen(name) + size
+
+    see: https://datatracker.ietf.org/doc/html/rfc4254#section-5.4
+    RFC4254 5.4.  Channel-Specific Requests
 */
 
-int send_channel_start_command_message(struct ssh_channel_s *channel, unsigned char reply, uint32_t *seq)
+unsigned int get_length_ssh_channel_request_msg(struct ssh_channel_request_msg_s *msg)
 {
-    unsigned int len=get_session_channel_data_len(channel);
-    char buffer[sizeof(struct ssh_payload_s) + len];
-    struct ssh_payload_s *payload=(struct ssh_payload_s *) buffer;
-    char *pos=payload->buffer;
+    return (10 + msg->type.len + msg->len);
+}
 
-    init_ssh_payload(payload, len);
-    payload->type=SSH_MSG_CHANNEL_REQUEST;
+unsigned int write_ssh_channel_request_msg(unsigned int rcnr, struct ssh_channel_request_msg_s *msg, char *buffer)
+{
+    char *pos=buffer;
 
     *pos=(unsigned char) SSH_MSG_CHANNEL_REQUEST;
     pos++;
-    store_uint32(pos, channel->remote_channel);
+    store_uint32(pos, rcnr);
     pos+=4;
-    pos+=write_ssh_string(pos, 0, 'c', (void *) get_subsys_name_session_channel(channel->target.session.type));
-    *pos=(reply>0) ? 1 : 0;
+    pos+=write_ssh_string(pos, 0, 's', (void *) &msg->type);
+    *pos=msg->reply;
     pos++;
 
-    /* with exec provide also the command, and with subsystem the name */
+    if (msg->len) {
 
-    if ((channel->target.session.type==_CHANNEL_SESSION_TYPE_EXEC) || (channel->target.session.type==_CHANNEL_SESSION_TYPE_SUBSYSTEM)) {
-
-	pos+=write_ssh_string(pos, 0, 'c', (void *) channel->target.session.buffer);
+        memcpy(pos, msg->data, msg->len);
+        pos+=msg->len;
 
     }
 
-    payload->len=(unsigned int)(pos - payload->buffer);
-    return write_ssh_packet(channel->connection, payload, seq);
+    return (unsigned int)(pos - buffer);
+}
 
+int send_ssh_channel_request_msg(struct ssh_channel_s *channel, union ssh_message_u *msg)
+{
+    struct ssh_channel_request_msg_s *request=&msg->channel.type.request;
+    unsigned int size=get_length_ssh_channel_request_msg(request);
+    char buffer[sizeof(struct ssh_payload_s) + size];
+    struct ssh_payload_s *payload=(struct ssh_payload_s *) buffer;
+
+    init_ssh_payload(payload, size);
+    payload->type=SSH_MSG_CHANNEL_REQUEST;
+    payload->len=write_ssh_channel_request_msg(channel->rcnr, request, payload->buffer);
+
+    return write_ssh_packet(channel->connection, payload);
 }
 
 /*
-    send a channel data (RFC4254 5.2. Data Transfer)
+    exec a command or start a subsystem/shell
+    see: https://datatracker.ietf.org/doc/html/rfc4254#section-6.5
+    RFC4254 6.5. Starting a Shell or a Command
+*/
+
+int send_ssh_channel_start_command_msg(struct ssh_channel_s *channel, unsigned char reply)
+{
+
+    if (channel->type==SSH_CHANNEL_TYPE_SESSION) {
+        unsigned char type=channel->target.session.type;
+	char *name=get_subsys_name_session_channel(type);
+
+	if (name) {
+	    char *command=channel->target.session.buffer;
+	    unsigned int size=strlen(command);
+	    char data[size + 4];
+	    unsigned int tmp=write_ssh_string(data, size+4, 'c', (void *) command); /* is command or subsystem name */
+	    union ssh_message_u msg;
+
+            memset(&msg, 0, sizeof(union ssh_message_u));
+            set_ssh_string(&msg.channel.type.request.type, 'c', name);
+            msg.channel.type.request.reply=reply;
+
+            if ((type==SSH_CHANNEL_SESSION_TYPE_EXEC) || (type==SSH_CHANNEL_SESSION_TYPE_SUBSYSTEM)) {
+
+                msg.channel.type.request.len=(size+4);
+                msg.channel.type.request.data=data;
+
+            }
+
+	    return send_ssh_channel_request_msg(channel, &msg);
+
+	}
+
+    }
+
+    return -1;
+
+}
+
+/*  send a channel data (RFC4254 5.2. Data Transfer)
 
     - byte 	SSH_MSG_CHANNEL_DATA
     - uint32    remote channel
     - uint32	len
     - byte[len]
+
+    --------- +
+    1 + 4 + 4 + len = 9 + len
 */
 
-int send_channel_data_message_connected(struct ssh_channel_s *channel, char *data, unsigned int size, uint32_t *seq)
+unsigned int get_length_ssh_channel_data_msg(struct ssh_channel_data_msg_s *msg)
 {
-    unsigned int len=9 + size;
-    char buffer[sizeof(struct ssh_payload_s) + len];
-    struct ssh_payload_s *payload=(struct ssh_payload_s *) buffer;
-    char *pos=payload->buffer;
+    return (9 + msg->len);
+}
 
-    init_ssh_payload(payload, len);
-    payload->type=SSH_MSG_CHANNEL_DATA;
+unsigned int write_ssh_channel_data_msg(unsigned int rcnr, struct ssh_channel_data_msg_s *msg, char *buffer)
+{
+    char *pos=buffer;
 
     *pos=(unsigned char) SSH_MSG_CHANNEL_DATA;
     pos++;
-
-    store_uint32(pos, channel->remote_channel);
+    store_uint32(pos, rcnr);
     pos+=4;
-    store_uint32(pos, size);
+    store_uint32(pos, msg->len);
     pos+=4;
-    memcpy(pos, data, size);
-    pos+=size;
-    payload->len=(unsigned int)(pos - payload->buffer);
-
-    return write_ssh_packet(channel->connection, payload, seq);
-
+    memcpy(pos, msg->data, msg->len);
+    pos+=msg->len;
+    return (unsigned int)(pos - buffer);
 }
 
-int send_channel_data_message_error(struct ssh_channel_s *channel, char *data, unsigned int len, uint32_t *seq)
+int send_ssh_channel_data_msg(struct ssh_channel_s *channel, union ssh_message_u *msg)
 {
-    return -1;
-}
-
-int send_channel_data_message(struct ssh_channel_s *channel, char *data, unsigned int len, unsigned int *seq)
-{
-    (* channel->process_outgoing_bytes)(channel, len);
-    return (* channel->send_data_msg)(channel, data, len, seq);
-}
-
-int send_channel_request_message(struct ssh_channel_s *channel, const char *request, unsigned char reply, struct ssh_string_s *data, uint32_t *seq)
-{
-    unsigned int len=1 + 4 + 4 + strlen(request) + 1 + ((data) ? data->len : 0);
-    char buffer[sizeof(struct ssh_payload_s) + len];
+    struct ssh_channel_data_msg_s *data=&msg->channel.type.data;
+    unsigned int size=get_length_ssh_channel_data_msg(data);
+    char buffer[sizeof(struct ssh_payload_s) + size];
     struct ssh_payload_s *payload=(struct ssh_payload_s *) buffer;
-    char *pos=payload->buffer;
-    unsigned int tmp=strlen(request);
 
-    init_ssh_payload(payload, len);
+    init_ssh_payload(payload, size);
     payload->type=SSH_MSG_CHANNEL_DATA;
+    payload->len=write_ssh_channel_data_msg(channel->rcnr, data, payload->buffer);
 
-    *pos=(unsigned char) SSH_MSG_CHANNEL_REQUEST;
-    pos++;
-    store_uint32(pos, channel->remote_channel);
-    pos+=4;
-    store_uint32(pos, tmp);
-    pos+=4;
-    memcpy(pos, request, tmp);
-    pos+=tmp;
-    *pos=(reply) ? 1 : 0;
-    pos++;
-    if (data && data->len>0) {
+    return write_ssh_packet(channel->connection, payload);
 
-	memcpy(pos, data->ptr, data->len);
-	pos+=data->len;
-
-    }
-
-    payload->len=(unsigned int)(pos - payload->buffer);
-    return write_ssh_packet(channel->connection, payload, seq);
 }
 
-int send_channel_open_confirmation(struct ssh_channel_s *channel, struct ssh_string_s *data, uint32_t *seq)
+/*  send a channel extended data (RFC4254 5.2. Data Transfer)
+
+    - byte 	SSH_MSG_CHANNEL_EXTENDED_DATA
+    - uint32    remote channel
+    - uint32	code
+    - uint32	len
+    - byte[len]
+
+    ------ +
+    1 + 4 + 4 + 4 + len = 13 + len
+*/
+
+unsigned int get_length_ssh_channel_xdata_msg(struct ssh_channel_xdata_msg_s *msg)
 {
-    unsigned int len=1 + 4 + 4 + 4 + 4 + ((data) ? data->len : 0);
-    char buffer[sizeof(struct ssh_payload_s) + len];
-    struct ssh_payload_s *payload=(struct ssh_payload_s *) buffer;
-    char *pos=payload->buffer;
-
-    init_ssh_payload(payload, len);
-    payload->type=SSH_MSG_CHANNEL_OPEN_CONFIRMATION;
-
-    *pos=(unsigned char) SSH_MSG_CHANNEL_OPEN_CONFIRMATION;
-    pos++;
-    store_uint32(pos, channel->remote_channel);
-    pos+=4;
-    store_uint32(pos, channel->local_channel);
-    pos+=4;
-    store_uint32(pos, channel->local_window);
-    pos+=4;
-    store_uint32(pos, channel->max_packet_size);
-    pos+=4;
-
-    if (data && data->len>0) {
-
-	memcpy(pos, data->ptr, data->len);
-	pos+=data->len;
-
-    }
-
-    payload->len=(unsigned int)(pos - payload->buffer);
-    return write_ssh_packet(channel->connection, payload, seq);
+    return (13 + msg->len);
 }
 
-int send_channel_open_failure(struct ssh_connection_s *c, unsigned int remote_channel, uint32_t code, uint32_t *seq)
+unsigned int write_ssh_channel_xdata_msg(unsigned int rcnr, struct ssh_channel_xdata_msg_s *msg, char *buffer)
 {
-    unsigned int len=1 + 4 + 4 + 4 + 4;
-    char buffer[sizeof(struct ssh_payload_s) + len];
-    struct ssh_payload_s *payload=(struct ssh_payload_s *) buffer;
-    char *pos=payload->buffer;
+    char *pos=buffer;
 
-    init_ssh_payload(payload, len);
-    payload->type=SSH_MSG_CHANNEL_OPEN_FAILURE;
-
-    *pos=(unsigned char) SSH_MSG_CHANNEL_OPEN_FAILURE;
+    *pos=(unsigned char) SSH_MSG_CHANNEL_EXTENDED_DATA;
     pos++;
-    store_uint32(pos, remote_channel);
+    store_uint32(pos, rcnr);
     pos+=4;
-    store_uint32(pos, code);
+    store_uint32(pos, msg->code);
     pos+=4;
-    store_uint32(pos, 0);
+    store_uint32(pos, msg->len);
     pos+=4;
-    store_uint32(pos, 0);
-    pos+=4;
+    memcpy(pos, msg->data, msg->len);
+    pos+=msg->len;
+    return (unsigned int)(pos - buffer);
+}
 
-    payload->len=(unsigned int)(pos - payload->buffer);
-    return write_ssh_packet(c, payload, seq);
+int send_ssh_channel_xdata_msg(struct ssh_channel_s *channel, union ssh_message_u *msg)
+{
+    struct ssh_channel_xdata_msg_s *xdata=&msg->channel.type.xdata;
+    unsigned int size=get_length_ssh_channel_xdata_msg(xdata);
+    char buffer[sizeof(struct ssh_payload_s) + size];
+    struct ssh_payload_s *payload=(struct ssh_payload_s *) buffer;
+
+    init_ssh_payload(payload, size);
+    payload->type=SSH_MSG_CHANNEL_EXTENDED_DATA;
+    payload->len=write_ssh_channel_xdata_msg(channel->rcnr, xdata, payload->buffer);
+
+    return write_ssh_packet(channel->connection, payload);
 }

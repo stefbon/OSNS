@@ -55,6 +55,14 @@ static void thread_process_mountinfo(void *ptr)
 
     signal_lock_flag(monitor->signal, &monitor->status, MOUNT_MONITOR_STATUS_MOUNTEVENT);
 
+    if (monitor->status & MOUNT_MONITOR_STATUS_PROCESS) {
+
+        monitor->status |= MOUNT_MONITOR_STATUS_CHANGED;
+        signal_unlock_flag(monitor->signal, &monitor->status, MOUNT_MONITOR_STATUS_MOUNTEVENT);
+        return;
+
+    }
+
     monitor->status |= MOUNT_MONITOR_STATUS_PROCESS;
 
     processmounttable:
@@ -73,9 +81,9 @@ static void thread_process_mountinfo(void *ptr)
 
 /* process an event the mountinfo */
 
-void process_mountinfo_event(struct bevent_s *bevent, unsigned int flag, struct bevent_argument_s *arg)
+void process_mountinfo_event(struct osns_socket_s *sock, unsigned int level, unsigned int errcode, void *ptr)
 {
-    struct mount_monitor_s *monitor=(struct mount_monitor_s *) bevent->ptr;
+    struct mount_monitor_s *monitor=(struct mount_monitor_s *) ptr;
 
     logoutput_debug("process_mountinfo_event");
 
@@ -89,7 +97,7 @@ void process_mountinfo_event(struct bevent_s *bevent, unsigned int flag, struct 
 
 	/* get a thread to do the work */
 
-	work_workerthread(NULL, 0, thread_process_mountinfo, (void *) monitor, NULL);
+	work_workerthread(NULL, 0, thread_process_mountinfo, (void *) monitor);
 
     }
 

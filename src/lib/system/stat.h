@@ -24,10 +24,10 @@
 #include <sys/sysmacros.h>
 #include <sys/stat.h>
 
-#include "path.h"
+#include "libosns-fspath.h"
 #include "time.h"
 
-struct osns_socket_s;
+#define SYSTEM_FILE_PROPERTY_MIMETYPE		1
 
 #define SYSTEM_STAT_FLAG_FOLLOW_SYMLINK		1
 
@@ -176,14 +176,9 @@ struct system_statvfs_s {
 
 /* system calls */
 
-int system_getstat(struct fs_location_path_s *p, unsigned int mask, struct system_stat_s *stat);
-int system_getlstat(struct fs_location_path_s *p, unsigned int mask, struct system_stat_s *stat);
-int system_setstat(struct fs_location_path_s *p, unsigned int mask, struct system_stat_s *stat);
-
-int system_fgetstat(struct osns_socket_s *socket, unsigned int mask, struct system_stat_s *stat);
-int system_fsetstat(struct osns_socket_s *socket, unsigned int mask, struct system_stat_s *stat);
-
-int system_fgetstatat(struct osns_socket_s *socket, char *name, unsigned int mask, struct system_stat_s *stat, unsigned int flags);
+int system_getstat(struct fs_path_s *p, unsigned int mask, struct system_stat_s *stat);
+int system_getlstat(struct fs_path_s *p, unsigned int mask, struct system_stat_s *stat);
+int system_setstat(struct fs_path_s *p, unsigned int mask, struct system_stat_s *stat);
 
 /* get */
 
@@ -191,7 +186,7 @@ uint64_t get_ino_system_stat(struct system_stat_s *stat);
 uint32_t get_nlink_system_stat(struct system_stat_s *stat);
 uint32_t get_uid_system_stat(struct system_stat_s *stat);
 uint32_t get_gid_system_stat(struct system_stat_s *stat);
-uint32_t get_size_system_stat(struct system_stat_s *stat);
+off_t get_size_system_stat(struct system_stat_s *stat);
 uint16_t get_type_system_stat(struct system_stat_s *stat);
 uint16_t get_mode_system_stat(struct system_stat_s *stat);
 
@@ -221,7 +216,7 @@ void set_type_system_stat(struct system_stat_s *stat, uint16_t type);
 void set_mode_system_stat(struct system_stat_s *stat, uint16_t mode);
 void set_uid_system_stat(struct system_stat_s *stat, uint32_t uid);
 void set_gid_system_stat(struct system_stat_s *stat, uint32_t gid);
-void set_size_system_stat(struct system_stat_s *stat, uint64_t size);
+void set_size_system_stat(struct system_stat_s *stat, off_t size);
 void set_nlink_system_stat(struct system_stat_s *stat, uint32_t nlink);
 
 void set_atime_system_stat(struct system_stat_s *stat, struct system_timespec_s *time);
@@ -270,7 +265,7 @@ int system_stat_test_ISCHR(struct system_stat_s *stat);
 int system_stat_test_ISSOCK(struct system_stat_s *stat);
 int system_stat_test_ISREG(struct system_stat_s *stat);
 
-int system_getstatvfs(struct fs_location_path_s *path, struct system_statvfs_s *s);
+int system_getstatvfs(struct fs_path_s *path, struct system_statvfs_s *s);
 
 unsigned int enable_mode_permission(unsigned int mode, unsigned int role, unsigned int perm);
 

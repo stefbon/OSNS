@@ -22,6 +22,7 @@
 #include "libosns-log.h"
 #include "libosns-threads.h"
 #include "libosns-misc.h"
+#include "libosns-eventloop.h"
 
 #include "ssh-common.h"
 #include "ssh-common-protocol.h"
@@ -29,98 +30,121 @@
 #include "ssh-utils.h"
 #include "ssh-connections.h"
 
-static void _disconnect_ssh_connection(struct ssh_connection_s *sshc, unsigned char remote)
+static uint64_t cb_copy_socket_ssh(struct osns_socket_s *sock, char *buffer, void *pmsg, unsigned int bytesread, void *ptr)
 {
+    sock->rd.pos += bytesread;
+    signal_broadcast_locked(sock->signal);
+    return 1;
+}
+
+/* socket msg cb's for ssh */
+
+static unsigned int get_msg_header_size_ssh_greeter(struct osns_socket_s *sock, void *ptr)
+{
+    return 0; /* no header with greeter */
+}
+
+static unsigned int get_msg_header_size_ssh(struct osns_socket_s *sock, void *ptr)
+{
+    return 8; /* safe size */
+}
+
+static unsigned int get_msg_size_ssh(struct osns_socket_s *sock, char *buffer, unsigned int size, void *ptr)
+{
+    return (unsigned int) -1; /* set to maximum to get appending mode */
+}
+
+static void set_msg_size_ssh(struct osns_socket_s *sock, char *buffer, unsigned int size, void *ptr)
+{}
+
+struct close_ssh_connection_hlpr_s {
+    struct ssh_connection_s *sshc;
+};
+
+static void process_ssh_socket_close(struct osns_socket_s *sock, unsigned int level, void *ptr)
+{
+    struct ssh_connection_s *sshc=(struct ssh_connection_s *) ptr;
+
+    logoutput_debug("process_ssh_socket_close: level %u", level);
+    process_socket_close_default(sock, level, NULL);
 
     if (change_ssh_connection_setup(sshc, "setup", 0, SSH_SETUP_FLAG_DISCONNECTING, SSH_SETUP_OPTION_XOR, NULL, 0)==0) {
-	struct connection_s *c=&sshc->connection;
 
-	(* c->ops.client.disconnect)(c, remote);
+        /* TODO: add a mechanism to inform the channels the connection is closed and signal every interface */
+
 	change_ssh_connection_setup(sshc, "setup", 0, SSH_SETUP_FLAG_DISCONNECTED, 0, NULL, 0);
 
     }
 
 }
 
-/*
-    read the data coming from server after the connection is created
-    and queue it
-*/
-
-void read_ssh_connection_socket(struct connection_s *c)
+static void process_ssh_socket_error(struct osns_socket_s *sock, unsigned int level, unsigned int errcode, void *ptr)
 {
-    struct ssh_connection_s *sshc=(struct ssh_connection_s *)((char *)c - offsetof(struct ssh_connection_s, connection));
-    struct osns_socket_s *sock=&c->sock;
-    struct ssh_receive_s *receive=&sshc->receive;
-    unsigned int error=0;
-    int bytesread=0;
+    struct ssh_connection_s *sshc=NULL;
 
-    pthread_mutex_lock(&receive->mutex);
+    if (errcode==EAGAIN) return;
 
-    /* read the first data coming from the remote server */
+    sshc=(struct ssh_connection_s *) ptr;
+    logoutput_debug("process_ssh_socket_error: level %u error %u (%s)", level, errcode, strerror(errcode));
+    process_socket_error_default(sock, level, errcode, NULL);
 
-    readbuffer:
+}
 
-    bytesread=(* sock->sops.connection.recv)(sock, (void *) (receive->buffer + receive->read), (size_t) (receive->size - receive->read), 0);
-    error=errno;
+static void process_ssh_socket_dummy(struct osns_socket_s *sock, char *header, char *data, struct socket_control_data_s *ctrl, void *ptr)
+{}
 
-    if (bytesread<=0) {
+void set_ssh_socket_behaviour(struct osns_socket_s *sock, const char *phase)
+{
+    struct bevent_s *bevent=sock->event.bevent;
 
-	pthread_mutex_unlock(&receive->mutex);
+    if (bevent==NULL) {
 
-	logoutput_info("read_ssh_connection_socket: bytesread %i error %i", bytesread, error);
-
-	/* handle error */
-
-	if (bytesread==0) {
-
-	    /* peer has performed an orderly shutdown */
-
-	    _disconnect_ssh_connection(sshc, 1);
-	    return;
-
-	} else if (error==EAGAIN || error==EWOULDBLOCK) {
-
-	    return;
-
-	} else if (socket_connection_error(error)) {
-
-	    logoutput_warning("read_ssh_connection_socket: socket is not connected? error %i:%s", error, strerror(error));
-	    sshc->flags |= SSH_CONNECTION_FLAG_TROUBLE;
-	    sshc->setup.error=error;
-	    sshc->setup.flags |= SSH_SETUP_FLAG_RECV_ERROR;
-	    start_thread_ssh_connection_problem(sshc);
-
-	} else {
-
-	    logoutput_warning("read_ssh_connection_socket: error %i:%s", error, strerror(error));
-
-	}
+        logoutput_warning("set_ssh_socket_behaviour: cannot change socket eventloop behaviour ... no bevent set");
 
     } else {
 
-	/* no error */
-
-	receive->read+=bytesread;
-
-	if (receive->status & SSH_RECEIVE_STATUS_WAIT) {
-
-	    /* there is a thread waiting for more data to arrive: signal it */
-
-	    pthread_cond_broadcast(&receive->cond);
-
-	} else if (receive->threads<2) {
-
-	    /* start a thread (but max number of threads may not exceed 2)*/
-
-	    read_ssh_connection_buffer(sshc);
-
-	}
-
-	pthread_mutex_unlock(&receive->mutex);
+        set_bevent_process_data_default(bevent);
 
     }
 
-    return;
+    if ((strcmp(phase, "init")==0) || (strcmp(phase, "greeter")==0)) {
+
+        sock->ctx.read=cb_read_socket_ssh_greeter;
+        sock->ctx.get_msg_header_size=get_msg_header_size_ssh_greeter;
+
+    } else {
+
+        sock->ctx.read=cb_read_socket_ssh;
+        sock->ctx.get_msg_header_size=get_msg_header_size_ssh;
+
+    }
+
+}
+
+static void cb_read_socket_ssh_dummy(struct osns_socket_s *sock, uint64_t ctr, void *ptr)
+{}
+
+void disable_ssh_socket_read_data(struct osns_socket_s *sock)
+{
+    sock->ctx.read=cb_read_socket_ssh_dummy;
+}
+
+void enable_ssh_socket_read_data(struct osns_socket_s *sock)
+{
+    sock->ctx.read=cb_read_socket_ssh;
+}
+
+void init_ssh_socket_behaviour(struct osns_socket_s *sock)
+{
+
+    sock->ctx.copy=cb_copy_socket_ssh;
+    sock->ctx.get_msg_size=get_msg_size_ssh;
+    sock->ctx.set_msg_size=set_msg_size_ssh;
+
+    sock->ctx.process_data=process_ssh_socket_dummy;
+    sock->ctx.process_close=process_ssh_socket_close;
+    sock->ctx.process_error=process_ssh_socket_error;
+
+    set_ssh_socket_behaviour(sock, "init");
 
 }

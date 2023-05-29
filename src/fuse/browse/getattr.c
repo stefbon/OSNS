@@ -26,12 +26,12 @@
 #include "libosns-context.h"
 #include "libosns-fuse-public.h"
 
-void _fs_browse_getattr(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode)
+void _fs_browse_getattr(struct service_context_s *ctx, struct fuse_request_s *request, struct inode_s *inode)
 {
-    _fs_common_getattr(context, request, inode);
+    _fs_common_getattr(request, &inode->stat);
 }
 
-void _fs_browse_setattr(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, struct system_stat_s *st)
+void _fs_browse_setattr(struct service_context_s *ctx, struct fuse_request_s *request, struct inode_s *inode, struct system_stat_s *st)
 {
-    _fs_common_getattr(context, request, inode);
+    _fs_common_getattr(request, &inode->stat);
 }

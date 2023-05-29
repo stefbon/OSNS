@@ -30,11 +30,12 @@
 static void print_help(const char *progname) {
 
     logoutput("General options:\n");
-    logoutput("    --help                		print help\n");
-    logoutput("    --version             		print version\n");
-    logoutput("    --list (netcache|mountinfo)       	list records of network cache or mounted devices\n");
-    logoutput("    --filter (%expression%)     	 	filter the list of records like (service=ssh) and (domain=example.org) (only for network)\n");
-    logoutput("    --mount (network|devices)      	mount a FUSE filesystem for user\n");
+    logoutput("    --help                                                               print help\n");
+    logoutput("    --version                                                            print version\n");
+    logoutput("    --list (netcache|mountinfo) --filter (expression)                    list records of network cache or mounted devices using filter (optional)\n");
+    logoutput("                                                                         example of filters: (service=ssh) (domain=example.org) (only for network)\n");
+    logoutput("    --mount (network|devices)                                            mount a FUSE filesystem for user\n");
+    logoutput("    --channel (exec) --host 192.168.0.2 --command /path/to/command       list output of command on host\n");
 
     logoutput("\n");
     logoutput("\n");
@@ -46,7 +47,7 @@ static void print_version()
     logoutput("%i:%i\n", OSNS_CTL_VERSION, OSNS_CTL_MINOR_VERSION);
 }
 
-int parse_arguments(int argc, char *argv[], struct ctl_arguments_s *arguments)
+int read_osnsctl_arguments(int argc, char *argv[], struct ctl_arguments_s *arguments)
 {
     static struct option long_options[] = {
 	{"help", 		optional_argument, 		0, 0},
@@ -54,6 +55,9 @@ int parse_arguments(int argc, char *argv[], struct ctl_arguments_s *arguments)
 	{"list", 		required_argument, 		0, 0},
 	{"filter", 		required_argument, 		0, 0},
 	{"mount",		required_argument,		0, 0},
+	{"channel",		required_argument,		0, 0},
+	{"host",		required_argument,		0, 0},
+	{"command",		required_argument,		0, 0},
 	{0,0,0,0}
     };
     int long_options_index=0;
@@ -82,7 +86,7 @@ int parse_arguments(int argc, char *argv[], struct ctl_arguments_s *arguments)
 
 		    if (arguments->type>0) {
 
-			logoutput_error("parse_arguments: error: argument already specified.");
+			logoutput_error("read_osnsctl_arguments: error: argument already specified.");
 			result=-1;
 
 		    } else {
@@ -91,26 +95,26 @@ int parse_arguments(int argc, char *argv[], struct ctl_arguments_s *arguments)
 
 			if (optarg) {
 
-			    if (strcmp(optarg, "netcache")==0) {
-
-				arguments->cmd.list.service=OSNS_LIST_TYPE_NETCACHE;
-				arguments->init |= OSNS_INIT_FLAG_NETCACHE;
-
-			    } else if (strcmp(optarg, "mountinfo")==0) {
+			    if (strcmp(optarg, "mountinfo")==0) {
 
 				arguments->cmd.list.service=OSNS_LIST_TYPE_MOUNTINFO;
-				arguments->init |= OSNS_INIT_FLAG_MOUNTINFO;
+				arguments->init |= OSNS_INIT_FLAG_LIST_MOUNTINFO;
+
+			    } else if (strcmp(optarg, "connections")==0) {
+
+				arguments->cmd.list.service=OSNS_LIST_TYPE_CONNECTIONS;
+				arguments->init |= OSNS_INIT_FLAG_LIST_CONNECTIONS;
 
 			    } else {
 
-				logoutput_error("parse_arguments: error: list argument %s not reckognized.", optarg);
+				logoutput_error("read_osnsctl_arguments: error: list argument %s not reckognized.", optarg);
 				result=-1;
 
 			    }
 
 			} else {
 
-			    logoutput_error("parse_arguments: error: list argument requires argument.");
+			    logoutput_error("read_osnsctl_arguments: error: list argument requires argument.");
 
 			}
 
@@ -120,7 +124,7 @@ int parse_arguments(int argc, char *argv[], struct ctl_arguments_s *arguments)
 
 		    if (arguments->type>0) {
 
-			logoutput_error("parse_arguments: error: argument already specified.");
+			logoutput_error("read_osnsctl_arguments: error: argument already specified.");
 			result=-1;
 
 		    } else {
@@ -141,14 +145,52 @@ int parse_arguments(int argc, char *argv[], struct ctl_arguments_s *arguments)
 
 			    } else {
 
-				logoutput_error("parse_arguments: error: list argument %s not reckognized.", optarg);
+				logoutput_error("read_osnsctl_arguments: error: list argument %s not reckognized.", optarg);
 				result=-1;
 
 			    }
 
 			} else {
 
-			    logoutput_error("parse_arguments: error: list argument requires argument.");
+			    logoutput_error("read_osnsctl_arguments: error: list argument requires argument.");
+
+			}
+
+		    }
+
+		} else if (strcmp(long_options[long_options_index].name, "channel")==0) {
+
+		    if (arguments->type>0) {
+
+			logoutput_error("read_osnsctl_arguments: error: argument already specified.");
+			result=-1;
+
+		    } else {
+
+			arguments->type=OSNS_COMMAND_TYPE_CHANNEL;
+
+			if (optarg) {
+
+			    if (strcmp(optarg, "exec")==0) {
+
+				arguments->cmd.channel.type=OSNS_CHANNEL_TYPE_EXEC;
+				arguments->init |= OSNS_INIT_FLAG_CHANNEL_EXEC;
+
+                            } else if (strcmp(optarg, "read")==0) {
+
+				arguments->cmd.channel.type=OSNS_CHANNEL_TYPE_READ;
+				arguments->init |= OSNS_INIT_FLAG_CHANNEL_READ;
+
+			    } else {
+
+				logoutput_error("read_osnsctl_arguments: error: list argument %s not reckognized.", optarg);
+				result=-1;
+
+			    }
+
+			} else {
+
+			    logoutput_error("read_osnsctl_arguments: error: list argument requires argument.");
 
 			}
 
@@ -158,12 +200,12 @@ int parse_arguments(int argc, char *argv[], struct ctl_arguments_s *arguments)
 
 		    if (arguments->type==0) {
 
-			logoutput_error("parse_arguments: error: no service to filter specified.");
+			logoutput_error("read_osnsctl_arguments: error: no service to filter specified.");
 			result=-1;
 
 		    } else if ((arguments->type != OSNS_COMMAND_TYPE_LIST) || ((arguments->type == OSNS_COMMAND_TYPE_LIST) && arguments->cmd.list.filter.len>0)) {
 
-			logoutput_error("parse_arguments: error: filter already specified or wrong command.");
+			logoutput_error("read_osnsctl_arguments: error: filter already specified or wrong command.");
 			result=-1;
 
 		    } else {
@@ -171,11 +213,7 @@ int parse_arguments(int argc, char *argv[], struct ctl_arguments_s *arguments)
 			arguments->cmd.list.filter.data=optarg;
 			arguments->cmd.list.filter.len=strlen(optarg);
 
-			if (arguments->cmd.list.service==OSNS_LIST_TYPE_NETCACHE) {
-
-			    arguments->init |= OSNS_INIT_FLAG_FILTER_NETCACHE;
-
-			} else if (arguments->cmd.list.service==OSNS_LIST_TYPE_MOUNTINFO) {
+			if (arguments->cmd.list.service==OSNS_LIST_TYPE_MOUNTINFO) {
 
 			    arguments->init |= OSNS_INIT_FLAG_FILTER_MOUNTINFO;
 
@@ -183,9 +221,48 @@ int parse_arguments(int argc, char *argv[], struct ctl_arguments_s *arguments)
 
 		    }
 
+		} else if (strcmp(long_options[long_options_index].name, "command")==0) {
+
+		    if (arguments->type==0) {
+
+			logoutput_error("read_osnsctl_arguments: error: no channel for command specified.");
+			result=-1;
+
+		    } else if (arguments->type != OSNS_COMMAND_TYPE_CHANNEL) {
+
+			logoutput_error("read_osnsctl_arguments: error: command already specified or wrong command.");
+			result=-1;
+
+		    } else {
+
+			arguments->cmd.channel.command.data=optarg;
+			arguments->cmd.channel.command.len=strlen(optarg);
+
+		    }
+
+		} else if (strcmp(long_options[long_options_index].name, "host")==0) {
+
+		    if (arguments->type==0) {
+
+			logoutput_error("read_osnsctl_arguments: error: no channel for command specified.");
+			result=-1;
+
+		    } else if (arguments->type != OSNS_COMMAND_TYPE_CHANNEL) {
+
+			logoutput_error("read_osnsctl_arguments: error: command already specified or wrong command.");
+			result=-1;
+
+		    } else {
+
+			arguments->cmd.channel.host.data=optarg;
+			arguments->cmd.channel.host.len=strlen(optarg);
+			logoutput_debug("read_osnsctl_arguments: found host %.*s", arguments->cmd.channel.host.len, arguments->cmd.channel.host.data);
+
+		    }
+
 		} else {
 
-		    logoutput_error("parse_arguments: error: argument not supported/reckognized.");
+		    logoutput_error("read_osnsctl_arguments: error: argument not supported/reckognized.");
 		    result=-1;
 
 		}
@@ -194,13 +271,13 @@ int parse_arguments(int argc, char *argv[], struct ctl_arguments_s *arguments)
 
 	    case '?':
 
-		logoutput_error("Error: option %s not reckognized.\n", optarg);
+		logoutput_error("read_osnsctl: error: option %s not reckognized.\n", optarg);
 		result=-1;
 		break;
 
 	    default:
 
-		logoutput("Warning: getoption returned character code 0%o!\n", result);
+		logoutput("read_osnsctl: warning: getoption returned character code 0%o!\n", result);
 
 	}
 
@@ -211,6 +288,6 @@ int parse_arguments(int argc, char *argv[], struct ctl_arguments_s *arguments)
 
 }
 
-void free_options()
+void free_osnsctl_arguments(struct ctl_arguments_s *arguments)
 {
 }

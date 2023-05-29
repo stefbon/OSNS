@@ -25,37 +25,36 @@ struct browse_service_fs_s {
 
     unsigned int (* get_name)(struct service_context_s *context, char *buffer, unsigned int len);
 
-    void (*lookup_existing) (struct service_context_s *context, struct fuse_request_s *request, struct entry_s *entry);
-    void (*lookup_new) (struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, struct name_s *xname);
+    void (* lookup)(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, struct name_s *xname);
 
-    void (*access) (struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, unsigned int mask);
+    void (* access)(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, unsigned int mask);
 
-    void (*getattr) (struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode);
-    void (*setattr) (struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, struct system_stat_s *stat);
+    void (* getattr)(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode);
+    void (* setattr)(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, struct system_stat_s *stat);
 
-    void (*readlink) (struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode);
+    void (* readlink)(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode);
 
-    void (*mkdir) (struct service_context_s *context, struct fuse_request_s *request, struct entry_s *entry, struct system_stat_s *stat);
-    void (*mknod) (struct service_context_s *context, struct fuse_request_s *request, struct entry_s *entry, struct system_stat_s *stat);
-    void (*symlink) (struct service_context_s *context, struct fuse_request_s *request, struct entry_s *entry, struct fs_location_path_s *link);
-    int  (*symlink_validate)(struct service_context_s *context, char *target, struct fs_location_path_s *sub);
+    void (* mkdir)(struct service_context_s *context, struct fuse_request_s *request, struct entry_s *entry, struct system_stat_s *stat);
+    void (* mknod)(struct service_context_s *context, struct fuse_request_s *request, struct entry_s *entry, struct system_stat_s *stat);
+    void (* symlink)(struct service_context_s *context, struct fuse_request_s *request, struct entry_s *entry, struct fs_location_path_s *link);
+    int  (* symlink_validate)(struct service_context_s *context, char *target, struct fs_location_path_s *sub);
 
-    void (*unlink) (struct service_context_s *context, struct fuse_request_s *request, struct entry_s **entry);
-    void (*rmdir) (struct service_context_s *context, struct fuse_request_s *request, struct entry_s **entry);
+    void (* unlink)(struct service_context_s *context, struct fuse_request_s *request, struct entry_s **entry);
+    void (* rmdir)(struct service_context_s *context, struct fuse_request_s *request, struct entry_s **entry);
 
-    void (*rename) (struct service_context_s *context, struct fuse_request_s *request, struct entry_s **entry, struct entry_s **n_entry, unsigned int flags);
+    void (* rename)(struct service_context_s *context, struct fuse_request_s *request, struct entry_s **entry, struct entry_s **n_entry, unsigned int flags);
 
-    void (*open) (struct fuse_openfile_s *openfile, struct fuse_request_s *request, unsigned int flags);
-    void (*create) (struct fuse_openfile_s *openfile, struct fuse_request_s *request, struct entry_s *entry, struct system_stat_s *stat, unsigned int flags);
+    void (* open)(struct fuse_openfile_s *openfile, struct fuse_request_s *request, unsigned int flags);
+    void (* create)(struct fuse_openfile_s *openfile, struct fuse_request_s *request, struct entry_s *entry, struct system_stat_s *stat, unsigned int flags);
 
-    void (*opendir) (struct fuse_opendir_s *opendir, struct fuse_request_s *request, unsigned int flags);
+    void (* opendir)(struct fuse_opendir_s *opendir, struct fuse_request_s *request, unsigned int flags);
 
-    void (*setxattr) (struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, const char *name, const char *value, size_t size, int flags);
-    void (*getxattr) (struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, const char *name, size_t size);
-    void (*listxattr) (struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, size_t size);
-    void (*removexattr) (struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, const char *name);
+    void (* setxattr)(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, const char *name, const char *value, size_t size, int flags);
+    void (* getxattr)(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, const char *name, size_t size);
+    void (* listxattr)(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, size_t size);
+    void (* removexattr)(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode, const char *name);
 
-    void (*statfs)(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode);
+    void (* statfs)(struct service_context_s *context, struct fuse_request_s *request, struct inode_s *inode);
 
 };
 

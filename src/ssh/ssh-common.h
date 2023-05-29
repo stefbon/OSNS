@@ -29,10 +29,10 @@
 #include "libosns-list.h"
 #include "libosns-network.h"
 #include "libosns-users.h"
-// #include "libosns-system.h"
 #include "libosns-datatypes.h"
 #include "libosns-lock.h"
 #include "libosns-connection.h"
+#include "libosns-ssh.h"
 
 #include "ssh-pk.h"
 #include "ssh-common-protocol.h"
@@ -42,9 +42,16 @@ struct ssh_session_s;
 struct ssh_connection_s;
 struct ssh_channel_s;
 struct channel_table_s;
+struct ssh_payload_s;
 
-#include "ssh-channel.h"
-#include "ssh-pubkey.h"
+// #include "ssh-channel.h"
+// #include "ssh-pubkey.h"
+
+#define SSH_GREETER_START			        "SSH-"
+#define SSH_GREETER_TERMINATOR_CRLF		        1
+#define SSH_GREETER_TERMINATOR_LF		        2
+
+#define SSH_PACKET_HEADER_SIZE				4
 
 struct ssh_packet_s {
     unsigned int 					len;
@@ -100,120 +107,85 @@ struct ssh_config_s {
     unsigned int					auth;
 };
 
-#define CHANNEL_FLAG_INIT				(1 << 0)
-#define CHANNEL_FLAG_TABLE				(1 << 1)
-#define CHANNEL_FLAG_OPEN				(1 << 2)
-#define CHANNEL_FLAG_OPENFAILURE			(1 << 3)
-#define CHANNEL_FLAG_SERVER_EOF				(1 << 4)
-#define CHANNEL_FLAG_SERVER_CLOSE			(1 << 5)
-#define CHANNEL_FLAG_CLIENT_EOF				(1 << 6)
-#define CHANNEL_FLAG_CLIENT_CLOSE			(1 << 7)
-#define CHANNEL_FLAG_NODATA				( CHANNEL_FLAG_CLIENT_CLOSE | CHANNEL_FLAG_CLIENT_EOF | CHANNEL_FLAG_SERVER_CLOSE | CHANNEL_FLAG_SERVER_EOF )
+#define SSH_CHANNEL_FLAG_INIT				(1 << 0)
+#define SSH_CHANNEL_FLAG_TABLE				(1 << 1)
+#define SSH_CHANNEL_FLAG_OPEN				(1 << 2)
+#define SSH_CHANNEL_FLAG_OPENFAILURE			(1 << 3)
+#define SSH_CHANNEL_FLAG_SERVER_EOF		        (1 << 4)
+#define SSH_CHANNEL_FLAG_SERVER_CLOSE			(1 << 5)
+#define SSH_CHANNEL_FLAG_CLIENT_EOF			(1 << 6)
+#define SSH_CHANNEL_FLAG_CLIENT_CLOSE			(1 << 7)
+#define SSH_CHANNEL_FLAG_NODATA				( SSH_CHANNEL_FLAG_CLIENT_CLOSE | SSH_CHANNEL_FLAG_CLIENT_EOF | SSH_CHANNEL_FLAG_SERVER_CLOSE | SSH_CHANNEL_FLAG_SERVER_EOF )
 
-#define CHANNEL_FLAG_SERVER_SIGNAL			(1 << 8)
+#define SSH_CHANNEL_FLAG_SERVER_SIGNAL			(1 << 8)
 
-#define CHANNEL_FLAG_SEND_DATA				(1 << 9)
-#define CHANNEL_FLAG_RECV_DATA				(1 << 10)
-#define CHANNEL_FLAG_EXIT_SIGNAL			(1 << 11)
-#define CHANNEL_FLAG_EXIT_STATUS			(1 << 12)
+#define SSH_CHANNEL_FLAG_SEND_DATA			(1 << 9)
+#define SSH_CHANNEL_FLAG_RECV_DATA		        (1 << 10)
+#define SSH_CHANNEL_FLAG_EXIT_SIGNAL			(1 << 11)
+#define SSH_CHANNEL_FLAG_EXIT_STATUS			(1 << 12)
+#define SSH_CHANNEL_FLAG_QUEUE_EOF                      (1 << 13)
+#define SSH_CHANNEL_FLAG_QUEUE_CLOSE                    (1 << 14)
+#define SSH_CHANNEL_FLAG_QUEUE_EXIT_STATUS              (1 << 15)
+#define SSH_CHANNEL_FLAG_QUEUE_EXIT_SIGNAL              (1 << 16)
 
-#define CHANNEL_FLAG_UDP				(1 << 20)
-#define CHANNEL_FLAG_CONNECTION_REFCOUNT		(1 << 21)
-#define CHANNEL_FLAG_ALLOCATED				(1 << 22)
-#define CHANNEL_FLAG_OUTGOING_DATA			(1 << 23)
-#define CHANNEL_FLAG_INCOMING_DATA			(1 << 24)
+#define SSH_CHANNEL_FLAG_UDP				(1 << 20)
+#define SSH_CHANNEL_FLAG_CONNECTION_REFCOUNT		(1 << 21)
+#define SSH_CHANNEL_FLAG_ALLOCATED			(1 << 22)
+#define SSH_CHANNEL_FLAG_OUTGOING_DATA			(1 << 23)
+#define SSH_CHANNEL_FLAG_INCOMING_DATA			(1 << 24)
 
-#define CHANNEL_EXIT_SIGNAL_ABRT			1
-#define CHANNEL_EXIT_SIGNAL_ALRM			2
-#define CHANNEL_EXIT_SIGNAL_FPE				3
-#define CHANNEL_EXIT_SIGNAL_HUP				4
-#define CHANNEL_EXIT_SIGNAL_ILL				5
-#define CHANNEL_EXIT_SIGNAL_INT				6
-#define CHANNEL_EXIT_SIGNAL_KILL			7
-#define CHANNEL_EXIT_SIGNAL_PIPE			8
-#define CHANNEL_EXIT_SIGNAL_QUIT			9
-#define CHANNEL_EXIT_SIGNAL_SEGV			10
-#define CHANNEL_EXIT_SIGNAL_TERM			11
-#define CHANNEL_EXIT_SIGNAL_USR1			12
-#define CHANNEL_EXIT_SIGNAL_USR2			13
+#define SSH_CHANNEL_EXIT_SIGNAL_ABRT			1
+#define SSH_CHANNEL_EXIT_SIGNAL_ALRM			2
+#define SSH_CHANNEL_EXIT_SIGNAL_FPE			3
+#define SSH_CHANNEL_EXIT_SIGNAL_HUP			4
+#define SSH_CHANNEL_EXIT_SIGNAL_ILL			5
+#define SSH_CHANNEL_EXIT_SIGNAL_INT			6
+#define SSH_CHANNEL_EXIT_SIGNAL_KILL			7
+#define SSH_CHANNEL_EXIT_SIGNAL_PIPE			8
+#define SSH_CHANNEL_EXIT_SIGNAL_QUIT			9
+#define SSH_CHANNEL_EXIT_SIGNAL_SEGV			10
+#define SSH_CHANNEL_EXIT_SIGNAL_TERM			11
+#define SSH_CHANNEL_EXIT_SIGNAL_USR1			12
+#define SSH_CHANNEL_EXIT_SIGNAL_USR2			13
 
-#define CHANNELS_TABLE_SIZE				8
+#define SSH_CHANNEL_TYPE_SESSION			1
+#define SSH_CHANNEL_TYPE_DIRECT				2
+#define SSH_CHANNEL_TYPE_FORWARDED			3
 
-#define CHANNELS_TABLE_FLAG_SHELL			1
-#define CHANNELS_TABLE_FLAG_ADD_LOCK			2
-#define CHANNELS_TABLE_FLAG_RM_LOCK			4
+/* possible types for a session channel */
 
-struct channel_table_s {
-    unsigned int					flags;
-    unsigned int					latest_channel;
-    unsigned int					free_channel;
-    unsigned int 					count;
-    struct ssh_channel_s				*shell;
-    struct shared_signal_s				*signal;
-    unsigned int					table_size;
-    struct list_header_s				hash[CHANNELS_TABLE_SIZE];
-    struct osns_locking_s				locking;
-};
+#define SSH_CHANNEL_SESSION_TYPE_NOTSET                 0
+#define SSH_CHANNEL_SESSION_TYPE_SHELL			1
+#define SSH_CHANNEL_SESSION_TYPE_EXEC			2
+#define SSH_CHANNEL_SESSION_TYPE_SUBSYSTEM		3
 
-#define SSH_SIGNAL_FLAG_ALLOCATED			1
-#define SSH_SIGNAL_FLAG_MUTEX_INIT			2
-#define SSH_SIGNAL_FLAG_COND_INIT			4
+/* possible types for direct and forwarded channels */
 
-struct ssh_signal_s {
-    unsigned char					flags;
-    struct shared_signal_s				*signal;
-    unsigned int					sequence_number_error;
-    unsigned int					error;
-};
+#define SSH_CHANNEL_SOCKET_TYPE_STREAMLOCAL		1
+#define SSH_CHANNEL_SOCKET_TYPE_TCPIP			2
 
-struct payload_queue_s {
-    struct list_header_s 				header;
-    struct ssh_signal_s					*signal;
-    void						*ptr;
-};
+#define SSH_CHANNEL_DIRECT_FLAG_STREAMLOCAL_OPENSSH_COM	1
 
-#define _CHANNEL_NAME_SESSION 				"session"
-#define _CHANNEL_NAME_DIRECT_STREAMLOCAL_OPENSSH_COM 	"direct-streamlocal@openssh.com"
-#define _CHANNEL_NAME_DIRECT_TCPIP 			"direct-tcpip"
-#define _CHANNEL_SESSION_NAME_EXEC			"exec"
-#define _CHANNEL_SESSION_NAME_SHELL			"shell"
-#define _CHANNEL_SESSION_NAME_SUBSYSTEM			"subsystem"
-#define _CHANNEL_SUBSYSTEM_NAME_SFTP			"sftp"
+#define SSH_CHANNEL_DATA_RECEIVE_FLAG_ERROR		1
+#define SSH_CHANNEL_DATA_RECEIVE_FLAG_ALLOC		2
 
-/* TODO: 
-    add subsystems like:
-    - chat
-    - fsnotify 
-    - ... */
-
-#define _CHANNEL_TYPE_SESSION				1
-#define _CHANNEL_TYPE_DIRECT_STREAMLOCAL		2
-#define _CHANNEL_TYPE_DIRECT_TCPIP			3
-
-#define _CHANNEL_DIRECT_STREAMLOCAL_TYPE_OPENSSH_COM	1
-
-#define _CHANNEL_SESSION_TYPE_SHELL			1
-#define _CHANNEL_SESSION_TYPE_EXEC			2
-#define _CHANNEL_SESSION_TYPE_SUBSYSTEM			3
-
-#define _CHANNEL_SUBSYSTEM_TYPE_SFTP			1
-// #define _CHANNEL_SUBSYSTEM_TYPE_TEXTCHAT			2
-// #define _CHANNEL_SUBSYSTEM_TYPE_FSNOTIFY			3
-
-#define _CHANNEL_DATA_RECEIVE_FLAG_ERROR		1
-#define _CHANNEL_DATA_RECEIVE_FLAG_ALLOC		2
-
-#define _CHANNEL_SESSION_BUFFER_MAXLEN			128
-#define _CHANNEL_DIRECT_STREAMLOCAL_PATH_MAX		108
+#define SSH_CHANNEL_SESSION_BUFFER_MAXLEN		128
+#define SSH_CHANNEL_STREAMLOCAL_PATH_MAX		108
 
 struct ssh_channel_ctx_s {
     uint64_t						unique;
     void 						*ctx;
     int							(* signal_ctx2channel)(struct ssh_channel_s **s, const char *what, struct io_option_s *o, unsigned int type);
     int							(* signal_channel2ctx)(struct ssh_channel_s *s, const char *what, struct io_option_s *o, unsigned int type);
-    void						(* recv_data)(struct ssh_channel_s *c, char **buffer, unsigned int size, uint32_t seq, unsigned char flags);
-    int							(* send_data)(struct ssh_channel_s *c, char *data, unsigned int len, uint32_t *seq);
 };
+
+#define SSH_CHANNEL_IOCB_RECV_MAXCOUNT                  4
+#define SSH_CHANNEL_IOCB_RECV_DATA                      0
+#define SSH_CHANNEL_IOCB_RECV_XDATA                     1
+#define SSH_CHANNEL_IOCB_RECV_REQUEST                   2
+#define SSH_CHANNEL_IOCB_RECV_OPEN                      3
+
+typedef void (* io_ssh_channel_recv_msg_t)(struct ssh_channel_s *channel, struct ssh_payload_s **payload);
 
 struct ssh_channel_s {
     struct ssh_connection_s 				*connection;
@@ -224,33 +196,37 @@ struct ssh_channel_s {
     unsigned int					flags;
     unsigned int					exit_signal;
     unsigned int					exit_status;
-    unsigned int 					local_channel;
-    unsigned int					remote_channel;
-    unsigned int					max_packet_size;
-    uint32_t						local_window;
+    unsigned int 					lcnr;
+    unsigned int					rcnr;
+    unsigned int					maxpacketsize;
+    uint32_t						lwindowsize;
     void						(* process_incoming_bytes)(struct ssh_channel_s *c, unsigned int size);
-    uint32_t						remote_window;
+    uint32_t						rwindowsize;
     void						(* process_outgoing_bytes)(struct ssh_channel_s *c, unsigned int size);
     struct list_element_s				list;
     struct payload_queue_s				queue;
-    int							(* start)(struct ssh_channel_s *c, unsigned int *error);
-    void						(* receive_msg_channel_data)(struct ssh_channel_s *c, struct ssh_payload_s **payload);
-    int 						(* send_data_msg)(struct ssh_channel_s *c, char *data, unsigned int len, uint32_t *seq);
+    int                                                 (* start)(struct ssh_channel_s *c, struct ssh_channel_open_data_s *d);
+    io_ssh_channel_recv_msg_t                           iocb[SSH_CHANNEL_IOCB_RECV_MAXCOUNT];
     void						(* close)(struct ssh_channel_s *c, unsigned int flags);
     union {
-	struct _direct_streamlocal_s {
+	struct _socket_s {
 	    unsigned char				type;
-	    char					path[_CHANNEL_DIRECT_STREAMLOCAL_PATH_MAX];
-	} direct_streamlocal;
-	struct _direct_tcpip_s {
-	    struct host_address_s			address;
-	    unsigned int				portnr;
-	    struct ip_address_s				orig_ip;
-	    unsigned int				orig_portnr;
-	} direct_tcpip;
+	    unsigned int				flags;
+	    union _socket_type_u {
+		struct _socket_local_s {
+		    char				path[SSH_CHANNEL_STREAMLOCAL_PATH_MAX];
+		} local;
+		struct _socket_tcpip_s {
+		    struct host_address_s		address;
+		    unsigned int			portnr;
+		    struct ip_address_s			orig_ip;
+		    unsigned int			orig_portnr;
+		} tcpip;
+	    } stype;
+	} socket;
 	struct _session_s {
 	    unsigned char				type;
-	    char					buffer[_CHANNEL_SESSION_BUFFER_MAXLEN];
+	    char					buffer[SSH_CHANNEL_SESSION_BUFFER_MAXLEN];
 	} session;
     } target;
 };
@@ -339,14 +315,20 @@ struct ssh_utils_s {
     uint64_t 						(* ntohll)(uint64_t value);
 };
 
-struct ssh_decompressor_s {
-    struct ssh_decompress_s				*decompress;
-    struct system_timespec_s				created;
-    unsigned int					nr;
-    int							(* decompress_packet)(struct ssh_decompressor_s *d, struct ssh_packet_s *packet, struct ssh_payload_s **payload, unsigned int *error);
-    void						(* clear)(struct ssh_decompressor_s *d);
-    void						(* queue)(struct ssh_decompressor_s *d);
+struct ssh_cryptoactor_s {
     struct list_element_s				list;
+    struct system_timespec_s				created;
+    unsigned int					kexctr;
+    unsigned int					nr;
+    void						(* queue)(struct ssh_cryptoactor_s *ca);
+    void                                                (* free)(struct list_element_s *list);
+};
+
+struct ssh_decompressor_s {
+    struct ssh_cryptoactor_s                            common;
+    struct ssh_decompress_s				*decompress;
+    struct ssh_payload_s                                *(* decompress_packet)(struct ssh_decompressor_s *d, struct ssh_packet_s *packet, unsigned int *error);
+    void                                                (* clear)(struct ssh_decompressor_s *d);
     unsigned int					size;
     char						buffer[];
 };
@@ -355,7 +337,7 @@ struct decompress_ops_s {
     char						*name;
     unsigned int					(* populate)(struct ssh_connection_s *c, struct decompress_ops_s *ops, struct algo_list_s *alist, unsigned int start);
     unsigned int					(* get_handle_size)(struct ssh_decompress_s *decompress);
-    int							(* init_decompressor)(struct ssh_decompressor_s *d);
+    int							(* init)(struct ssh_decompressor_s *d);
     struct list_element_s				list;
 };
 
@@ -369,19 +351,16 @@ struct ssh_decompress_s {
 };
 
 struct ssh_decryptor_s {
+    struct ssh_cryptoactor_s                            common;
     struct ssh_decrypt_s				*decrypt;
-    struct system_timespec_s				created;
-    unsigned int					nr;
-    int							(* verify_hmac_pre)(struct ssh_decryptor_s *d, struct ssh_packet_s *packet);
-    int							(* decrypt_length)(struct ssh_decryptor_s *d, struct ssh_packet_s *packet, char *buffer, unsigned int len);
-    int							(* decrypt_packet)(struct ssh_decryptor_s *d, struct ssh_packet_s *packet);
-    int							(* verify_hmac_post)(struct ssh_decryptor_s *d, struct ssh_packet_s *packet);
-    void						(* clear)(struct ssh_decryptor_s *d);
-    void						(* queue)(struct ssh_decryptor_s *d);
+    int							(* verify_hmac_pre)(struct ssh_decryptor_s *d, struct ssh_packet_s *p);
+    int							(* decrypt_length)(struct ssh_decryptor_s *d, struct ssh_packet_s *p, char *b, unsigned int l);
+    int							(* decrypt_packet)(struct ssh_decryptor_s *d, struct ssh_packet_s *p);
+    int							(* verify_hmac_post)(struct ssh_decryptor_s *d, struct ssh_packet_s *p);
+    void                                                (* clear)(struct ssh_decryptor_s *d);
     unsigned int					cipher_blocksize;
     unsigned int					cipher_headersize;
     unsigned int					hmac_maclen;
-    struct list_element_s				list;
     unsigned int					size;
     char						buffer[];
 };
@@ -391,7 +370,7 @@ struct decrypt_ops_s {
     unsigned int					(* populate_cipher)(struct ssh_connection_s *s, struct decrypt_ops_s *ops, struct algo_list_s *alist, unsigned int start);
     unsigned int					(* populate_hmac)(struct ssh_connection_s *s, struct decrypt_ops_s *ops, struct algo_list_s *alist, unsigned int start);
     unsigned int					(* get_handle_size)(struct ssh_decrypt_s *d);
-    int							(* init_decryptor)(struct ssh_decryptor_s *decryptor);
+    int							(* init)(struct ssh_decryptor_s *decryptor);
     unsigned int					(* get_cipher_blocksize)(const char *name);
     unsigned int					(* get_cipher_keysize)(const char *name);
     unsigned int					(* get_cipher_ivsize)(const char *name);
@@ -419,7 +398,7 @@ struct ssh_decrypt_s {
 
 #define SSH_RECEIVE_STATUS_INIT				(1 << 0)
 
-/* receiving received y/n */
+/* greeter received y/n */
 
 #define SSH_RECEIVE_STATUS_GREETER			(1 << 1)
 
@@ -435,42 +414,42 @@ struct ssh_decrypt_s {
 
 #define SSH_RECEIVE_STATUS_NEWKEYS			(1 << 4)
 
+/* receive process locked */
+
+#define SSH_RECEIVE_STATUS_LOCK				(1 << 5)
+
+#define SSH_RECEIVE_STATUS_BUFFER			(1 << 6)
+#define SSH_RECEIVE_STATUS_PROCESS			(1 << 7)
+#define SSH_RECEIVE_STATUS_THREAD			(1 << 8)
+
 /* is the receiving done in serial y/n (alternative is parallel) */
 
-#define SSH_RECEIVE_STATUS_SERIAL			(1 << 9)
-
-/* is there a thread processing a packet ? */
-
-#define SSH_RECEIVE_STATUS_PACKET			(1 << 10)
-
-/* is there a thread waiting for enough data to read the header (4 or 8 bytes mostly)*/
-
-#define SSH_RECEIVE_STATUS_WAITING1			(1 << 11)
-
-/* is there a thread waiting for data to complete a packet ? */
-
-#define SSH_RECEIVE_STATUS_WAITING2			(1 << 12)
-
-#define SSH_RECEIVE_STATUS_WAIT				( SSH_RECEIVE_STATUS_WAITING2 | SSH_RECEIVE_STATUS_WAITING1 )
+#define SSH_RECEIVE_STATUS_SERIAL			(1 << 10)
+#define SSH_RECEIVE_STATUS_REKEY			(1 << 11)
 
 #define SSH_RECEIVE_STATUS_ERROR			(1 << 30)
 #define SSH_RECEIVE_STATUS_DISCONNECT			(1 << 31)
 
+struct ssh_recv_sequence_error_s {
+    unsigned int					sequence_number_error;
+    unsigned int					errcode;
+};
+
 struct ssh_receive_s {
     unsigned int					status;
     struct system_timespec_s				newkeys;
-    struct ssh_signal_s					signal;
+    struct system_timespec_s				kexinit;
+    unsigned int					kexctr;
+    struct shared_signal_s				signal;			/* shared signal for receiving ssh processes only : transport level */
     struct ssh_decrypt_s				decrypt;
     struct ssh_decompress_s				decompress;
-    pthread_mutex_t					mutex;
-    pthread_cond_t					cond;
     unsigned int					threads;
     unsigned int 					sequence_number;
-    void						(* process_ssh_packet)(struct ssh_connection_s *c, struct ssh_packet_s *packet);
-    void						(* read_ssh_buffer)(void *ptr);
-    unsigned int					read;
-    unsigned int 					size;
-    char						*buffer;
+    struct ssh_recv_sequence_error_s			sequence_error;
+    unsigned int                                        msgsize;
+    unsigned int                                        read;
+    unsigned int                                        size;
+    char                                                *buffer;
 };
 
 /*
@@ -485,13 +464,10 @@ struct ssh_compress_s;
     the backend library determines how this looks like */
 
 struct ssh_compressor_s {
+    struct ssh_cryptoactor_s                            common;
     struct ssh_compress_s				*compress;
-    struct system_timespec_s				created;
-    unsigned int					nr;
     int							(* compress_payload)(struct ssh_compressor_s *c, struct ssh_payload_s **payload, unsigned int *error);
-    void						(* clear)(struct ssh_compressor_s *c);
-    void						(* queue)(struct ssh_compressor_s *c);
-    struct list_element_s				list;
+    void                                                (* clear)(struct ssh_compressor_s *d);
     unsigned int					size;
     char						buffer[];
 };
@@ -505,7 +481,7 @@ struct compress_ops_s {
     char						*name;
     unsigned int					(* populate)(struct ssh_connection_s *c, struct compress_ops_s *ops, struct algo_list_s *alist, unsigned int start);
     unsigned int					(* get_handle_size)(struct ssh_compress_s *compress);
-    int							(* init_compressor)(struct ssh_compressor_s *d);
+    int							(* init)(struct ssh_compressor_s *d);
     struct list_element_s				list;
 };
 
@@ -528,19 +504,16 @@ struct ssh_compress_s {
     - clear clears the encrypt data in buffer */
 
 struct ssh_encryptor_s {
+    struct ssh_cryptoactor_s                            common;
     struct ssh_encrypt_s				*encrypt;
-    struct system_timespec_s				created;
-    unsigned int					nr;
     int							(* write_hmac_pre)(struct ssh_encryptor_s *e, struct ssh_packet_s *packet);
     int							(* encrypt_packet)(struct ssh_encryptor_s *e, struct ssh_packet_s *packet);
     int							(* write_hmac_post)(struct ssh_encryptor_s *e, struct ssh_packet_s *packet);
     unsigned char					(* get_message_padding)(struct ssh_encryptor_s *e, unsigned int len);
-    void						(* clear)(struct ssh_encryptor_s *e);
-    void						(* queue)(struct ssh_encryptor_s *e);
+    void                                                (* clear)(struct ssh_encryptor_s *d);
     unsigned int					cipher_blocksize;
     unsigned int					cipher_headersize;
     unsigned int					hmac_maclen;
-    struct list_element_s				list;
     unsigned int					size;
     char						buffer[];
 };
@@ -556,7 +529,7 @@ struct encrypt_ops_s {
     unsigned int					(* populate_cipher)(struct ssh_connection_s *c, struct encrypt_ops_s *ops, struct algo_list_s *alist, unsigned int start);
     unsigned int					(* populate_hmac)(struct ssh_connection_s *s, struct encrypt_ops_s *ops, struct algo_list_s *alist, unsigned int start);
     unsigned int					(* get_handle_size)(struct ssh_encrypt_s *encrypt);
-    int							(* init_encryptor)(struct ssh_encryptor_s *encryptor);
+    int							(* init)(struct ssh_encryptor_s *encryptor);
     unsigned int					(* get_cipher_blocksize)(const char *name);
     unsigned int					(* get_cipher_keysize)(const char *name);
     unsigned int					(* get_cipher_ivsize)(const char *name);
@@ -581,24 +554,30 @@ struct ssh_encrypt_s {
     struct ssh_string_s					hmac_key;
 };
 
+struct ssh_send_s;
+
 struct ssh_sender_s {
     struct list_element_s				list;
     unsigned int					sequence;
+    unsigned char					type;
+    int							(* queue_sender)(struct ssh_send_s *send, struct ssh_sender_s *sender, unsigned int *error);
+    void						(* pre_send)(struct ssh_send_s *send, struct ssh_sender_s *sender);
+    void						(* post_send)(struct ssh_send_s *send, struct ssh_sender_s *sender, int bytessend);
 };
 
 #define SSH_SEND_FLAG_SESSION				(1 << 0)
-#define SSH_SEND_FLAG_KEXINIT				(1 << 1)
-#define SSH_SEND_FLAG_NEWKEYS				(1 << 2)
+#define SSH_SEND_FLAG_SERIAL				(1 << 1)
+#define SSH_SEND_FLAG_LOCK				(1 << 2)
 #define SSH_SEND_FLAG_ERROR				(1 << 3)
 #define SSH_SEND_FLAG_DISCONNECT			(1 << 4)
 
 struct ssh_send_s {
     unsigned int					flags;
-    pthread_mutex_t					mutex;
-    pthread_cond_t					cond;
+    struct shared_signal_s				signal;
     struct list_header_s				senders;
     struct system_timespec_s				newkeys;
-    int							(* queue_sender)(struct ssh_send_s *send, struct ssh_sender_s *sender, unsigned int *error);
+    unsigned int					kexctr;
+    void 						(* set_sender)(struct ssh_send_s *send, struct ssh_sender_s *sender);
     unsigned int 					sequence_number;
     struct ssh_encrypt_s				encrypt;
     struct ssh_compress_s				compress;
@@ -741,21 +720,35 @@ struct ssh_service_s {
     } type;
 };
 
+#define SSH_SESSION_COMPLETE_TYPE_KEX			1
+
+struct ssh_session_complete_s {
+    unsigned int					status;
+    union {
+	struct ssh_keyexchange_s			kex;
+    } type;
+};
+
 #define SSH_SETUP_PHASE_TRANSPORT			1
 #define SSH_SETUP_PHASE_SERVICE				2
+#define SSH_SETUP_PHASE_SESSION				3
 
-/* greeter phase success */
+/* transport: greeter phase */
 #define SSH_SETUP_FLAG_GREETER				(1 << 0)
-/* kex phase success (also rekex) */
+/* transport: kex phase success (also rekex) */
 #define SSH_SETUP_FLAG_KEX				(1 << 1)
-/* transport is setup */
+/* transport */
 #define SSH_SETUP_FLAG_TRANSPORT			(1 << 2)
+
 /* service authentication success */
 #define SSH_SETUP_FLAG_SERVICE_AUTH			(1 << 3)
 /* service connection */
 #define SSH_SETUP_FLAG_SERVICE_CONNECTION		(1 << 4)
-/* service rekex active */
-#define SSH_SETUP_FLAG_REKEX				(1 << 5)
+/* session */
+#define SSH_SETUP_FLAG_SESSION				(1 << 5)
+
+/* connection: rekey exchange */
+#define SSH_SETUP_FLAG_REKEX				(1 << 6)
 
 #define SSH_SETUP_FLAG_RECV_ERROR			(1 << 24)
 #define SSH_SETUP_FLAG_SEND_ERROR			(1 << 25)
@@ -830,7 +823,9 @@ struct ssh_connection_s {
     struct connection_s					connection;
     struct ssh_receive_s				receive;
     struct ssh_send_s					send;
-    struct list_element_s				list;
+    void						(* pre_process)(struct ssh_connection_s *s);
+    void						(* post_process_01)(struct ssh_connection_s *s);
+    unsigned int					(* post_process_02)(struct ssh_connection_s *s, unsigned char type);
 };
 
 #define SSH_CONNECTIONS_FLAG_SIGNAL_ALLOCATED		(1 << 0)
@@ -862,6 +857,8 @@ struct ssh_session_ctx_s {
     int							(* signal_ctx2ssh)(void **p_ptr, const char *what, struct io_option_s *o, unsigned int type);
     int							(* signal_ssh2ctx)(struct ssh_session_s *s, const char *what, struct io_option_s *o, unsigned int type);
     int							(* signal_ssh2remote)(struct ssh_session_s *s, const char *what, struct io_option_s *o, unsigned int type);
+    // void                                                (* get_next_key)(struct ssh_session_s *s, unsigned int flags, struct ssh_key_s *key);
+    // void                                                (* check_remote_host_key)(struct ssh_session_s *s, unsigned int flags, struct ssh_key_s *key);
 };
 
 /* main client session per user
@@ -884,7 +881,6 @@ struct ssh_session_s {
     struct ssh_session_ctx_s				context;
     struct ssh_config_s					config;
     struct ssh_identity_s				identity;
-    struct channel_table_s				channel_table;
     struct session_data_s				data;
     struct ssh_pubkey_s					pubkey;
     struct ssh_hostinfo_s				hostinfo;
@@ -913,6 +909,8 @@ void init_ssh_identity(struct ssh_session_s *s);
 void close_ssh_session(struct ssh_session_s *session);
 void clear_ssh_session(struct ssh_session_s *s);
 void free_ssh_session(void **p_ptr);
+
+void disconnect_ssh_connection(struct ssh_connection_s *sshc);
 
 struct ssh_session_s *create_ssh_session(unsigned int flags, struct generic_error_s *error);
 int init_ssh_session(struct ssh_session_s *session, uid_t uid, void *ctx, struct shared_signal_s *signal);

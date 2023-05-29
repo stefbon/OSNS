@@ -57,15 +57,14 @@ int reply_sftp_attr_from_stat(struct sftp_subsystem_s *sftp, uint32_t id, struct
     - uint32				flags
     */
 
-static void sftp_op_stat_generic(struct sftp_subsystem_s *sftp, struct sftp_payload_s *payload, int (* cb_stat)(struct fs_location_path_s *p, unsigned int mask, struct system_stat_s *s))
+static void sftp_op_stat_generic(struct sftp_subsystem_s *sftp, struct sftp_in_header_s *inh, char *data, int (* cb_stat)(struct fs_path_s *p, unsigned int mask, struct system_stat_s *s))
 {
     unsigned int status=SSH_FX_BAD_MESSAGE;
 
     /* message should at least have 4 bytes for the path string, and 4 for the flags
 	note an empty path is possible */
 
-    if (payload->len>=8) {
-	char *data=payload->data;
+    if (inh->len>=8) {
 	unsigned int pos=0;
 	struct ssh_string_s path=SSH_STRING_INIT;
 
@@ -74,10 +73,10 @@ static void sftp_op_stat_generic(struct sftp_subsystem_s *sftp, struct sftp_payl
 	path.ptr=&data[pos];
 	pos+=path.len;
 
-	if (path.len + 8 <= payload->len) {
+	if (path.len + 8 <= inh->len) {
 	    struct system_stat_s stat;
 	    struct sftp_valid_s valid;
-	    struct fs_location_s location;
+	    struct fs_path_s location=FS_PATH_INIT;
 	    struct convert_sftp_path_s convert;
 	    unsigned int size=(* sftp->prefix.get_length_fullpath)(sftp, &path, &convert);
 	    char pathtmp[size+1];
@@ -88,19 +87,16 @@ static void sftp_op_stat_generic(struct sftp_subsystem_s *sftp, struct sftp_payl
 	    validbits=get_uint32(&data[pos]);
 	    convert_sftp_valid_w(&sftp->attrctx, &valid, validbits);
 
-	    memset(&location, 0, sizeof(struct fs_location_s));
-	    location.flags=FS_LOCATION_FLAG_PATH;
-	    assign_buffer_location_path(&location.type.path, pathtmp, size+1);
-	    (* convert.complete)(sftp, &path, &location.type.path);
-
+	    fs_path_assign_buffer(&location, pathtmp, size+1);
+	    (* convert.complete)(sftp, &path, &location);
 	    mask=translate_valid_2_stat_mask(&sftp->attrctx, &valid, 'w');
-	    result=(* cb_stat)(&location.type.path, mask, &stat);
+	    result=(* cb_stat)(&location, mask, &stat);
 
-	    logoutput("sftp_op_stat: %.*s result %i valid %i", location.type.path.len, location.type.path.ptr, result, valid.mask);
+	    logoutput("sftp_op_stat: %.*s result %i valid %i", location.len, location.buffer, result, valid.mask);
 
 	    if (result==0) {
 
-		if (reply_sftp_attr_from_stat(sftp, payload->id, &valid, &stat)==-1) logoutput_warning("sftp_op_stat_generic: error sending attr");
+		if (reply_sftp_attr_from_stat(sftp, inh->id, &valid, &stat)==-1) logoutput_warning("sftp_op_stat_generic: error sending attr");
 		return;
 
 	    } else {
@@ -129,51 +125,44 @@ static void sftp_op_stat_generic(struct sftp_subsystem_s *sftp, struct sftp_payl
     }
 
     logoutput("sftp_op_stat_generic: status %i", status);
-    reply_sftp_status_simple(sftp, payload->id, status);
+    reply_sftp_status_simple(sftp, inh->id, status);
 
 }
 
-void sftp_op_stat(struct sftp_payload_s *payload)
+void sftp_op_stat(struct sftp_subsystem_s *sftp, struct sftp_in_header_s *inh, char *data)
 {
-    struct sftp_subsystem_s *sftp=payload->sftp;
-    sftp_op_stat_generic(sftp, payload, system_getstat);
+    sftp_op_stat_generic(sftp, inh, data, system_getstat);
 }
 
-void sftp_op_lstat(struct sftp_payload_s *payload)
+void sftp_op_lstat(struct sftp_subsystem_s *sftp, struct sftp_in_header_s *inh, char *data)
 {
-    struct sftp_subsystem_s *sftp=payload->sftp;
-    sftp_op_stat_generic(sftp, payload, system_getlstat);
+    sftp_op_stat_generic(sftp, inh, data, system_getlstat);
 }
 
-void sftp_op_fstat(struct sftp_payload_s *payload)
+void sftp_op_fstat(struct sftp_subsystem_s *sftp, struct sftp_in_header_s *inh, char *data)
 {
-    struct sftp_subsystem_s *sftp=payload->sftp; 
     unsigned int status=SSH_FX_BAD_MESSAGE;
 
     logoutput("sftp_op_fstat (%i)", (int) gettid());
 
-    if (payload->len >= 8 + get_sftp_handle_size()) {
-	char *data=payload->data;
+    if (inh->len >= 8 + get_fs_handle_buffer_size()) {
 	unsigned int len=0;
 	unsigned int pos=0;
 
 	len=get_uint32(&data[pos]);
 	pos+=4;
 
-	if (len==get_sftp_handle_size()) {
+	if (len==get_fs_handle_buffer_size()) {
 	    struct system_stat_s stat;
 	    struct sftp_valid_s valid;
 	    int result=0;
 	    unsigned int count=0;
-	    struct commonhandle_s *handle=find_sftp_commonhandle(sftp, &data[4], len, &count);
-	    struct sftp_subsystem_s *tmp=NULL;
+	    struct fs_handle_s *handle=NULL;
+	    struct fs_socket_s *sock=NULL;
 	    unsigned int mask=0;
 	    uint32_t validbits=0;
 
-	    pos+=count;
-
-	    validbits=get_uint32(&data[pos]);
-	    convert_sftp_valid_w(&sftp->attrctx, &valid, validbits);
+            handle=get_fs_handle(sftp->connection.unique, &data[4], len, &count);
 
 	    if (handle==NULL) {
 
@@ -183,36 +172,13 @@ void sftp_op_fstat(struct sftp_payload_s *payload)
 
 	    }
 
-	    tmp=get_sftp_subsystem_commonhandle(handle);
-
-	    if (tmp==NULL) {
-
-		status=SSH_FX_INVALID_HANDLE;
-		logoutput_warning("sftp_op_fstat: handle is not a sftp handle");
-		goto error;
-
-	    } else if (tmp != sftp) {
-
-		status=SSH_FX_INVALID_HANDLE;
-		logoutput_warning("sftp_op_fstat: handle does belong by other sftp server");
-		goto error;
-
-	    }
-
+	    pos+=count;
+	    validbits=get_uint32(&data[pos]);
+	    convert_sftp_valid_w(&sftp->attrctx, &valid, validbits);
 	    mask=translate_valid_2_stat_mask(&sftp->attrctx, &valid, 'w');
+	    sock=&handle->socket;
 
-	    if (handle->flags & COMMONHANDLE_FLAG_DIR) {
-		struct dirhandle_s *dh=&handle->type.dir;
-
-		result=(* dh->fstatat)(dh, NULL, mask, &stat);
-
-	    } else {
-		struct filehandle_s *fh=&handle->type.file;
-
-		result=(* fh->fgetstat)(fh, mask, &stat);
-
-	    }
-
+            result=(* sock->ops.fgetstat)(sock, mask, &stat);
 	    logoutput("sftp_op_fstat: result %i valid %i", result, valid.mask);
 
 	    if (result==0) {
@@ -224,8 +190,7 @@ void sftp_op_fstat(struct sftp_payload_s *payload)
 		set_attr_buffer_write(&abuff, tmp, size);
 		(* abuff.ops->rw.write.write_uint32)(&abuff, (r.valid.mask | r.valid.flags));
 		write_attributes_generic(&sftp->attrctx, &abuff, &r, &stat, &valid);
-
-		if (reply_sftp_attrs(sftp, payload->id, tmp, abuff.len)==-1) logoutput_warning("sftp_op_stat: error sending attr");
+		if (reply_sftp_attrs(sftp, inh->id, tmp, abuff.len)==-1) logoutput_warning("sftp_op_stat: error sending attr");
 		return;
 
 	    } else {
@@ -261,7 +226,7 @@ void sftp_op_fstat(struct sftp_payload_s *payload)
     error:
 
     logoutput("sftp_op_fstat: status %i", status);
-    reply_sftp_status_simple(sftp, payload->id, status);
+    reply_sftp_status_simple(sftp, inh->id, status);
     return;
 
     disconnect:

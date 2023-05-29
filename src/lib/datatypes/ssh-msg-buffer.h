@@ -57,7 +57,6 @@ unsigned int start_count(struct msg_buffer_s *mb);
 void nowrite_complete_count(struct msg_buffer_s *mb, unsigned int pos, unsigned int count); */
 
 void set_msg_buffer(struct msg_buffer_s *mb, char *data, unsigned int len);
-void set_msg_buffer_payload(struct msg_buffer_s *mb, struct ssh_payload_s *p);
 void set_msg_buffer_string(struct msg_buffer_s *mb, struct ssh_string_s *s);
 void set_msg_buffer_fatal_error(struct msg_buffer_s *mb, unsigned int error);
 

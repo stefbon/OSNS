@@ -372,7 +372,6 @@ int get_mountinfo_list(struct mount_monitor_s *monitor, unsigned int flags)
     }
 
     size=get_mountinfo_line(monitor, fp);
-    logoutput_debug("get_mountinfo_list: size %i", size);
 
     while (size>0) {
 	struct mountentry_s *me=NULL;

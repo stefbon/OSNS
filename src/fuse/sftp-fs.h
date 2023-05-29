@@ -20,6 +20,6 @@
 #ifndef _FUSE_SFTP_FS_H
 #define _FUSE_SFTP_FS_H
 
-void set_context_filesystem_sftp(struct service_context_s *context, unsigned char disconnect);
+void set_context_filesystem_sftp(struct service_context_s *context);
 
 #endif

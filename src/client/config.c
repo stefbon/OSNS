@@ -26,30 +26,6 @@
 #include "arguments.h"
 #include "config.h"
 
-void parse_options_commalist(char *list, unsigned int size, void (* cb)(char *entry, void *ptr), void *ptr)
-{
-    int left = (size>0) ? size : strlen(list);
-    char *sep=NULL;
-    char *start=list;
-
-    finditem:
-
-    sep=memchr(start, ',', left);
-    if (sep) *sep='\0';
-
-    (* cb)(start, ptr);
-
-    if (sep) {
-
-	*sep=',';
-	left-=(sep - start);
-	start=sep+1;
-	if (left>0) goto finditem;
-
-    }
-
-}
-
 static void parse_fuse_timeout_option(struct system_timespec_s *timeout, char *value)
 {
     double tmp=strtod(value, NULL);
@@ -123,9 +99,25 @@ int read_configfile(struct client_options_s *options, struct client_arguments_s 
 
 	    logoutput("read_configfile: found %s:%s", option, value);
 
+	    /* MAIN */
+
+	    if (strcmp(option, "main.maxthreads")==0) {
+
+		if (len>0) {
+
+		    options->maxthreads=atoi(value);
+		    if (options->maxthreads>OSNS_OPTIONS_MAIN_MAXTHREADS) options->maxthreads=OSNS_OPTIONS_MAIN_MAXTHREADS;
+
+		} else {
+
+		    logoutput_warning("read_config: option %s requires an argument. Cannot continue.", option);
+		    result=-1;
+
+		}
+
 	    /* FUSE */
 
-	    if (strcmp(option, "fuse.timeout_attr")==0) {
+	    } else if (strcmp(option, "fuse.timeout_attr")==0) {
 
 		if (len>0) parse_fuse_timeout_option(&options->fuse.attr_timeout, value);
 
@@ -208,7 +200,7 @@ int read_configfile(struct client_options_s *options, struct client_arguments_s 
 
 	    /* SFTP */
 
-/*	    } else if (strcmp(option, "sftp.network.maximum_packet_size")==0) {
+	    } else if (strcmp(option, "sftp.network.maximum_packet_size")==0) {
 
 		if (len>0) {
 
@@ -220,7 +212,7 @@ int read_configfile(struct client_options_s *options, struct client_arguments_s 
 		    result=-1;
 
 		}
-
+/*
 	    } else if (strcmp(option, "sftp.network.home_use_remotename")==0) {
 
 		if ( len>0 ) {
@@ -278,6 +270,13 @@ void set_default_options(struct client_options_s *options)
 {
     struct system_timespec_s dummy=SYSTEM_TIME_INIT;
 
+    /* MAIN */
+
+    options->runpath=OSNS_DEFAULT_RUNPATH;
+    options->etcpath=OSNS_DEFAULT_ETCPATH;
+    options->group=OSNS_DEFAULT_UNIXGROUP;
+    options->maxthreads=6;
+
     /* FUSE */
 
     if (system_time_test_earlier(&options->fuse.attr_timeout, &dummy)==0) set_system_time(&options->fuse.attr_timeout, 1, 0);
@@ -301,7 +300,19 @@ void set_default_options(struct client_options_s *options)
 
     /* SFTP */
 
-//    options->sftp.maxpacketsize=OSNS_OPTIONS_SFTP_PACKET_MAXSIZE;
+    options->sftp.maxpacketsize=OSNS_OPTIONS_SFTP_PACKET_MAXSIZE;
 //    options->sftp.flags |= OSNS_OPTIONS_SFTP_ALLOW_PREFIX;
+
+}
+
+void free_options(struct client_options_s *options)
+{
+
+    if (options->network.name && (options->network.flags & OSNS_OPTIONS_NETWORK_DEFAULT_NETWORK_NAME)==0) {
+
+	free(options->network.name);
+	options->network.name=NULL;
+
+    }
 
 }

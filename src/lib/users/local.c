@@ -21,6 +21,7 @@
 
 #include "pwd.h"
 #include "grp.h"
+#include "pthread.h"
 
 #include "libosns-log.h"
 #include "libosns-misc.h"

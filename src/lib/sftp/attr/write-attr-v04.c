@@ -50,23 +50,17 @@ void write_attr_ownergroup_v04(struct attr_context_s *actx, struct attr_buffer_s
 
     user.net.name.ptr=(char *) (buffer->buffer + buffer->pos + 4); /* use buffer to write name to */
     user.net.name.len=(unsigned int) (buffer->left - 4); /* available space */
-    user.local.uid=get_uid_system_stat(stat);
-
-    logoutput_debug("write_attr_ownergroup_v04: local uid %i", user.local.uid);
-
+    user.localid=get_uid_system_stat(stat);
+    logoutput_debug("write_attr_ownergroup_v04: local uid %i", user.localid);
     (* actx->mapping->mapcb.get_user_l2p)(actx->mapping, &user);
-
     (* buffer->ops->rw.write.write_uint32)(buffer, user.net.name.len);
     (* buffer->ops->rw.write.write_skip)(buffer, user.net.name.len); /* name is already written above to the buffer */
 
     group.net.name.ptr=(char *) (buffer->buffer + buffer->pos + 4); /* use buffer to write name to */
     group.net.name.len=(unsigned int) (buffer->left - 4); /* available space */
-    group.local.gid=get_gid_system_stat(stat);
-
-    logoutput_debug("write_attr_ownergroup_v04: local gid %i", group.local.gid);
-
+    group.localid=get_gid_system_stat(stat);
+    logoutput_debug("write_attr_ownergroup_v04: local gid %i", group.localid);
     (* actx->mapping->mapcb.get_group_l2p)(actx->mapping, &group);
-
     (* buffer->ops->rw.write.write_uint32)(buffer, group.net.name.len);
     (* buffer->ops->rw.write.write_skip)(buffer, group.net.name.len); /* name is already written above to the buffer */
 
@@ -79,7 +73,6 @@ void write_attr_permissions_v04(struct attr_context_s *actx, struct attr_buffer_
     uint32_t perm=get_mode_system_stat(stat) & (S_IRWXU | S_IRWXG | S_IRWXO); /* only interested in permission bits */
 
     (* buffer->ops->rw.write.write_uint32)(buffer, perm);
-
     logoutput_debug("write_attr_permissions_v04: perm %i", perm);
 }
 

@@ -59,9 +59,7 @@ static void _attr_cb_user(struct attr_buffer_s *buffer, struct ssh_string_s *s, 
     user.net.name.len=s->len;
 
     (* ctx->mapping->mapcb.get_user_p2l)(ctx->mapping, &user);
-
-    set_uid_system_stat(stat, user.local.uid);
-
+    set_uid_system_stat(stat, user.localid);
 }
 
 static void _attr_cb_group(struct attr_buffer_s *buffer, struct ssh_string_s *s, void *ptr)
@@ -75,9 +73,7 @@ static void _attr_cb_group(struct attr_buffer_s *buffer, struct ssh_string_s *s,
     group.net.name.len=s->len;
 
     (* ctx->mapping->mapcb.get_group_p2l)(ctx->mapping, &group);
-
-    set_gid_system_stat(stat, group.local.gid);
-
+    set_gid_system_stat(stat, group.localid);
 }
 
 void read_attr_ownergroup_v04(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)
@@ -100,21 +96,21 @@ void read_attr_permissions_v04(struct attr_context_s *actx, struct attr_buffer_s
     uint16_t perm=(mode & (S_IRWXU | S_IRWXG | S_IRWXO));
 
     set_mode_system_stat(stat, perm); /* sftp uses the same permission bits as Linux */
-    logoutput_debug("read_attr_permissions_v04: perm %i", perm);
+    // logoutput_debug("read_attr_permissions_v04: perm %i", perm);
 }
 
 void read_attr_accesstime_v04(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)
 {
     int64_t sec=(* buffer->ops->rw.read.read_int64)(buffer);
     set_atime_sec_system_stat(stat, sec);
-    logoutput_debug("read_attr_accesstime_v04: sec %i", sec);
+    // logoutput_debug("read_attr_accesstime_v04: sec %i", sec);
 }
 
 void read_attr_accesstime_n_v04(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)
 {
     uint32_t nsec=(* buffer->ops->rw.read.read_uint32)(buffer);
     set_atime_nsec_system_stat(stat, nsec);
-    logoutput_debug("read_attr_accesstime_n_v04: nsec %i", nsec);
+    // logoutput_debug("read_attr_accesstime_n_v04: nsec %i", nsec);
 }
 
 void read_attr_createtime_v04(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)
@@ -133,14 +129,14 @@ void read_attr_modifytime_v04(struct attr_context_s *ctx, struct attr_buffer_s *
 {
     int64_t sec=(* buffer->ops->rw.read.read_int64)(buffer);
     set_mtime_sec_system_stat(stat, sec);
-    logoutput_debug("read_attr_modifytime_v04: sec %i", sec);
+    // logoutput_debug("read_attr_modifytime_v04: sec %i", sec);
 }
 
 void read_attr_modifytime_n_v04(struct attr_context_s *ctx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)
 {
     uint32_t nsec=(* buffer->ops->rw.read.read_uint32)(buffer);
     set_mtime_nsec_system_stat(stat, nsec);
-    logoutput_debug("read_attr_modifytime_n_v04: nsec %i", nsec);
+    // logoutput_debug("read_attr_modifytime_n_v04: nsec %i", nsec);
 }
 
 static void _attr_acl_string_cb(struct attr_buffer_s *buffer, struct ssh_string_s *aclblock, void *ptr)

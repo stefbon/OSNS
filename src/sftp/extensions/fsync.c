@@ -26,7 +26,6 @@
 #include "libosns-workspace.h"
 #include "libosns-context.h"
 #include "libosns-fuse-public.h"
-#include "libosns-resources.h"
 
 #include "sftp/common-protocol.h"
 #include "sftp/common.h"
@@ -63,6 +62,7 @@ static void init_fsync(struct sftp_client_s *sftp, struct sftp_protocol_extensio
 
 void register_client_sftp_extension_fsync(struct sftp_extensions_s *extensions)
 {
+
     init_list_element(&client_extension.list, NULL);
     set_ssh_string(&client_extension.name, 'c', SFTP_EXTENSION_NAME_FSYNC);
 

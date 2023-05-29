@@ -35,6 +35,8 @@
 struct _bevent_glib_s {
     GSource				source;
     GPollFD				pollfd;
+    struct beventloop_s                 *loop;
+    struct list_element_s               list;
     struct bevent_s			common;
 };
 
@@ -42,29 +44,9 @@ static gboolean glib_fd_cb(gpointer ptr)
 {
     struct bevent_s *bevent=(struct bevent_s *) ptr;
     struct _bevent_glib_s *tmp=(struct _bevent_glib_s *)((char *) bevent - offsetof(struct _bevent_glib_s, common));
-    struct bevent_argument_s arg;
-    uint32_t events=tmp->pollfd.revents;
-
-    memset(&arg, 0, sizeof(struct bevent_argument_s));
-    arg.loop=get_eventloop_bevent(bevent);
-    arg.event.code=events;
-    arg.event.flags=((events & G_IO_PRI) ? BEVENT_EVENT_FLAG_PRI : 0);
-
-    logoutput_debug("glib_fd_cb: fd %u events %u", tmp->pollfd.fd, events);
-
-    if (events & G_IO_ERR) (* bevent->cb_error)(bevent, BEVENT_EVENT_FLAG_ERROR, NULL);
-    if (events & G_IO_HUP) {
-
-	(* bevent->cb_close)(bevent, BEVENT_EVENT_FLAG_CLOSE, &arg);
-
-    } else {
-
-	if (events & (G_IO_IN | G_IO_PRI)) (* bevent->cb_dataavail)(bevent, BEVENT_EVENT_FLAG_DATAAVAIL, &arg);
-	if (events & G_IO_OUT) (* bevent->cb_writeable)(bevent, BEVENT_EVENT_FLAG_WRITEABLE, &arg);
-
-    }
-
-    return ((bevent->flags & BEVENT_FLAG_ENABLED) ? G_SOURCE_CONTINUE : G_SOURCE_REMOVE);
+    logoutput_debug("glib_fd_cb: events %u", tmp->pollfd.revents);
+    if (queue_bevent_events(tmp->loop, tmp->pollfd.revents, bevent)) work_workerthread(NULL, 0, beventloop_process_events_thread, (void *) tmp->loop);
+    return G_SOURCE_CONTINUE;
 
 }
 
@@ -73,6 +55,7 @@ static int ctl_io_bevent_glib(struct beventloop_s *eloop, struct bevent_s *beven
     struct _bevent_glib_s *tmp=(struct _bevent_glib_s *)((char *) bevent - offsetof(struct _bevent_glib_s, common));
     int result=-1;
 
+    logoutput_debug("ctl_bevent_glib");
     events &= GLIB_FLAG_ALL;
     if (events==0 && op==BEVENT_CTL_MOD) return -1;
 
@@ -95,6 +78,8 @@ static int ctl_io_bevent_glib(struct beventloop_s *eloop, struct bevent_s *beven
     } else if (op==BEVENT_CTL_ADD) {
 
 	if ((bevent->flags & BEVENT_FLAG_ENABLED)==0) {
+
+            logoutput_debug("ctl_bevent_glib: add events %u", events);
 
 	    tmp->pollfd.events = events;
 	    g_source_add_poll((GSource *) &tmp->source, &tmp->pollfd);
@@ -164,6 +149,8 @@ static void free_bevent_glib(struct bevent_s **p_bevent)
 static void set_bevent_unix_fd_glib(struct bevent_s *bevent, int fd)
 {
     struct _bevent_glib_s *tmp=(struct _bevent_glib_s *)((char *) bevent - offsetof(struct _bevent_glib_s, common));
+
+    logoutput_debug("set_bevent_unix_fd_glib: fd %i", fd);
     tmp->pollfd.fd = (gint) fd;
 }
 
@@ -191,7 +178,7 @@ static void start_beventloop_glib(struct beventloop_s *loop)
     g_main_loop_run(tmp->loop);
 }
 
-static void stop_beventloop_glib(struct beventloop_s *loop)
+static void stop_beventloop_glib(struct beventloop_s *loop, unsigned int signo)
 {
     struct _beventloop_glib_s *tmp=NULL;
     struct shared_signal_s *signal=NULL;
@@ -200,6 +187,7 @@ static void stop_beventloop_glib(struct beventloop_s *loop)
     tmp=&loop->backend.glib;
     signal=loop->signal;
     g_main_loop_quit(tmp->loop);
+
     signal_set_flag(signal, &loop->flags, BEVENTLOOP_FLAG_STOP);
 }
 
@@ -240,6 +228,7 @@ struct bevent_s *create_io_bevent_glib(struct beventloop_s *loop)
 	g_source_ref((GSource *) &tmp->source);
 	tmp->pollfd.events = loop->BEVENT_INIT;
 	tmp->pollfd.fd=-1;
+	tmp->loop=loop;
 
 	bevent=&tmp->common;
 	init_bevent(bevent);
@@ -283,6 +272,7 @@ int init_beventloop_glib(struct beventloop_s *loop)
     tmp=&loop->backend.glib;
     tmp->loop=g_main_loop_new(NULL, 0);
     if (tmp->loop==NULL) return -1;
+    init_list_header(&tmp->events, SIMPLE_LIST_TYPE_EMPTY, NULL);
 
     tmp->funcs.prepare=eloop_glib_prepare;
     tmp->funcs.check=eloop_glib_check;

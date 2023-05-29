@@ -36,8 +36,8 @@ void set_bevent_osns_socket(struct bevent_s *bevent, struct osns_socket_s *sock)
     if (sock) {
 
 	bevent->sock=sock;
-	sock->event.type = SOCKET_EVENT_TYPE_BEVENT;
-	sock->event.link.bevent=bevent;
+	sock->flags |= OSNS_SOCKET_FLAG_BEVENT;
+	sock->event.bevent=bevent;
 
 	/* some eventloops need to have the fd around */
 
@@ -73,16 +73,11 @@ void unset_bevent_osns_socket(struct bevent_s *bevent, struct osns_socket_s *soc
 
     if (sock) {
 
-	sock->event.type=0;
-	sock->event.link.bevent=NULL;
+	sock->flags &= ~OSNS_SOCKET_FLAG_BEVENT;
+	sock->event.bevent=NULL;
 
     }
 
-}
-
-struct osns_socket_s *get_bevent_osns_socket(struct bevent_s *bevent)
-{
-    return bevent->sock;
 }
 
 static void cb_bevent_dummy(struct bevent_s *bevent, unsigned int flag, struct bevent_argument_s *arg)
@@ -110,13 +105,9 @@ struct bevent_s *create_fd_bevent(struct beventloop_s *eloop, void *ptr)
 
 	bevent->flags=(BEVENT_FLAG_CREATE);
 	bevent->ptr=ptr;
-	bevent->cb_error=cb_bevent_dummy;
-	bevent->cb_close=cb_bevent_dummy;
-	bevent->cb_pri=cb_bevent_dummy;
-	bevent->cb_dataavail=cb_bevent_dummy;
-	bevent->cb_writeable=cb_bevent_dummy;
-
+	for (unsigned int i=0; i<5; i++) bevent->cb[i]=cb_bevent_dummy;
 	set_system_time(&bevent->unblocked, 0, 0);
+	init_list_element(&bevent->elist, NULL);
 
 	signal_lock_flag(signal, &eloop->flags, BEVENTLOOP_FLAG_BEVENTS_LOCK);
 	add_list_element_last(&eloop->bevents, &bevent->list);
@@ -144,6 +135,104 @@ struct beventloop_s *get_eventloop_bevent(struct bevent_s *bevent)
 
 }
 
+void clear_io_event(struct bevent_s *bevent, unsigned int code, struct bevent_argument_s *arg)
+{
+    struct beventloop_s *loop=arg->loop;
+
+    logoutput_debug("clear_io_event: (tid %u) bevent code %u event code %u arg code %u", gettid(), bevent->event.code, code, arg->event.code);
+
+    write_lock_list_element(&bevent->elist);
+    bevent->event.code &= ~code;
+    write_unlock_list_element(&bevent->elist);
+
+}
+
+/* remove bevent from the events list */
+
+void remove_io_event(struct bevent_s *bevent)
+{
+    struct list_header_s *h=NULL;
+
+    write_lock_list_element(&bevent->elist);
+
+    bevent->event.code=0;
+    h=bevent->elist.h;
+
+    if (h) {
+
+	write_lock_list_header(h);
+        remove_list_element(&bevent->elist);
+        write_unlock_list_header(h);
+
+    }
+
+    write_unlock_list_element(&bevent->elist);
+}
+
+void beventloop_process_events_thread(void *ptr)
+{
+    struct beventloop_s *loop=(struct beventloop_s *) ptr;
+    struct list_element_s *list=NULL;
+
+    processlist:
+
+    write_lock_list_header(&loop->events);
+    list=remove_list_head(&loop->events);
+    write_unlock_list_header(&loop->events);
+
+    if (list) {
+        struct bevent_s *bevent=(struct bevent_s *)((char *) list - offsetof(struct bevent_s, elist));
+	struct bevent_argument_s arg;
+
+	/* bevent->event.code &= ~elist->event.code; */
+
+	arg.loop=loop;
+	arg.event.code=bevent->event.code;
+	arg.event.flags=bevent->event.flags;
+	arg.error.error=0;
+
+	if (bevent->event.code & loop->BEVENT_ERR) (* bevent->cb[BEVENT_EVENT_INDEX_ERROR])(bevent, loop->BEVENT_ERR, &arg);
+	if (bevent->event.code & loop->BEVENT_HUP) (* bevent->cb[BEVENT_EVENT_INDEX_CLOSE])(bevent, loop->BEVENT_HUP, &arg);
+	if (bevent->event.code & loop->BEVENT_PRI) (* bevent->cb[BEVENT_EVENT_INDEX_PRI])(bevent, loop->BEVENT_PRI, &arg);
+	if (bevent->event.code & loop->BEVENT_IN) (* bevent->cb[BEVENT_EVENT_INDEX_DATA])(bevent, loop->BEVENT_IN, &arg);
+	if (bevent->event.code & loop->BEVENT_OUT) (* bevent->cb[BEVENT_EVENT_INDEX_WRITEABLE])(bevent, loop->BEVENT_OUT, &arg);
+	goto processlist;
+
+    }
+
+}
+
+unsigned char queue_bevent_events(struct beventloop_s *loop, uint32_t events, struct bevent_s *bevent)
+{
+    unsigned char count=0;
+    uint32_t code=0;
+
+    write_lock_list_element(&bevent->elist);
+    code=(events & ~bevent->event.code); /* is this event not already reported here ? */
+
+    // logoutput_debug("queue_bevent_events: fd %u events %u bevents %u code %u", (* bevent->ops->get_unix_fd)(bevent), events, bevent->event.code, code);
+
+    if (code) {
+
+        /* only queue it if not already */
+
+        if (bevent->elist.h==NULL) {
+
+	    write_lock_list_header(&loop->events);
+            add_list_element_last(&loop->events, &bevent->elist);
+            write_unlock_list_header(&loop->events);
+
+        }
+
+	bevent->event.code |= code; /* remember this event to prevent will be queued again and again and again ...  */
+	count++;
+
+    }
+
+    write_unlock_list_element(&bevent->elist);
+    return count;
+}
+
 struct bevent_s *get_next_bevent(struct beventloop_s *loop, struct bevent_s *bevent)
 {
     struct list_element_s *list=NULL;
@@ -155,43 +244,27 @@ struct bevent_s *get_next_bevent(struct beventloop_s *loop, struct bevent_s *bev
     } else {
 
 	if (loop==NULL) loop=get_default_mainloop();
-	list=get_list_head(&loop->bevents, 0);
+	list=get_list_head(&loop->bevents);
 
     }
 
     return ((list) ? (struct bevent_s *)((char *) list - offsetof(struct bevent_s, list)) : NULL);
 }
 
-static void set_bevent_cb_hlp(struct bevent_s *bevent, unsigned int flag, void (* cb)(struct bevent_s *bevent, unsigned int flag, struct bevent_argument_s *arg))
+static void set_bevent_cb_hlp(struct bevent_s *bevent, unsigned int flag, unsigned int event, void (* cb)(struct bevent_s *bevent, unsigned int flag, struct bevent_argument_s *arg))
 {
 
-	switch (flag) {
+    if (cb) {
 
-	    case BEVENT_FLAG_CB_CLOSE:
+        bevent->cb[event]=cb;
+        bevent->flags |= flag;
 
-		bevent->cb_close=((cb) ? cb : cb_bevent_dummy);
-		bevent->flags |= BEVENT_FLAG_CB_CLOSE;
-		break;
+    } else {
 
-	    case BEVENT_FLAG_CB_ERROR:
+        bevent->cb[event]=cb_bevent_dummy;
+        bevent->flags &= ~flag;
 
-		bevent->cb_error=((cb) ? cb : cb_bevent_dummy);
-		bevent->flags |= BEVENT_FLAG_CB_ERROR;
-		break;
-
-	    case BEVENT_FLAG_CB_DATAAVAIL:
-
-		bevent->cb_dataavail=((cb) ? cb : cb_bevent_dummy);
-		bevent->flags |= BEVENT_FLAG_CB_DATAAVAIL;
-		break;
-
-	    case BEVENT_FLAG_CB_PRI:
-
-		bevent->cb_pri=((cb) ? cb : cb_bevent_dummy);
-		bevent->flags |= BEVENT_FLAG_CB_PRI;
-		break;
-
-	}
+    }
 
 }
 
@@ -200,10 +273,10 @@ void set_bevent_cb(struct bevent_s *bevent, unsigned int flag, void (* cb)(struc
 
     if (bevent) {
 
-	if (flag & BEVENT_FLAG_CB_CLOSE) set_bevent_cb_hlp(bevent, BEVENT_FLAG_CB_CLOSE, cb);
-	if (flag & BEVENT_FLAG_CB_ERROR) set_bevent_cb_hlp(bevent, BEVENT_FLAG_CB_ERROR, cb);
-	if (flag & BEVENT_FLAG_CB_DATAAVAIL) set_bevent_cb_hlp(bevent, BEVENT_FLAG_CB_DATAAVAIL, cb);
-	if (flag & BEVENT_FLAG_CB_PRI) set_bevent_cb_hlp(bevent, BEVENT_FLAG_CB_PRI, cb);
+	if (flag & BEVENT_FLAG_CB_CLOSE) set_bevent_cb_hlp(bevent, BEVENT_FLAG_CB_CLOSE, BEVENT_EVENT_INDEX_CLOSE, cb);
+	if (flag & BEVENT_FLAG_CB_ERROR) set_bevent_cb_hlp(bevent, BEVENT_FLAG_CB_ERROR, BEVENT_EVENT_INDEX_ERROR, cb);
+	if (flag & BEVENT_FLAG_CB_DATA) set_bevent_cb_hlp(bevent, BEVENT_FLAG_CB_DATA, BEVENT_EVENT_INDEX_DATA, cb);
+	if (flag & BEVENT_FLAG_CB_PRI) set_bevent_cb_hlp(bevent, BEVENT_FLAG_CB_PRI, BEVENT_EVENT_INDEX_PRI, cb);
 
     }
 
@@ -225,7 +298,7 @@ static uint32_t get_bevent_events_from_flags(struct bevent_s *bevent)
 
 	if (bevent->flags & BEVENT_FLAG_CB_CLOSE) events |= loop->BEVENT_HUP;
 	if (bevent->flags & BEVENT_FLAG_CB_ERROR) events |= loop->BEVENT_ERR;
-	if (bevent->flags & BEVENT_FLAG_CB_DATAAVAIL) events |= loop->BEVENT_IN;
+	if (bevent->flags & BEVENT_FLAG_CB_DATA) events |= loop->BEVENT_IN;
 	if (bevent->flags & BEVENT_FLAG_CB_WRITEABLE) events |= loop->BEVENT_OUT;
 	if (bevent->flags & BEVENT_FLAG_CB_PRI) events |= loop->BEVENT_PRI;
 
@@ -263,7 +336,7 @@ int add_bevent_watch(struct bevent_s *bevent)
     if (loop) {
 	uint32_t events=get_bevent_events_from_flags(bevent); /* get events to set from the cb's set */
 
-	// logoutput_debug("add_bevent_watch: events %i", events);
+	logoutput_debug("add_bevent_watch: events %i", events);
 	result=(* bevent->ops->ctl_io_bevent)(loop, bevent, BEVENT_CTL_ADD, events);
 
     }
@@ -277,7 +350,8 @@ void remove_bevent_watch(struct bevent_s *bevent, unsigned int flags)
     if (bevent) {
 	struct beventloop_s *loop=get_eventloop_bevent(bevent);
 
-	(* bevent->ops->ctl_io_bevent)(loop, bevent, BEVENT_CTL_DEL, 0);
+	if (loop) (* bevent->ops->ctl_io_bevent)(loop, bevent, BEVENT_CTL_DEL, 0);
+	remove_io_event(bevent);
 
 	if (flags & BEVENT_REMOVE_FLAG_UNSET) {
 
@@ -334,12 +408,10 @@ uint32_t signal_is_error(struct bevent_argument_s *arg)
 
 void disable_signal(struct bevent_argument_s *arg, unsigned int flag)
 {
-
-    if (arg->loop==NULL) return;
     if (flag & BEVENT_EVENT_FLAG_ERROR) (arg->event.code &= ~arg->loop->BEVENT_ERR);
     if (flag & BEVENT_EVENT_FLAG_WRITEABLE) (arg->event.code &= ~arg->loop->BEVENT_OUT);
     if (flag & BEVENT_EVENT_FLAG_CLOSE) (arg->event.code &= ~arg->loop->BEVENT_HUP);
-    if (flag & BEVENT_EVENT_FLAG_DATAAVAIL) (arg->event.code &= ~arg->loop->BEVENT_IN);
+    if (flag & BEVENT_EVENT_FLAG_DATA) (arg->event.code &= ~arg->loop->BEVENT_IN);
 }
 
 uint32_t signal_is_close(struct bevent_argument_s *arg)

@@ -128,7 +128,7 @@ static int lookup_hostkey_pk_list_server(struct pk_list_s *pkeys, struct ssh_pka
 
     if (algo->libname==NULL) return -1;
 
-    list=get_list_head(&pkeys->host_list_header, 0);
+    list=get_list_head(&pkeys->host_list_header);
     while (list) {
 
 	if (algo->flags & SSH_PKALGO_FLAG_PKA) {
@@ -291,7 +291,7 @@ static unsigned int build_keyex_list(struct ssh_connection_s *c, struct algo_lis
 
     /* add the keyex methods already registered */
 
-    list=get_list_head(&list_keyex_ops, 0);
+    list=get_list_head(&list_keyex_ops);
 
     while (list) {
 
@@ -385,18 +385,24 @@ static int set_keyex_method(struct ssh_keyex_s *k, struct algo_list_s *algo_kex,
 
 }
 
+static int select_payload_newkeys(struct ssh_payload_s *payload, void *ptr)
+{
+    return ((payload->type==SSH_MSG_NEWKEYS) ? 1 : 0);
+}
+
 int key_exchange(struct ssh_connection_s *connection)
 {
     struct ssh_session_s *session=get_ssh_connection_session(connection);
     struct ssh_setup_s *setup=&connection->setup;
     struct ssh_receive_s *receive=&connection->receive;
+    struct ssh_payload_s *payload=NULL;
+    struct system_timespec_s expire=SYSTEM_TIME_INIT;
     struct ssh_keyexchange_s *kex=&setup->phase.transport.type.kex;
     unsigned int count=build_algo_list(connection, NULL) + 1;
     struct algo_list_s algos[count];
     unsigned int error=EIO;
     int result=-1;
     struct ssh_keyex_s keyex;
-    struct timespec expire;
 
     logoutput("key_exchange (algos count=%i)", count);
 
@@ -436,7 +442,7 @@ int key_exchange(struct ssh_connection_s *connection)
 
     if (kex->chosen[SSH_ALGO_TYPE_HOSTKEY]==-1 || kex->chosen[SSH_ALGO_TYPE_KEX]==-1) {
 
-	logoutput("key_exchange: no hostkey algo found");
+	logoutput("key_exchange: no hostkey algo and/or kex method found");
 	goto out;
 
     }
@@ -473,7 +479,21 @@ int key_exchange(struct ssh_connection_s *connection)
 
     }
 
-    /* wait for all the flags to be set */
+    /* wait for SSH_MSG_NEWKEYS from server */
+
+    get_ssh_connection_expire_init(connection, &expire);
+    payload=get_ssh_payload(&connection->setup.queue, &expire, select_payload_newkeys, NULL, NULL, NULL);
+
+    if (payload==NULL) {
+
+	logoutput_debug("key_exchange: error receiving NEWKEYS");
+	goto out;
+
+    }
+
+    logoutput_debug("key_exchange: received NEWKEYS");
+    set_ssh_receive_behaviour(connection, "newkeys");
+    if (change_ssh_connection_setup(connection, "transport", SSH_TRANSPORT_TYPE_KEX, SSH_KEX_FLAG_NEWKEYS_S2C, 0, NULL, NULL)==-1) goto out;
 
     if (wait_ssh_connection_setup_change(connection, "transport", SSH_TRANSPORT_TYPE_KEX, 0, NULL, NULL)==0) {
 	int index_compr=kex->chosen[SSH_ALGO_TYPE_COMPRESS_S2C];
@@ -486,10 +506,10 @@ int key_exchange(struct ssh_connection_s *connection)
 	/* reset cipher, hmac and compression to the one aggreed in kexinit
 	    new keys are already computed */
 
-	reset_decompress(connection, algo_compr);
-	reset_decrypt(connection, algo_cipher, algo_hmac);
+	reset_ssh_decompress(connection, algo_compr);
+	reset_ssh_decrypt(connection, algo_cipher, algo_hmac);
+	receive->kexctr++;
 	result=0;
-	set_ssh_receive_behaviour(connection, "kexfinish");
 
     } else {
 

@@ -101,9 +101,9 @@ AS_IF([test "x$with_osns_system" = "xyes"], [
     AC_DEFINE([WITH_OSNS_SYSTEM], [1], [Define to build OSNS system])
     AC_MSG_NOTICE([Build the osns system service.])
 
-    PKG_CHECK_MODULES([AVAHI_CORE], [avahi-core], [AC_DEFINE([HAVE_AVAHI_CORE], [1], [Define Avahi core is available])], AC_MSG_ERROR([Error: avahi core not found.]))
-    PKG_CHECK_MODULES([AVAHI_CLIENT], [avahi-client], [AC_DEFINE([HAVE_AVAHI_CLIENT], [1], [Define Avahi client is available])], AC_MSG_ERROR([Error: avahi client not found.]))
-    PKG_CHECK_MODULES([AVAHI_GLIB], [avahi-glib], [AC_DEFINE([HAVE_AVAHI_GLIB], [1], [Define Avahi glib is available])], AC_MSG_ERROR([Error: avahi glib not found.]))
+#    PKG_CHECK_MODULES([AVAHI_CORE], [avahi-core], [AC_DEFINE([HAVE_AVAHI_CORE], [1], [Define Avahi core is available])], AC_MSG_ERROR([Error: avahi core not found.]))
+#    PKG_CHECK_MODULES([AVAHI_CLIENT], [avahi-client], [AC_DEFINE([HAVE_AVAHI_CLIENT], [1], [Define Avahi client is available])], AC_MSG_ERROR([Error: avahi client not found.]))
+#    PKG_CHECK_MODULES([AVAHI_GLIB], [avahi-glib], [AC_DEFINE([HAVE_AVAHI_GLIB], [1], [Define Avahi glib is available])], AC_MSG_ERROR([Error: avahi glib not found.]))
 
 ], [])
 
@@ -158,6 +158,7 @@ AS_IF([test LINUX], [
 ])
 
 PKG_CHECK_MODULES([SYSTEMD], [libsystemd], [AC_DEFINE([HAVE_LIBSYSTEMD], [1], [Define libsystemd is available])], AC_MSG_ERROR([Error: libsystemd not found.]))
+PKG_CHECK_MODULES(SQLITE3, [ sqlite3 ], [AC_DEFINE([HAVE_SQLITE3], [1], [Define if SQLITE 3 is available])], AC_MSG_ERROR([Error: sqlite 3 not found.]))
 
 AM_CONDITIONAL([BUILD_OSNS_CLIENT], [ test "x$with_osns_client" = "xyes" ])
 AM_CONDITIONAL([BUILD_OSNS_SYSTEM], [ test "x$with_osns_system" = "xyes" ])
@@ -174,6 +175,8 @@ AM_CONDITIONAL([LIBPAM_AVAIL], [ test HAVE_LIBPAM ])
 AM_CONDITIONAL([GLIB2_AVAIL], [ test HAVE_GLIB2 ])
 AM_CONDITIONAL([GOBJECT2_AVAIL], [ test HAVE_GOBJECT2 ])
 AM_CONDITIONAL([GIO2_AVAIL], [ test HAVE_GIO2 ])
+AM_CONDITIONAL([LIBSYSTEMD_AVAIL], [ test HAVE_LIBSYSTEMD ])
+AM_CONDITIONAL([SQLITE_AVAIL], [ test HAVE_SQLITE3 ])
 
 # AM_CONDITIONAL([LIBSMB2_AVAIL], [ test HAVE_LIBSMB2 ])
 

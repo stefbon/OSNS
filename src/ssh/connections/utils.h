@@ -21,14 +21,14 @@
 #define _SSH_CONNECTION_UTILS_H
 
 struct ssh_connection_s *get_main_ssh_connection(struct ssh_connections_s *connections);
-struct ssh_connection_s *get_next_ssh_connection(struct ssh_connections_s *connections, struct ssh_connection_s *connection, unsigned char remove);
+struct ssh_connection_s *get_next_ssh_connection(struct ssh_connections_s *connections, struct ssh_connection_s *connection);
 
+void get_ssh_connection_expire_custom(struct system_timespec_s *expire, unsigned int sec);
 void get_ssh_connection_expire_init(struct ssh_connection_s *c, struct system_timespec_s *expire);
 void get_ssh_connection_expire_session(struct ssh_connection_s *c, struct system_timespec_s *expire);
 void get_ssh_connection_expire_userauth(struct ssh_connection_s *c, struct system_timespec_s *expire);
 
 unsigned int get_status_ssh_connection(struct ssh_connection_s *connection);
-void signal_ssh_connections(struct ssh_session_s *session);
 
 void increase_refcount_ssh_connection(struct ssh_connection_s *connection);
 void decrease_refcount_ssh_connection(struct ssh_connection_s *connection);

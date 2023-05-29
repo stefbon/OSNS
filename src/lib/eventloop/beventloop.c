@@ -24,6 +24,7 @@
 
 #include "libosns-misc.h"
 #include "libosns-log.h"
+#include "libosns-lock.h"
 
 #include "beventloop.h"
 #include "bevent.h"
@@ -38,7 +39,23 @@ static int result_init_keep=-1;
 static pthread_mutex_t loop_mutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t loop_cond=PTHREAD_COND_INITIALIZER;
 
-void _loop_dummy_action(struct beventloop_s *l)
+static struct shared_signal_s loop_shared_signal = {
+
+	.flags				= 0,
+	.mutex				= &loop_mutex,
+	.cond				= &loop_cond,
+	.lock				= _signal_default_lock,
+	.unlock				= _signal_default_unlock,
+	.broadcast			= _signal_default_broadcast,
+	.condwait			= _signal_default_condwait,
+	.condtimedwait			= _signal_default_condtimedwait
+
+};
+
+static void _loop_dummy_action(struct beventloop_s *l)
+{}
+
+static void _loop_dummy_stop(struct beventloop_s *l, unsigned int sig)
 {}
 
 static struct bevent_s *create_bevent_dummy(struct beventloop_s *l)
@@ -52,7 +69,7 @@ static int init_io_bevent_dummy(struct beventloop_s *l, struct bevent_s *b)
 
 static struct beventloop_ops_s dummy_init_ops = {
     .start_eventloop			= _loop_dummy_action,
-    .stop_eventloop			= _loop_dummy_action,
+    .stop_eventloop			= _loop_dummy_stop,
     .clear_eventloop			= _loop_dummy_action,
     .create_bevent			= create_bevent_dummy,
     .init_io_bevent			= init_io_bevent_dummy,
@@ -84,9 +101,9 @@ static int _init_beventloop(struct beventloop_s *eloop)
     logoutput("_init_beventloop");
 
     init_list_header(&eloop->bevents, SIMPLE_LIST_TYPE_EMPTY, NULL);
-    eloop->signal=get_custom_shared_signal(&loop_mutex, &loop_cond);
-    if (eloop->signal==NULL) eloop->signal=get_default_shared_signal();
+    init_list_header(&eloop->events, SIMPLE_LIST_TYPE_EMPTY, NULL);
 
+    eloop->signal=&loop_shared_signal;
     eloop->ptr=NULL;
     eloop->first_run=start_first_run_cb;
     eloop->first_run_ctx_cb=first_run_ignore;
@@ -199,10 +216,10 @@ void start_beventloop(struct beventloop_s *eloop)
     (* eloop->ops->start_eventloop)(eloop);
 }
 
-void stop_beventloop(struct beventloop_s *eloop)
+void stop_beventloop(struct beventloop_s *eloop, unsigned int signo)
 {
     if (!eloop) eloop=&beventloop_main;
-    (* eloop->ops->stop_eventloop)(eloop);
+    (* eloop->ops->stop_eventloop)(eloop, signo);
 }
 
 void clear_beventloop(struct beventloop_s *eloop)
@@ -231,22 +248,22 @@ void clear_beventloop(struct beventloop_s *eloop)
 
 	}
 
-    } *.
+    } */
 
     /* bevents */
 
-    /* list=get_list_head(&eloop->bevents, SIMPLE_LIST_FLAG_REMOVE);
+    /* list=remove_list_head(&eloop->bevents);
 
     while (list) {
 	struct bevent_s *bevent=(struct bevent_s *)((char *) list - offsetof(struct bevent_s, list));
 
 	remove_bevent_watch(bevent, 0);
 	free_bevent(&bevent);
-	list=get_list_head(&eloop->bevents, SIMPLE_LIST_FLAG_REMOVE);
+	list=remove_list_head(&eloop->bevents);
 
     } */
 
-    clear_shared_signal(&eloop->signal);
+    // clear_shared_signal(&eloop->signal);
 
 }
 

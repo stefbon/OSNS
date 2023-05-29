@@ -21,6 +21,8 @@
 
 /* prototypes */
 
+struct attr_context_s *get_sftp_attr_context(struct context_interface_s *i);
+
 void parse_attributes_generic_ctx(struct context_interface_s *i, struct rw_attr_result_s *r, struct system_stat_s *stat, unsigned char what, void (* cb)(unsigned int stat_mask, unsigned int len, unsigned int valid, unsigned int fattr, void *ptr), void *ptr);
 
 void read_sftp_attributes_ctx(struct context_interface_s *i, struct attr_buffer_s *abuff, struct system_stat_s *stat);
@@ -31,7 +33,7 @@ void read_name_name_response_ctx(struct context_interface_s *i, struct attr_buff
 void correct_time_c2s_ctx(struct context_interface_s *i, struct system_timespec_s *t);
 void correct_time_s2c_ctx(struct context_interface_s *i, struct system_timespec_s *t);
 
-unsigned char enable_attributes_ctx(struct context_interface_s *i, struct sftp_valid_s *valid, const char *name);
+void enable_attributes_ctx(struct context_interface_s *i, struct sftp_valid_s *valid, const char *name);
 
 uid_t get_sftp_unknown_userid_ctx(struct context_interface_s *i);
 gid_t get_sftp_unknown_groupid_ctx(struct context_interface_s *i);

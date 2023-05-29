@@ -20,6 +20,24 @@
 #ifndef _SSH_RECEIVE_READ_SOCKET_H
 #define _SSH_RECEIVE_READ_SOCKET_H
 
-void read_ssh_connection_socket(struct connection_s *connection);
+#define SSH_RAWDATA_FLAG_WATCHED                1
+#define SSH_RAWDATA_FLAG_COMPLETE               2
+
+struct ssh_rawdata_s {
+    struct list_element_s                       list;
+    unsigned int                                flags;
+    unsigned int                                msgsize;
+    unsigned int                                pos;
+    unsigned int                                size;
+    char                                        *buffer;
+};
+
+/* prototypes */
+
+void set_ssh_socket_behaviour(struct osns_socket_s *sock, const char *phase);
+void disable_ssh_socket_read_data(struct osns_socket_s *sock);
+void enable_ssh_socket_read_data(struct osns_socket_s *sock);
+
+void init_ssh_socket_behaviour(struct osns_socket_s *sock);
 
 #endif

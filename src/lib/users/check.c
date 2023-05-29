@@ -19,7 +19,7 @@
 
 #include "libosns-basic-system-headers.h"
 
-#include "datatypes/ssh-string.h"
+#include "lib/ssh/ssh-string.h"
 #include "libosns-log.h"
 
 /* check for existance of username

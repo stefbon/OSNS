@@ -33,16 +33,6 @@ static void opendir_readdir_noop(struct fuse_opendir_s *opendir, struct fuse_req
     reply_VFS_error(request, EIO);
 }
 
-static void opendir_release_noop(struct fuse_opendir_s *opendir, struct fuse_request_s *request)
-{
-    reply_VFS_error(request, 0);
-}
-
-static void opendir_fsync_noop(struct fuse_opendir_s *opendir, struct fuse_request_s *request, unsigned char datasync)
-{
-    reply_VFS_error(request, 0);
-}
-
 static signed char hidefile_default(struct fuse_opendir_s *opendir, struct entry_s *entry)
 {
 
@@ -77,15 +67,16 @@ void init_fuse_opendir(struct fuse_opendir_s *opendir, struct service_context_s 
 
     memset(opendir, 0, sizeof(struct fuse_opendir_s));
 
-    opendir->context=ctx;
-    opendir->inode=inode;
+    /* header */
+
+    init_fuse_open_header(&opendir->header, ctx, inode);
+    opendir->header.type=FUSE_OPEN_TYPE_DIR;
+
     opendir->error=0;
     opendir->flags=0;
     opendir->ino=0;
 
     opendir->readdir=opendir_readdir_noop;
-    opendir->fsyncdir=opendir_fsync_noop;
-    opendir->releasedir=opendir_release_noop;
     opendir->hidefile=hidefile_default;
 
     opendir->count_keep=0;
@@ -93,10 +84,10 @@ void init_fuse_opendir(struct fuse_opendir_s *opendir, struct service_context_s 
     opendir->count_created=0;
 
     init_list_header(&opendir->entries, SIMPLE_LIST_TYPE_EMPTY, NULL);
+    init_list_header(&opendir->symlinks, SIMPLE_LIST_TYPE_EMPTY, NULL);
 
     opendir->signal=workspace->signal;
     opendir->threads=0;
-    opendir->handle=NULL;
 
 }
 
@@ -130,19 +121,21 @@ void queue_fuse_direntry(struct fuse_opendir_s *opendir, struct entry_s *entry)
     queue_fuse_direntry_common(opendir, &opendir->entries, entry);
 }
 
+void queue_fuse_symlink(struct fuse_opendir_s *opendir, struct entry_s *entry)
+{
+    queue_fuse_direntry_common(opendir, &opendir->symlinks, entry);
+}
+
 static struct entry_s *get_fuse_direntry_common(struct fuse_opendir_s *opendir, struct list_header_s *header, struct fuse_request_s *request)
 {
     struct shared_signal_s *signal=opendir->signal;
-    struct workspace_mount_s *w=get_workspace_mount_ctx(opendir->context);
-    struct directory_s *directory=get_directory(w, opendir->inode, 0);
+    struct directory_s *directory=get_directory(opendir->header.ctx, opendir->header.inode, 0);
     struct list_element_s *list=NULL;
     struct fuse_direntry_s *direntry=NULL;
     struct entry_s *entry=NULL;
-    unsigned int opendirflags=(FUSE_OPENDIR_FLAG_FINISH | FUSE_OPENDIR_FLAG_INCOMPLETE | FUSE_OPENDIR_FLAG_ERROR | FUSE_OPENDIR_FLAG_QUEUE_READY);
+    unsigned int opendirflags=(FUSE_OPENDIR_FLAG_EOD | FUSE_OPENDIR_FLAG_FINISH | FUSE_OPENDIR_FLAG_INCOMPLETE | FUSE_OPENDIR_FLAG_ERROR);
     struct system_timespec_s expire=SYSTEM_TIME_INIT;
     int result=0;
-
-    logoutput("get_fuse_direntry_common: opendir flags %i", opendir->flags);
 
     signal_lock(signal);
 
@@ -151,7 +144,7 @@ static struct entry_s *get_fuse_direntry_common(struct fuse_opendir_s *opendir, 
 
     checkandwait:
 
-    if ((list=get_list_head(header, SIMPLE_LIST_FLAG_REMOVE))) {
+    if ((list=remove_list_head(header))) {
 
 	goto unlock;
 
@@ -200,30 +193,20 @@ struct entry_s *get_fuse_direntry(struct fuse_opendir_s *opendir, struct fuse_re
     return get_fuse_direntry_common(opendir, &opendir->entries, request);
 }
 
-void finish_get_fuse_direntry(struct fuse_opendir_s *opendir)
+void clear_opendir(struct fuse_opendir_s *opendir)
 {
-    struct shared_signal_s *signal=opendir->signal;
+    struct list_header_s *h=&opendir->entries;
+    struct list_element_s *list=NULL;
 
-    signal_lock(signal);
+    freedirentry:
 
-    if ((opendir->flags & FUSE_OPENDIR_FLAG_QUEUE_READY)==0) {
-	struct fuse_direntry_s *direntry=malloc(sizeof(struct fuse_direntry_s));
+    list=remove_list_head(h);
+    if (list) {
 
-	if (direntry) {
-
-	    memset(direntry, 0, sizeof(struct fuse_direntry_s));
-	    direntry->entry=NULL;
-	    init_list_element(&direntry->list, NULL);
-	    add_list_element_last(&opendir->entries, &direntry->list);
-
-	}
-
-	opendir->flags &= ~ FUSE_OPENDIR_FLAG_THREAD;
-	opendir->flags |= FUSE_OPENDIR_FLAG_QUEUE_READY;
-	signal_broadcast(signal);
-
+	struct fuse_direntry_s *direntry=(struct fuse_direntry_s *)((char *)list - offsetof(struct fuse_direntry_s, list));
+	free(direntry);
+	goto freedirentry;
 
     }
 
-    signal_unlock(signal);
 }

@@ -26,7 +26,6 @@
 #include "libosns-workspace.h"
 #include "libosns-context.h"
 #include "libosns-fuse-public.h"
-#include "libosns-resources.h"
 
 #include "sftp/common-protocol.h"
 #include "sftp/common.h"
@@ -71,7 +70,7 @@ static unsigned int linux_error_map[] = {
     [SSH_FX_GROUP_INVALID]		= EINVAL,
     [SSH_FX_NO_MATCHING_BYTE_RANGE_LOCK]= ENOLCK};
 
-static unsigned int map_sftp_error(unsigned int ssh_fx_error)
+static unsigned int map_sftp_error_v06(unsigned int ssh_fx_error)
 {
     if (ssh_fx_error < (sizeof(linux_error_map)/sizeof(linux_error_map[0]))) return linux_error_map[ssh_fx_error];
     return EIO;
@@ -119,66 +118,7 @@ static unsigned int map_sftp_error(unsigned int ssh_fx_error)
 
 void receive_sftp_status_v06(struct sftp_client_s *sftp, struct sftp_header_s *header)
 {
-    struct generic_error_s error=GENERIC_ERROR_INIT;
-    struct sftp_request_s *req=NULL;
-
-    if ((req=get_sftp_request(sftp, header->id, &error))) {
-	char *buffer=header->buffer;
-	unsigned int len=0;
-	unsigned int pos=0;
-	struct sftp_reply_s *reply=&req->reply;
-
-	reply->type=header->type;
-	reply->response.status.code=get_uint32(&buffer[pos]);
-	pos+=4;
-	len=get_uint32(&buffer[pos]);
-	pos+=4;
-
-	reply->response.status.linux_error=map_sftp_error(reply->response.status.code);
-
-	if (len>0) {
-	    char errormessage[len+1];
-
-	    memcpy(errormessage, &buffer[pos], len);
-	    errormessage[len]='\0';
-	    pos+=len;
-
-	    logoutput_notice("receive_sftp_status_v06: error %i:%s", reply->response.status.code, errormessage);
-
-	} else {
-
-	    if (reply->response.status.code>0) logoutput_notice("receive_sftp_status_v06: code %i error %i", reply->response.status.code, reply->response.status.linux_error);
-
-	}
-
-	/* language tag for error message */
-
-	len=get_uint32(&buffer[pos]);
-	pos+=4+len;
-
-	/* error specific data */
-
-	if (pos<header->len) {
-
-	    reply->response.status.buff=malloc(header->len - pos);
-
-	    if (reply->response.status.buff) {
-
-		memcpy(reply->response.status.buff, &buffer[pos], header->len - pos);
-		reply->response.status.size=header->len - pos;
-
-	    }
-
-	}
-
-	signal_sftp_received_id(sftp, req);
-
-    } else {
-
-	logoutput("receive_sftp_status_v06: error finding id %i (%s)", header->id, get_error_description(&error));
-
-    }
-
+    _receive_sftp_status_v05(sftp, header, map_sftp_error_v06);
 }
 
 void receive_sftp_data_v06(struct sftp_client_s *sftp, struct sftp_header_s *header)
@@ -193,20 +133,16 @@ void receive_sftp_data_v06(struct sftp_client_s *sftp, struct sftp_header_s *hea
 
 	reply->type=header->type;
 	reply->response.data.flags=SFTP_RESPONSE_FLAG_EOF_SUPPORTED;
-	reply->response.data.size=get_uint32(&buffer[pos]);
+	reply->size=get_uint32(&buffer[pos]);
 	pos+=4;
 
 	/* there is an extra byte for eol ? if so test the value */
-	if (reply->response.data.size + pos < header->len) {
-
-	    reply->response.data.flags |= (buffer[reply->response.data.size + pos] ? SFTP_RESPONSE_FLAG_EOF : 0);
-
-	}
+	if (reply->size + pos < header->len) reply->response.data.flags |= (buffer[reply->size + pos] ? SFTP_RESPONSE_FLAG_EOF : 0);
 
 	/* let the processing of this into names, attr to the calling/receiving thread */
 
-	memmove(buffer, &buffer[pos], reply->response.data.size);
-	reply->response.data.data=(unsigned char *)buffer;
+	memmove(buffer, &buffer[pos], reply->size);
+	reply->data=buffer;
 	header->buffer=NULL;
 	signal_sftp_received_id(sftp, sftp_r);
 
@@ -229,12 +165,12 @@ void receive_sftp_name_v06(struct sftp_client_s *sftp, struct sftp_header_s *hea
 	struct sftp_reply_s *reply=&req->reply;
 
 	reply->type=header->type;
-	reply->response.names.flags=SFTP_RESPONSE_FLAG_EOF_SUPPORTED; /* it's not possible to determine the eof is present and what value: the size of the names is not set here */
-	reply->response.names.count=get_uint32(&buffer[pos]);
+	reply->response.name.flags=SFTP_RESPONSE_FLAG_EOF_SUPPORTED; /* it's not possible to determine the eof is present and what value: the size of the names is not set here */
+	reply->response.name.count=get_uint32(&buffer[pos]);
 	pos+=4;
-	reply->response.names.size=header->len - pos; /* minus the count field */
-	memmove(buffer, &buffer[pos], reply->response.names.size);
-	reply->response.names.buff=buffer; /* let the processing of this into names, attr to the receiving (FUSE) thread */
+	reply->size=header->len - pos; /* minus the count field */
+	memmove(buffer, &buffer[pos], reply->size);
+	reply->data=buffer; /* let the processing of this into names, attr to the receiving (FUSE) thread */
 	header->buffer=NULL;
 
 	signal_sftp_received_id(sftp, req);

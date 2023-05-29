@@ -45,39 +45,59 @@ static char *get_interface_buffer_default(struct context_interface_s *i)
     return i->buffer;
 }
 
-int init_context_interface(struct context_interface_s *i, struct interface_list_s *ilist, struct context_interface_s *p)
+static struct list_header_s *get_header_connections_default(struct context_interface_s *i)
+{
+    return NULL;
+}
+
+static unsigned int get_interface_status_default(struct context_interface_s *i, struct interface_status_s *status)
+{
+    return 0;
+}
+
+static void set_primary_default(struct context_interface_s *i, struct context_interface_s *p)
+{
+    i->link.primary=p;
+    i->flags |= _INTERFACE_FLAG_SECONDARY_1TON;
+}
+
+static void set_secondary_default(struct context_interface_s *i, struct context_interface_s *s)
+{
+    i->link.secondary.refcount++;
+    i->flags |= _INTERFACE_FLAG_PRIMARY_1TON;
+}
+
+static struct context_interface_s *get_primary_default(struct context_interface_s *i)
+{
+    return ((i->flags & _INTERFACE_FLAG_SECONDARY) ? i->link.primary : NULL);
+}
+
+void init_context_interface(struct context_interface_s *i, unsigned int type, unsigned int size)
 {
 
-    memset(i, 0, sizeof(struct context_interface_s));
-    i->type=0;
+    i->type=type;
     i->flags=0;
+    i->unique=0;
     i->ptr=NULL;
 
     i->connect=_connect_interface;
     i->start=_start_interface;
     i->get_interface_buffer=get_interface_buffer_default;
+    i->get_header_connections=get_header_connections_default;
+    i->get_interface_status=get_interface_status_default;
+    i->set_primary=set_primary_default;
+    i->set_secondary=set_secondary_default;
+    i->get_primary=get_primary_default;
 
     i->iocmd.in=_signal_nothing;
     i->iocmd.out=_signal_nothing;
 
-    if (ilist) {
-	struct interface_ops_s *ops=ilist->ops;
-
-	if ((*ops->init_buffer)(i, ilist, p)==-1) {
-
-	    logoutput("init_context_interface: initializing buffer failed for type %s", ops->name);
-	    return -1;
-
-	}
-
-    }
-
-    return 0;
+    i->size=size;
 }
 
 void reset_context_interface(struct context_interface_s *i)
 {
-    init_context_interface(i, NULL, NULL);
+    init_context_interface(i, 0, 0);
 }
 
 struct context_interface_s *get_primary_context_interface(struct context_interface_s *i)
@@ -90,3 +110,9 @@ void init_context_interfaces()
     init_header_interfaces();
 }
 
+void init_interface_status (struct interface_status_s *istatus)
+{
+    istatus->flags=0;
+    istatus->errcode=0;
+    set_system_time(&istatus->time, 0, 0);
+}

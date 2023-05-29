@@ -26,7 +26,6 @@
 #include "libosns-workspace.h"
 #include "libosns-context.h"
 #include "libosns-fuse-public.h"
-#include "libosns-resources.h"
 
 #include "sftp/common-protocol.h"
 #include "sftp/common.h"
@@ -56,7 +55,7 @@ static unsigned int linux_error_map[] = {
     [SSH_FX_UNKNOWN_PRINCIPAL]		= EIO,
     [SSH_FX_LOCK_CONFLICT]		= EWOULDBLOCK};
 
-static unsigned int map_sftp_error(unsigned int ssh_fx_error)
+static unsigned int map_sftp_error_v05(unsigned int ssh_fx_error)
 {
     if (ssh_fx_error < (sizeof(linux_error_map)/sizeof(linux_error_map[0]))) return linux_error_map[ssh_fx_error];
     return EIO;
@@ -102,7 +101,7 @@ static unsigned int map_sftp_error(unsigned int ssh_fx_error)
     the rest is in buffer
 */
 
-void receive_sftp_status_v05(struct sftp_client_s *sftp, struct sftp_header_s *header)
+void _receive_sftp_status_v05(struct sftp_client_s *sftp, struct sftp_header_s *header, unsigned int (* map_error)(unsigned int status))
 {
     struct generic_error_s error=GENERIC_ERROR_INIT;
     struct sftp_request_s *req=NULL;
@@ -115,7 +114,7 @@ void receive_sftp_status_v05(struct sftp_client_s *sftp, struct sftp_header_s *h
 
 	reply->type=header->type;
 	reply->response.status.code=get_uint32(&buffer[pos]);
-	reply->response.status.linux_error=map_sftp_error(reply->response.status.code);
+	reply->response.status.linux_error=map_error(reply->response.status.code);
 
 	pos+=4;
 	len=get_uint32(&buffer[pos]);
@@ -135,21 +134,23 @@ void receive_sftp_status_v05(struct sftp_client_s *sftp, struct sftp_header_s *h
 
 	}
 
-	/* language tag for error message */
+	if (pos + 4 < header->len) {
 
-	len=get_uint32(&buffer[pos]);
-	pos+=4+len;
+	    /* language tag for error message (ignore) */
 
-	/* error specific data */
+	    len=get_uint32(&buffer[pos]);
+	    pos+=4;
 
-	if (pos < header->len) {
+	    if (pos + len < header->len) {
 
-	    reply->response.status.buff=malloc(header->len - pos);
+		pos+=len;
 
-	    if (reply->response.status.buff) {
+		/* error specific data */
 
-		memcpy(reply->response.status.buff, &buffer[pos], header->len - pos);
-		reply->response.status.size=header->len - pos;
+		reply->size=(header->len - pos);
+		memmove(buffer, &buffer[pos], reply->size);
+		reply->data=buffer;
+		header->buffer=NULL;
 
 	    }
 
@@ -163,6 +164,11 @@ void receive_sftp_status_v05(struct sftp_client_s *sftp, struct sftp_header_s *h
 
     }
 
+}
+
+void receive_sftp_status_v05(struct sftp_client_s *sftp, struct sftp_header_s *header)
+{
+    _receive_sftp_status_v05(sftp, header, map_sftp_error_v05);
 }
 
 static struct sftp_recv_ops_s recv_ops_v05 = {

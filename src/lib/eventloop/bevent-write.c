@@ -179,7 +179,7 @@ void enable_bevent_write_watch(struct bevent_s *bevent)
 
     if (bevent) {
 
-	bevent->cb_writeable=signal_blocked_bevent;
+	bevent->cb[BEVENT_EVENT_INDEX_WRITEABLE]=signal_blocked_bevent;
 	bevent->flags |= BEVENT_FLAG_CB_WRITEABLE;
 
     }

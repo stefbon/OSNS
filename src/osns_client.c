@@ -17,21 +17,7 @@
 
 */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/time.h>
-#include <time.h>
-#include <ctype.h>
-#include <inttypes.h>
-
-#include <sys/param.h>
-#include <sys/types.h>
+#include "libosns-basic-system-headers.h"
 
 #include "libosns-log.h"
 #include "libosns-misc.h"
@@ -42,18 +28,28 @@
 #include "libosns-workspace.h"
 #include "libosns-fuse-public.h"
 #include "libosns-network.h"
-#include "libosns-resources.h"
+#include "libosns-db.h"
+#include "libosns-resource.h"
+#include "libosns-ssh.h"
 
 #include "osns-protocol.h"
+#include "osns/osns.h"
 #include "osns_client.h"
-#include "osns/init.h"
+
+#include "osns/send/init.h"
 #include "osns/utils.h"
-#include "osns/write.h"
-#include "osns/client.h"
+#include "osns/connection.h"
+#include "osns/send/write.h"
 #include "osns/pidfile.h"
-#include "osns/hashtable.h"
-#include "osns/netcache-send.h"
-#include "osns/netcache-read.h"
+
+#include "osns/send/hashtable.h"
+#include "osns/send/channel.h"
+#include "osns/send/reply.h"
+
+#include "osns/recv/msg-channel.h"
+#include "osns/recv/msg-disconnect.h"
+#include "osns/recv/msg-init.h"
+#include "osns/recv/read.h"
 
 #include "interface/fuse.h"
 
@@ -62,175 +58,30 @@
 #include "client/arguments.h"
 #include "client/config.h"
 #include "client/network.h"
+#include "client/channel/channel.h"
+#include "client/watch.h"
+
+#include "interface/fuse.h"
+#include "interface/sftp.h"
+#include "interface/osns-channel.h"
+#include "interface/ssh-channel.h"
+#include "interface/ssh.h"
 
 static char osns_static_buffer[OSNS_CONNECTION_BUFFER_SIZE];
-
-/* process the received netcache data */
-
-static void process_netcache_attr(struct query_netcache_attr_s *attr, unsigned int flags)
-{
-    unsigned int valid=attr->valid;
-    char domainname[HOST_HOSTNAME_FQDN_MAX_LENGTH + 1];
-    struct host_address_s address;
-    struct network_port_s port;
-    unsigned int service=0;
-    unsigned int transport=0;
-
-    if (attr->flags & OSNS_NETCACHE_QUERY_FLAG_LOCALHOST) flags |= NETWORK_RESOURCE_FLAG_LOCALHOST;
-    if (attr->flags & OSNS_NETCACHE_QUERY_FLAG_DNSSD) flags |= NETWORK_RESOURCE_FLAG_DNSSD;
-    if (attr->flags & OSNS_NETCACHE_QUERY_FLAG_PRIVATE) flags |= NETWORK_RESOURCE_FLAG_PRIVATE;
-
-    memset(&address, 0, sizeof(struct host_address_s));
-    memset(&port, 0, sizeof(struct network_port_s));
-    memset(domainname, 0, HOST_HOSTNAME_FQDN_MAX_LENGTH + 1);
-
-    if ((valid & (OSNS_NETCACHE_QUERY_ATTR_IPV4 | OSNS_NETCACHE_QUERY_ATTR_IPV6))==0) {
-
-	logoutput_debug("process_netcache_attr: no ip address from system attr");
-	return;
-
-    }
-
-    if ((valid & OSNS_NETCACHE_QUERY_ATTR_PORT)==0) {
-
-	logoutput_debug("process_netcache_attr: no port from system attr");
-	return;
-
-    }
-
-    if ((valid & OSNS_NETCACHE_QUERY_ATTR_COMM_FAMILY)==0) {
-
-	logoutput_debug("process_netcache_attr: no domain/communication family (IPv6, IPv4, ...) from system attr");
-	return;
-
-    }
-
-    if ((valid & OSNS_NETCACHE_QUERY_ATTR_COMM_TYPE)==0) {
-
-	logoutput_debug("process_netcache_attr: no communication type (stream or dgram) from system attr");
-	return;
-
-    }
-
-    if (valid & OSNS_NETCACHE_QUERY_ATTR_IPV4) {
-	struct name_string_s *name=&attr->names[OSNS_NETCACHE_QUERY_INDEX_IPV4];
-
-	if (name->len <= INET_ADDRSTRLEN) {
-
-	    memcpy(address.ip.addr.v4, name->ptr, name->len);
-	    address.flags |= HOST_ADDRESS_FLAG_IP;
-	    address.ip.family=IP_ADDRESS_FAMILY_IPv4;
-
-	    if (strncmp(address.ip.addr.v4, "127.", 4)==0) flags |= NETWORK_RESOURCE_FLAG_LOCALHOST;
-
-	} else {
-
-	    logoutput_warning("process_netcache_attr: ip4 number from system too long (%u, max %u)", name->len, INET_ADDRSTRLEN);
-
-	}
-
-    }
-
-    if ((address.flags & HOST_ADDRESS_FLAG_IP)==0 && (valid & OSNS_NETCACHE_QUERY_ATTR_IPV6)) {
-	struct name_string_s *name=&attr->names[OSNS_NETCACHE_QUERY_INDEX_IPV6];
-
-	if (name->len <= INET6_ADDRSTRLEN) {
-
-	    memcpy(address.ip.addr.v6, name->ptr, name->len);
-	    address.flags |= HOST_ADDRESS_FLAG_IP;
-	    address.ip.family=IP_ADDRESS_FAMILY_IPv6;
-
-	    if (strncmp(address.ip.addr.v6, "fe80:", 5)==0) flags |= NETWORK_RESOURCE_FLAG_LOCALHOST;
-
-	} else {
-
-	    logoutput_warning("process_netcache_attr: ip6 number from system too long (%u, max %u)", name->len, INET_ADDRSTRLEN);
-
-	}
-
-    }
-
-    if (valid & OSNS_NETCACHE_QUERY_ATTR_DNSHOSTNAME) {
-	struct name_string_s *name=&attr->names[OSNS_NETCACHE_QUERY_INDEX_DNSHOSTNAME];
-
-	if (name->len <= HOST_HOSTNAME_FQDN_MAX_LENGTH) {
-
-	    memcpy(address.hostname, name->ptr, name->len);
-	    address.flags |= HOST_ADDRESS_FLAG_HOSTNAME;
-
-	    if (strcmp(address.hostname, "localhost")==0) flags |= NETWORK_RESOURCE_FLAG_LOCALHOST;
-
-	} else {
-
-	    logoutput_warning("process_netcache_attr: hostname from system too long (%u, max %u)", name->len, HOST_HOSTNAME_FQDN_MAX_LENGTH);
-
-	}
-
-    }
-
-    if (valid & OSNS_NETCACHE_QUERY_ATTR_DNSDOMAIN) {
-	struct name_string_s *name=&attr->names[OSNS_NETCACHE_QUERY_INDEX_DNSDOMAIN];
-
-	if (name->len <= HOST_HOSTNAME_FQDN_MAX_LENGTH) {
-
-	    memcpy(domainname, name->ptr, name->len);
-
-	} else {
-
-	    logoutput_warning("process_netcache_attr: domainname from system too long (%u, max %u)", name->len, HOST_HOSTNAME_FQDN_MAX_LENGTH);
-
-	}
-
-    }
-
-    if (valid & OSNS_NETCACHE_QUERY_ATTR_PORT) {
-
-	port.nr=attr->port;
-
-    }
-
-    if (valid & OSNS_NETCACHE_QUERY_ATTR_COMM_TYPE) {
-
-	port.type=attr->comm_type;
-
-    }
-
-    /* service type, like SSH, SFTP, NFS, ... */
-
-    if (valid & OSNS_NETCACHE_QUERY_ATTR_SERVICE) {
-
-	service=attr->service;
-
-    }
-
-    if (service==0) {
-
-	service=guess_network_service_from_port(attr->port);
-	if (service>0) flags |= NETWORK_RESOURCE_FLAG_SERVICE_GUESSED;
-
-    }
-
-    /* (secure) transport used ? */
-
-    if (valid & OSNS_NETCACHE_QUERY_ATTR_TRANSPORT) {
-
-	transport=attr->transport;
-
-    }
-
-    add_network_service_resource(&address, domainname, &port, service, transport, flags);
-
-}
-
-static void process_netcache_change(char *data, unsigned int size, void *ptr)
-{
+static char osns_static_cbuffer[OSNS_CMSG_BUFFER_SIZE];
+static int id_signal_subsystem=0;
+static int id_timer_subsystem=0;
+static char *pidfile=NULL;
+
+/*static void process_netcache_change(char *data, unsigned int size, void *ptr)
+{*/
     /* TODO:
 	format of data is:
 	uint32						valid
 	NETCACHE ATTR					attr
 	 */
 
-    struct query_netcache_attr_s attr;
+/*    struct query_netcache_attr_s attr;
     int len=0;
     unsigned int pos=0;
     unsigned int valid=0;
@@ -248,7 +99,7 @@ static void process_netcache_change(char *data, unsigned int size, void *ptr)
 
     }
 
-}
+}*/
 
 static void start_mounting_workspaces(void *ptr)
 {
@@ -257,8 +108,10 @@ static void start_mounting_workspaces(void *ptr)
     struct beventloop_s *loop=get_default_mainloop();
     struct service_context_s *ctx=NULL;
     struct connection_s *c=&session->osns.connection;
-    unsigned int requested_flags=0;
-    unsigned int received_flags=0;
+    struct osns_connection_s *oc=&session->osns;
+    unsigned int sr=0;
+    unsigned int sp=0;
+    int result=-1;
 
     /* since this thread is started before the eventloop is up and running, wait here
 	for the eventloop to be effective */
@@ -279,7 +132,7 @@ static void start_mounting_workspaces(void *ptr)
 
     /* create connection to the osns system service */
 
-    if (create_local_connection(c, OSNS_DEFAULT_RUNPATH, loop)==0) {
+    if (create_osns_local_connection(c, OSNS_DEFAULT_RUNPATH, "systemsocket", loop, NULL)==0) {
 
 	logoutput_info("start_mounting_workspaces: created connection to system socket");
 
@@ -290,27 +143,46 @@ static void start_mounting_workspaces(void *ptr)
 
     }
 
-    /* when contacting the osns system service at least mounting and quering the netcache should be supported
-	and - cause dns names are neccesary - dns translation of the ip addresses is required
-
-	TODO: add a watch for netcache
+    /* requested from osns system:
+	- mount a fuse network filesystem
     */
 
-    requested_flags=(OSNS_INIT_FLAG_MOUNT | OSNS_INIT_FLAG_NETCACHE | OSNS_INIT_FLAG_DNSLOOKUP | OSNS_INIT_FLAG_SETWATCH_NETCACHE);
-    process_osns_initialization(&session->osns, requested_flags);
-    received_flags=get_osns_protocol_flags(&session->osns);
+    sr=(OSNS_INIT_FLAG_MOUNT_NETWORK);
 
-    if ((received_flags & requested_flags) < requested_flags) {
+    // | OSNS_INIT_FLAG_WATCH_NETCACHE);
 
-	logoutput_warning("start_mounting_workspaces: not all required services %u supported by server", requested_flags);
+    /* for now client provides nothing
+	20221017: todo
+	- open a channel to: execute a file, open a shell or start a ssh subsystem
+	- list connections1
+    */
+
+    sp=0;
+
+    do_osns_initialization(&session->osns, sr, sp);
+
+    if (oc->status & OSNS_CONNECTION_STATUS_VERSION) {
+
+	if (get_osns_major(oc->protocol.version)==1) {
+
+	    if (oc->protocol.level.one.sr >= sr) result=0;
+
+	 }
+
+    }
+
+    if (result==-1) {
+
+	/* peer supports less than requested */
+
+	logoutput_warning("start_mounting_workspaces: not all required services %u supported by server (received from server %u)", sr, oc->protocol.level.one.sr);
 	goto finishout;
 
     }
 
-    /* mount the network */
+    /* mount the network: request the osns system to do that  */
 
     logoutput_debug("start_mounting_workspaces: create mount context");
-
     ctx=create_mount_context(session, OSNS_MOUNT_TYPE_NETWORK, session->options.fuse.maxread);
 
     if (ctx) {
@@ -320,7 +192,6 @@ static void start_mounting_workspaces(void *ptr)
 	/* query the osns system for network resources
 	    these resources are required to provide the user a browseable map through the "network environment" */
 
-	osns_system_query_netcache(&session->osns, NULL, process_netcache_attr);
 	populate_network_workspace_mount(ctx);
 
     } else {
@@ -330,14 +201,20 @@ static void start_mounting_workspaces(void *ptr)
     }
 
     finishout:
-    if (ctx==NULL) stop_beventloop(NULL);
+    if (ctx==NULL) stop_beventloop(NULL, 0);
 
+}
+
+static void close_osns_connection(struct osns_connection_s *oc, unsigned int flags)
+{
+}
+
+static void clear_osns_connection(struct osns_connection_s *oc)
+{
 }
 
 static void workspace_signal_handler(struct beventloop_s *loop, struct bsignal_event_s *bse)
 {
-
-    logoutput("workspace_signal_handler: received %i", bse->signo);
 
     switch (bse->signo) {
 
@@ -349,7 +226,18 @@ static void workspace_signal_handler(struct beventloop_s *loop, struct bsignal_e
 	case SIGQUIT:
 
 	    logoutput("workspace_signal_handler: got signal (%i): terminating", bse->signo);
-	    stop_beventloop(loop);
+
+	    // if (id_signal_subsystem>0) {
+
+		// stop_bsignal_subsystem(NULL, id_signal_subsystem); /* prevent the "catching" of the eventual following signal */
+		// id_signal_subsystem=0;
+
+	    // }
+
+	    /* stop eventloop will finish the program, and send the signal again (for attached subsystems which also listen to signals)
+		but did not receive anything cause the signal handler was in the way */
+
+	    stop_beventloop(loop, bse->signo);
 	    break;
 
 	case SIGIO:
@@ -391,24 +279,37 @@ static void workspace_signal_handler(struct beventloop_s *loop, struct bsignal_e
 
 }
 
+static struct osns_ops_s client_ops = {
+    .init				= NULL,
+    .openquery				= NULL,
+
+    /* client cannot do a mount and will never receive a request to do that */
+    .mount				= NULL,
+    .umount				= NULL,
+
+    .openchannel			= process_osns_channel_open_client,
+    .startchannel			= process_osns_channel_start_client,
+
+    .watchevent                         = NULL,
+};
+
 int main(int argc, char *argv[])
 {
     int result=0;
     unsigned int error=0;
-    struct bevent_s *bevent=NULL;
-    char *pidfile=NULL;
-    int id_signal_subsystem=0;
-    int id_timer_subsystem=0;
     struct client_arguments_s arguments;
     struct client_session_s session;
+    struct osns_connection_s *oc=NULL;
     struct connection_s *c=NULL;
-    struct osns_receive_s *r=NULL;
+    struct osns_socket_s *sock=NULL;
+
+    /* log to the standard output/error */
 
     switch_logging_backend("std");
     set_logging_level(LOG_DEBUG);
     logoutput("%s started", argv[0]);
 
-    /* parse commandline options and initialize the fuse options */
+    /* parse commandline arguments  */
 
     memset(&arguments, 0, sizeof(struct client_arguments_s));
     result=parse_arguments(argc, argv, &arguments);
@@ -437,10 +338,10 @@ int main(int argc, char *argv[])
 
     }
 
-    /* output to stdout/stderr is useless since daemonized */
+    /* output to stdout/stderr is useless since daemonized so use syslog */
 
     switch_logging_backend("syslog");
-    set_logging_level(LOG_DEBUG);
+    set_logging_level(LOG_DEBUG); /* make this configurable */
 
     if (check_create_pid_file(OSNS_DEFAULT_RUNPATH, argv[0], &pidfile)==-1) {
 
@@ -449,29 +350,65 @@ int main(int argc, char *argv[])
 
     }
 
-    init_localhost_resources(NULL);
-    result=add_network_subsys(NULL, NULL);
+    /* main client session for io with osns system */
 
-    if (result==1) {
+    memset(&session, 0, sizeof(struct client_session_s));
+    oc=&session.osns;
+    c=&oc->connection;
 
-	logoutput_debug("MAIN: added network resources subsys");
+    /* session */
 
-    } else if (result==-1) {
+    session.status=0;
+    session.signal=get_default_shared_signal();
+    init_list_header(&session.workspaces, SIMPLE_LIST_TYPE_EMPTY, NULL);
 
-	logoutput_debug("MAIN: error adding network resources subsys");
+    oc->flags=OSNS_CONNECTION_FLAG_CLIENT;
+    oc->status=0;
+    oc->close=close_osns_connection;
+    oc->clear=clear_osns_connection;
+    oc->free=clear_osns_connection;
+    oc->protocol.version=create_osns_version(OSNS_CLIENT_VERSION, OSNS_CLIENT_MINOR);
+    oc->ops=&client_ops;
+
+    set_default_options(&session.options);
+
+    if (read_configfile(&session.options, &arguments)==-1) {
+
+	logoutput("MAIN: failed to read option file/error");
 	goto out;
+
+    }
+
+    init_db_sql();
+
+    if (open_network_db(session.options.runpath)==0) {
+
+        logoutput_debug("MAIN: open db with network resources");
+
+    } else {
+
+        logoutput_debug("MAIN: unable to open db with network resources ... cannot continue");
+        goto out;
 
     }
 
     logoutput_debug("MAIN: initializing interfaces");
 
-    init_context_interfaces();
-    init_fuse_interface();
-    init_ssh_session_interface();
-    init_ssh_channel_interface();
-    init_sftp_client_interface();
+    init_context_interfaces(); 			/* init the list with all available interfaces */
+    init_fuse_interface();			/* init/add the fuse interface */
+    init_ssh_session_interface();		/* init/add ssh session interface */
+    init_ssh_channel_interface();		/* init/add ssh channel interface */
+    init_sftp_client_interface();		/* init/add sftp client interface */
+    init_osns_channel_interface();		/* init/add OSNS channel */
 
-    /* eventloop */
+    init_inode_hashtable();
+    init_rootentry();
+    init_dummy_directory();
+
+    init_fuse_open_hashtable();			/* init the list for fuse handles */
+    init_osns_send_hashtable();			/* init the client hashtable for io with osns system */
+
+    /* init eventloop */
 
     if (init_beventloop(NULL)==-1) {
 
@@ -484,7 +421,7 @@ int main(int argc, char *argv[])
 
     }
 
-    /* subsystem eventloop system signals */
+    /* start subsystem eventloop system signals */
 
     id_signal_subsystem=create_bevent_signal_subsystem(NULL, workspace_signal_handler);
 
@@ -493,16 +430,12 @@ int main(int argc, char *argv[])
 	logoutput_error("MAIN: error adding signal handler to eventloop.");
         goto out;
 
-    } else {
-
-	logoutput_info("MAIN: signal handler added to main eventloop");
-
     }
 
     result=start_bsignal_subsystem(NULL, id_signal_subsystem);
-    logoutput("MAIN: signal handler started (%i)", result);
+    logoutput("MAIN: signal handler started (id=%u)", id_signal_subsystem);
 
-    /* subsystem eventloop system timer */
+    /* start subsystem eventloop system timer */
 
     id_timer_subsystem=create_bevent_timer_subsystem(NULL);
 
@@ -513,79 +446,68 @@ int main(int argc, char *argv[])
 
     }
 
-    logoutput("MAIN: timer handler added to main eventloop (id=%i)", id_timer_subsystem);
-
     result=start_btimer_subsystem(NULL, id_timer_subsystem);
-    logoutput("MAIN: timer handler started (%i)", result);
+    logoutput("MAIN: timer handler started (id=%u)", id_timer_subsystem);
 
     /* Initialize and start default threads
 	NOTE: important to start these after initializing the signal handler,
 	if not doing this this way any signal will make the program crash */
 
-    /* TODO:
-	- add maximum number of threads to options/configfile (6=reasonable at this moment)
-    */
+    logoutput("MAIN: init workerthreads (max=%u)", session.options.maxthreads);
 
     init_workerthreads(NULL);
-    set_max_numberthreads(NULL, 6);
+    set_max_numberthreads(NULL, session.options.maxthreads);
     start_default_workerthreads(NULL);
 
-    init_osns_client_hashtable();
-
-    /* main client session */
-
-    memset(&session, 0, sizeof(struct client_session_s));
-    c=&session.osns.connection;
-    r=&session.osns.receive;
-
-    session.status=0;
-    session.signal=get_default_shared_signal();
-
-    session.osns.status=0;
-    session.osns.protocol.version=create_osns_version(OSNS_CLIENT_VERSION, OSNS_CLIENT_MINOR);
-
-    set_default_options(&session.options);
-
-    if (read_configfile(&session.options, &arguments)==-1) {
-
-	logoutput("MAIN: failed to read option file/error");
-	goto out;
-
-    }
-
     init_connection(c, CONNECTION_TYPE_LOCAL, CONNECTION_ROLE_CLIENT, 0);
-    c->ops.client.error=osns_client_handle_error;
-    c->ops.client.dataavail=osns_client_handle_dataavail;
+    sock=&c->sock;
 
-    /* receive */
+    oc->signal=session.signal;
+    oc->send=osns_connection_send_data;
+    for (unsigned int i=0; i<= OSNS_MSG_MAX; i++) oc->cb[i]=reply_msg_notsupported;
 
-    r->status=0;
-    r->ptr=(void *) c;
-    r->signal=get_default_shared_signal();
+    oc->cb[OSNS_MSG_INIT]=reply_msg_protocolerror;
+    oc->cb[OSNS_MSG_VERSION]=process_msg_reply;
+    oc->cb[OSNS_MSG_DISCONNECT]=process_msg_disconnect;
+    oc->cb[OSNS_MSG_UNIMPLEMENTED]=process_msg_reply;
 
-    r->process_data=osns_client_process_data;
-    r->send=osns_client_send_data;
-    r->read=0;
-    r->size=OSNS_CONNECTION_BUFFER_SIZE;
-    r->threads=0;
-    r->buffer=osns_static_buffer;
+    /* open a channel, done by ctl or app forwarded by system */
 
-    init_list_header(&session.workspaces, SIMPLE_LIST_TYPE_EMPTY, NULL);
+    oc->cb[OSNS_MSG_CHANNEL_OPEN]=process_msg_channel_open;
+    oc->cb[OSNS_MSG_CHANNEL_START]=process_msg_channel_start;
 
-    /* start a thread to do all the io with osns system,
-	and let the main handle the eventloop */
+    /* allowed replies */
 
-    work_workerthread(NULL, 0, start_mounting_workspaces, (void *) &session, NULL);
+    oc->cb[OSNS_MSG_STATUS]=process_msg_reply;
+    oc->cb[OSNS_MSG_NAME]=process_msg_reply;
+    oc->cb[OSNS_MSG_MOUNTED]=process_msg_reply;
+    oc->cb[OSNS_MSG_RECORDS]=process_msg_reply;
+
+    /* socket */
+
+    set_osns_socket_ops(sock, osns_static_buffer, OSNS_CONNECTION_BUFFER_SIZE);
+    set_osns_socket_control_data_buffer(sock, osns_static_cbuffer, OSNS_CMSG_BUFFER_SIZE);
+
+    /* start a thread to do all the io with osns system
+	(to mount the workspaces)
+	and let the main handle do the eventloop */
+
+    logoutput_debug("MAIN: connect system using osns version %u", session.osns.protocol.version);
+
+    work_workerthread(NULL, 0, start_mounting_workspaces, (void *) &session);
     start_beventloop(NULL);
 
     out:
 
-    logoutput_info("MAIN: stop workerthreads");
+    logoutput_debug("MAIN: remove workspaces");
+    remove_workspaces(&session);
+
+    logoutput_debug("MAIN: stop workerthreads");
     stop_workerthreads(NULL);
 
     post:
 
-    terminate_workerthreads(NULL, 0);
+    terminate_workerthreads(NULL, 1);
     logoutput_info("MAIN: clear eventloop");
     clear_beventloop(NULL);
 
@@ -598,8 +520,9 @@ int main(int argc, char *argv[])
 
     options:
 
-    logoutput_info("MAIN: free options");
     free_arguments(&arguments);
+    free_options(&session.options);
+    clear_shared_signal(&session.signal);
     return 0;
 
 }

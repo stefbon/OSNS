@@ -56,13 +56,13 @@ void read_attr_uidgid_v03(struct attr_context_s *actx, struct attr_buffer_s *buf
 
     user.net.id=(* buffer->ops->rw.read.read_uint32)(buffer);
     (* actx->mapping->mapcb.get_user_p2l)(actx->mapping, &user);
-    set_uid_system_stat(stat, user.local.uid);
+    set_uid_system_stat(stat, user.localid);
 
     /* gid */
 
     group.net.id=(* buffer->ops->rw.read.read_uint32)(buffer);
     (* actx->mapping->mapcb.get_group_p2l)(actx->mapping, &group);
-    set_gid_system_stat(stat, group.local.gid);
+    set_gid_system_stat(stat, group.localid);
 
 }
 
@@ -92,9 +92,26 @@ void read_attr_acmodtime_v03(struct attr_context_s *actx, struct attr_buffer_s *
 
 }
 
+/* 20220821: for now do nothing with extended attributes, only read them */
+
+static void _attr_cb_extension_dummy(struct attr_buffer_s *buffer, struct ssh_string_s *s, void *ptr)
+{
+}
+
 void read_attr_extensions_v03(struct attr_context_s *actx, struct attr_buffer_s *buffer, struct rw_attr_result_s *r, struct system_stat_s *stat)
 {
-    /* what to do here ? */
+    uint32_t count=(* buffer->ops->rw.read.read_uint32)(buffer);
+    unsigned int len=0;
+    struct ssh_string_s name=SSH_STRING_INIT;
+    struct ssh_string_s data=SSH_STRING_INIT;
+
+    for (unsigned int i=0; i<count; i++) {
+
+	len=(* buffer->ops->rw.read.read_string)(buffer, &name, _attr_cb_extension_dummy, NULL);
+	len=(* buffer->ops->rw.read.read_string)(buffer, &data, _attr_cb_extension_dummy, NULL);
+
+    }
+
 }
 
 /* read the name of a NAME response

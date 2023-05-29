@@ -114,7 +114,6 @@ static int ssh_send_hb_signature(struct ssh_connection_s *connection, struct ssh
     struct ssh_auth_s *auth=&setup->phase.service.type.auth;
     struct ssh_string_s signature=SSH_STRING_INIT;
     int result=-1;
-    uint32_t seq=0;
 
     logoutput("ssh_send_hostbased_signature");
 
@@ -129,10 +128,10 @@ static int ssh_send_hb_signature(struct ssh_connection_s *connection, struct ssh
 
     /* send userauth hostbased request to server with signature */
 
-    if (send_userauth_hostbased_message(connection, &auth->s_username, service, pkey, &auth->c_hostname, &auth->c_username, &signature, &seq)==0) {
+    if (send_userauth_hostbased_message(connection, &auth->s_username, service, pkey, &auth->c_hostname, &auth->c_username, &signature)==0) {
 	struct ssh_payload_s *payload=NULL;
 
-	payload=receive_message_common(connection, select_userauth_reply, NULL, NULL);
+	payload=receive_message_common(connection, select_userauth_reply, NULL);
 	if (payload==NULL) goto out;
 
 	if (payload->type == SSH_MSG_USERAUTH_SUCCESS) {
