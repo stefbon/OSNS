@@ -104,15 +104,24 @@ int main(int argc, char *argv[])
     struct sftp_subsystem_s sftp;
     char *pidfile=NULL;
     int id_signal_subsystem=0;
-
-    switch_logging_backend("std");
-    set_logging_level(LOG_DEBUG);
-    logoutput("%s started", argv[0]);
+    char *envvar=NULL;
 
     /* output to stdout/stderr is useless since daemonized */
 
     switch_logging_backend("syslog");
     set_logging_level(LOG_DEBUG);
+
+    envvar=getenv("SSH_CONNECTION");
+
+    if (envvar) {
+
+        logoutput("osns_sftp_subsystem: environment SSH_CONNECTION=%s", envvar);
+
+    } else {
+
+        logoutput("osns_sftp_subsystem: environment SSH_CONNECTION not set");
+
+    }
 
     if (init_beventloop(NULL)==-1) {
 
