@@ -26,7 +26,7 @@
 #include "libosns-eventloop.h"
 
 #include "libosns-fspath.h"
-#include "lib/system/fsrm.h"
+#include "lib/system/fsoperations.h"
 
 #include "protocol.h"
 
